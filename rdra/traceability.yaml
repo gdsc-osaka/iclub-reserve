@@ -1,0 +1,493 @@
+version: "1.0"
+generated_at: "2026-03-17T00:00:00Z"
+
+elements:
+  # ゴール
+  - id: "GOAL-001"
+    type: goal
+    name: "団体アカウントによる予約管理"
+    defined_in: "rdra/overview.md"
+    traces_to: []
+
+  - id: "GOAL-002"
+    type: goal
+    name: "承認制による優先順位の制御"
+    defined_in: "rdra/overview.md"
+    traces_to: []
+
+  - id: "GOAL-003"
+    type: goal
+    name: "通知の自動化"
+    defined_in: "rdra/overview.md"
+    traces_to: []
+
+  - id: "GOAL-004"
+    type: goal
+    name: "Google Calendarへの自動反映"
+    defined_in: "rdra/overview.md"
+    traces_to: []
+
+  - id: "GOAL-005"
+    type: goal
+    name: "予約単位のコミュニケーション"
+    defined_in: "rdra/overview.md"
+    traces_to: []
+
+  - id: "GOAL-006"
+    type: goal
+    name: "阪大関係者のみに利用を限定する"
+    defined_in: "rdra/overview.md"
+    traces_to: []
+
+  # 要求
+  - id: "REQ-001"
+    type: requirement
+    name: "空き状況のカレンダー確認"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-002"
+    type: requirement
+    name: "仮予約の申請"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-001", "GOAL-002"]
+
+  - id: "REQ-003"
+    type: requirement
+    name: "自団体の予約一覧確認"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-004"
+    type: requirement
+    name: "仮予約の取り消し"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-002"]
+
+  - id: "REQ-005"
+    type: requirement
+    name: "申請結果のメール通知"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-003"]
+
+  - id: "REQ-006"
+    type: requirement
+    name: "承認済み予約のキャンセル"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-003"]
+
+  - id: "REQ-007"
+    type: requirement
+    name: "承認済み予約の内容変更"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-003"]
+
+  - id: "REQ-008"
+    type: requirement
+    name: "大阪大学メールアドレス制限"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["GOAL-006"]
+
+  - id: "REQ-009"
+    type: requirement
+    name: "予約単位のメッセージ送受信"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-005"]
+
+  - id: "REQ-010"
+    type: requirement
+    name: "仮予約一覧の確認"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["GOAL-002"]
+
+  - id: "REQ-011"
+    type: requirement
+    name: "仮予約の承認・却下"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["GOAL-002", "GOAL-003"]
+
+  - id: "REQ-012"
+    type: requirement
+    name: "事務局による承認済み予約のキャンセル"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["GOAL-002"]
+
+  - id: "REQ-013"
+    type: requirement
+    name: "全団体の予約のカレンダー・一覧確認"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-014"
+    type: requirement
+    name: "事務局による予約の直接作成・変更・削除"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["GOAL-002"]
+
+  - id: "REQ-015"
+    type: requirement
+    name: "事務局による予約メッセージの確認・送信"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["GOAL-005"]
+
+  - id: "REQ-016"
+    type: requirement
+    name: "団体アカウントの新規作成"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-017"
+    type: requirement
+    name: "メンバーの追加"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-018"
+    type: requirement
+    name: "オーナーの昇格・降格"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-019"
+    type: requirement
+    name: "メンバーの削除"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-020"
+    type: requirement
+    name: "団体情報の編集"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-021"
+    type: requirement
+    name: "事務局による団体の無効化"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-022"
+    type: requirement
+    name: "施設・設備の新規登録"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-023"
+    type: requirement
+    name: "施設・設備情報の編集"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-024"
+    type: requirement
+    name: "施設・設備の無効化"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["GOAL-002"]
+
+  - id: "REQ-025"
+    type: requirement
+    name: "施設・設備一覧の確認"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["GOAL-001"]
+
+  - id: "REQ-026"
+    type: requirement
+    name: "Google Calendar自動登録"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["GOAL-004"]
+
+  - id: "REQ-027"
+    type: requirement
+    name: "Google Calendar自動削除"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["GOAL-004"]
+
+  - id: "REQ-028"
+    type: requirement
+    name: "Google Calendar自動更新"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["GOAL-004"]
+
+  - id: "REQ-029"
+    type: requirement
+    name: "仮予約の直接編集"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["GOAL-003"]
+
+  - id: "REQ-030"
+    type: requirement
+    name: "カレンダー購読URLの公開"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["GOAL-004"]
+
+  - id: "REQ-031"
+    type: requirement
+    name: "アカウント登録時のメール認証コード"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["GOAL-006"]
+
+  - id: "REQ-032"
+    type: requirement
+    name: "メールアドレスとパスワードによるログイン"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["GOAL-006"]
+
+  # ビジネスユースケース
+  - id: "BUC-001"
+    type: business_usecase
+    name: "空き確認・仮予約申請"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["REQ-001", "REQ-002", "REQ-003"]
+
+  - id: "BUC-002"
+    type: business_usecase
+    name: "仮予約の取り消し"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["REQ-004"]
+
+  - id: "BUC-003"
+    type: business_usecase
+    name: "承認済み予約のキャンセル"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["REQ-006"]
+
+  - id: "BUC-004"
+    type: business_usecase
+    name: "承認済み予約の内容変更（使用人数・備考）"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["REQ-007"]
+
+  - id: "BUC-005"
+    type: business_usecase
+    name: "仮予約の内容変更"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["REQ-029"]
+
+  - id: "BUC-006"
+    type: business_usecase
+    name: "仮予約の承認・却下"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["REQ-010", "REQ-011", "REQ-013"]
+
+  - id: "BUC-007"
+    type: business_usecase
+    name: "承認済み予約の事務局キャンセル"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["REQ-012"]
+
+  - id: "BUC-008"
+    type: business_usecase
+    name: "事務局による予約の直接作成・変更・削除"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["REQ-014"]
+
+  - id: "BUC-009"
+    type: business_usecase
+    name: "予約へのメッセージ送受信"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["REQ-009", "REQ-015"]
+
+  - id: "BUC-010"
+    type: business_usecase
+    name: "団体の新規作成"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["REQ-016"]
+
+  - id: "BUC-011"
+    type: business_usecase
+    name: "メンバーの追加・削除"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["REQ-017", "REQ-019"]
+
+  - id: "BUC-012"
+    type: business_usecase
+    name: "オーナーの昇格・降格"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["REQ-018"]
+
+  - id: "BUC-013"
+    type: business_usecase
+    name: "団体情報の編集"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["REQ-020"]
+
+  - id: "BUC-014"
+    type: business_usecase
+    name: "事務局による団体の無効化"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["REQ-021"]
+
+  - id: "BUC-015"
+    type: business_usecase
+    name: "施設・設備の登録・編集"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["REQ-022", "REQ-023", "REQ-025"]
+
+  - id: "BUC-016"
+    type: business_usecase
+    name: "施設・設備の無効化"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["REQ-024"]
+
+  - id: "BUC-017"
+    type: business_usecase
+    name: "Google Calendarへの自動反映"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["REQ-026", "REQ-027", "REQ-028"]
+
+  - id: "BUC-019"
+    type: business_usecase
+    name: "カレンダー購読URLの公開"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["REQ-030"]
+
+  - id: "BUC-018"
+    type: business_usecase
+    name: "承認済み予約の施設・日時変更"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["REQ-007"]
+
+  - id: "BUC-020"
+    type: business_usecase
+    name: "アカウント登録"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["REQ-008", "REQ-031"]
+
+  - id: "BUC-021"
+    type: business_usecase
+    name: "ログイン"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["REQ-032"]
+
+  # ユースケース
+  - id: "UC-001"
+    type: usecase
+    name: "空き状況を確認する"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-001"]
+
+  - id: "UC-002"
+    type: usecase
+    name: "仮予約を申請する"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-001"]
+
+  - id: "UC-003"
+    type: usecase
+    name: "仮予約を取り消す"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-002"]
+
+  - id: "UC-004"
+    type: usecase
+    name: "承認済み予約をキャンセルする"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-003"]
+
+  - id: "UC-005"
+    type: usecase
+    name: "承認済み予約の内容を変更する"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-004", "BUC-018"]
+
+  - id: "UC-006"
+    type: usecase
+    name: "仮予約を承認・却下する"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["BUC-006"]
+
+  - id: "UC-007"
+    type: usecase
+    name: "承認済み予約をキャンセルする（事務局）"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["BUC-007"]
+
+  - id: "UC-008"
+    type: usecase
+    name: "予約を直接作成・変更・削除する"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["BUC-008"]
+
+  - id: "UC-009"
+    type: usecase
+    name: "予約にメッセージを送受信する"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["BUC-009"]
+
+  - id: "UC-010"
+    type: usecase
+    name: "団体を新規作成する"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["BUC-010"]
+
+  - id: "UC-011"
+    type: usecase
+    name: "メンバーを追加・削除する"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["BUC-011"]
+
+  - id: "UC-012"
+    type: usecase
+    name: "オーナーを昇格・降格する"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["BUC-012"]
+
+  - id: "UC-013"
+    type: usecase
+    name: "団体情報を編集する"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["BUC-013"]
+
+  - id: "UC-014"
+    type: usecase
+    name: "団体を無効化する"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["BUC-014"]
+
+  - id: "UC-015"
+    type: usecase
+    name: "施設・設備を登録・編集する"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["BUC-015"]
+
+  - id: "UC-016"
+    type: usecase
+    name: "施設・設備を無効化する"
+    defined_in: "rdra/contexts/facility-management.md"
+    traces_to: ["BUC-016"]
+
+  - id: "UC-017"
+    type: usecase
+    name: "仮予約の内容を編集する"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-005"]
+
+  - id: "UC-018"
+    type: usecase
+    name: "カレンダー購読URLを確認する"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["BUC-019"]
+
+  - id: "UC-019"
+    type: usecase
+    name: "アカウントを登録する"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["BUC-020"]
+
+  - id: "UC-020"
+    type: usecase
+    name: "ログインする"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["BUC-021"]
+
+coverage:
+  total_goals: 6
+  goals_with_requirements: 6
+  total_requirements: 32
+  requirements_with_bucs: 32
+  total_bucs: 21
+  bucs_with_ucs: 20
+  total_ucs: 20
+  orphaned_elements: []
+  notes:
+    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=20）"
