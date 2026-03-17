@@ -16,14 +16,17 @@ value:
     - id: "REQ-032"
       description: "登録済みのメールアドレスとパスワードでログインできる。"
       traces_to: ["GOAL-006"]
+    - id: "REQ-033"
+      description: "初回アカウント登録時にi-Club利用規約への同意が必要。同意しない場合は登録を完了できない。"
+      traces_to: ["GOAL-006"]
 
 environment:
   business_usecases:
     - id: "BUC-020"
       name: "アカウント登録"
       actors: ["ACTOR-002"]
-      description: "ユーザーがosaka-u.ac.jpドメインのメールアドレスとパスワードを入力し、メール認証コードを経て本登録を完了する。"
-      traces_to: ["REQ-008", "REQ-031"]
+      description: "ユーザーがosaka-u.ac.jpドメインのメールアドレスとパスワードを入力し、利用規約に同意の上、メール認証コードを経て本登録を完了する。"
+      traces_to: ["REQ-008", "REQ-031", "REQ-033"]
     - id: "BUC-021"
       name: "ログイン"
       actors: ["ACTOR-001", "ACTOR-002"]
@@ -38,7 +41,7 @@ boundary:
       screens: ["SCR-011", "SCR-013"]
       events: ["EVT-013"]
       traces_to: ["BUC-020"]
-      description: "メールアドレス（osaka-u.ac.jpドメイン）とパスワードを入力し、送信された認証コードを入力して本登録を完了する。"
+      description: "メールアドレス（osaka-u.ac.jpドメイン）とパスワードを入力し、利用規約に同意の上、送信された認証コードを入力して本登録を完了する。"
     - id: "UC-020"
       name: "ログインする"
       actors: ["ACTOR-001", "ACTOR-002"]
@@ -50,7 +53,7 @@ boundary:
   screens:
     - id: "SCR-011"
       name: "アカウント登録フォーム"
-      description: "メールアドレス（osaka-u.ac.jpドメイン検証）・氏名・パスワードを入力して登録を開始するフォーム。"
+      description: "メールアドレス（osaka-u.ac.jpドメイン検証）・氏名・パスワードを入力し、i-Club利用規約（リンク表示）への同意チェックボックスにチェックして登録を開始するフォーム。"
       information: ["INFO-006"]
     - id: "SCR-012"
       name: "ログイン画面"
@@ -108,7 +111,7 @@ sequenceDiagram
     actor ユーザー
     participant システム
 
-    ユーザー->>システム: メールアドレス・氏名・パスワードを入力
+    ユーザー->>システム: メールアドレス・氏名・パスワードを入力し利用規約に同意
     システム->>システム: ドメイン検証（osaka-u.ac.jp）（COND-004）
     システム-->>ユーザー: 認証コードをメール送信（EVT-013）
     ユーザー->>システム: 認証コードを入力
