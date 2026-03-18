@@ -115,8 +115,8 @@ system:
   variations:
     - id: "VAR-001"
       name: "メンバーロール"
-      values: ["オーナー", "メンバー"]
-      description: "団体内のメンバーロール。オーナーはメンバー管理・団体情報編集が可能。メンバーは予約申請・閲覧のみ可能。"
+      values: ["owner（オーナー）", "member（メンバー）"]
+      description: "団体内のメンバーロール（INFO-005.role の enum 値）。owner（オーナー）はメンバー管理・団体情報編集が可能。member（メンバー）は予約申請・閲覧のみ可能。"
       traces_to: ["UC-011", "UC-012"]
 ---
 

@@ -69,8 +69,8 @@ contexts:
   - id: "BIZ-005"
     name: "calendar-integration"
     display_name: "カレンダー連携"
-    description: "承認済み予約のGoogle Calendarへの自動登録・更新・削除。"
-    primary_actors: ["ACTOR-003"]
+    description: "承認済み予約のGoogle Calendarへの自動登録・更新・削除。団体・事務局へのカレンダー購読URL公開を含む。"
+    primary_actors: ["ACTOR-001", "ACTOR-002", "ACTOR-003"]
     goals: ["GOAL-004"]
   - id: "BIZ-006"
     name: "user-authentication"
