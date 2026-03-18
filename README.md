@@ -4,8 +4,8 @@
 
 ```bash
 pnpm i
-cp .dev.vars.example .dev.vars
-pnpm dev:wrangler
+pnpm dev
 ```
 
 `https://127.0.0.1:8787` として起動するはず。
+`https://iclub-reserve.gdsc-osaka.workers.dev` にもとりあえずデプロイ済み。
