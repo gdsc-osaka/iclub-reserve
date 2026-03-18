@@ -27,3 +27,6 @@ pnpm dev:wrangler
 | 団体B | group2@osaka-u.ac.jp | demo1234 |
 
 `https://127.0.0.1:8787` として起動するはず。
+
+<img width="1275" height="852" alt="image" src="https://github.com/user-attachments/assets/b3da300b-9d84-4391-a27e-07251b5bf106" />
+
