@@ -1,16 +1,19 @@
 import { data, Form } from "react-router";
 import type { Route } from "./+types/$id";
+import { EmailPreviewModal } from "~/components/EmailPreviewModal";
 import { getDb } from "~/db/client";
 import {
   facilities,
   groups,
+  memberships,
   messages,
   reservations,
   users,
 } from "~/db/schema";
 import { requireAuth } from "~/lib/auth";
+import { collectPreviews, sendEmail } from "~/lib/email";
 import { generateId } from "~/lib/id";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 export function meta() {
   return [{ title: "予約詳細 | iclub-reserve" }];
@@ -63,6 +66,46 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return data({ session, reservation, messageList });
 }
 
+// メール送信先を取得するヘルパー
+async function getNotifyEmails(
+  db: ReturnType<typeof getDb>,
+  groupId: string,
+  createdBy: string,
+) {
+  // 申請者のメールアドレス
+  const creator = await db
+    .select({ email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, createdBy))
+    .get();
+
+  // 団体オーナーのメールアドレス
+  const owners = await db
+    .select({ email: users.email })
+    .from(memberships)
+    .leftJoin(users, eq(memberships.userId, users.id))
+    .where(
+      and(
+        eq(memberships.groupId, groupId),
+        eq(memberships.role, "owner"),
+      ),
+    )
+    .all();
+
+  // 事務局のメールアドレス
+  const staff = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.isStaff, true))
+    .all();
+
+  const ownerEmails = owners.map((o) => o.email).filter(Boolean) as string[];
+  const staffEmails = staff.map((s) => s.email).filter(Boolean) as string[];
+  const creatorEmail = creator?.email;
+
+  return { creatorEmail, ownerEmails, staffEmails };
+}
+
 export async function action({ request, params, context }: Route.ActionArgs) {
   const { env } = context.cloudflare;
   const session = await requireAuth(request, env);
@@ -80,9 +123,24 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
+  const { creatorEmail, ownerEmails, staffEmails } = await getNotifyEmails(
+    db,
+    reservation.groupId,
+    reservation.createdBy,
+  );
+
+  // 通知先メールアドレス（重複除去）
+  const toGroupMembers = Array.from(
+    new Set([creatorEmail, ...ownerEmails].filter(Boolean) as string[]),
+  );
+  const toAll = Array.from(
+    new Set([...toGroupMembers, ...staffEmails]),
+  );
+
   if (intent === "message") {
     const body = String(formData.get("body") ?? "").trim();
-    if (!body) return data({ error: "メッセージを入力してください。" }, { status: 400 });
+    if (!body)
+      return data({ error: "メッセージを入力してください。" }, { status: 400 });
 
     await db.insert(messages).values({
       id: generateId(),
@@ -90,7 +148,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       senderId: session.userId,
       body,
     });
-    return data({ success: true });
+
+    // メッセージ通知（EVT-008）
+    const targets = session.isStaff ? toGroupMembers : staffEmails;
+    const result = await sendEmail(env.RESEND_API_KEY, {
+      to: targets,
+      subject: `【iclub-reserve】予約にメッセージが届きました`,
+      body: `<p>予約（${reservation.id}）にメッセージが届きました。</p><p>${body}</p>`,
+    });
+
+    return data({
+      success: true,
+      emailPreviews: collectPreviews([result]),
+    });
   }
 
   if (intent === "withdraw" && reservation.status === "provisional") {
@@ -98,7 +168,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       .update(reservations)
       .set({ status: "withdrawn", updatedAt: new Date().toISOString() })
       .where(eq(reservations.id, params.id));
-    return data({ success: true });
+
+    // 取り消し通知（EVT-002）: 申請者・団体オーナーへ
+    const result = await sendEmail(env.RESEND_API_KEY, {
+      to: toGroupMembers,
+      subject: "【iclub-reserve】仮予約を取り消しました",
+      body: `<p>仮予約を取り消しました。</p>`,
+    });
+
+    return data({ success: true, emailPreviews: collectPreviews([result]) });
   }
 
   if (intent === "cancel" && reservation.status === "approved") {
@@ -106,7 +184,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       .update(reservations)
       .set({ status: "cancelled", updatedAt: new Date().toISOString() })
       .where(eq(reservations.id, params.id));
-    return data({ success: true });
+
+    // キャンセル通知（EVT-003）: 申請者・団体オーナー・事務局へ
+    const result = await sendEmail(env.RESEND_API_KEY, {
+      to: toAll,
+      subject: "【iclub-reserve】承認済み予約がキャンセルされました",
+      body: `<p>承認済み予約がキャンセルされました。</p>`,
+    });
+
+    return data({ success: true, emailPreviews: collectPreviews([result]) });
   }
 
   // 事務局専用操作
@@ -116,7 +202,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         .update(reservations)
         .set({ status: "approved", updatedAt: new Date().toISOString() })
         .where(eq(reservations.id, params.id));
-      return data({ success: true });
+
+      // 承認通知（EVT-005）: 申請者・団体オーナーへ
+      const result = await sendEmail(env.RESEND_API_KEY, {
+        to: toGroupMembers,
+        subject: "【iclub-reserve】予約が承認されました",
+        body: `<p>仮予約が承認され、施設利用が確定しました。</p>`,
+      });
+
+      return data({ success: true, emailPreviews: collectPreviews([result]) });
     }
 
     if (intent === "reject" && reservation.status === "provisional") {
@@ -132,7 +226,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           updatedAt: new Date().toISOString(),
         })
         .where(eq(reservations.id, params.id));
-      return data({ success: true });
+
+      // 却下通知（EVT-006）: 申請者・団体オーナーへ
+      const result = await sendEmail(env.RESEND_API_KEY, {
+        to: toGroupMembers,
+        subject: "【iclub-reserve】仮予約が却下されました",
+        body: `<p>仮予約が却下されました。</p><p><strong>理由:</strong> ${reason}</p>`,
+      });
+
+      return data({ success: true, emailPreviews: collectPreviews([result]) });
     }
 
     if (intent === "cancel_by_staff" && reservation.status === "approved") {
@@ -151,7 +253,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           updatedAt: new Date().toISOString(),
         })
         .where(eq(reservations.id, params.id));
-      return data({ success: true });
+
+      // 事務局キャンセル通知（EVT-007）: 申請者・団体オーナーへ
+      const result = await sendEmail(env.RESEND_API_KEY, {
+        to: toGroupMembers,
+        subject: "【iclub-reserve】予約が事務局によりキャンセルされました",
+        body: `<p>予約が事務局によりキャンセルされました。</p><p><strong>理由:</strong> ${reason}</p>`,
+      });
+
+      return data({ success: true, emailPreviews: collectPreviews([result]) });
     }
   }
 
@@ -159,12 +269,24 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  provisional: { label: "仮予約（承認待ち）", className: "bg-yellow-100 text-yellow-700" },
+  provisional: {
+    label: "仮予約（承認待ち）",
+    className: "bg-yellow-100 text-yellow-700",
+  },
   approved: { label: "承認済み", className: "bg-green-100 text-green-700" },
-  withdrawn: { label: "取り消し済み", className: "bg-gray-100 text-gray-600" },
+  withdrawn: {
+    label: "取り消し済み",
+    className: "bg-gray-100 text-gray-600",
+  },
   rejected: { label: "却下済み", className: "bg-red-100 text-red-700" },
-  cancelled: { label: "キャンセル済み", className: "bg-gray-100 text-gray-600" },
-  cancelled_by_staff: { label: "事務局キャンセル", className: "bg-red-100 text-red-700" },
+  cancelled: {
+    label: "キャンセル済み",
+    className: "bg-gray-100 text-gray-600",
+  },
+  cancelled_by_staff: {
+    label: "事務局キャンセル",
+    className: "bg-red-100 text-red-700",
+  },
 };
 
 export default function ReservationDetailPage({
@@ -178,11 +300,23 @@ export default function ReservationDetailPage({
   };
 
   const isActive = ["provisional", "approved"].includes(reservation.status);
+  const emailPreviews =
+    actionData && "emailPreviews" in actionData
+      ? actionData.emailPreviews ?? []
+      : [];
 
   return (
     <div className="max-w-2xl">
+      {/* デモ用メールプレビューモーダル */}
+      {emailPreviews.length > 0 && (
+        <EmailPreviewModal emails={emailPreviews} />
+      )}
+
       <div className="flex items-center gap-3 mb-6">
-        <a href="/reservations" className="text-gray-400 hover:text-gray-600 text-sm">
+        <a
+          href="/reservations"
+          className="text-gray-400 hover:text-gray-600 text-sm"
+        >
           ← 予約一覧
         </a>
         <h1 className="text-xl font-bold text-gray-900">予約詳細</h1>
@@ -197,10 +331,14 @@ export default function ReservationDetailPage({
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="font-medium text-gray-900">{reservation.facilityName}</h2>
+            <h2 className="font-medium text-gray-900">
+              {reservation.facilityName}
+            </h2>
             <p className="text-sm text-gray-500">{reservation.groupName}</p>
           </div>
-          <span className={`text-xs px-2 py-1 rounded font-medium ${status.className}`}>
+          <span
+            className={`text-xs px-2 py-1 rounded font-medium ${status.className}`}
+          >
             {status.label}
           </span>
         </div>
@@ -233,7 +371,9 @@ export default function ReservationDetailPage({
           {reservation.statusReason && (
             <div className="col-span-2">
               <dt className="text-gray-500">理由</dt>
-              <dd className="font-medium text-red-600">{reservation.statusReason}</dd>
+              <dd className="font-medium text-red-600">
+                {reservation.statusReason}
+              </dd>
             </div>
           )}
         </dl>

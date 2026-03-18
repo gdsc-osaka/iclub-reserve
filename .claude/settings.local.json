@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr:*)",
+      "Bash(pnpm --version)",
+      "Bash(pnpm create:*)",
+      "Bash(mv app/package.json .)",
+      "Bash(mv app/pnpm-lock.yaml .)",
+      "Bash(mv app/tsconfig.json .)",
+      "Bash(mv app/vite.config.ts .)",
+      "Bash(mv app/react-router.config.ts .)",
+      "Bash(cp -r app/app ./app_tmp)",
+      "Bash(mv app/public .)",
+      "Bash(mv app/Dockerfile .)",
+      "Bash(rm -rf app)",
+      "Bash(mv app_tmp app)",
+      "Bash(cp -r app_tmp/* app/)",
+      "Bash(rm -rf app_tmp)",
+      "Bash(cd:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm show:*)",
+      "Bash(pnpm react-router:*)",
+      "Bash(pnpm tsc:*)",
+      "Bash(pnpm wrangler:*)",
+      "Bash(echo \"Exit: $?\")"
+    ]
+  }
+}

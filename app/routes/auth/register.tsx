@@ -1,6 +1,6 @@
+import { eq } from "drizzle-orm";
 import { data, Form, Link, redirect } from "react-router";
 import type { Route } from "./+types/register";
-import { eq } from "drizzle-orm";
 import { getDb } from "~/db/client";
 import { users } from "~/db/schema";
 import { isOsakaUDomain } from "~/lib/auth";
@@ -74,7 +74,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     passwordHash,
   });
 
-  // メール送信
+  // メール送信（RESEND_API_KEY がある場合のみ）
   if (env.RESEND_API_KEY) {
     await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -86,20 +86,26 @@ export async function action({ request, context }: Route.ActionArgs) {
         from: "iclub-reserve <noreply@iclub-reserve.osaka-u.ac.jp>",
         to: email,
         subject: "【iclub-reserve】メールアドレスの確認",
-        html: `
-          <p>${name} 様</p>
-          <p>iclub-reserve へのご登録ありがとうございます。</p>
-          <p>以下の認証コードを入力して、登録を完了してください。</p>
-          <p style="font-size:2em;font-weight:bold;letter-spacing:0.2em;">${code}</p>
-          <p>このコードは30分間有効です。</p>
-        `,
+        html: buildVerificationEmail(name, code),
       }),
     });
   }
 
-  throw redirect(
-    `/register/verify?email=${encodeURIComponent(email)}`,
-  );
+  // 認証コードを URL パラメータに含めてリダイレクト（デモ: メール未送信時もコードを表示）
+  const params = new URLSearchParams({ email });
+  if (!env.RESEND_API_KEY) {
+    // デモ用: コードを URL に含めて verify 画面で直接表示
+    params.set("demo_code", code);
+  }
+  throw redirect(`/register/verify?${params.toString()}`);
+}
+
+function buildVerificationEmail(name: string, code: string): string {
+  return `<p>${name} 様</p>
+<p>iclub-reserve へのご登録ありがとうございます。</p>
+<p>以下の認証コードを入力して、登録を完了してください。</p>
+<p style="font-size:2em;font-weight:bold;letter-spacing:0.2em;">${code}</p>
+<p>このコードは30分間有効です。</p>`;
 }
 
 export default function RegisterPage({ actionData }: Route.ComponentProps) {

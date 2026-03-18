@@ -1,10 +1,12 @@
+import { and, eq, gt, inArray, lt } from "drizzle-orm";
 import { data, Form, redirect } from "react-router";
 import type { Route } from "./+types/new";
+import { EmailPreviewModal } from "~/components/EmailPreviewModal";
 import { getDb } from "~/db/client";
-import { facilities, groups, memberships, reservations } from "~/db/schema";
+import { facilities, groups, memberships, reservations, users } from "~/db/schema";
 import { requireAuth } from "~/lib/auth";
+import { collectPreviews, sendEmail } from "~/lib/email";
 import { generateId } from "~/lib/id";
-import { and, eq, gt, inArray, lt } from "drizzle-orm";
 
 export function meta() {
   return [{ title: "予約申請 | iclub-reserve" }];
@@ -104,7 +106,41 @@ export async function action({ request, context }: Route.ActionArgs) {
     createdBy: session.userId,
   });
 
-  throw redirect(`/reservations/${id}`);
+  // 仮予約申請通知（EVT-001）: 申請者・団体オーナー・事務局へ
+  const ownerEmails = await db
+    .select({ email: users.email })
+    .from(memberships)
+    .leftJoin(users, eq(memberships.userId, users.id))
+    .where(and(eq(memberships.groupId, groupId), eq(memberships.role, "owner")))
+    .all();
+  const staffEmails = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.isStaff, true))
+    .all();
+  const notifyEmails = Array.from(
+    new Set([
+      ...(ownerEmails.map((o) => o.email).filter(Boolean) as string[]),
+      ...(staffEmails.map((s) => s.email).filter(Boolean) as string[]),
+    ]),
+  );
+
+  const emailResult = await sendEmail(env.RESEND_API_KEY, {
+    to: notifyEmails.length > 0 ? notifyEmails : [session.email],
+    subject: "【iclub-reserve】仮予約申請が届きました",
+    body: `<p>新しい仮予約申請が届きました。</p><p>承認は予約管理画面からお願いします。</p>`,
+  });
+
+  // メール送信済みの場合はそのまま詳細ページへ
+  if (emailResult.sent) {
+    throw redirect(`/reservations/${id}`);
+  }
+
+  // デモ用: メールプレビューを表示するためリダイレクトせずに返す
+  return data({
+    createdId: id,
+    emailPreviews: collectPreviews([emailResult]),
+  });
 }
 
 export default function NewReservationPage({
@@ -112,6 +148,36 @@ export default function NewReservationPage({
   actionData,
 }: Route.ComponentProps) {
   const { facilityList, myGroups } = loaderData;
+
+  // 申請完了 + メールプレビューがある場合
+  const emailPreviews =
+    actionData && "emailPreviews" in actionData
+      ? actionData.emailPreviews ?? []
+      : [];
+  const createdId =
+    actionData && "createdId" in actionData ? actionData.createdId : null;
+
+  if (createdId) {
+    return (
+      <div>
+        {emailPreviews.length > 0 && (
+          <EmailPreviewModal emails={emailPreviews} />
+        )}
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+          <p className="text-green-600 font-semibold mb-2">✓ 仮予約を申請しました</p>
+          <p className="text-sm text-gray-500 mb-4">
+            事務局の承認をお待ちください。
+          </p>
+          <a
+            href={`/reservations/${createdId}`}
+            className="inline-block bg-blue-600 text-white px-6 py-2 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            予約詳細を確認する
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   if (myGroups.length === 0) {
     return (
@@ -136,7 +202,7 @@ export default function NewReservationPage({
     <div>
       <h1 className="text-xl font-bold mb-6">予約申請</h1>
 
-      {actionData?.error && (
+      {actionData && "error" in actionData && actionData.error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
           {actionData.error}
         </div>
