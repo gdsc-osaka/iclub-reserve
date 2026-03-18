@@ -1,0 +1,23 @@
+{
+  "name": "iclub-reserve",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "node build.mjs",
+    "deploy": "pnpm build && wrangler pages deploy dist",
+    "db:migrate:local": "wrangler d1 execute iclub-reserve --local --file=migrations/0001_initial.sql && wrangler d1 execute iclub-reserve --local --file=migrations/0002_seed.sql",
+    "db:migrate:remote": "wrangler d1 execute iclub-reserve --remote --file=migrations/0001_initial.sql && wrangler d1 execute iclub-reserve --remote --file=migrations/0002_seed.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "remix": "next"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}

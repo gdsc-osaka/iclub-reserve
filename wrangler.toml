@@ -1,0 +1,12 @@
+name = "iclub-reserve"
+main = "_worker.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "iclub-reserve"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+SESSION_SECRET = "demo-secret-change-in-production"
