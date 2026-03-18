@@ -1,8 +1,8 @@
 # iclub-reserve — 製品要件定義書（PRD）
 
-> **ステータス**: Draft
-> **最終更新**: 2026-03-18
-> **RDRA成果物バージョン**: feat/rdra-requirements ブランチ時点
+> **ステータス**: Draft  
+> **最終更新**: 2026-03-18  
+> **RDRA成果物バージョン**: feat/rdra-requirements ブランチ時点 (`cce4c553faecc8a27648c6d2f5d39ef13e3e9fc8`)
 
 ---
 
