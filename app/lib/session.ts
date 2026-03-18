@@ -39,6 +39,9 @@ export async function getSession(
   kv: KVNamespace,
   token: string,
 ): Promise<SessionData | null> {
+  // KV キーは最大 512 バイト。トークンは 32 文字 UUID のはずなので
+  // 異常に長い場合（古いクッキーや破損データ）は無効扱いにする
+  if (!token || token.length > 128) return null;
   const raw = await kv.get(`session:${token}`);
   if (!raw) return null;
   return JSON.parse(raw) as SessionData;
