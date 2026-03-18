@@ -1,0 +1,11 @@
+node_modules/
+build/
+dist/
+.cache/
+.wrangler/
+.react-router/
+.dev.vars
+*.local
+.env
+.env.*
+!.env.example

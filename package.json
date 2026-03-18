@@ -1,0 +1,40 @@
+{
+  "name": "iclub-reserve",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "dev": "vite dev",
+    "dev:wrangler": "react-router build && wrangler dev",
+    "typecheck": "react-router typegen && tsc",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply iclub-reserve-db --local --yes",
+    "db:migrate:remote": "wrangler d1 migrations apply iclub-reserve-db --remote",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@react-router/cloudflare": "^7.13.1",
+    "@react-router/node": "7.13.1",
+    "@react-router/serve": "7.13.1",
+    "drizzle-orm": "^0.45.1",
+    "isbot": "^5.1.31",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "7.13.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.29.1",
+    "@react-router/dev": "7.13.1",
+    "@tailwindcss/vite": "^4.1.13",
+    "@types/node": "^22",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "drizzle-kit": "^0.31.10",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "vite-tsconfig-paths": "^5.1.4",
+    "wrangler": "^4.75.0"
+  }
+}

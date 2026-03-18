@@ -1,0 +1,12 @@
+# ローカル開発用環境変数（.dev.vars にコピーして使用）
+# .dev.vars は git 管理外（.gitignore 参照）
+
+APP_URL=http://localhost:5173
+SESSION_SECRET=dev-secret-please-change-in-production
+
+# メール送信（Resend API）
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxx
+
+# Google Calendar プロキシ（Cloud Run）
+CALENDAR_SERVICE_URL=http://localhost:8080
+CALENDAR_SERVICE_SECRET=dev-calendar-secret

@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "iclub-reserve",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./server.ts",
+  "assets": {
+    "directory": "./build/client"
+  },
+
+  // D1 Database
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "iclub-reserve-db",
+      "database_id": "local-placeholder",
+      "migrations_dir": "./app/db/migrations"
+    }
+  ],
+
+  // KV Namespaces (sessions, verification codes)
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "local-placeholder-kv"
+    }
+  ],
+
+  // R2 Bucket (facility photos)
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "iclub-reserve-assets"
+    }
+  ],
+
+  // Environment variables (set secrets in production via wrangler secret)
+  "vars": {
+    "APP_URL": "http://localhost:5173",
+    "SESSION_SECRET": "dev-secret-change-in-production"
+  }
+}
