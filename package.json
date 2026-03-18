@@ -4,9 +4,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "node build.mjs && wrangler dev",
     "build": "node build.mjs",
-    "deploy": "pnpm build && wrangler pages deploy dist",
+    "deploy": "pnpm build && wrangler deploy",
     "db:migrate:local": "wrangler d1 execute iclub-reserve --local --file=migrations/0001_initial.sql && wrangler d1 execute iclub-reserve --local --file=migrations/0002_seed.sql",
     "db:migrate:remote": "wrangler d1 execute iclub-reserve --remote --file=migrations/0001_initial.sql && wrangler d1 execute iclub-reserve --remote --file=migrations/0002_seed.sql",
     "typecheck": "tsc --noEmit"
