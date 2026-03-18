@@ -37,7 +37,7 @@ entities:
         type: "enum"
         required: true
         description: "予約ステータス: provisional（仮予約）/ approved（承認済み）/ withdrawn（団体による取り消し済み）/ rejected（事務局による却下済み）/ cancelled（団体によるキャンセル済み）/ cancelled_by_staff（事務局によるキャンセル済み）"
-      - name: "rejection_reason"
+      - name: "status_reason"
         type: "string"
         required: false
         description: "却下・キャンセル理由。status が rejected（事務局却下）または cancelled_by_staff（事務局キャンセル）の場合は必須（COND-002）。withdrawn（団体取り消し）・cancelled（団体キャンセル）の場合は任意。"
@@ -307,7 +307,7 @@ erDiagram
         integer headcount
         string note
         enum status "provisional/approved/withdrawn/rejected/cancelled/cancelled_by_staff"
-        string rejection_reason
+        string status_reason
         string created_by FK
         datetime created_at
         datetime updated_at
