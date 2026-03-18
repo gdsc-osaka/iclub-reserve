@@ -109,8 +109,8 @@ system:
   conditions:
     - id: "COND-001"
       name: "重複予約不可条件"
-      description: "同一施設・同一時間帯に承認済みの予約が存在しないこと。申請時（UC-002）・変更時（UC-005/BUC-018）・承認時（UC-006）に確認する。"
-      traces_to: ["UC-002", "UC-005", "UC-006"]
+      description: "同一施設・同一時間帯に承認済みの予約が存在しないこと。申請時（UC-002）・変更時（UC-005/BUC-018）・承認時（UC-006）・事務局直接作成時（UC-008）に確認する。重複が存在する場合は先にキャンセルが必要。"
+      traces_to: ["UC-002", "UC-005", "UC-006", "UC-008"]
     - id: "COND-002"
       name: "却下・キャンセル必須入力"
       description: "事務局による却下（UC-006）および事務局によるキャンセル（UC-007）時は理由の入力が必須。status が rejected または cancelled_by_staff の場合に rejection_reason を必須とする。団体による取り消し（UC-003・withdrawn）・キャンセル（UC-004・cancelled）は任意。"
