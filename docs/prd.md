@@ -2,7 +2,7 @@
 
 > **ステータス**: Draft  
 > **最終更新**: 2026-03-18  
-> **RDRA成果物バージョン**: feat/rdra-requirements ブランチ時点 (`cce4c553faecc8a27648c6d2f5d39ef13e3e9fc8`)
+> **RDRA成果物バージョン**: feat/rdra-requirements ブランチ時点 (`b0f9fe1eb5f911cbe57807664494f4e7cf434828`)
 
 ---
 
@@ -244,7 +244,7 @@ Innovators' Club（i-Club）が管理する施設・設備の予約は、現状�
 
 | エンティティ | 主要属性 |
 |------------|---------|
-| INFO-001 予約 | id, group_id, facility_id, start_at, end_at, headcount, note, status, rejection_reason, created_by |
+| INFO-001 予約 | id, group_id, facility_id, start_at, end_at, headcount, note, status, status_reason, created_by |
 | INFO-002 施設/設備 | id, name, description, photo_url, google_calendar_id, calendar_url, is_active |
 | INFO-003 団体 | id, name, is_active |
 | INFO-004 メッセージ | id, reservation_id, sender_id, body, sent_at |
