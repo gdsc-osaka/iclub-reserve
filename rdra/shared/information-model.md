@@ -112,7 +112,7 @@ entities:
       - target: "INFO-001"
         type: "1:N"
         label: "予約"
-    traces_to: ["UC-015", "UC-016", "SCR-001", "SCR-009"]
+    traces_to: ["UC-015", "UC-016", "UC-018", "SCR-001", "SCR-009", "SCR-010"]
 
   - id: "INFO-003"
     name: "団体"
@@ -248,7 +248,7 @@ entities:
       - target: "INFO-004"
         type: "1:N"
         label: "送信メッセージ"
-    traces_to: ["UC-010", "UC-011", "SCR-006", "SCR-007"]
+    traces_to: ["UC-010", "UC-011", "UC-019", "UC-020", "SCR-006", "SCR-007", "SCR-011", "SCR-012", "SCR-013"]
 ---
 
 # 情報モデル（横断）
