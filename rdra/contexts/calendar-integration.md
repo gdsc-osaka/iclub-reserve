@@ -61,7 +61,7 @@ boundary:
     - id: "EVT-011"
       name: "Google Calendar更新"
       trigger: "UC-008（事務局が承認済み予約の公開フィールド〈施設名・日時〉を直接変更した場合）"
-      description: "承認済みのまま公開フィールドが変更された場合に Google Calendar を更新する。使用人数・備考は非公開のため変更してもEVT-011は発火しない。UC-005は非公開フィールドのみ変更のためトリガーしない。"
+      description: "承認済みのまま公開フィールドが変更された場合に Google Calendar を更新する。使用人数・備考は非公開のため変更してもEVT-011は発火しない。UC-005（施設・日時変更）は承認済みを仮予約に差し戻してEVT-010（削除）を発火するため、承認済みのままCalendarを更新するEVT-011はトリガーしない。"
 
 system:
   information: ["INFO-001", "INFO-002"]

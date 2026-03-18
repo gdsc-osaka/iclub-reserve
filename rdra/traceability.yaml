@@ -110,7 +110,7 @@ elements:
     type: requirement
     name: "事務局による承認済み予約のキャンセル"
     defined_in: "rdra/contexts/reservation-approval.md"
-    traces_to: ["GOAL-002"]
+    traces_to: ["GOAL-002", "GOAL-003"]
 
   - id: "REQ-013"
     type: requirement

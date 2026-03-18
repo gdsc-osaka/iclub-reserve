@@ -99,7 +99,7 @@ entities:
       - name: "is_active"
         type: "boolean"
         required: true
-        description: "有効/無効フラグ。無効化には将来の予約がすべて取り消し済みであることが必要。"
+        description: "有効/無効フラグ。無効化には将来の予約（仮予約・承認済み）がすべて終了状態（取り消し済み・却下済み・キャンセル済み）であることが必要（COND-003）。"
       - name: "created_at"
         type: "datetime"
         required: true
