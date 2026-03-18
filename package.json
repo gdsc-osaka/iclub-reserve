@@ -8,7 +8,7 @@
     "dev:wrangler": "react-router build && wrangler dev",
     "typecheck": "react-router typegen && tsc",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply iclub-reserve-db --local --yes",
+    "db:migrate:local": "wrangler d1 migrations apply iclub-reserve-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply iclub-reserve-db --remote",
     "db:studio": "drizzle-kit studio",
     "db:seed": "node scripts/create-demo-accounts.mjs > .tmp-seed.sql && wrangler d1 execute iclub-reserve-db --local --file .tmp-seed.sql && del .tmp-seed.sql",
