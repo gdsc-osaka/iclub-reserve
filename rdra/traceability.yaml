@@ -273,7 +273,7 @@ elements:
     type: business_usecase
     name: "仮予約の承認・却下"
     defined_in: "rdra/contexts/reservation-approval.md"
-    traces_to: ["REQ-010", "REQ-011", "REQ-013"]
+    traces_to: ["REQ-005", "REQ-010", "REQ-011", "REQ-013"]
 
   - id: "BUC-007"
     type: business_usecase
@@ -357,7 +357,7 @@ elements:
     type: business_usecase
     name: "アカウント登録"
     defined_in: "rdra/contexts/user-authentication.md"
-    traces_to: ["REQ-008", "REQ-031"]
+    traces_to: ["REQ-008", "REQ-031", "REQ-033"]
 
   - id: "BUC-021"
     type: business_usecase
@@ -490,7 +490,7 @@ coverage:
   total_goals: 6
   goals_with_requirements: 6
   total_requirements: 33
-  requirements_with_bucs: 32
+  requirements_with_bucs: 33
   total_bucs: 21
   bucs_with_ucs: 20
   total_ucs: 20

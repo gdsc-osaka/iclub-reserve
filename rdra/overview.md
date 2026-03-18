@@ -53,7 +53,7 @@ contexts:
     display_name: "予約承認"
     description: "事務局による仮予約の承認・却下、直接予約の作成・変更・削除、メッセージ送受信。"
     primary_actors: ["ACTOR-001"]
-    goals: ["GOAL-002", "GOAL-003", "GOAL-005"]
+    goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005"]
   - id: "BIZ-003"
     name: "group-management"
     display_name: "団体管理"

@@ -30,7 +30,7 @@ environment:
     - id: "BUC-019"
       name: "カレンダー購読URLの公開"
       actors: ["ACTOR-001", "ACTOR-002"]
-      description: "施設・設備ごとのカレンダー購読URLを予約システム上に表示し、誰でも追加できる。"
+      description: "施設・設備ごとのカレンダー購読URLをログイン済みの団体・事務局に公開する。URLを入手した後はそのURLを使って誰でも自分のカレンダーに追加できる。"
       traces_to: ["REQ-030"]
 
 boundary:

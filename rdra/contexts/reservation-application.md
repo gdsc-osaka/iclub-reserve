@@ -40,7 +40,7 @@ environment:
     - id: "BUC-001"
       name: "空き確認・仮予約申請"
       actors: ["ACTOR-002"]
-      description: "施設・設備の空き状況を確認し、仮予約を申請する。自団体の予約一覧確認も含む。"
+      description: "施設・設備の空き状況を確認し、仮予約を申請する。申請時に申請者・団体オーナー全員・事務局へ通知。自団体の予約一覧確認も含む。"
       traces_to: ["REQ-001", "REQ-002", "REQ-003"]
     - id: "BUC-002"
       name: "仮予約の取り消し"
@@ -50,12 +50,12 @@ environment:
     - id: "BUC-003"
       name: "承認済み予約のキャンセル"
       actors: ["ACTOR-002"]
-      description: "承認済み予約をキャンセルする。申請者・事務局へ通知。"
+      description: "承認済み予約をキャンセルする。申請者・団体オーナー全員・事務局へ通知。"
       traces_to: ["REQ-006"]
     - id: "BUC-004"
       name: "承認済み予約の内容変更（使用人数・備考）"
       actors: ["ACTOR-002"]
-      description: "承認済み予約の使用人数・備考を変更する。再承認不要。申請者・事務局へ通知。"
+      description: "承認済み予約の使用人数・備考を変更する。再承認不要。申請者・団体オーナー全員・事務局へ通知。"
       traces_to: ["REQ-007"]
     - id: "BUC-018"
       name: "承認済み予約の施設・日時変更"
@@ -65,7 +65,7 @@ environment:
     - id: "BUC-005"
       name: "仮予約の内容変更"
       actors: ["ACTOR-002"]
-      description: "承認前の仮予約を直接編集する。ステータスは仮予約のまま維持。申請者・事務局へ通知。"
+      description: "承認前の仮予約を直接編集する。ステータスは仮予約のまま維持。申請者・団体オーナー全員・事務局へ通知。"
       traces_to: ["REQ-029"]
 
 boundary:
@@ -83,7 +83,7 @@ boundary:
       screens: ["SCR-002"]
       events: ["EVT-001"]
       traces_to: ["BUC-001"]
-      description: "施設/設備・日時・使用人数・備考を入力して仮予約を申請する。申請時に申請者・事務局へメール通知。"
+      description: "施設/設備・日時・使用人数・備考を入力して仮予約を申請する。申請時に申請者・団体オーナー全員・事務局へメール通知。"
     - id: "UC-003"
       name: "仮予約を取り消す"
       actors: ["ACTOR-002"]
@@ -97,14 +97,14 @@ boundary:
       screens: ["SCR-003", "SCR-005"]
       events: ["EVT-012"]
       traces_to: ["BUC-005"]
-      description: "承認前の仮予約の施設/設備・日時・使用人数・備考を直接編集する。ステータス変更なし。申請者・事務局へメール通知。"
+      description: "承認前の仮予約の施設/設備・日時・使用人数・備考を直接編集する。ステータス変更なし。申請者・団体オーナー全員・事務局へメール通知。"
     - id: "UC-004"
       name: "承認済み予約をキャンセルする"
       actors: ["ACTOR-002"]
       screens: ["SCR-003"]
       events: ["EVT-003", "EVT-010"]
       traces_to: ["BUC-003"]
-      description: "承認済み予約をキャンセルする。申請者・事務局へメール通知。"
+      description: "承認済み予約をキャンセルする。申請者・団体オーナー全員・事務局へメール通知。"
     - id: "UC-005"
       name: "承認済み予約の内容を変更する"
       actors: ["ACTOR-002"]

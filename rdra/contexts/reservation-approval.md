@@ -15,7 +15,7 @@ value:
       traces_to: ["GOAL-002", "GOAL-003"]
     - id: "REQ-012"
       description: "承認済み予約を事務局側からキャンセルできる。キャンセル理由の入力が必須。団体へ通知する。"
-      traces_to: ["GOAL-002"]
+      traces_to: ["GOAL-002", "GOAL-003"]
     - id: "REQ-013"
       description: "全団体の予約をカレンダー・一覧で確認できる。"
       traces_to: ["GOAL-001"]
@@ -32,7 +32,7 @@ environment:
       name: "仮予約の承認・却下"
       actors: ["ACTOR-001"]
       description: "事務局が仮予約を確認し、承認または却下（理由必須）する。団体へメール通知。全団体の予約一覧確認も含む。"
-      traces_to: ["REQ-010", "REQ-011", "REQ-013"]
+      traces_to: ["REQ-005", "REQ-010", "REQ-011", "REQ-013"]
     - id: "BUC-007"
       name: "承認済み予約の事務局キャンセル"
       actors: ["ACTOR-001"]

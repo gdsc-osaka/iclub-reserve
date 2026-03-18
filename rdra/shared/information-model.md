@@ -3,7 +3,7 @@ type: rdra-information-model
 entities:
   - id: "INFO-001"
     name: "予約"
-    description: "施設・設備に対する予約エントリ。ステータスにより仮予約・承認済み・取り消し済み・キャンセル済みを区別する。"
+    description: "施設・設備に対する予約エントリ。ステータスにより provisional（仮予約）・approved（承認済み）・withdrawn（団体取り消し）・rejected（事務局却下）・cancelled（団体キャンセル）・cancelled_by_staff（事務局キャンセル）を区別する。"
     attributes:
       - name: "id"
         type: "string"
@@ -63,6 +63,9 @@ entities:
       - target: "INFO-004"
         type: "1:N"
         label: "メッセージ"
+      - target: "INFO-006"
+        type: "N:1"
+        label: "作成者"
     traces_to: ["UC-001", "UC-002", "UC-003", "UC-004", "UC-005", "UC-006", "UC-007", "UC-008", "SCR-001", "SCR-002", "SCR-003", "SCR-005"]
 
   - id: "INFO-002"
@@ -260,6 +263,7 @@ erDiagram
     INFO_002 ||--o{ INFO_001 : "予約される"
     INFO_001 ||--o{ INFO_004 : "持つ"
     INFO_006 ||--o{ INFO_004 : "送信する"
+    INFO_006 ||--o{ INFO_001 : "作成する"
 
     INFO_006["INFO-006: ユーザー"] {
         string id PK
