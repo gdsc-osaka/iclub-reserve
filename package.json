@@ -1,0 +1,32 @@
+{
+  "name": "iclub-reserve",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm run --parallel \"/^dev:/\"",
+    "dev:worker": "NODE_ENV=development wrangler dev dist/worker.js",
+    "dev:browser": "pnpm run copy-assets && NODE_ENV=development esbuild app/assets/*.ts app/assets/*.tsx --outbase=app/assets --outdir=public/assets --bundle --minify --splitting --format=esm --entry-names='[dir]/[name]' --chunk-names='chunks/[name]-[hash]' --sourcemap --watch --jsx-factory=h --jsx-fragment=Fragment",
+    "build": "pnpm run build:browser && pnpm run build:worker",
+    "build:browser": "pnpm run copy-assets && NODE_ENV=production esbuild app/assets/*.ts app/assets/*.tsx --outbase=app/assets --outdir=public/assets --bundle --minify --splitting --format=esm --entry-names='[dir]/[name]' --chunk-names='chunks/[name]-[hash]' --jsx-factory=h --jsx-fragment=Fragment",
+    "build:worker": "NODE_ENV=production esbuild server.tsx --bundle --outfile=dist/worker.js --format=esm --platform=neutral --target=es2022 --jsx-factory=h --jsx-fragment=Fragment",
+    "deploy": "pnpm run build && wrangler deploy dist/worker.js",
+    "copy-assets": "mkdir -p public/assets && cp app/styles/global.css public/assets/global.css",
+    "db:init": "wrangler d1 execute reserve-db --local --file=schema.sql",
+    "db:seed": "wrangler d1 execute reserve-db --local --file=seed.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "remix": "3.0.0-alpha.3",
+    "preact": "^10.25.4",
+    "preact-render-to-string": "^6.5.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "@types/dom-navigation": "^1.0.7",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3",
+    "tsx": "^4.19.2",
+    "wrangler": "^3.109.0"
+  }
+}

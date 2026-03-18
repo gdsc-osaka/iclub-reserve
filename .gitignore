@@ -1,0 +1,22 @@
+# dependencies
+node_modules
+.pnpm-debug.log*
+
+# build
+dist
+public/assets
+
+# cloudflare
+.wrangler
+.dev.vars
+.wranglerrc
+*.sqlite
+
+# misc
+.DS_Store
+.env
+.env.*
+!.env.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

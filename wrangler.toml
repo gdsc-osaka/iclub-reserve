@@ -1,0 +1,11 @@
+name = "iclub-reserve"
+main = "server.ts"
+compatibility_date = "2024-03-20"
+compatibility_flags = ["nodejs_compat"]
+
+assets = { directory = "./public" }
+
+[[d1_databases]]
+binding = "DB"
+database_name = "reserve-db"
+database_id = "00000000-0000-0000-0000-000000000000"
