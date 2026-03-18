@@ -63,6 +63,19 @@ stateDiagram-v2
     cancelled_by_staff --> [*]
 ```
 
+### ステータス値と STATE-001 の状態名の対応
+
+`stateDiagram-v2` の各ノードは enum 値（`provisional` 等）で表記している。RDRA `state-models.md`（STATE-001）では日本語の状態名を使用しており、対応は以下の通り。
+
+| enum 値（ADR・DB） | STATE-001 の状態名 |
+|-------------------|------------------|
+| `provisional` | 仮予約 |
+| `approved` | 承認済み |
+| `withdrawn` | 取り消し済み |
+| `rejected` | 却下済み |
+| `cancelled` | キャンセル済み |
+| `cancelled_by_staff` | 事務局キャンセル済み |
+
 ## 影響・トレードオフ
 
 | 項目 | 内容 |

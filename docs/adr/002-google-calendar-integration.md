@@ -40,7 +40,7 @@ Google Calendar はユーザーが自分のカレンダーアプリに購読追�
 ```
 GCP プロジェクト
   └─ Service Account（例: iclub-reserve@<project-id>.iam.gserviceaccount.com）
-       └─ 秘密鍵（JSON）→ Secret Manager または環境変数で管理
+       └─ 秘密鍵（JSON）→ 本番: Secret Manager / ローカル開発: 環境変数（.env）
 
 Google Calendar（施設ごとに1つ）
   └─ 所有者: Service Account
@@ -67,7 +67,7 @@ Google Calendar（施設ごとに1つ）
 
 | 項目 | 内容 |
 |------|------|
-| 秘密鍵の管理 | Service Account の JSON 秘密鍵を Secret Manager または環境変数で安全に管理する必要がある。漏洩した場合は即座にローテーションする |
+| 秘密鍵の管理 | 本番環境では Secret Manager（Google Cloud）で管理する。環境変数への長期秘密鍵の設定はログや設定ファイル経由で漏洩するリスクがあるため、ローカル開発時のみ `.env` への設定を許容する。漏洩時は即座にローテーションする |
 | カレンダー所有権 | カレンダーは Service Account が所有するため、GCP プロジェクトが失われると連携も失われる |
 | INFO-002.google_calendar_id | 施設ごとのカレンダー ID を登録していない場合、Calendar 連携をスキップする（未設定施設はカレンダー未反映） |
 | Google Calendar API 制限 | 無料枠内で運用できる見込みだが、大量の予約更新が発生する場合はクォータに注意する |
