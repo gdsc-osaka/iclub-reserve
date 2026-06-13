@@ -66,7 +66,21 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "作成者"
-    traces_to: ["UC-001", "UC-002", "UC-003", "UC-004", "UC-005", "UC-006", "UC-007", "UC-008", "SCR-001", "SCR-002", "SCR-003", "SCR-005"]
+    traces_to:
+      [
+        "UC-001",
+        "UC-002",
+        "UC-003",
+        "UC-004",
+        "UC-005",
+        "UC-006",
+        "UC-007",
+        "UC-008",
+        "SCR-001",
+        "SCR-002",
+        "SCR-003",
+        "SCR-005",
+      ]
 
   - id: "INFO-002"
     name: "施設/設備"
@@ -248,7 +262,18 @@ entities:
       - target: "INFO-004"
         type: "1:N"
         label: "送信メッセージ"
-    traces_to: ["UC-010", "UC-011", "UC-019", "UC-020", "SCR-006", "SCR-007", "SCR-011", "SCR-012", "SCR-013"]
+    traces_to:
+      [
+        "UC-010",
+        "UC-011",
+        "UC-019",
+        "UC-020",
+        "SCR-006",
+        "SCR-007",
+        "SCR-011",
+        "SCR-012",
+        "SCR-013",
+      ]
 ---
 
 # 情報モデル（横断）
