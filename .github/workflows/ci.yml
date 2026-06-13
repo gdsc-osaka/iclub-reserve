@@ -1,39 +1,117 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: ["develop"]
   pull_request:
     branches: ["develop"]
 
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
-      - name: Install pnpm
+jobs:
+  run_format:
+    name: Format
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: "pnpm"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install node modules
+        run: pnpm i
 
-      - name: Check Format (Oxfmt)
-        run: pnpm run format
+      - name: Format
+        run: pnpm format
 
-      - name: Lint (Oxlint)
-        run: pnpm run lint
+  run_lint:
+    name: Lint
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
 
-      - name: Type Check (tsc)
-        run: pnpm run typecheck
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Test (Vitest)
-        run: pnpm run test
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install node modules
+        run: pnpm i
+
+      - name: Lint
+        run: pnpm lint
+
+  run_type_check:
+    name: Type Check
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install node modules
+        run: pnpm i
+
+      - name: Type Check
+        run: pnpm typecheck
+
+  run_test:
+    name: Test
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install node modules
+        run: pnpm i
+
+      - name: Test
+        run: pnpm test
