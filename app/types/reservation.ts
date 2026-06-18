@@ -1,5 +1,5 @@
 interface Reservation {
-  id: number;
+  id: string;
   name: string;
   description: string;
   photo_url: string;
