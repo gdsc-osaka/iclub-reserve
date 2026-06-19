@@ -1,4 +1,4 @@
-interface Reservation {
+interface Facility {
   id: string;
   name: string;
   description: string;
