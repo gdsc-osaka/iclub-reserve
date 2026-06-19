@@ -6,7 +6,13 @@ interface Reservation {
   end_at: string;
   headcount: number;
   note: string;
-  status: 'provisional' | 'approved' | 'withdrawn' | 'rejected' | 'cancelled' | 'cancelled_by_staff';
+  status:
+    | "provisional"
+    | "approved"
+    | "withdrawn"
+    | "rejected"
+    | "cancelled"
+    | "cancelled_by_staff";
   status_reason: string;
   created_by: string;
 }
