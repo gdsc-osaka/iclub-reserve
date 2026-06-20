@@ -1,79 +1,51 @@
-# Welcome to React Router!
+# iclub-reserve
 
-A modern, production-ready template for building full-stack React applications using React Router.
+阪大 Innovators' Club（i-Club）向けの施設・設備予約システムです。団体（学生）からの予約申請と事務局による承認・管理、および Google Calendar との連携機能を備えています。
 
-## Features
+## アーキテクチャ・技術スタック
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+本プロジェクトは、**機能ベース（バーティカル）開発**を前提に、フルスタックな技術構成を採用しています。
 
-## Getting Started
+- **言語**: TypeScript
+- **フロントエンド・バックエンド**: [React Router v8](https://reactrouter.com/) (旧 Remix)
+  - ルート単位で UI コンポーネント、データ取得（Loader）、更新処理（Action）を統合
+- **スタイリング**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- **データベース**: [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite)
+  - ORM: [Drizzle ORM](https://orm.drizzle.team/)
+- **認証**: [Better Auth](https://better-auth.com/)
+  - `osaka-u.ac.jp` ドメイン限定のメール（マジックリンク / 認証コード）認証
+- **インフラ・ホスティング**: [Cloudflare Workers](https://www.cloudflare.com/products/workers/)
+  - IaC: [Terraform](https://developer.hashicorp.com/terraform) を用いたインフラ定義と管理
+- **パッケージマネージャー**: [pnpm](https://pnpm.io/)
 
-### Installation
+## ドキュメント
 
-Install the dependencies:
+- [製品要件定義書 (PRD)](./docs/prd.md)
+- [RDRA成果物・要件定義](./rdra/)
+
+## 開発環境のセットアップ
+
+### 前提条件
+
+- [Node.js](https://nodejs.org/ja/download) (v24 以上推奨)
+- [pnpm](https://pnpm.io/installation)
+- [Terraform](https://developer.hashicorp.com/terraform/install) (インフラ変更時のみ)
+
+### インストール
+
+依存関係のインストール:
 
 ```bash
 pnpm install
 ```
 
-### Development
+### ローカル開発
 
-Start the development server with HMR:
+開発サーバーの起動（HMR 対応）:
 
 ```bash
 pnpm run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
-
-## Previewing the Production Build
-
-Preview the production build locally:
-
-```bash
-pnpm run preview
-```
-
-## Building for Production
-
-Create a production build:
-
-```bash
-pnpm run build
-```
-
-## Deployment
-
-Deployment is done using the Wrangler CLI.
-
-To build and deploy directly to production:
-
-```sh
-pnpm run deploy
-```
-
-To deploy a preview URL:
-
-```sh
-pnpm dlx wrangler versions upload
-```
-
-You can then promote a version to production after verification or roll it out progressively.
-
-```sh
-pnpm dlx wrangler versions deploy
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+アプリケーションは `http://localhost:5173` で利用可能になります。
+※ ローカルの D1 データベース（SQLite）のマイグレーションやシード手順については、追って整備します。
