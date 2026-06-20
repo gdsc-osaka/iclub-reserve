@@ -11,12 +11,6 @@ importers:
       isbot:
         specifier: ^5.1.36
         version: 5.1.43
-      oxfmt:
-        specifier: ^0.55.0
-        version: 0.55.0
-      oxlint:
-        specifier: ^1.70.0
-        version: 1.70.0
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -26,9 +20,6 @@ importers:
       react-router:
         specifier: 8.0.0
         version: 8.0.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      vitest:
-        specifier: ^4.1.9
-        version: 4.1.9(@types/node@22.19.21)(vite@8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0))
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.42.1
@@ -48,6 +39,12 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.17)
+      oxfmt:
+        specifier: ^0.55.0
+        version: 0.55.0
+      oxlint:
+        specifier: ^1.70.0
+        version: 1.70.0
       tailwindcss:
         specifier: ^4.2.2
         version: 4.3.1
@@ -57,6 +54,9 @@ importers:
       vite:
         specifier: ^8.0.3
         version: 8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@22.19.21)(vite@8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0))
       wrangler:
         specifier: ^4.103.0
         version: 4.103.0
