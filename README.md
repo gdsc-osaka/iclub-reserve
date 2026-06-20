@@ -30,7 +30,6 @@
 - [Node.js](https://nodejs.org/ja/download) (v24 以上推奨)
 - [pnpm](https://pnpm.io/installation)
 - [Terraform](https://developer.hashicorp.com/terraform/install) (インフラ変更時のみ)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
 
 ### インストール
 
