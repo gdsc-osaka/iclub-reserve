@@ -4,7 +4,7 @@
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "my-react-router-app",
+  "name": "iclub-reserve",
   "compatibility_date": "2026-06-20",
   "main": "./workers/app.ts",
   "vars": {
