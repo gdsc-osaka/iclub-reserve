@@ -4,8 +4,8 @@
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "iclub-reserve",
-  "compatibility_date": "2025-04-04",
+  "name": "my-react-router-app",
+  "compatibility_date": "2026-06-20",
   "main": "./workers/app.ts",
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
