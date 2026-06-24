@@ -12,7 +12,9 @@ export default function Login() {
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold tracking-tight">ログイン</h1>
-          <p className="text-sm text-muted-foreground">メールアドレスとパスワードを入力してください</p>
+          <p className="text-sm text-muted-foreground">
+            メールアドレスとパスワードを入力してください
+          </p>
         </div>
 
         <form className="space-y-4">
