@@ -15,7 +15,7 @@ jobs:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           username: "GitHub Review"
 
-          embed-title: "${{ github.event.review.user.name }} approved #${{ github.event.pull_request.number }} 🎉"
+          embed-title: "${{ github.event.review.user.login }} approved #${{ github.event.pull_request.number }} 🎉"
           embed-url: "${{ github.event.review.html_url }}"
           embed-author-name: "${{ github.event.review.user.login }}"
           embed-author-url: "${{ github.event.review.user.html_url }}"
@@ -36,7 +36,7 @@ jobs:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           username: "GitHub Review"
 
-          embed-title: "${{ github.event.review.user.name }} requested changes for #${{ github.event.pull_request.number }} 🔄"
+          embed-title: "${{ github.event.review.user.login }} requested changes for #${{ github.event.pull_request.number }} 🔄"
           embed-url: "${{ github.event.review.html_url }}"
           embed-author-name: "${{ github.event.review.user.login }}"
           embed-author-url: "${{ github.event.review.user.html_url }}"
@@ -57,7 +57,7 @@ jobs:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           username: "GitHub Review"
 
-          embed-title: "${{ github.event.review.user.name }} commented on #${{ github.event.pull_request.number }} 💬"
+          embed-title: "${{ github.event.review.user.login }} commented on #${{ github.event.pull_request.number }} 💬"
           embed-url: "${{ github.event.review.html_url }}"
           embed-author-name: "${{ github.event.review.user.login }}"
           embed-author-url: "${{ github.event.review.user.html_url }}"
