@@ -1,5 +1,6 @@
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Textarea } from "~/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -46,12 +47,12 @@ export default function GroupReservation() {
 
       <Label htmlFor="note">備考</Label>
       <br />
-      <Input type="text" id="note" name="note" required className={inputClass} />
+      <Textarea id="note" name="note" required className={inputClass} />
       <br />
 
       <Label htmlFor="status">予約状態</Label>
       <br />
-      <Select name="status">
+      <Select name="status" defaultValue="provisional">
         <SelectTrigger className={inputClass}>
           <SelectValue placeholder="予約状態" />
         </SelectTrigger>
