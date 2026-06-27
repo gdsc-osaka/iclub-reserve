@@ -18,7 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply iclub-reserve-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply iclub-reserve-db --remote",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "node scripts/run-studio.js"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
