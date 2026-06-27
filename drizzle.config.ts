@@ -5,7 +5,8 @@ import path from "node:path";
 // Drizzle Studio 用に、ローカルの SQLite ファイルパスを自動探索する関数
 // 非公式の実装のため、wrangler や Drizzle Studio の将来のバージョンで動作しなくなる可能性あり
 function getLocalD1DB() {
-  const basePath = path.resolve(".wrangler/state/v3/d1/miniflare-D1DatabaseObject");
+  const relativePath = ".wrangler/state/v3/d1/miniflare-D1DatabaseObject";
+  const basePath = path.resolve(relativePath);
 
   if (!fs.existsSync(basePath)) {
     throw new Error("ローカル DB が見つかりません。先に `pnpm run dev` を実行してください。");
@@ -18,6 +19,12 @@ function getLocalD1DB() {
 
   if (dbFiles.length === 0) {
     throw new Error("対象の .sqlite ファイルが見つかりません。");
+  }
+
+  if (dbFiles.length !== 1) {
+    throw new Error(
+      `対象の .sqlite ファイルを一意に特定できません。\n${relativePath} ディレクトリから古い DB ファイルを削除してください:\n${dbFiles.join("\n")}`,
+    );
   }
 
   return path.resolve(basePath, dbFiles[0]);
