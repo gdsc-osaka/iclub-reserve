@@ -1,6 +1,7 @@
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import { Button } from "~/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -67,9 +68,9 @@ export default function GroupReservation() {
       </Select>
       <br />
 
-      <button type="submit" className={inputClass}>
+      <Button type="submit" className={inputClass}>
         送信
-      </button>
+      </Button>
     </form>
   );
 }
