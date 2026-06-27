@@ -38,4 +38,12 @@
    * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
    */
   // "services": [  {   "binding": "MY_SERVICE",   "service": "my-service"  } ]
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "iclub-reserve-db",
+      "database_id": "6ae196e1-208f-4182-b421-e8f8e25fe755",
+      "migrations_dir": "drizzle/migrations",
+    },
+  ],
 }
