@@ -5,6 +5,6 @@ export const usersTable = sqliteTable("users", {
   email: text().notNull(),
   name: text().notNull(),
   is_staff: integer({ mode: "boolean" }).notNull(),
-  createdAt: integer({ mode: "timestamp_ms" }).notNull(),
-  updatedAt: integer({ mode: "timestamp_ms" }).notNull(),
+  created_at: integer({ mode: "timestamp_ms" }).notNull(),
+  updated_at: integer({ mode: "timestamp_ms" }).notNull(),
 });
