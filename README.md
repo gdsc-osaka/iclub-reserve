@@ -39,6 +39,12 @@
 pnpm install
 ```
 
+ローカル環境の DB へのマイグレーションの適用
+
+```bash
+pnpm run db:migrate:local
+```
+
 ### ローカル開発
 
 開発サーバーの起動（HMR 対応）:
@@ -48,4 +54,12 @@ pnpm run dev
 ```
 
 アプリケーションは `http://localhost:5173` で利用可能になります。
-※ ローカルの D1 データベース（SQLite）のマイグレーションやシード手順については、追って整備します。
+※ ローカルの D1 データベース（SQLite）のシード手順については、追って整備します。
+
+> [!TIP]
+> 開発サーバーの起動後に、別ターミナルで以下のコマンドを実行すると、DB の内容を直接確認・変更できる Drizzle Studio を起動できます。
+> `https://local.drizzle.studio` で利用可能です。
+>
+> ```bash
+> pnpm run db:studio
+> ```
