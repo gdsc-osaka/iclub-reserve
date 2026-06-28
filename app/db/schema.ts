@@ -1,4 +1,5 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { createId } from "@paralleldrive/cuid2";
 
 export const usersTable = sqliteTable("users", {
   id: text().primaryKey(),
@@ -8,3 +9,23 @@ export const usersTable = sqliteTable("users", {
   created_at: integer({ mode: "timestamp_ms" }).notNull(),
   updated_at: integer({ mode: "timestamp_ms" }).notNull(),
 });
+
+export const groupsTable = sqliteTable("groups", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+
+  name: text("name", { length: 100 }).notNull(),
+
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export type Group = typeof groupsTable.$inferSelect;
+export type NewGroup = typeof groupsTable.$inferInsert;
