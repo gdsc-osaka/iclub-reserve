@@ -29,7 +29,7 @@ export const groupsTable = sqliteTable("groups", {
 
 export enum MembershipRole {
   Owner = "owner",
-  Member ="member"
+  Member = "member",
 }
 export const membershipTable = sqliteTable("membership", {
   id: text("id")
@@ -38,16 +38,16 @@ export const membershipTable = sqliteTable("membership", {
 
   name: text("id", { length: 100 }).notNull(),
 
-  userId: text("user_id").references(()=> usersTable.id)
+  userId: text("user_id")
+    .references(() => usersTable.id)
     .notNull(),
 
-  groupId: text("group_id").references(()=> groupsTable.id)
+  groupId: text("group_id")
+    .references(() => groupsTable.id)
     .notNull(),
 
-  role: text("role")
-   .$type <MembershipRole>()
-   .notNull(),
-   
+  role: text("role").$type<MembershipRole>().notNull(),
+
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -55,7 +55,6 @@ export const membershipTable = sqliteTable("membership", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
-
 
 export type Group = typeof groupsTable.$inferSelect;
 export type NewGroup = typeof groupsTable.$inferInsert;
