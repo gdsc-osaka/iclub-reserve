@@ -22,6 +22,13 @@
       "when": 1782623859989,
       "tag": "0002_abandoned_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1782977347792,
+      "tag": "0003_clean_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }
