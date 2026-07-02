@@ -42,8 +42,8 @@ export const facilityTable = sqliteTable("facility", {
 
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
-    .$defaultFn(() => new Date())
-})
+    .$defaultFn(() => new Date()),
+});
 
 export const groupsTable = sqliteTable("groups", {
   id: text("id")
