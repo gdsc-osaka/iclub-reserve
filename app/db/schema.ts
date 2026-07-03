@@ -79,7 +79,7 @@ export const groupReservationTable = sqliteTable("reservation", {
     .notNull()
     .$defaultFn(() => new Date()),
 
-  headCount: integer("headcount").notNull(),
+  headCount: integer("head_count").notNull(),
 
   note: text("note"),
 
