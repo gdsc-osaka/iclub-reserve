@@ -28,11 +28,11 @@ export const facilityTable = sqliteTable("facility", {
 
   description: text("description"),
 
-  photoURL: text("photo_url"),
+  photoUrl: text("photo_url"),
 
-  googleCalenderId: text("google_calendar_id"),
+  googleCalendarId: text("google_calendar_id"),
 
-  calenderURL: text("calendar_url"),
+  calendarUrl: text("calendar_url"),
 
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 
