@@ -67,9 +67,9 @@ export const groupReservationTable = sqliteTable("reservation", {
     .primaryKey()
     .$defaultFn(() => createId()),
 
-  groupId: text("group_id").references(() => groupsTable.id),
+  groupId: text("group_id").references(() => groupsTable.id).notNull(),
 
-  facilityId: text("facility_id").references(() => facilityTable.id),
+  facilityId: text("facility_id").references(() => facilityTable.id).notNull(),
 
   startAt: integer("start_at", { mode: "timestamp_ms" })
     .notNull()
