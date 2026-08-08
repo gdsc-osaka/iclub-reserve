@@ -15,6 +15,13 @@
       "when": 1782577793646,
       "tag": "0001_brainy_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782623859989,
+      "tag": "0002_abandoned_alice",
+      "breakpoints": true
     }
   ]
 }
