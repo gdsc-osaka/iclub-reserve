@@ -11,6 +11,19 @@
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
     "NODE_VERSION": "24",
     "PNPM_VERSION": "11",
+    /**
+     * Oracle Email Delivery（SMTP 送信）の設定。
+     * 機密でない値のみここに置き、認証情報は .dev.vars / `wrangler secret put` で渡す。
+     * ホスト名とポートは OCI コンソールの「SMTP 送信情報」から転記すること。
+     *
+     * ポートは 465（暗黙 TLS）固定。587 は STARTTLS が必要だが
+     * workerd 側が未対応のため使えない (https://github.com/cloudflare/workerd/issues/2712)。
+     * ポート 25 は Cloudflare Workers からブロックされている。
+     */
+    "SMTP_HOST": "smtp.email.ap-osaka-1.oci.oraclecloud.com",
+    "SMTP_PORT": "465",
+    "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
+    "MAIL_FROM_NAME": "i-Club 予約システム",
   },
   "observability": {
     "enabled": true,

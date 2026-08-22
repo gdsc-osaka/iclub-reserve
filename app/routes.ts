@@ -6,4 +6,6 @@ export default [
   // route("signup", "routes/signup.tsx"),
   route("reservation", "routes/group_reservation.tsx"),
   route("login", "routes/login.tsx"),
+  // Better Auth のエンドポイント（/api/auth/... を全て受ける）
+  route("api/auth/*", "routes/api.auth.$.ts"),
 ] satisfies RouteConfig;

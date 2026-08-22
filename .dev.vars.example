@@ -4,3 +4,8 @@ BETTER_AUTH_SECRET=your-secret-key-here
 # `pnpm run dev` が起動する URL に合わせる（ズレると INVALID_ORIGIN になる）
 BETTER_AUTH_URL=http://localhost:5173
 
+# Oracle Email Delivery の SMTP 認証情報
+# OCI コンソール > アイデンティティ > ユーザー > SMTP 資格証明 から発行する。
+# 空のままにしておくと、メールを送信せず内容をターミナルに出力する（ローカル開発用）。
+SMTP_USER=
+SMTP_PASSWORD=
