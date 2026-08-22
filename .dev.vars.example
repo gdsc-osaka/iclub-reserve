@@ -1,0 +1,6 @@
+# Better Auth
+# BETTER_AUTH_SECRET は `openssl rand -base64 32` などで生成する
+BETTER_AUTH_SECRET=your-secret-key-here
+# `pnpm run dev` が起動する URL に合わせる（ズレると INVALID_ORIGIN になる）
+BETTER_AUTH_URL=http://localhost:5173
+

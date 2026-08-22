@@ -1,14 +1,20 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { createId } from "@paralleldrive/cuid2";
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
-  email: text("email").notNull().unique(),
   name: text("name").notNull(),
-  emailVerified: integer("email_verified", { mode: "boolean" }).default(false).notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" })
+    .default(false)
+    .notNull(),
   image: text("image"),
-  is_staff: integer({ mode: "boolean" }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
     .notNull(),
@@ -68,7 +74,10 @@ export const account = sqliteTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("account_issuer_accountId_uidx").on(table.issuer, table.accountId),
+    uniqueIndex("account_issuer_accountId_uidx").on(
+      table.issuer,
+      table.accountId,
+    ),
     index("account_userId_idx").on(table.userId),
   ],
 );
@@ -109,23 +118,3 @@ export const accountRelations = relations(account, ({ one }) => ({
     references: [user.id],
   }),
 }));
-
-export const groupsTable = sqliteTable("groups", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-
-  name: text("name", { length: 100 }).notNull(),
-
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export type Group = typeof groupsTable.$inferSelect;
-export type NewGroup = typeof groupsTable.$inferInsert;
