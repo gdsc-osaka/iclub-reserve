@@ -4,6 +4,18 @@ import { createSmtpMailSender } from "./smtp-mail-sender.server";
 import type { MailSender } from "~/domain/mail/mail-sender";
 
 /**
+ * SMTP の認証情報（`.dev.vars` や `wrangler secret put` で渡す）。
+ *
+ * `wrangler types` が生成する `Env` には「今の環境に実際にある値」しか載らないため、
+ * 未設定の環境では型にも現れない。未設定でも動く（コンソール出力に切り替える）のが
+ * この関数の役目なので、あってもなくてもよい値として読む。
+ */
+type SmtpCredentials = {
+  readonly SMTP_USER?: string;
+  readonly SMTP_PASSWORD?: string;
+};
+
+/**
  * 実行環境に応じた MailSender を組み立てる。
  *
  * SMTP の認証情報が設定されていなければコンソール出力にフォールバックするので、
@@ -13,8 +25,7 @@ import type { MailSender } from "~/domain/mail/mail-sender";
  * モジュール読み込み時ではなく呼び出しごとに生成すること。
  */
 export const createMailSender = (): MailSender => {
-  const username = env.SMTP_USER;
-  const password = env.SMTP_PASSWORD;
+  const { SMTP_USER: username, SMTP_PASSWORD: password } = env as Env & SmtpCredentials;
 
   if (!username || !password) {
     console.warn(
