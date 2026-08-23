@@ -7,5 +7,10 @@ BETTER_AUTH_URL=http://localhost:5173
 # Oracle Email Delivery の SMTP 認証情報
 # OCI コンソール > アイデンティティ > ユーザー > SMTP 資格証明 から発行する。
 # 空のままにしておくと、メールを送信せず内容をターミナルに出力する（ローカル開発用）。
-SMTP_USER=
-SMTP_PASSWORD=
+#
+# 【注意】値は必ずダブルクォートで囲むこと。
+# このファイルは dotenv 形式で読まれるため、囲まないと値の中の `#` 以降が
+# コメント扱いで切り捨てられる。OCI が発行するパスワードには `#` が含まれることがあり、
+# 切り捨てられると SMTP 認証に失敗する（送信時に auth_failed になる）。
+SMTP_USER=""
+SMTP_PASSWORD=""
