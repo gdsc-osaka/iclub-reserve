@@ -8,7 +8,9 @@ export const user = sqliteTable("user", {
   name: text("name").notNull(),
   emailVerified: integer("email_verified", { mode: "boolean" }).default(false).notNull(),
   image: text("image"),
-  is_staff: integer({ mode: "boolean" }).notNull(),
+  // 事務局スタッフかどうか。Better Auth はユーザー作成時にこの列を渡さないため、
+  // 既定値を入れておかないと NOT NULL 制約でアカウント作成に失敗する。
+  is_staff: integer({ mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
     .notNull(),
