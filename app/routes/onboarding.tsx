@@ -10,7 +10,7 @@ import { isProfileCompleted } from "~/domain/auth/user-profile";
 import { authClient } from "~/lib/auth-client";
 import { toAuthErrorMessage } from "~/lib/auth-error-message";
 import { LOGIN_PATH, readRedirectTo, withRedirectTo } from "~/lib/auth-redirect";
-import { getSessionUser } from "~/lib/auth-session.server";
+import { getRequestUser } from "~/lib/auth-session.server";
 
 import type { Route } from "./+types/onboarding";
 
@@ -25,9 +25,9 @@ export function meta(_: Route.MetaArgs) {
  *   （ログインし直せば、名前が空の人はこの画面へ自動で戻ってくるため）
  * - 登録済み: もうこの画面は不要なので、そのまま元のページへ返す
  */
-export async function loader({ request }: Route.LoaderArgs) {
+export function loader({ request, context }: Route.LoaderArgs) {
   const redirectTo = readRedirectTo(request);
-  const user = await getSessionUser(request);
+  const user = getRequestUser(context);
 
   if (!user) throw redirect(withRedirectTo(LOGIN_PATH, redirectTo));
   if (isProfileCompleted(user)) throw redirect(redirectTo);

@@ -12,7 +12,7 @@ import { isProfileCompleted } from "~/domain/auth/user-profile";
 import { authClient } from "~/lib/auth-client";
 import { toAuthErrorMessage } from "~/lib/auth-error-message";
 import { readRedirectTo, WELCOME_PATH, withRedirectTo } from "~/lib/auth-redirect";
-import { getSessionUser } from "~/lib/auth-session.server";
+import { getRequestUser } from "~/lib/auth-session.server";
 
 import type { Route } from "./+types/login";
 
@@ -26,9 +26,9 @@ export function meta(_: Route.MetaArgs) {
  * お名前がまだ空の人（アカウントを作った直後に離脱した人）は
  * セットアップ画面へ、それ以外の人は元いたページへ送る。
  */
-export async function loader({ request }: Route.LoaderArgs) {
+export function loader({ request, context }: Route.LoaderArgs) {
   const redirectTo = readRedirectTo(request);
-  const user = await getSessionUser(request);
+  const user = getRequestUser(context);
 
   if (user) {
     throw redirect(

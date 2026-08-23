@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  isPublicPath,
   LOGIN_PATH,
   readRedirectTo,
   toCurrentPath,
+  toCurrentPathname,
   toSafeRedirectTo,
   withRedirectTo,
 } from "./auth-redirect";
@@ -37,6 +39,49 @@ describe("readRedirectTo", () => {
     const request = new Request("https://example.com/login?redirectTo=https%3A%2F%2Fevil.example");
 
     expect(readRedirectTo(request)).toBe("/");
+  });
+});
+
+describe("isPublicPath", () => {
+  it.each([
+    ["ログイン画面", "/login"],
+    ["お名前の登録画面", "/welcome"],
+    ["Better Auth の API", "/api/auth/email-otp/send-verification-otp"],
+  ])("%s はログインなしで開ける", (_, pathname) => {
+    expect(isPublicPath(pathname)).toBe(true);
+  });
+
+  it.each([
+    ["トップページ", "/"],
+    ["予約画面", "/reservation"],
+    ["存在しない画面", "/unknown"],
+    ["ログイン画面に似ているだけのパス", "/login-guide"],
+    ["ログイン画面の下の階層", "/login/extra"],
+    ["Better Auth 以外の API", "/api/reservations"],
+  ])("%s はログインが必要", (_, pathname) => {
+    expect(isPublicPath(pathname)).toBe(false);
+  });
+});
+
+describe("toCurrentPathname", () => {
+  it("クエリパラメータを取り除いたパスを返す", () => {
+    const request = new Request("https://example.com/reservation?date=2026-08-23");
+
+    expect(toCurrentPathname(request)).toBe("/reservation");
+  });
+
+  it("画面遷移用のリクエスト（.data）も元のパスに戻す", () => {
+    const request = new Request(
+      "https://example.com/reservation.data?_routes=routes%2Freservation",
+    );
+
+    expect(toCurrentPathname(request)).toBe("/reservation");
+  });
+
+  it("トップページの画面遷移用リクエスト（/_.data）も元に戻す", () => {
+    const request = new Request("https://example.com/_.data");
+
+    expect(toCurrentPathname(request)).toBe("/");
   });
 });
 
