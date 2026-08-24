@@ -48,7 +48,7 @@ describe("createGetUser", () => {
     expect(result._unsafeUnwrapErr().code).toBe(UserErrorCode.UserNotFound);
   });
 
-  it("ID が空文字の場合は INVALID_USER_ID を返す", async () => {
+  it("ID が空文字の場合は USER_NOT_FOUND を返す", async () => {
     const getUser = createGetUser({
       userRepository: createFakeUserRepository([dummyUser]),
     });
@@ -56,7 +56,7 @@ describe("createGetUser", () => {
     const result = await getUser({ userId: "   " });
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(UserErrorCode.InvalidUserId);
+    expect(result._unsafeUnwrapErr().code).toBe(UserErrorCode.UserNotFound);
   });
 
   it("DB アクセスに失敗した場合は DATABASE_ERROR がそのまま伝播する", async () => {
