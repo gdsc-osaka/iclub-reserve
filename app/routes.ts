@@ -10,4 +10,5 @@ export default [
   route("welcome", "routes/onboarding.tsx"),
   // Better Auth のエンドポイント（/api/auth/... を全て受ける）
   route("api/auth/*", "routes/api.auth.$.ts"),
+  route("api/users/:userId", "routes/api.user.tsx"),
 ] satisfies RouteConfig;
