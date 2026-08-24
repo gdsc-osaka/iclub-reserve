@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a153cb33-53ae-40f4-9be2-5f4a19b99c5b",
+  "id": "1d308e02-5ccc-4a05-83fc-952d34083b73",
   "prevId": "dccd5b5b-1561-41e3-a795-5e3a2aa8e35e",
   "tables": {
     "facility": {
@@ -92,14 +92,14 @@
           "name": "group_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "facility_id": {
           "name": "facility_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "start_at": {
@@ -116,8 +116,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "headcount": {
-          "name": "headcount",
+        "head_count": {
+          "name": "head_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

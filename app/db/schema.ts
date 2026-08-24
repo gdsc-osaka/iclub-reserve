@@ -1,14 +1,17 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
 
-export enum GroupReservationStatus {
-  Provisional = "provisional",
-  Approved = "approved",
-  Withdrawn = "withdrawn",
-  Rejected = "rejected",
-  Cancelled = "cancelled",
-  CancelledByStaff = "cancelled_by_staff",
-}
+export const GroupReservationStatus = {
+  Provisional: "provisional",
+  Approved: "approved",
+  Withdrawn: "withdrawn",
+  Rejected: "rejected",
+  Cancelled: "cancelled",
+  CancelledByStaff: "cancelled_by_staff",
+} as const;
+
+export type GroupReservationStatus =
+  (typeof GroupReservationStatus)[keyof typeof GroupReservationStatus];
 
 export const usersTable = sqliteTable("users", {
   id: text().primaryKey(),

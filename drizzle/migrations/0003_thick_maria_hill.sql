@@ -12,11 +12,11 @@ CREATE TABLE `facility` (
 --> statement-breakpoint
 CREATE TABLE `reservation` (
 	`id` text PRIMARY KEY NOT NULL,
-	`group_id` text,
-	`facility_id` text,
+	`group_id` text NOT NULL,
+	`facility_id` text NOT NULL,
 	`start_at` integer NOT NULL,
 	`end_at` integer NOT NULL,
-	`headcount` integer NOT NULL,
+	`head_count` integer NOT NULL,
 	`note` text,
 	`status` text NOT NULL,
 	`status_reason` text,
