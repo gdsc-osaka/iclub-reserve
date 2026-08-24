@@ -108,5 +108,38 @@ export const groupReservationTable = sqliteTable("reservation", {
     .$defaultFn(() => new Date()),
 });
 
+export const MembershipRole = {
+  Owner: "owner",
+  Member: "member",
+} as const;
+
+export type MembershipRole = (typeof MembershipRole)[keyof typeof MembershipRole];
+
+export const membershipTable = sqliteTable("membership", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+
+  name: text("name", { length: 100 }).notNull(),
+
+  userId: text("user_id")
+    .references(() => usersTable.id)
+    .notNull(),
+
+  groupId: text("group_id")
+    .references(() => groupsTable.id)
+    .notNull(),
+
+  role: text("role").$type<MembershipRole>().notNull(),
+
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 export type Group = typeof groupsTable.$inferSelect;
 export type NewGroup = typeof groupsTable.$inferInsert;
