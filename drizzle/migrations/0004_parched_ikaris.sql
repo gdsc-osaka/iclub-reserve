@@ -1,5 +1,6 @@
 CREATE TABLE `membership` (
-	`id` text(100) NOT NULL,
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text(100) NOT NULL,
 	`user_id` text NOT NULL,
 	`group_id` text NOT NULL,
 	`role` text NOT NULL,
