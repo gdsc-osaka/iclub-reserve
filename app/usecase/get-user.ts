@@ -1,10 +1,9 @@
 import type { ResultAsync } from "neverthrow";
-import { err, errAsync, ok } from "neverthrow";
+import { err, ok } from "neverthrow";
 
 import type { User } from "~/domain/user";
-import { isValidUserId } from "~/domain/user";
 import type { UserError } from "~/domain/user-error";
-import { invalidUserId, userNotFound } from "~/domain/user-error";
+import { userNotFound } from "~/domain/user-error";
 import type { UserRepository } from "~/domain/user-repository";
 
 /** このユースケースが必要とする依存 */
@@ -32,13 +31,8 @@ export type GetUser = (input: GetUserInput) => ResultAsync<User, UserError>;
 export const createGetUser =
   (deps: GetUserDeps): GetUser =>
   ({ userId }) => {
-    const id = userId.trim();
-    if (!isValidUserId(id)) {
-      return errAsync(invalidUserId());
-    }
-
     // findById が失敗した場合、andThen の中身は実行されずエラーがそのまま伝播する
     return deps.userRepository
-      .findById(id)
-      .andThen((user) => (user === undefined ? err(userNotFound(id)) : ok(user)));
+      .findById(userId)
+      .andThen((user) => (user === undefined ? err(userNotFound(userId)) : ok(user)));
   };

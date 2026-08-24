@@ -1,20 +1,20 @@
 import { eq } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
-import { usersTable } from "~/db/schema";
+import { user } from "~/db/schema";
 import type { User, UserId } from "~/domain/user";
 import { databaseError } from "~/domain/user-error";
 import type { UserRepository } from "~/domain/user-repository";
 import type { Database } from "./db";
 
 /** users テーブルの 1 行を、ドメインモデルの User に変換する */
-const toUser = (row: typeof usersTable.$inferSelect): User => ({
+const toUser = (row: typeof user.$inferSelect): User => ({
   id: row.id,
   email: row.email,
   name: row.name,
   isStaff: row.is_staff,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
 });
 
 /**
@@ -28,7 +28,7 @@ export const createUserRepository = (db: Database): UserRepository => ({
     // fromPromise で「例外を投げる世界」から「Result を返す世界」へ橋渡しする。
     // ここが try-catch を書く唯一の場所になる。
     ResultAsync.fromPromise(
-      db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1),
+      db.select().from(user).where(eq(user.id, id)).limit(1),
       databaseError,
     ).map((rows) => {
       const row = rows.at(0);
