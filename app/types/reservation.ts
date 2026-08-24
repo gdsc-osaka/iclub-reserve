@@ -1,9 +1,18 @@
 export interface Reservation {
   id: string;
-  name: string;
-  description: string;
-  photo_url: string;
-  google_calendar_id: string;
-  calendar_url: string;
-  is_active: boolean;
+  group_id: string;
+  facility_id: string;
+  start_at: string;
+  end_at: string;
+  headcount: number;
+  note: string;
+  status:
+    | "provisional"
+    | "approved"
+    | "withdrawn"
+    | "rejected"
+    | "cancelled"
+    | "cancelled_by_staff";
+  status_reason: string;
+  created_by: string;
 }

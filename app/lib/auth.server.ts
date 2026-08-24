@@ -21,10 +21,22 @@ import {
 /** 許可外のドメインを拒否するときに返す説明文。 */
 const NOT_ALLOWED_MESSAGE = `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`;
 
+/**
+ * Better Auth の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
+ *
+ * `wrangler types` が生成する `Env` には「今の環境に実際にある値」しか載らない。
+ * シークレットは CI には存在しないため型にも現れず、直接参照すると型検査が落ちる。
+ * そのため、ここで形だけを宣言して読む。
+ */
+type AuthSecrets = {
+  readonly BETTER_AUTH_SECRET?: string;
+  readonly BETTER_AUTH_URL?: string;
+};
+
 const createAuth = () =>
   betterAuth({
-    secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
+    secret: (env as Env & AuthSecrets).BETTER_AUTH_SECRET,
+    baseURL: (env as Env & AuthSecrets).BETTER_AUTH_URL,
     database: drizzleAdapter(createDb(env.DB), {
       provider: "sqlite",
     }),
