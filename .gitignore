@@ -1,5 +1,6 @@
 .DS_Store
 .env
+.env.*
 /node_modules/
 *.tsbuildinfo
 
@@ -14,4 +15,3 @@
 worker-configuration.d.ts
 
 !.dev.vars.example
-!.env.example
