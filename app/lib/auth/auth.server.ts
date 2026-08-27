@@ -6,7 +6,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { env } from "cloudflare:workers";
-import { createDb } from "./db";
+import { createDb } from "~/infra/db";
 import {
   ALLOWED_EMAIL_DOMAINS_LABEL,
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
