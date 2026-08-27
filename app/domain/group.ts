@@ -1,4 +1,5 @@
 import type { ResultAsync } from "neverthrow";
+import type { BaseError } from "./error";
 
 export interface Group {
   id: string;
@@ -14,10 +15,8 @@ export const GroupErrorCode = {
 } as const;
 export type GroupErrorCode = (typeof GroupErrorCode)[keyof typeof GroupErrorCode];
 
-export interface GroupError {
+export interface GroupError extends BaseError {
   readonly code: GroupErrorCode;
-  readonly message: string;
-  readonly cause?: unknown;
 }
 
 export interface GroupRepository {
