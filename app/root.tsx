@@ -7,7 +7,7 @@ import {
   ScrollRestoration,
 } from "react-router";
 
-import { getRequestUser, requireAuthentication } from "~/lib/auth-session.server";
+import { getRequestUser, requireAuthentication } from "~/lib/auth/auth-session.server";
 
 import type { Route } from "./+types/root";
 import "./app.css";

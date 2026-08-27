@@ -7,10 +7,10 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { isProfileCompleted } from "~/domain/auth/user-profile";
-import { authClient } from "~/lib/auth-client";
-import { toAuthErrorMessage } from "~/lib/auth-error-message";
-import { LOGIN_PATH, readRedirectTo, withRedirectTo } from "~/lib/auth-redirect";
-import { getRequestUser } from "~/lib/auth-session.server";
+import { authClient } from "~/lib/auth/auth-client";
+import { toAuthErrorMessage } from "~/lib/auth/auth-error-message";
+import { LOGIN_PATH, readRedirectTo, withRedirectTo } from "~/lib/auth/auth-redirect";
+import { getRequestUser } from "~/lib/auth/auth-session.server";
 
 import type { Route } from "./+types/onboarding";
 
