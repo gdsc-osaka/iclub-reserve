@@ -11,5 +11,5 @@ export default [
   // Better Auth のエンドポイント（/api/auth/... を全て受ける）
   route("api/auth/*", "routes/api.auth.$.ts"),
   route("api/users/:userId", "routes/api.user.tsx"),
-  route("groups/:groupId", "routes/groups.tsx")
+  route("groups/:groupId", "routes/groups.tsx"),
 ] satisfies RouteConfig;
