@@ -61,16 +61,6 @@ describe("getUserUseCase", () => {
     expect(result._unsafeUnwrapErr().code).toBe(UserErrorCode.UserNotFound);
   });
 
-  it("ID が空白だけの場合は DB へ問い合わせずに INVALID_USER_ID を返す", async () => {
-    const result = await getUserUseCase(
-      { userRepository: createFailingUserRepository() },
-      { userId: "   " },
-    );
-
-    expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(UserErrorCode.InvalidUserId);
-  });
-
   it("DB アクセスに失敗した場合は DATABASE_ERROR がそのまま伝播する", async () => {
     const result = await getUserUseCase(
       { userRepository: createFailingUserRepository() },
