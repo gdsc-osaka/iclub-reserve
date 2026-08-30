@@ -12,6 +12,9 @@
   "[markdown]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
   },
+  "[css]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
   "[tailwindcss]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
   },
