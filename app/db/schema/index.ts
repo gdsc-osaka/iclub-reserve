@@ -10,6 +10,10 @@
  * - `reservation.ts`: このアプリ独自のテーブル。こちらは手で書く。
  *
  * 参照する側は今までどおり `~/db/schema` から import すればよい。
+ *
+ * なお `db:auth:generate` が使う CLI のバージョンは package.json で固定してある。
+ * CLI は自分と同じバージョンの better-auth で生成するため、
+ * `better-auth` を上げるときは CLI のバージョンも合わせて上げること。
  */
 export * from "./auth";
 export * from "./reservation";
