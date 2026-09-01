@@ -2,6 +2,10 @@
 # BETTER_AUTH_SECRET は `openssl rand -base64 32` などで生成する
 BETTER_AUTH_SECRET=your-secret-key-here
 # `pnpm run dev` が起動する URL に合わせる（ズレると INVALID_ORIGIN になる）
+#
+# パスキーの rpID（どのサイトのパスキーかを表す識別子）も、この URL のホスト名から決まる。
+# rpID は登録済みのパスキー 1 つ 1 つに焼き付けられるため、
+# ホスト名を変えると、それ以前に登録されたパスキーはすべて使えなくなる。
 BETTER_AUTH_URL=http://localhost:5173
 
 # Oracle Email Delivery の SMTP 認証情報
