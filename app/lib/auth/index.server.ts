@@ -11,4 +11,10 @@
  */
 import { getAuth } from "./auth.server";
 
+/**
+ * @deprecated
+ *
+ * Better Auth CLI 用のエンドポイントのため、
+ * 代わりに `./auth.server` の `getAuth()` を使用してください。
+ */
 export const auth = getAuth();
