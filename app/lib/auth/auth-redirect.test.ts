@@ -55,6 +55,7 @@ describe("isPublicPath", () => {
     ["トップページ", "/"],
     ["予約画面", "/reservation"],
     ["存在しない画面", "/unknown"],
+    ["パスキーの登録を勧める画面", "/passkey/suggest"],
     ["ログイン画面に似ているだけのパス", "/login-guide"],
     ["ログイン画面の下の階層", "/login/extra"],
     ["Better Auth 以外の API", "/api/reservations"],

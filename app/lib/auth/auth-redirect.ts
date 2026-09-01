@@ -7,6 +7,14 @@ export const LOGIN_PATH = "/login";
 /** 初回セットアップ（お名前の登録）の画面。 */
 export const WELCOME_PATH = "/welcome";
 
+/**
+ * パスキーの登録を勧める画面。
+ *
+ * メールの認証コードでログインした人を、行き先へ送る前に一度だけ通す。
+ * ログインが必要な画面なので `PUBLIC_PATHS` には入れない。
+ */
+export const PASSKEY_SUGGEST_PATH = "/passkey/suggest";
+
 /** 遷移先の指定がないときに送るページ。 */
 const DEFAULT_REDIRECT_TO = "/";
 
