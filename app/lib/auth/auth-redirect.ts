@@ -52,10 +52,6 @@ export const isPublicPath = (pathname: string): boolean =>
 export const toSafeRedirectTo = (value: string | null): string =>
   value && value.startsWith("/") && !value.startsWith("//") ? value : DEFAULT_REDIRECT_TO;
 
-/** リクエストの `?redirectTo=...` から、ログイン後の遷移先を取り出す。 */
-export const readRedirectTo = (request: Request): string =>
-  toSafeRedirectTo(new URL(request.url).searchParams.get(REDIRECT_TO_PARAM));
-
 /**
  * 今リクエストされているページのパス（クエリパラメータを除く）を返す。
  *
@@ -70,6 +66,26 @@ export const toCurrentPathname = (request: Request): string => {
   return pathname.endsWith("/_.data")
     ? pathname.replace(/_\.data$/, "")
     : pathname.replace(/\.data$/, "");
+};
+
+/**
+ * リクエストの `?redirectTo=...` から、ログイン後の遷移先を取り出す。
+ *
+ * 今いる画面そのものが指定されていたときは、代わりにトップページを返す。
+ * ログインの途中に挟む画面（お名前の登録・パスキーの登録）は、
+ * 用が済むとこの遷移先へ進む。そこに自分自身が入っていると、
+ * 何度進んでも同じ画面に戻ってくる堂々巡りになってしまう。
+ *
+ * この指定は作為的なものだけではなく、ログインしていない状態で
+ * これらの画面を直接開くと自然に発生する
+ * （ログイン画面へ送るときに、元の画面として引き継がれるため）。
+ */
+export const readRedirectTo = (request: Request): string => {
+  const redirectTo = toSafeRedirectTo(new URL(request.url).searchParams.get(REDIRECT_TO_PARAM));
+  // 遷移先はクエリパラメータを含むことがあるので、画面の比較はパスだけで行う。
+  const redirectToPathname = redirectTo.split("?")[0];
+
+  return redirectToPathname === toCurrentPathname(request) ? DEFAULT_REDIRECT_TO : redirectTo;
 };
 
 /**

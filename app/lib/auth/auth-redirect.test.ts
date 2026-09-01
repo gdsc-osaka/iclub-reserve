@@ -40,6 +40,23 @@ describe("readRedirectTo", () => {
 
     expect(readRedirectTo(request)).toBe("/");
   });
+
+  it.each([
+    ["今いる画面そのもの", "/passkey/suggest", "%2Fpasskey%2Fsuggest"],
+    ["今いる画面（クエリ付き）", "/welcome", "%2Fwelcome%3Fstep%3D2"],
+  ])("遷移先に %s が指定されていたらトップページに送る", (_, pathname, encoded) => {
+    const request = new Request(`https://example.com${pathname}?redirectTo=${encoded}`);
+
+    expect(readRedirectTo(request)).toBe("/");
+  });
+
+  it("画面内の遷移で使われる .data 付きの URL でも、今いる画面だと判定できる", () => {
+    const request = new Request(
+      "https://example.com/passkey/suggest.data?redirectTo=%2Fpasskey%2Fsuggest",
+    );
+
+    expect(readRedirectTo(request)).toBe("/");
+  });
 });
 
 describe("isPublicPath", () => {
