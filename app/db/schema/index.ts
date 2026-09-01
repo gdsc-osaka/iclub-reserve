@@ -11,9 +11,10 @@
  *
  * 参照する側は今までどおり `~/db/schema` から import すればよい。
  *
- * なお `db:auth:generate` が使う CLI のバージョンは package.json で固定してある。
- * CLI は自分と同じバージョンの better-auth で生成するため、
- * `better-auth` を上げるときは CLI のバージョンも合わせて上げること。
+ * なお `db:auth:generate` が使う CLI（`auth`）は devDependency として
+ * バージョンを固定してある。CLI は better-auth の実装を読んでスキーマを組み立てるため、
+ * pnpm-workspace.yaml の catalog と overrides で、CLI が**アプリと同じ better-auth**を
+ * 使うようにしてある。`better-auth` を上げるときは catalog と `auth` を合わせて上げること。
  */
 export * from "./auth";
 export * from "./reservation";
