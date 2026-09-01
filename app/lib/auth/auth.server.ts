@@ -12,7 +12,6 @@ import {
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
   isAllowedEmailAddress,
 } from "~/domain/auth/allowed-email-domain";
-import { createMailSender, getMailFrom } from "~/infra/mail/mail-sender-factory.server";
 import {
   createSendVerificationOtpUseCase,
   OTP_EXPIRES_IN_SECONDS,
@@ -42,6 +41,24 @@ const createAuth = () =>
     }),
 
     user: {
+      /**
+       * Better Auth が管理する `user` テーブルに、このアプリ独自の列を足す。
+       *
+       * ここに書いておかないと Better Auth CLI のスキーマ生成に含まれず、
+       * 生成のたびに列が消えてしまう。
+       * `input: false` でクライアントからの書き込みを禁じ、
+       * `required: true` と `defaultValue` で `NOT NULL DEFAULT 0` になる。
+       */
+      additionalFields: {
+        /** 事務局スタッフかどうか。 */
+        is_staff: {
+          type: "boolean",
+          defaultValue: false,
+          input: false,
+          required: true,
+        },
+      },
+
       /**
        * アカウントを作れるメールアドレスを大阪大学のドメインに限定する。
        *
@@ -103,6 +120,14 @@ const createAuth = () =>
          * 送信の失敗は Workers のログ（ローカルではターミナル）に出る。
          */
         async sendVerificationOTP({ email, otp, type }) {
+          // メール送信の実装（worker-mailer）は `cloudflare:sockets` を読み込む。
+          // Better Auth CLI はこの設定ファイルを Node.js 上で読むが、そのモジュールは
+          // Workers 上にしか存在しないため、トップレベルで import すると CLI が
+          // 設定を読み込めずスキーマ生成に失敗する。
+          // 実行時にしか必要ない依存なので、ここで動的に読み込む。
+          const { createMailSender, getMailFrom } =
+            await import("~/infra/mail/mail-sender-factory.server");
+
           const sendVerificationOtp = createSendVerificationOtpUseCase({
             mailSender: createMailSender(),
             from: getMailFrom(),
