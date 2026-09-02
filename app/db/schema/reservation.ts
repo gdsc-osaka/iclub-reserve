@@ -39,7 +39,7 @@ export const facilityTable = sqliteTable("facility", {
     .$defaultFn(() => new Date()),
 });
 
-export const groupsTable = sqliteTable("groups", {
+export const groupTable = sqliteTable("group", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
@@ -62,7 +62,7 @@ export const reservationTable = sqliteTable("reservation", {
     .$defaultFn(() => createId()),
 
   groupId: text("group_id")
-    .references(() => groupsTable.id)
+    .references(() => groupTable.id)
     .notNull(),
 
   facilityId: text("facility_id")
@@ -118,7 +118,7 @@ export const membershipTable = sqliteTable("membership", {
     .notNull(),
 
   groupId: text("group_id")
-    .references(() => groupsTable.id)
+    .references(() => groupTable.id)
     .notNull(),
 
   role: text("role").$type<MembershipRole>().notNull(),
@@ -132,5 +132,5 @@ export const membershipTable = sqliteTable("membership", {
     .$defaultFn(() => new Date()),
 });
 
-export type Group = typeof groupsTable.$inferSelect;
-export type NewGroup = typeof groupsTable.$inferInsert;
+export type Group = typeof groupTable.$inferSelect;
+export type NewGroup = typeof groupTable.$inferInsert;
