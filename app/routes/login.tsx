@@ -11,8 +11,15 @@ import { ALLOWED_EMAIL_DOMAINS_LABEL } from "~/domain/auth/allowed-email-domain"
 import { isProfileCompleted } from "~/domain/auth/user-profile";
 import { authClient } from "~/lib/auth/auth-client";
 import { toAuthErrorMessage } from "~/lib/auth/auth-error-message";
-import { readRedirectTo, WELCOME_PATH, withRedirectTo } from "~/lib/auth/auth-redirect";
+import {
+  PASSKEY_SUGGEST_PATH,
+  readRedirectTo,
+  WELCOME_PATH,
+  withRedirectTo,
+} from "~/lib/auth/auth-redirect";
 import { getRequestUser } from "~/lib/auth/auth-session.server";
+import { shouldSuggestPasskeyOnThisDevice } from "~/lib/auth/passkey-prompt-storage";
+import { detectPasskeySupport } from "~/lib/auth/passkey-support";
 
 import type { Route } from "./+types/login";
 
@@ -110,6 +117,30 @@ export default function Login({ loaderData }: Route.ComponentProps) {
   };
 
   /**
+   * ログインを終えた人を、次にどの画面へ送るかを決める。
+   *
+   * 1. お名前がまだの人（アカウントができたばかりの人）はセットアップ画面へ。
+   *    パスキーの登録もその画面が続けて勧めるので、ここでは何もしない。
+   * 2. この端末にパスキーを保存できて、勧める頃合いなら、勧める画面へ。
+   *    すでにパスキーを持っているかどうかは、その画面のローダーが確かめる。
+   * 3. どちらでもなければ、元いたページへ。
+   *
+   * 端末の判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
+   * 判定が終わる前に認証を終えた人に、勧めそこねてしまう。
+   */
+  const toNextPath = async (user: { readonly name: string }): Promise<string> => {
+    if (!isProfileCompleted(user)) return withRedirectTo(WELCOME_PATH, redirectTo);
+
+    const { canRegisterOnThisDevice } = await detectPasskeySupport();
+
+    if (canRegisterOnThisDevice && shouldSuggestPasskeyOnThisDevice()) {
+      return withRedirectTo(PASSKEY_SUGGEST_PATH, redirectTo);
+    }
+
+    return redirectTo;
+  };
+
+  /**
    * 入力された認証コードで認証する。
    *
    * 未登録のメールアドレスならこの時点でアカウントが作られる。
@@ -131,10 +162,7 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     }
 
     // 画面が切り替わるまで操作させたくないので pending は true のままにする。
-    await navigate(
-      isProfileCompleted(data.user) ? redirectTo : withRedirectTo(WELCOME_PATH, redirectTo),
-      { replace: true },
-    );
+    await navigate(await toNextPath(data.user), { replace: true });
   };
 
   const description = {
