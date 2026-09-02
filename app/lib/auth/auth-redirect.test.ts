@@ -40,6 +40,23 @@ describe("readRedirectTo", () => {
 
     expect(readRedirectTo(request)).toBe("/");
   });
+
+  it.each([
+    ["今いる画面そのもの", "/passkey/suggest", "%2Fpasskey%2Fsuggest"],
+    ["今いる画面（クエリ付き）", "/welcome", "%2Fwelcome%3Fstep%3D2"],
+  ])("遷移先に %s が指定されていたらトップページに送る", (_, pathname, encoded) => {
+    const request = new Request(`https://example.com${pathname}?redirectTo=${encoded}`);
+
+    expect(readRedirectTo(request)).toBe("/");
+  });
+
+  it("画面内の遷移で使われる .data 付きの URL でも、今いる画面だと判定できる", () => {
+    const request = new Request(
+      "https://example.com/passkey/suggest.data?redirectTo=%2Fpasskey%2Fsuggest",
+    );
+
+    expect(readRedirectTo(request)).toBe("/");
+  });
 });
 
 describe("isPublicPath", () => {
@@ -55,6 +72,7 @@ describe("isPublicPath", () => {
     ["トップページ", "/"],
     ["予約画面", "/reservation"],
     ["存在しない画面", "/unknown"],
+    ["パスキーの登録を勧める画面", "/passkey/suggest"],
     ["ログイン画面に似ているだけのパス", "/login-guide"],
     ["ログイン画面の下の階層", "/login/extra"],
     ["Better Auth 以外の API", "/api/reservations"],
