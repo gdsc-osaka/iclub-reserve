@@ -296,10 +296,11 @@ export default function Login({ loaderData }: Route.ComponentProps) {
    * メールアドレスの入力欄のオートフィルに、パスキーを候補として出す。
    *
    * ここで始めた待ち受けは、利用者が候補を選ぶまで終わらない。
-   * 選ばれずに終わる（＝打ち切られる）のは次のときで、どちらも表示は変えない。
+   * 選ばれずに終わる（＝打ち切られる）のは次のときで、どれも表示は変えない。
    *
    * - パスキーでログインボタンを押されたとき
    * - 認証コードの入力へ進んで、目印の付いた入力欄がなくなったとき
+   * - ログインを終えるなどして、この画面から離れたとき
    *
    * 待ち受けを外から止める手段はライブラリにないため、
    * 上の通し番号で古い結果を捨てる形にしている。
@@ -310,6 +311,15 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     if (step !== "email") return;
 
     void signInWithPasskey(true);
+
+    // 待ち受けたまま画面が変わるときの後始末。
+    // 待ち受け自体は止められないので、通し番号だけ進めておく。
+    // こうすれば、あとから戻ってきた結果を古いものとして捨てられる。
+    // これがないと、認証コードの入力へ進んだあとに
+    // 関係のないエラーが出たり、画面から離れたあとに遷移が起きたりする。
+    return () => {
+      latestPasskeyCeremony.current += 1;
+    };
     // signInWithPasskey は描画のたびに作り直されるが、待ち受けを始め直したいのは
     // ここに挙げた 3 つが変わったときだけなので、あえて依存に入れていない。
   }, [passkeySupport.canAutofill, step, autofillAttempt]);
