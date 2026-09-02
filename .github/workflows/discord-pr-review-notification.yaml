@@ -4,8 +4,9 @@ on:
   pull_request_review:
     types: [submitted]
 
-# Discord Webhook を叩くだけで GitHub API は利用しないため GITHUB_TOKEN の権限は不要
-permissions: {}
+# GitHub API を叩いてインラインコメントの有無を確認する
+permissions:
+  pull-requests: read
 
 jobs:
   notify:
@@ -13,7 +14,23 @@ jobs:
     if: contains(fromJSON('["approved", "changes_requested", "commented"]'), github.event.review.state)
     runs-on: ubuntu-latest
     steps:
+      - name: Check for inline comments
+        id: check_inline
+        if: github.event.review.state == 'commented'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # in_reply_to_id が存在しない（null である）新規のインラインコメントの数をカウントする
+          NEW_COMMENTS_COUNT=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews/${{ github.event.review.id }}/comments --jq '[.[] | select(.in_reply_to_id == null)] | length')
+
+          if [ "$NEW_COMMENTS_COUNT" -eq 0 ]; then
+            echo "has_inline_comments=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_inline_comments=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set variables based on review state
+        if: github.event.review.state != 'commented' || steps.check_inline.outputs.has_inline_comments == 'true'
         env:
           REVIEW_STATE: ${{ github.event.review.state }}
           REVIEWER: ${{ github.event.review.user.login }}
@@ -38,6 +55,7 @@ jobs:
           echo "EMBED_COLOR=$COLOR" >> "$GITHUB_ENV"
 
       - name: Send Discord notification
+        if: github.event.review.state != 'commented' || steps.check_inline.outputs.has_inline_comments == 'true'
         uses: tsickert/discord-webhook@b217a69502f52803de774ded2b1ab7c282e99645 # v7.0.0
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
