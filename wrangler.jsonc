@@ -4,13 +4,42 @@
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "iclub-reserve",
+
+  /**
+   * 環境（env）の構成
+   *
+   * デプロイ先は `--env` で必ず明示すること。
+   *
+   * | 環境          | Worker 名                | D1                         |
+   * | ------------- | ------------------------ | -------------------------- |
+   * | `production`  | `iclub-reserve`          | `iclub-reserve-db`         |
+   * | `preview`     | `iclub-reserve-preview`  | `iclub-reserve-preview-db` |
+   * | トップレベル  | ローカル開発専用         | `iclub-reserve-preview-db` |
+   *
+   * トップレベルの `name` をあえて本番と別名にしてあるのは、`--env` を付け忘れた
+   * `wrangler deploy` が本番を上書きするのを防ぐため。付け忘れても、無害な Worker が
+   * 1 つ増えるだけで済む。同じ理由で、トップレベルの D1 もプレビュー側を指している。
+   *
+   * `vars` と `d1_databases`（バインディング全般）は env に**継承されない**ため、
+   * 3 か所すべてに同じ内容を書く必要がある。とくに `vars` のキー集合は 3 つとも
+   * 揃えること。`wrangler types` は `--env` なし（＝トップレベル）で走るので、
+   * トップレベルにないキーは `Env` の型に現れない。
+   *
+   * 一方 `main` `compatibility_date` `compatibility_flags` `observability`
+   * `upload_source_maps` `account_id` は継承されるので、ここに 1 度書けばよい。
+   */
+  "name": "iclub-reserve-local",
+  "account_id": "09381b15a7d3beb91294a7ce295420a4",
   "compatibility_date": "2026-06-20",
   "main": "./workers/app.ts",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+  },
+  "upload_source_maps": true,
+
   "vars": {
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-    "NODE_VERSION": "24",
-    "PNPM_VERSION": "11",
     /**
      * Oracle Email Delivery（SMTP 送信）の設定。
      * 機密でない値のみここに置き、認証情報は .dev.vars / `wrangler secret put` で渡す。
@@ -25,38 +54,69 @@
     "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
     "MAIL_FROM_NAME": "i-Club 予約システム",
   },
-  "observability": {
-    "enabled": true,
-  },
-  "upload_source_maps": true,
-  "compatibility_flags": ["nodejs_compat"],
-  /**
-   * Smart Placement
-   * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-   */
-  // "placement": {  "mode": "smart" }
-  /**
-   * Bindings
-   * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-   * databases, object storage, AI inference, real-time communication and more.
-   * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-   */
-  /**
-   * Static Assets
-   * https://developers.cloudflare.com/workers/static-assets/binding/
-   */
-  // "assets": {  "directory": "./public/",  "binding": "ASSETS" }
-  /**
-   * Service Bindings (communicate between multiple Workers)
-   * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
-   */
-  // "services": [  {   "binding": "MY_SERVICE",   "service": "my-service"  } ]
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "iclub-reserve-db",
-      "database_id": "6ae196e1-208f-4182-b421-e8f8e25fe755",
+      "database_name": "iclub-reserve-preview-db",
+      "database_id": "0de33eb1-9e5c-4721-bda8-7dc7c201157a",
       "migrations_dir": "drizzle/migrations",
     },
   ],
+
+  "env": {
+    /** 本番環境。`main` ブランチから Workers Builds でデプロイされる。 */
+    "production": {
+      "name": "iclub-reserve",
+      /**
+       * バージョンごとのプレビュー URL を本番 Worker では発行しない。
+       * 本番の Worker 名でレビュー前のコードが公開される事故を防ぐため。
+       */
+      "preview_urls": false,
+      "vars": {
+        "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
+        // SMTP の設定についてはトップレベルの `vars` のコメントを参照。
+        "SMTP_HOST": "smtp.email.ap-osaka-1.oci.oraclecloud.com",
+        "SMTP_PORT": "465",
+        "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
+        "MAIL_FROM_NAME": "i-Club 予約システム",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "iclub-reserve-db",
+          "database_id": "6ae196e1-208f-4182-b421-e8f8e25fe755",
+          "migrations_dir": "drizzle/migrations",
+        },
+      ],
+    },
+
+    /**
+     * プレビュー環境。`develop` とその派生ブランチから Workers Builds でデプロイされる。
+     *
+     * 本番とは Worker も D1 も別物なので、DB を壊しても本番には影響しない。
+     * `BETTER_AUTH_SECRET` も本番とは別の値を入れること
+     * （同じ値だと本番のセッション Cookie がプレビューでも通ってしまう）。
+     */
+    "preview": {
+      "name": "iclub-reserve-preview",
+      // 派生ブランチごとのプレビュー URL を発行するために必要。
+      "preview_urls": true,
+      "vars": {
+        "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
+        // SMTP の設定についてはトップレベルの `vars` のコメントを参照。
+        "SMTP_HOST": "smtp.email.ap-osaka-1.oci.oraclecloud.com",
+        "SMTP_PORT": "465",
+        "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
+        "MAIL_FROM_NAME": "i-Club 予約システム",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "iclub-reserve-preview-db",
+          "database_id": "0de33eb1-9e5c-4721-bda8-7dc7c201157a",
+          "migrations_dir": "drizzle/migrations",
+        },
+      ],
+    },
+  },
 }
