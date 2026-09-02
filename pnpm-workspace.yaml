@@ -12,6 +12,6 @@ minimumReleaseAgeExclude:
   - miniflare@4.20260617.1
   - wrangler@4.103.0
 catalog:
-  better-auth: ^1.7.1
+  better-auth: ^1.7.2
 overrides:
   better-auth: "catalog:"
