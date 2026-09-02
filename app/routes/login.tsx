@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { redirect, useNavigate } from "react-router";
 
 import { AuthCard } from "~/components/auth/auth-card";
@@ -8,7 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { ALLOWED_EMAIL_DOMAINS_LABEL } from "~/domain/auth/allowed-email-domain";
-import type { LoginMethod } from "~/domain/auth/login-method";
+import { type LoginMethod, toLoginMethodOrder } from "~/domain/auth/login-method";
 import { isProfileCompleted } from "~/domain/auth/user-profile";
 import { authClient } from "~/lib/auth/auth-client";
 import { isPasskeyCancelledError, toAuthErrorMessage } from "~/lib/auth/auth-error-message";
@@ -19,6 +19,7 @@ import {
   withRedirectTo,
 } from "~/lib/auth/auth-redirect";
 import { getRequestUser } from "~/lib/auth/auth-session.server";
+import { readLastLoginMethod, rememberLastLoginMethod } from "~/lib/auth/last-login-method-cookie";
 import { shouldSuggestPasskeyOnThisDevice } from "~/lib/auth/passkey-prompt-storage";
 import { usePasskeySupport } from "~/lib/auth/passkey-support";
 
@@ -33,6 +34,10 @@ export function meta(_: Route.MetaArgs) {
  *
  * お名前がまだ空の人（アカウントを作った直後に離脱した人）は
  * セットアップ画面へ、それ以外の人は元いたページへ送る。
+ *
+ * 併せて、前回このブラウザで使ったログイン方法も読んでおく。
+ * ログイン方法の並び順は、最初の描画の時点で確定していないと
+ * 画面が表示されたあとに入れ替わってしまうため。
  */
 export function loader({ request, context }: Route.LoaderArgs) {
   const redirectTo = readRedirectTo(request);
@@ -44,7 +49,7 @@ export function loader({ request, context }: Route.LoaderArgs) {
     );
   }
 
-  return { redirectTo };
+  return { redirectTo, lastLoginMethod: readLastLoginMethod(request) };
 }
 
 /** 画面に出すお知らせ。エラーは赤色、それ以外は通常色で表示する。 */
@@ -90,8 +95,9 @@ function MethodDivider() {
  */
 export default function Login({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  // ログインが必要なページから飛ばされてきた場合は、ログイン後にそのページへ戻す。
-  const { redirectTo } = loaderData;
+  // redirectTo: ログインが必要なページから飛ばされてきた場合の、ログイン後の戻り先。
+  // lastLoginMethod: 前回このブラウザで使ったログイン方法（ログイン方法の並び順に使う）。
+  const { redirectTo, lastLoginMethod } = loaderData;
 
   const passkeySupport = usePasskeySupport();
 
@@ -159,6 +165,8 @@ export default function Login({ loaderData }: Route.ComponentProps) {
    * @param method 実際に使ったログイン方法
    */
   const finishLogin = async (user: { readonly name: string }, method: LoginMethod) => {
+    // 次に来たとき、この方法を先頭に出せるよう覚えておく。
+    rememberLastLoginMethod(method);
     // 画面が切り替わるまで操作させたくないので、待っている状態のままにする。
     setPendingMethod(method);
     await navigate(toNextPath(user, method), { replace: true });
@@ -337,8 +345,9 @@ export default function Login({ loaderData }: Route.ComponentProps) {
   /**
    * パスキーでログインするボタン。
    *
-   * 塗りつぶしのボタンは主導線の「メールアドレスで続ける」に譲り、
-   * こちらは枠線だけにしておく。
+   * 先頭に来ても見た目は変えない。塗りつぶしのボタンは
+   * 「メールアドレスで続ける」に譲り、こちらは枠線だけにしておく。
+   * 並び順で色まで入れ替わると、開くたびに画面の印象が変わってしまうため。
    */
   const passkeyButton = (
     <div className="space-y-2">
@@ -358,11 +367,20 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     </div>
   );
 
+  const methodContents: Record<LoginMethod, ReactNode> = {
+    "email-otp": emailOtpForm,
+    passkey: passkeyButton,
+  };
+
+  // 前回使った方法を先頭にして並べる。
+  //
   // パスキーは「使える」前提で描いておき、対応していないと分かったときだけ取り下げる。
   // 判定はブラウザでしかできないが、その結果を待ってから描き始めると、
   // 画面が出たあとにボタンが割り込んで、カードの高さごと全体がずれてしまう。
   // WebAuthn を持たないブラウザは今では稀なので、ずれるのを稀なほうに寄せている。
-  const showsPasskey = passkeySupport.status !== "unsupported";
+  const methods = toLoginMethodOrder(lastLoginMethod).filter(
+    (method) => method !== "passkey" || passkeySupport.status !== "unsupported",
+  );
 
   const description = {
     email:
@@ -381,14 +399,12 @@ export default function Login({ loaderData }: Route.ComponentProps) {
 
         {step === "email" && (
           <div className="space-y-4">
-            {emailOtpForm}
-
-            {showsPasskey && (
-              <>
-                <MethodDivider />
-                {passkeyButton}
-              </>
-            )}
+            {methods.map((method, index) => (
+              <Fragment key={method}>
+                {index > 0 && <MethodDivider />}
+                {methodContents[method]}
+              </Fragment>
+            ))}
           </div>
         )}
 
