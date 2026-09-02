@@ -21,7 +21,7 @@ import {
 import { getRequestUser } from "~/lib/auth/auth-session.server";
 import { readLastLoginMethod, rememberLastLoginMethod } from "~/lib/auth/last-login-method-cookie";
 import { shouldSuggestPasskeyOnThisDevice } from "~/lib/auth/passkey-prompt-storage";
-import { usePasskeySupport } from "~/lib/auth/passkey-support";
+import { detectPasskeySupport, usePasskeySupport } from "~/lib/auth/passkey-support";
 
 import type { Route } from "./+types/login";
 
@@ -144,14 +144,22 @@ export default function Login({ loaderData }: Route.ComponentProps) {
    * 2. この端末にパスキーを保存できて、勧める頃合いなら、勧める画面へ。
    *    すでにパスキーを持っているかどうかは、その画面のローダーが確かめる。
    * 3. どちらでもなければ、元いたページへ。
+   *
+   * 端末の判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
+   * 判定が終わる前に認証を終えた人に、勧めそこねてしまう。
    */
-  const toNextPath = (user: { readonly name: string }, method: LoginMethod): string => {
+  const toNextPath = async (
+    user: { readonly name: string },
+    method: LoginMethod,
+  ): Promise<string> => {
     if (!isProfileCompleted(user)) return withRedirectTo(WELCOME_PATH, redirectTo);
 
     // パスキーでログインできた人は、当然すでにパスキーを持っている。
     if (method === "passkey") return redirectTo;
 
-    if (passkeySupport.canRegisterOnThisDevice && shouldSuggestPasskeyOnThisDevice()) {
+    const { canRegisterOnThisDevice } = await detectPasskeySupport();
+
+    if (canRegisterOnThisDevice && shouldSuggestPasskeyOnThisDevice()) {
       return withRedirectTo(PASSKEY_SUGGEST_PATH, redirectTo);
     }
 
@@ -169,7 +177,7 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     rememberLastLoginMethod(method);
     // 画面が切り替わるまで操作させたくないので、待っている状態のままにする。
     setPendingMethod(method);
-    await navigate(toNextPath(user, method), { replace: true });
+    await navigate(await toNextPath(user, method), { replace: true });
   };
 
   /**

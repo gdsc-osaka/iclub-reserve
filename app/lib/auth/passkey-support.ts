@@ -84,6 +84,48 @@ const detectConditionalMediation = async (): Promise<boolean> => {
 };
 
 /**
+ * ブラウザに問い合わせて、実際に判定する。
+ *
+ * 上の 2 つの判定をまとめて、この環境で何ができるかの答えを 1 つにする。
+ */
+const askBrowser = async (): Promise<PasskeySupport> => {
+  // WebAuthn 自体に対応していないブラウザ。
+  if (typeof window.PublicKeyCredential === "undefined") {
+    return { status: "unsupported", canRegisterOnThisDevice: false, canAutofill: false };
+  }
+
+  // 2 つの判定は互いに関係がないので、まとめて待つ。
+  const [canRegisterOnThisDevice, canAutofill] = await Promise.all([
+    detectPlatformAuthenticator(),
+    detectConditionalMediation(),
+  ]);
+
+  return { status: "supported", canRegisterOnThisDevice, canAutofill };
+};
+
+/**
+ * 一度始めた判定を、ページを開いている間ずっと使い回すための入れ物。
+ *
+ * 答えは操作の途中で変わらないので、画面ごとに問い合わせ直す必要はない。
+ * 結果ではなく約束（Promise）を覚えておくことで、
+ * 判定の途中で誰が呼んでも、同じ 1 回の答えを待てるようになる。
+ */
+let detection: Promise<PasskeySupport> | null = null;
+
+/**
+ * パスキーに対応した環境かどうかを調べる。ブラウザ側でのみ呼べる。
+ *
+ * 描画に合わせて値がほしいときは `usePasskeySupport` を使うこと。
+ * こちらは「ボタンが押された、その時点の答えが確実にほしい」ときのためにある。
+ * `usePasskeySupport` は判定が終わるまで "unknown" を返すので、
+ * 終わる前に操作されると、対応した端末を非対応として扱ってしまう。
+ */
+export const detectPasskeySupport = (): Promise<PasskeySupport> => {
+  detection ??= askBrowser();
+  return detection;
+};
+
+/**
  * パスキーに対応した環境かどうかを調べる。
  *
  * 判定にはブラウザの API が要るため、必ず画面の描画が終わってから実行する。
@@ -96,19 +138,10 @@ export const usePasskeySupport = (): PasskeySupport => {
     // 判定を待っている間に画面が切り替わったら、結果は捨てる。
     let abandoned = false;
 
-    // WebAuthn 自体に対応していないブラウザ。
-    if (typeof window.PublicKeyCredential === "undefined") {
-      setSupport({ status: "unsupported", canRegisterOnThisDevice: false, canAutofill: false });
-      return;
-    }
-
-    // 2 つの判定は互いに関係がないので、まとめて待つ。
-    void Promise.all([detectPlatformAuthenticator(), detectConditionalMediation()]).then(
-      ([canRegisterOnThisDevice, canAutofill]) => {
-        if (abandoned) return;
-        setSupport({ status: "supported", canRegisterOnThisDevice, canAutofill });
-      },
-    );
+    void detectPasskeySupport().then((result) => {
+      if (abandoned) return;
+      setSupport(result);
+    });
 
     return () => {
       abandoned = true;

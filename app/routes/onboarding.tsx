@@ -16,7 +16,7 @@ import { authClient } from "~/lib/auth/auth-client";
 import { toAuthErrorMessage } from "~/lib/auth/auth-error-message";
 import { LOGIN_PATH, readRedirectTo, withRedirectTo } from "~/lib/auth/auth-redirect";
 import { getRequestUser } from "~/lib/auth/auth-session.server";
-import { usePasskeySupport } from "~/lib/auth/passkey-support";
+import { detectPasskeySupport } from "~/lib/auth/passkey-support";
 
 import type { Route } from "./+types/onboarding";
 
@@ -67,8 +67,6 @@ export default function Onboarding({ loaderData }: Route.ComponentProps) {
   // セットアップを終えたあとに戻すページ。
   const { redirectTo } = loaderData;
 
-  const passkeySupport = usePasskeySupport();
-
   const [step, setStep] = useState<Step>("name");
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
@@ -101,7 +99,12 @@ export default function Onboarding({ loaderData }: Route.ComponentProps) {
     // お名前より後に置いているのは、この画面の本来の目的を先に終わらせるため。
     // パスキーの登録は任意なので、ここで離脱されてもお名前は残る。
     // 逆にすると、お名前が未登録のまま離脱されて、次のログインでまたこの画面に戻ってしまう。
-    if (passkeySupport.canRegisterOnThisDevice) {
+    //
+    // 判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
+    // 判定が終わる前にお名前を登録し終えた人に、勧めそこねてしまう。
+    const { canRegisterOnThisDevice } = await detectPasskeySupport();
+
+    if (canRegisterOnThisDevice) {
       setPending(false);
       setStep("passkey");
       return;
