@@ -2,7 +2,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
 import { user } from "./auth";
 
-export const GroupReservationStatus = {
+export const ReservationStatus = {
   Provisional: "provisional",
   Approved: "approved",
   Withdrawn: "withdrawn",
@@ -11,8 +11,7 @@ export const GroupReservationStatus = {
   CancelledByStaff: "cancelled_by_staff",
 } as const;
 
-export type GroupReservationStatus =
-  (typeof GroupReservationStatus)[keyof typeof GroupReservationStatus];
+export type ReservationStatus = (typeof ReservationStatus)[keyof typeof ReservationStatus];
 
 export const facilityTable = sqliteTable("facility", {
   id: text("id")
@@ -57,7 +56,7 @@ export const groupsTable = sqliteTable("groups", {
     .$defaultFn(() => new Date()),
 });
 
-export const groupReservationTable = sqliteTable("reservation", {
+export const reservationTable = sqliteTable("reservation", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
@@ -83,9 +82,9 @@ export const groupReservationTable = sqliteTable("reservation", {
   note: text("note"),
 
   status: text("status")
-    .$type<GroupReservationStatus>()
+    .$type<ReservationStatus>()
     .notNull()
-    .$default(() => GroupReservationStatus.Provisional),
+    .$default(() => ReservationStatus.Provisional),
 
   statusReason: text("status_reason"),
 
