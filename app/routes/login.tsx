@@ -19,7 +19,7 @@ import {
 } from "~/lib/auth/auth-redirect";
 import { getRequestUser } from "~/lib/auth/auth-session.server";
 import { shouldSuggestPasskeyOnThisDevice } from "~/lib/auth/passkey-prompt-storage";
-import { usePasskeySupport } from "~/lib/auth/passkey-support";
+import { detectPasskeySupport } from "~/lib/auth/passkey-support";
 
 import type { Route } from "./+types/login";
 
@@ -75,8 +75,6 @@ export default function Login({ loaderData }: Route.ComponentProps) {
   // ログインが必要なページから飛ばされてきた場合は、ログイン後にそのページへ戻す。
   const { redirectTo } = loaderData;
 
-  const passkeySupport = usePasskeySupport();
-
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
@@ -126,11 +124,16 @@ export default function Login({ loaderData }: Route.ComponentProps) {
    * 2. この端末にパスキーを保存できて、勧める頃合いなら、勧める画面へ。
    *    すでにパスキーを持っているかどうかは、その画面のローダーが確かめる。
    * 3. どちらでもなければ、元いたページへ。
+   *
+   * 端末の判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
+   * 判定が終わる前に認証を終えた人に、勧めそこねてしまう。
    */
-  const toNextPath = (user: { readonly name: string }): string => {
+  const toNextPath = async (user: { readonly name: string }): Promise<string> => {
     if (!isProfileCompleted(user)) return withRedirectTo(WELCOME_PATH, redirectTo);
 
-    if (passkeySupport.canRegisterOnThisDevice && shouldSuggestPasskeyOnThisDevice()) {
+    const { canRegisterOnThisDevice } = await detectPasskeySupport();
+
+    if (canRegisterOnThisDevice && shouldSuggestPasskeyOnThisDevice()) {
       return withRedirectTo(PASSKEY_SUGGEST_PATH, redirectTo);
     }
 
@@ -159,7 +162,7 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     }
 
     // 画面が切り替わるまで操作させたくないので pending は true のままにする。
-    await navigate(toNextPath(data.user), { replace: true });
+    await navigate(await toNextPath(data.user), { replace: true });
   };
 
   const description = {

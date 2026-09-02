@@ -35,17 +35,46 @@ export type PasskeySupport = {
 const UNKNOWN: PasskeySupport = { status: "unknown", canRegisterOnThisDevice: false };
 
 /**
- * この端末そのものにパスキーを保存できるかを調べる。
+ * ブラウザに問い合わせて、実際に判定する。
  *
  * 名前のとおり非同期で、ブラウザによっては答えが返るまで少し時間がかかる。
  */
-const detectPlatformAuthenticator = async (): Promise<boolean> => {
+const askBrowser = async (): Promise<PasskeySupport> => {
+  // WebAuthn 自体に対応していないブラウザ。
+  if (typeof window.PublicKeyCredential === "undefined") {
+    return { status: "unsupported", canRegisterOnThisDevice: false };
+  }
+
   try {
-    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    const canRegisterOnThisDevice =
+      await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    return { status: "supported", canRegisterOnThisDevice };
   } catch {
     // 判定できない環境では、勧めない側に倒す。
-    return false;
+    return { status: "supported", canRegisterOnThisDevice: false };
   }
+};
+
+/**
+ * 一度始めた判定を、ページを開いている間ずっと使い回すための入れ物。
+ *
+ * 答えは操作の途中で変わらないので、画面ごとに問い合わせ直す必要はない。
+ * 結果ではなく約束（Promise）を覚えておくことで、
+ * 判定の途中で誰が呼んでも、同じ 1 回の答えを待てるようになる。
+ */
+let detection: Promise<PasskeySupport> | null = null;
+
+/**
+ * パスキーに対応した環境かどうかを調べる。ブラウザ側でのみ呼べる。
+ *
+ * 描画に合わせて値がほしいときは `usePasskeySupport` を使うこと。
+ * こちらは「ボタンが押された、その時点の答えが確実にほしい」ときのためにある。
+ * `usePasskeySupport` は判定が終わるまで "unknown" を返すので、
+ * 終わる前に操作されると、対応した端末を非対応として扱ってしまう。
+ */
+export const detectPasskeySupport = (): Promise<PasskeySupport> => {
+  detection ??= askBrowser();
+  return detection;
 };
 
 /**
@@ -61,15 +90,9 @@ export const usePasskeySupport = (): PasskeySupport => {
     // 判定を待っている間に画面が切り替わったら、結果は捨てる。
     let abandoned = false;
 
-    // WebAuthn 自体に対応していないブラウザ。
-    if (typeof window.PublicKeyCredential === "undefined") {
-      setSupport({ status: "unsupported", canRegisterOnThisDevice: false });
-      return;
-    }
-
-    void detectPlatformAuthenticator().then((canRegisterOnThisDevice) => {
+    void detectPasskeySupport().then((result) => {
       if (abandoned) return;
-      setSupport({ status: "supported", canRegisterOnThisDevice });
+      setSupport(result);
     });
 
     return () => {
