@@ -22,7 +22,7 @@ jobs:
         run: |
           # in_reply_to_id が存在しない（null である）新規のインラインコメントの数をカウントする
           NEW_COMMENTS_COUNT=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews/${{ github.event.review.id }}/comments --jq '[.[] | select(.in_reply_to_id == null)] | length')
-          
+
           if [ "$NEW_COMMENTS_COUNT" -eq 0 ]; then
             echo "has_inline_comments=false" >> "$GITHUB_OUTPUT"
           else
