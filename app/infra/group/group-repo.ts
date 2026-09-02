@@ -1,5 +1,5 @@
 import { err, ok, ResultAsync } from "neverthrow";
-import { groupsTable, type Group } from "~/db/schema";
+import { groupTable, type Group } from "~/db/schema";
 import { GroupErrorCode, type GroupError, type GroupRepository } from "~/domain/group";
 import type { Database } from "../db";
 import { eq } from "drizzle-orm";
@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 export const createGroupRepository = (db: Database): GroupRepository => {
   const findById = (id: string): ResultAsync<Group, GroupError> =>
     ResultAsync.fromPromise(
-      db.select().from(groupsTable).where(eq(groupsTable.id, id)).limit(1),
+      db.select().from(groupTable).where(eq(groupTable.id, id)).limit(1),
       (error): GroupError => {
         return {
           code: GroupErrorCode.DatabaseError,
