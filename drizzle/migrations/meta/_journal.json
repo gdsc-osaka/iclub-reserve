@@ -57,6 +57,13 @@
       "when": 1787547262926,
       "tag": "0007_abandoned_payback",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788279002568,
+      "tag": "0008_jazzy_bloodscream",
+      "breakpoints": true
     }
   ]
 }
