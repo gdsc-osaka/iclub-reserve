@@ -35,7 +35,16 @@ const findCookieValue = (cookieHeader: string | null, name: string): string | nu
     if (separator === -1) continue;
     if (entry.slice(0, separator).trim() !== name) continue;
 
-    return decodeURIComponent(entry.slice(separator + 1).trim());
+    const value = entry.slice(separator + 1).trim();
+
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      // 「%」だけのような壊れた値だと decodeURIComponent は例外を投げる。
+      // ここで受け止めないとローダーごと落ちて、ログイン画面が開けなくなってしまう。
+      // 並び順のためだけの記録なので、なかったことにして先へ進める。
+      return null;
+    }
   }
 
   return null;
