@@ -130,6 +130,16 @@ export default function Login({ loaderData }: Route.ComponentProps) {
   const latestPasskeyCeremony = useRef(0);
 
   /**
+   * 待ち受け中のパスキーの操作を、打ち切ったことにする。
+   *
+   * 待ち受けそのものを外から止める手段はライブラリにないため、
+   * 通し番号だけを進めて、あとから返ってくる結果を捨てられるようにする。
+   */
+  const dropPendingPasskeyCeremony = () => {
+    latestPasskeyCeremony.current += 1;
+  };
+
+  /**
    * オートフィルの待ち受けをやり直すための番号。
    *
    * 増やすと、下の `useEffect` がもう一度待ち受けを始める。
@@ -210,6 +220,11 @@ export default function Login({ loaderData }: Route.ComponentProps) {
       return;
     }
 
+    // 認証コードの入力へ進むと、オートフィルの目印を付けた入力欄がなくなる。
+    // ただし下の useEffect の後始末は画面が描き変わったあとに走るため、
+    // その隙にオートフィルが成功すると、認証コードを飛ばしてログインが終わってしまう。
+    // 描き変える前に打ち切っておく。
+    dropPendingPasskeyCeremony();
     setStep("otp");
     if (isResend) {
       setMessage({ kind: "info", text: "認証コードを再送信しました。" });
@@ -315,12 +330,10 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     // 待ち受けたまま画面が変わるときの後始末。
     // 待ち受け自体は止められないので、通し番号だけ進めておく。
     // こうすれば、あとから戻ってきた結果を古いものとして捨てられる。
-    // これがないと、認証コードの入力へ進んだあとに
-    // 関係のないエラーが出たり、画面から離れたあとに遷移が起きたりする。
-    return () => {
-      latestPasskeyCeremony.current += 1;
-    };
-    // signInWithPasskey は描画のたびに作り直されるが、待ち受けを始め直したいのは
+    // これがないと、この画面から離れたあとに、
+    // 遅れて返ってきた結果で遷移やエラーの表示が起きてしまう。
+    return dropPendingPasskeyCeremony;
+    // ここで使っている関数は描画のたびに作り直されるが、待ち受けを始め直したいのは
     // ここに挙げた 3 つが変わったときだけなので、あえて依存に入れていない。
   }, [passkeySupport.canAutofill, step, autofillAttempt]);
 
