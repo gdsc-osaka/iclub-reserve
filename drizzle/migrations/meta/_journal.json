@@ -64,6 +64,13 @@
       "when": 1788279002568,
       "tag": "0008_jazzy_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788329824320,
+      "tag": "0009_sour_hulk",
+      "breakpoints": true
     }
   ]
 }
