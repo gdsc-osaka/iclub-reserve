@@ -8,7 +8,10 @@ export default [
   route("login", "routes/login.tsx"),
   // 初めてログインした人にお名前を登録してもらう画面（ログイン後に通る）
   route("welcome", "routes/onboarding.tsx"),
+  // 認証コードでログインしている人に、パスキーの登録を勧める画面（ログイン後に通る）
+  route("passkey/suggest", "routes/passkey.suggest.tsx"),
   // Better Auth のエンドポイント（/api/auth/... を全て受ける）
   route("api/auth/*", "routes/api.auth.$.ts"),
-  route("api/users/:userId", "routes/api.user.tsx"),
+  route("groups/:groupId", "routes/groups.tsx"),
+  route("facility/:facilityId", "routes/facility.tsx"),
 ] satisfies RouteConfig;

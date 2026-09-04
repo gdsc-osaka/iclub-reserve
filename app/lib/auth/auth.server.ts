@@ -6,20 +6,44 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { env } from "cloudflare:workers";
-import { createDb } from "./db";
+import { createDb } from "~/infra/db";
 import {
   ALLOWED_EMAIL_DOMAINS_LABEL,
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
   isAllowedEmailAddress,
 } from "~/domain/auth/allowed-email-domain";
-import { createMailSender, getMailFrom } from "~/infra/mail/mail-sender-factory.server";
 import {
   createSendVerificationOtpUseCase,
   OTP_EXPIRES_IN_SECONDS,
 } from "~/usecases/mail/send-verification-otp.server";
+import { passkey } from "@better-auth/passkey";
 
 /** 許可外のドメインを拒否するときに返す説明文。 */
 const NOT_ALLOWED_MESSAGE = `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`;
+
+/**
+ * このアプリの名前。
+ *
+ * パスキーを登録するとき、OS やブラウザが出す保存ダイアログにそのまま表示される
+ * （「"○○" のパスキーを保存しますか？」）。
+ * 指定しないと Better Auth の既定値 "Better Auth" が出てしまうので必ず設定すること。
+ */
+const APP_NAME = "i-Club 予約システム";
+
+/**
+ * パスキーの検証で期待する origin（`https://example.com` の形）を求める。
+ *
+ * 指定しないと Better Auth はリクエストの Origin ヘッダーをそのまま期待値に使う。
+ * ブラウザが origin と rpID の対応を強制するので実害は出にくいが、
+ * 検証の期待値をクライアント任せにする理由もないため、こちらで固定する。
+ *
+ * URL として読めないときは undefined を返し、Better Auth の既定に任せる。
+ * Better Auth CLI は `cloudflare:workers` を差し替えて `env` をダミーの Proxy にするため、
+ * スキーマ生成の最中は `BETTER_AUTH_URL` が文字列にならない。
+ * ここで素直に `new URL()` を呼ぶと、CLI が設定を読めずに失敗する。
+ */
+const toOrigin = (baseURL: string | undefined): string | undefined =>
+  typeof baseURL === "string" && URL.canParse(baseURL) ? new URL(baseURL).origin : undefined;
 
 /**
  * Better Auth の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
@@ -33,15 +57,36 @@ type AuthSecrets = {
   readonly BETTER_AUTH_URL?: string;
 };
 
-const createAuth = () =>
-  betterAuth({
-    secret: (env as Env & AuthSecrets).BETTER_AUTH_SECRET,
-    baseURL: (env as Env & AuthSecrets).BETTER_AUTH_URL,
+const createAuth = () => {
+  const { BETTER_AUTH_SECRET, BETTER_AUTH_URL } = env as Env & AuthSecrets;
+
+  return betterAuth({
+    appName: APP_NAME,
+    secret: BETTER_AUTH_SECRET,
+    baseURL: BETTER_AUTH_URL,
     database: drizzleAdapter(createDb(env.DB), {
       provider: "sqlite",
     }),
 
     user: {
+      /**
+       * Better Auth が管理する `user` テーブルに、このアプリ独自の列を足す。
+       *
+       * ここに書いておかないと Better Auth CLI のスキーマ生成に含まれず、
+       * 生成のたびに列が消えてしまう。
+       * `input: false` でクライアントからの書き込みを禁じ、
+       * `required: true` と `defaultValue` で `NOT NULL DEFAULT 0` になる。
+       */
+      additionalFields: {
+        /** 事務局スタッフかどうか。 */
+        is_staff: {
+          type: "boolean",
+          defaultValue: false,
+          input: false,
+          required: true,
+        },
+      },
+
       /**
        * アカウントを作れるメールアドレスを大阪大学のドメインに限定する。
        *
@@ -103,6 +148,14 @@ const createAuth = () =>
          * 送信の失敗は Workers のログ（ローカルではターミナル）に出る。
          */
         async sendVerificationOTP({ email, otp, type }) {
+          // メール送信の実装（worker-mailer）は `cloudflare:sockets` を読み込む。
+          // Better Auth CLI はこの設定ファイルを Node.js 上で読むが、そのモジュールは
+          // Workers 上にしか存在しないため、トップレベルで import すると CLI が
+          // 設定を読み込めずスキーマ生成に失敗する。
+          // 実行時にしか必要ない依存なので、ここで動的に読み込む。
+          const { createMailSender, getMailFrom } =
+            await import("~/infra/mail/mail-sender-factory.server");
+
           const sendVerificationOtp = createSendVerificationOtpUseCase({
             mailSender: createMailSender(),
             from: getMailFrom(),
@@ -116,8 +169,35 @@ const createAuth = () =>
           }
         },
       }),
+
+      /**
+       * パスキー（WebAuthn）でのログイン。
+       *
+       * rpID は指定しなければ baseURL のホスト名になる。
+       * この値は登録済みのパスキー 1 つ 1 つに焼き付けられるため、
+       * 後から変えると既存のパスキーが**すべて使えなくなる**点に注意。
+       */
+      passkey({
+        rpName: APP_NAME,
+        origin: toOrigin(BETTER_AUTH_URL),
+
+        authenticatorSelection: {
+          /**
+           * 端末側にユーザー情報ごと保存する形式（discoverable credential）を必須にする。
+           *
+           * 既定の "preferred" だと認証器によっては保存されないことがあり、
+           * そうなるとメールアドレス欄のオートフィル候補にも、
+           * メールアドレスを入力しないログインにも出てこないパスキーができてしまう。
+           */
+          residentKey: "required",
+
+          // 生体認証・PIN の要求。"required" だと毎回必ず求められて煩わしいので既定のまま。
+          userVerification: "preferred",
+        },
+      }),
     ],
   });
+};
 
 let authInstance: ReturnType<typeof createAuth> | undefined;
 

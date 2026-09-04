@@ -30,6 +30,21 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 - **Start development server**: `pnpm run dev`
 - **Database**: We are using SQLite (D1), **NOT** PostgreSQL. Keep this in mind when writing Drizzle schema or migrations.
 
+### Cloudflare environments
+
+There are two named environments in `wrangler.jsonc`, with separate Workers **and** separate D1 databases:
+
+| Environment  | Branch                     | Worker                  | D1                         |
+| ------------ | -------------------------- | ----------------------- | -------------------------- |
+| `production` | `main`                     | `iclub-reserve`         | `iclub-reserve-db`         |
+| `preview`    | `develop` and its branches | `iclub-reserve-preview` | `iclub-reserve-preview-db` |
+
+The top level of `wrangler.jsonc` is for local development only. It is deliberately named `iclub-reserve-local` and points at the preview D1, so that a `wrangler deploy` without `--env` cannot overwrite production.
+
+Because `@cloudflare/vite-plugin` resolves the environment **at build time**, adding `--env` to `wrangler deploy` afterwards does _not_ switch environments — the already-built configuration wins. Always use the provided scripts (`pnpm run deploy` / `pnpm run deploy:preview`), which set `CLOUDFLARE_ENV` for the build and pass a matching `--env` to the deploy. Wrangler errors out if the two disagree.
+
+`vars` and bindings are **not** inherited by named environments. When adding a variable, add it to all three places (top level, `env.production`, `env.preview`) and keep the key sets identical — `wrangler types` runs without `--env`, so a key missing from the top level will not appear in the `Env` type.
+
 ## 5. Coding Guidelines & Constraints
 
 - **React Router**: Keep data loaders and actions collocated with route components where possible to maintain feature-based cohesion.

@@ -1,17 +1,12 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { createId } from "@paralleldrive/cuid2";
-import { ReservationStatus } from "~/domain/reservation";
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
-  email: text("email").notNull().unique(),
   name: text("name").notNull(),
+  email: text("email").notNull().unique(),
   emailVerified: integer("email_verified", { mode: "boolean" }).default(false).notNull(),
   image: text("image"),
-  // 事務局スタッフかどうか。Better Auth はユーザー作成時にこの列を渡さないため、
-  // 既定値を入れておかないと NOT NULL 制約でアカウント作成に失敗する。
-  is_staff: integer({ mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
     .notNull(),
@@ -19,6 +14,7 @@ export const user = sqliteTable("user", {
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  is_staff: integer("is_staff", { mode: "boolean" }).default(false).notNull(),
 });
 
 export const session = sqliteTable(
@@ -94,9 +90,33 @@ export const verification = sqliteTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const passkey = sqliteTable(
+  "passkey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    credentialID: text("credential_id").notNull(),
+    counter: integer("counter").notNull(),
+    deviceType: text("device_type").notNull(),
+    backedUp: integer("backed_up", { mode: "boolean" }).notNull(),
+    transports: text("transports"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }),
+    aaguid: text("aaguid"),
+  },
+  (table) => [
+    index("passkey_userId_idx").on(table.userId),
+    index("passkey_credentialID_idx").on(table.credentialID),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  passkeys: many(passkey),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -113,124 +133,9 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }));
 
-export const facilityTable = sqliteTable("facility", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-
-  name: text().notNull(),
-
-  description: text("description"),
-
-  photoUrl: text("photo_url"),
-
-  googleCalendarId: text("google_calendar_id"),
-
-  calendarUrl: text("calendar_url"),
-
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const sTable = sqliteTable("s", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-
-  name: text("name", { length: 100 }).notNull(),
-
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const ReservationTable = sqliteTable("reservation", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-
-  Id: text("_id")
-    .references(() => sTable.id)
-    .notNull(),
-
-  facilityId: text("facility_id")
-    .references(() => facilityTable.id)
-    .notNull(),
-
-  startAt: integer("start_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-
-  endAt: integer("end_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-
-  headCount: integer("head_count").notNull(),
-
-  note: text("note"),
-
-  status: text("status")
-    .$type<ReservationStatus>()
-    .notNull()
-    .$default(() => ReservationStatus.Provisional),
-
-  statusReason: text("status_reason"),
-
-  createdBy: text("created_by"),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export const MembershipRole = {
-  Owner: "owner",
-  Member: "member",
-} as const;
-
-export type MembershipRole = (typeof MembershipRole)[keyof typeof MembershipRole];
-
-export const membershipTable = sqliteTable("membership", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-
-  name: text("name", { length: 100 }).notNull(),
-
-  userId: text("user_id")
-    .references(() => user.id)
-    .notNull(),
-
-  Id: text("_id")
-    .references(() => sTable.id)
-    .notNull(),
-
-  role: text("role").$type<MembershipRole>().notNull(),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export type  = typeof sTable.$inferSelect;
-export type New = typeof sTable.$inferInsert;
+export const passkeyRelations = relations(passkey, ({ one }) => ({
+  user: one(user, {
+    fields: [passkey.userId],
+    references: [user.id],
+  }),
+}));
