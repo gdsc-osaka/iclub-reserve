@@ -1,18 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { integer, sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
-
-export const GroupReservationStatus = {
-  Provisional: "provisional",
-  Approved: "approved",
-  Withdrawn: "withdrawn",
-  Rejected: "rejected",
-  Cancelled: "cancelled",
-  CancelledByStaff: "cancelled_by_staff",
-} as const;
-
-export type GroupReservationStatus =
-  (typeof GroupReservationStatus)[keyof typeof GroupReservationStatus];
+import { ReservationStatus } from "~/domain/reservation";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -150,7 +139,7 @@ export const facilityTable = sqliteTable("facility", {
     .$defaultFn(() => new Date()),
 });
 
-export const groupsTable = sqliteTable("groups", {
+export const sTable = sqliteTable("s", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
@@ -167,13 +156,13 @@ export const groupsTable = sqliteTable("groups", {
     .$defaultFn(() => new Date()),
 });
 
-export const groupReservationTable = sqliteTable("reservation", {
+export const ReservationTable = sqliteTable("reservation", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
 
-  groupId: text("group_id")
-    .references(() => groupsTable.id)
+  Id: text("_id")
+    .references(() => sTable.id)
     .notNull(),
 
   facilityId: text("facility_id")
@@ -193,9 +182,9 @@ export const groupReservationTable = sqliteTable("reservation", {
   note: text("note"),
 
   status: text("status")
-    .$type<GroupReservationStatus>()
+    .$type<ReservationStatus>()
     .notNull()
-    .$default(() => GroupReservationStatus.Provisional),
+    .$default(() => ReservationStatus.Provisional),
 
   statusReason: text("status_reason"),
 
@@ -228,8 +217,8 @@ export const membershipTable = sqliteTable("membership", {
     .references(() => user.id)
     .notNull(),
 
-  groupId: text("group_id")
-    .references(() => groupsTable.id)
+  Id: text("_id")
+    .references(() => sTable.id)
     .notNull(),
 
   role: text("role").$type<MembershipRole>().notNull(),
@@ -243,5 +232,5 @@ export const membershipTable = sqliteTable("membership", {
     .$defaultFn(() => new Date()),
 });
 
-export type Group = typeof groupsTable.$inferSelect;
-export type NewGroup = typeof groupsTable.$inferInsert;
+export type  = typeof sTable.$inferSelect;
+export type New = typeof sTable.$inferInsert;
