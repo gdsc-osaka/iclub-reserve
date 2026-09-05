@@ -27,10 +27,10 @@
 
 要求分析手法 RDRA 3.0 に基づく `rdra` スキルを同梱しています。要件定義・PRD の作成・要求のレビュー・要件の更新などを AI エージェントに依頼すると自動的に読み込まれ、`rdra/` および `docs/prd.md` と同じ形式で成果物を出力します。
 
-| パス | 役割 |
-| --- | --- |
-| `.agents/skills/rdra/` | スキルの実体。Antigravity (agy) はこちらを直接読み込みます |
-| `.claude/skills/rdra` | `.agents/skills/rdra` へのシンボリックリンク。Claude Code 用 |
+| パス                   | 役割                                                         |
+| ---------------------- | ------------------------------------------------------------ |
+| `.agents/skills/rdra/` | スキルの実体。Antigravity (agy) はこちらを直接読み込みます   |
+| `.claude/skills/rdra`  | `.agents/skills/rdra` へのシンボリックリンク。Claude Code 用 |
 
 > [!IMPORTANT]
 > Windows で clone した場合、Git がシンボリックリンクを展開せず、リンク先のパスが書かれただけの
