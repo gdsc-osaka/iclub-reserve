@@ -23,7 +23,9 @@
     "db:migrate:local": "wrangler d1 migrations apply iclub-reserve-preview-db --local",
     "db:migrate:preview": "wrangler d1 migrations apply iclub-reserve-preview-db --remote --env preview",
     "db:migrate:prod": "wrangler d1 migrations apply iclub-reserve-db --remote --env production",
-    "db:studio": "node scripts/run-studio.js"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:seed:preview": "tsx scripts/seed.ts --remote",
+    "db:studio": "tsx scripts/run-studio.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.2",
@@ -49,6 +51,7 @@
     "@cloudflare/vite-plugin": "^1.42.1",
     "@react-router/dev": "8.0.0",
     "@tailwindcss/vite": "^4.2.2",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -60,6 +63,7 @@
     "oxlint": "^1.70.0",
     "shadcn": "^4.11.0",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vite": "^8.0.3",
     "vitest": "^4.1.9",
