@@ -27,6 +27,8 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 
 - **Install dependencies**: `pnpm install`
 - **Apply DB Migrations**: `pnpm run db:migrate:local`
+- **Seed DB (Local)**: `pnpm run db:seed`
+- **Seed DB (Preview)**: `pnpm run db:seed:preview`
 - **Start development server**: `pnpm run dev`
 - **Database**: We are using SQLite (D1), **NOT** PostgreSQL. Keep this in mind when writing Drizzle schema or migrations.
 

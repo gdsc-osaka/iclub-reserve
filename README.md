@@ -63,8 +63,21 @@ pnpm run db:migrate:local
 pnpm run dev
 ```
 
-アプリケーションは `http://localhost:5173` で利用可能になります。
-※ ローカルの D1 データベース（SQLite）のシード手順については、追って整備します。
+### データベースのシード（テストデータ投入）
+
+ローカル環境の DB にテストデータ（施設、ユーザー、団体、予約サンプル）を投入します：
+
+```bash
+pnpm run db:seed
+```
+
+プレビュー環境（リモート D1）に投入する場合は以下を実行します：
+
+```bash
+pnpm run db:seed:preview
+# または
+pnpm run db:seed --remote
+```
 
 > [!TIP]
 > 開発サーバーの起動後に、別ターミナルで以下のコマンドを実行すると、DB の内容を直接確認・変更できる Drizzle Studio を起動できます。
