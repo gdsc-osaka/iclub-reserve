@@ -23,6 +23,31 @@
 - [製品要件定義書 (PRD)](./docs/prd.md)
 - [RDRA成果物・要件定義](./rdra/)
 
+## AI エージェント向けスキル
+
+要求分析手法 RDRA 3.0 に基づく `rdra` スキルを同梱しています。要件定義・PRD の作成・要求のレビュー・要件の更新などを AI エージェントに依頼すると自動的に読み込まれ、`rdra/` および `docs/prd.md` と同じ形式で成果物を出力します。
+
+| パス | 役割 |
+| --- | --- |
+| `.agents/skills/rdra/` | スキルの実体。Antigravity (agy) はこちらを直接読み込みます |
+| `.claude/skills/rdra` | `.agents/skills/rdra` へのシンボリックリンク。Claude Code 用 |
+
+> [!IMPORTANT]
+> Windows で clone した場合、Git がシンボリックリンクを展開せず、リンク先のパスが書かれただけの
+> テキストファイルとしてチェックアウトすることがあります。この状態になるとスキルはエラーも出さず、
+> 単に読み込まれません。
+>
+> `.claude/skills/rdra` がディレクトリではなくファイルになっていたら、次を実行してください。
+> 未コミットの変更には影響しません。
+>
+> ```bash
+> git config core.symlinks true
+> git checkout -- .claude/skills/rdra
+> ```
+>
+> シンボリックリンクの展開には Windows の「開発者モード」（設定 → システム → 開発者向け）を
+> 有効にしておく必要があります。
+
 ## 開発環境のセットアップ
 
 ### 前提条件
