@@ -25,7 +25,7 @@
     "db:migrate:prod": "wrangler d1 migrations apply iclub-reserve-db --remote --env production",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:preview": "tsx scripts/seed.ts --remote",
-    "db:studio": "node scripts/run-studio.js"
+    "db:studio": "tsx scripts/run-studio.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.2",
