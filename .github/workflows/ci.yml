@@ -28,15 +28,11 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/setup@v2
         with:
           version: 11
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: "pnpm"
+          runtime: node@24
+          cache: true
 
       - name: Install node modules
         run: pnpm i
@@ -56,15 +52,11 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/setup@v2
         with:
           version: 11
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: "pnpm"
+          runtime: node@24
+          cache: true
 
       - name: Install node modules
         run: pnpm i
@@ -84,15 +76,11 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/setup@v2
         with:
           version: 11
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: "pnpm"
+          runtime: node@24
+          cache: true
 
       - name: Install node modules
         run: pnpm i
@@ -112,15 +100,11 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/setup@v2
         with:
           version: 11
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: "pnpm"
+          runtime: node@24
+          cache: true
 
       - name: Install node modules
         run: pnpm i
