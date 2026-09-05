@@ -1,17 +1,7 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
 import { user } from "./auth";
-
-export const ReservationStatus = {
-  Provisional: "provisional",
-  Approved: "approved",
-  Withdrawn: "withdrawn",
-  Rejected: "rejected",
-  Cancelled: "cancelled",
-  CancelledByStaff: "cancelled_by_staff",
-} as const;
-
-export type ReservationStatus = (typeof ReservationStatus)[keyof typeof ReservationStatus];
+import { ReservationStatus } from "~/domain/reservation";
 
 export const facilityTable = sqliteTable("facility", {
   id: text("id")
