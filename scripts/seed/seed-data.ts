@@ -1,4 +1,6 @@
-import { ReservationStatus, MembershipRole } from "../../app/db/schema/reservation.js";
+import { ReservationStatus } from "~/db/schema/reservation";
+import { GroupStatus } from "~/domain/group";
+import { MembershipRole } from "~/domain/membership";
 
 /**
  * 施設・備品のシードデータ
@@ -85,43 +87,60 @@ export const seedUsers = [
 /**
  * サンプル団体のシードデータ
  */
-export const seedGroups = [
+export const seedOrganizations = [
   {
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
-    isActive: true,
+    slug: "grp_robotics",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    status: GroupStatus.Enabled,
   },
   {
     id: "grp_ai_hackers",
     name: "AI ハッカソンチーム",
-    isActive: true,
+    slug: "grp_ai_hackers",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    status: GroupStatus.Pending,
+  },
+  {
+    id: "grp_disabled_group",
+    name: "無効化された団体",
+    slug: "grp_disabled_group",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    status: GroupStatus.Disabled,
   },
 ];
 
 /**
  * 団体メンバーシップのシードデータ
  */
-export const seedMemberships = [
+export const seedMembers = [
   {
     id: "mem_taro_robotics",
-    name: "阪大 太郎",
+    organizationId: "grp_robotics",
     userId: "usr_student_01",
-    groupId: "grp_robotics",
-    role: MembershipRole.Owner,
+    role: MembershipRole.Admin,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   },
   {
     id: "mem_hanako_robotics",
-    name: "阪大 花子",
+    organizationId: "grp_robotics",
     userId: "usr_student_02",
-    groupId: "grp_robotics",
     role: MembershipRole.Member,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   },
   {
     id: "mem_taro_ai",
-    name: "阪大 太郎",
+    organizationId: "grp_ai_hackers",
     userId: "usr_student_01",
-    groupId: "grp_ai_hackers",
     role: MembershipRole.Member,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   },
 ];
 
