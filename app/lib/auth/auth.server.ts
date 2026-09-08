@@ -18,6 +18,8 @@ import {
 } from "~/usecases/mail/send-verification-otp.server";
 import { passkey } from "@better-auth/passkey";
 import { GroupStatus } from "~/domain/group";
+import { MembershipRole } from "~/domain/membership";
+import { ac, admin, member } from "./permission";
 
 /** 許可外のドメインを拒否するときに返す説明文。 */
 const NOT_ALLOWED_MESSAGE = `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`;
@@ -226,6 +228,9 @@ const createAuth = () => {
             data: { ...member, updatedAt: new Date() },
           }),
         },
+        ac,
+        roles: { admin, member },
+        creatorRole: MembershipRole.Admin,
       }),
     ],
   });
