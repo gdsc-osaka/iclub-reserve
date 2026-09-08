@@ -4,7 +4,7 @@ import type {} from "zod/v4/core";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { emailOTP } from "better-auth/plugins";
+import { emailOTP, organization } from "better-auth/plugins";
 import { env } from "cloudflare:workers";
 import { createDb } from "~/infra/db";
 import {
@@ -17,6 +17,7 @@ import {
   OTP_EXPIRES_IN_SECONDS,
 } from "~/usecases/mail/send-verification-otp.server";
 import { passkey } from "@better-auth/passkey";
+import { GroupStatus } from "~/domain/group";
 
 /** 許可外のドメインを拒否するときに返す説明文。 */
 const NOT_ALLOWED_MESSAGE = `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`;
@@ -193,6 +194,37 @@ const createAuth = () => {
 
           // 生体認証・PIN の要求。"required" だと毎回必ず求められて煩わしいので既定のまま。
           userVerification: "preferred",
+        },
+      }),
+
+      // グループの管理機能 (ロール・招待など)
+      organization({
+        schema: {
+          organization: {
+            additionalFields: {
+              status: { type: Object.values(GroupStatus), input: false, required: true },
+              updatedAt: { type: "date", input: false, required: true },
+            },
+          },
+          member: {
+            additionalFields: {
+              updatedAt: { type: "date", input: false, required: true },
+            },
+          },
+        },
+        organizationHooks: {
+          beforeCreateOrganization: async ({ organization }) => ({
+            data: { ...organization, updatedAt: new Date() },
+          }),
+          beforeUpdateOrganization: async ({ organization }) => ({
+            data: { ...organization, updatedAt: new Date() },
+          }),
+          beforeAddMember: async ({ member }) => ({
+            data: { ...member, updatedAt: new Date() },
+          }),
+          beforeUpdateMemberRole: async ({ member }) => ({
+            data: { ...member, updatedAt: new Date() },
+          }),
         },
       }),
     ],
