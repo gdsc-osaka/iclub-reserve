@@ -1,7 +1,7 @@
 import type { ResultAsync } from "neverthrow";
-import type { PermissionTable } from "./authz";
-import type { BaseError } from "./error";
-import { MembershipRole } from "./membership";
+import type { PermissionTable } from "../authz";
+import type { BaseError } from "../error";
+import { MembershipRole } from "../membership";
 
 export const GroupStatus = {
   Enabled: "enabled",

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { roleCan } from "./authz";
-import { GroupAction, groupPermissions } from "./group";
-import { canPerform, MembershipRole, type Membership } from "./membership";
+import { roleCan } from "../authz";
+import { GroupAction, groupPermissions } from ".";
+import { canPerform, MembershipRole, type Membership } from "../membership";
 
 /**
  * 役割ごとに許可される操作の期待値。
