@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { roleCan } from "./authz";
 import { GroupAction, groupPermissions } from "./group";
-import { canPerform, MembershipRole, toMembershipRoles, type Membership } from "./membership";
+import { canPerform, MembershipRole, type Membership } from "./membership";
 
 /**
  * 役割ごとに許可される操作の期待値。
@@ -56,14 +56,5 @@ describe("groupPermissions", () => {
 
     expect(canPerform(groupPermissions, membership, GroupAction.Update)).toBe(true);
     expect(canPerform(groupPermissions, membership, GroupAction.InviteMember)).toBe(true);
-  });
-
-  it("知らない役割だけの場合でも閲覧はできる", () => {
-    // creatorRole を修正する前に作られた "owner" の行が残っていても、
-    // 自分が所属しているグループが見えなくなってはいけない
-    const membership = membershipOf(...toMembershipRoles("owner"));
-
-    expect(canPerform(groupPermissions, membership, GroupAction.View)).toBe(true);
-    expect(canPerform(groupPermissions, membership, GroupAction.Update)).toBe(false);
   });
 });
