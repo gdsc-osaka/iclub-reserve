@@ -1,11 +1,12 @@
 import { ReservationStatus } from "~/db/schema/reservation";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
+import * as schema from "~/db/schema";
 
 /**
  * 施設・備品のシードデータ
  */
-export const seedFacilities = [
+export const seedFacilities: (typeof schema.facilityTable.$inferInsert)[] = [
   {
     id: "fac_meeting_a",
     name: "ミーティングルーム A",
@@ -57,7 +58,7 @@ export const seedFacilities = [
  * テスト用ユーザーのシードデータ
  * 大阪大学の許可ドメイン（@osaka-u.ac.jp / @*.osaka-u.ac.jp）に準拠
  */
-export const seedUsers = [
+export const seedUsers: (typeof schema.user.$inferInsert)[] = [
   {
     id: "usr_staff_01",
     name: "管理者スタッフ",
@@ -87,7 +88,7 @@ export const seedUsers = [
 /**
  * サンプル団体のシードデータ
  */
-export const seedOrganizations = [
+export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
@@ -117,7 +118,7 @@ export const seedOrganizations = [
 /**
  * 団体メンバーシップのシードデータ
  */
-export const seedMembers = [
+export const seedMembers: (typeof schema.member.$inferInsert)[] = [
   {
     id: "mem_taro_robotics",
     organizationId: "grp_robotics",
@@ -151,7 +152,7 @@ export const seedMembers = [
 const now = Date.now();
 const oneDayMs = 24 * 60 * 60 * 1000;
 
-export const seedReservations = [
+export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] = [
   {
     id: "res_sample_approved",
     groupId: "grp_robotics",
