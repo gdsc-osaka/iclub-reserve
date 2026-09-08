@@ -3,10 +3,17 @@ import type { PermissionTable } from "./authz";
 import type { BaseError } from "./error";
 import { MembershipRole } from "./membership";
 
+export const GroupStatus = {
+  Enabled: "enabled",
+  Pending: "pending",
+  Disabled: "disabled",
+} as const;
+export type GroupStatus = (typeof GroupStatus)[keyof typeof GroupStatus];
+
 export interface Group {
   id: string;
   name: string;
-  isActive: boolean;
+  status: GroupStatus;
   createdAt: Date;
   updatedAt: Date;
 }
