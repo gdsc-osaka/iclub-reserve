@@ -40,3 +40,19 @@ export interface ReservationError {
 export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
 }
+
+/**
+ * まだ結果が確定していない予約のステータス。
+ *
+ * 「これから使う予定」と「終わった記録」を分ける唯一の定義元。
+ * ここに挙がっていないステータス (取り消し・却下・キャンセル) は、
+ * 日時が未来であっても施設を押さえていないので、予定ではなく記録として扱う。
+ */
+export const ACTIVE_RESERVATION_STATUSES = [
+  ReservationStatus.Provisional,
+  ReservationStatus.Approved,
+] as const satisfies readonly ReservationStatus[];
+
+/** 予約がまだ生きている (施設を押さえている) ステータスかどうかを判定する。 */
+export const isActiveReservationStatus = (status: ReservationStatus): boolean =>
+  (ACTIVE_RESERVATION_STATUSES as readonly ReservationStatus[]).includes(status);
