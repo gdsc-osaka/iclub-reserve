@@ -1,11 +1,7 @@
 import { member } from "~/db/schema";
-import { MembershipRole, type Membership } from "~/domain/membership";
+import { isMembershipRole, MembershipRole, type Membership } from "~/domain/membership";
 
 type MemberRow = typeof member.$inferSelect;
-
-/** 文字列が MembershipRole のいずれかかどうかを判定する */
-const isMembershipRole = (value: string): value is MembershipRole =>
-  (Object.values(MembershipRole) as string[]).includes(value);
 
 /**
  * DB の `member.role` 列を MembershipRole の配列に変換する。

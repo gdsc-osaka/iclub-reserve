@@ -13,6 +13,22 @@ export const MembershipRole = {
 export type MembershipRole = (typeof MembershipRole)[keyof typeof MembershipRole];
 
 /**
+ * 文字列がこのアプリの役割かどうかを判定する。
+ *
+ * Better Auth は自前で `owner` を含む既定の役割一覧を持っており、
+ * 役割名の検証にはそれと設定側をマージした一覧を使う
+ * (better-auth の crud-members.ts の `validStaticRoles`)。
+ * そのため `roles` に admin と member しか渡していなくても、
+ * API からは `owner` を設定できてしまう。
+ *
+ * その `owner` は Better Auth の判定 (hasPermission) では何の権限も持たず、
+ * こちらの `toMembershipRoles` では未知として捨てられる。
+ * どちらから見ても意味を成さない役割なので、入口で弾くために使う。
+ */
+export const isMembershipRole = (value: string): value is MembershipRole =>
+  (Object.values(MembershipRole) as readonly string[]).includes(value);
+
+/**
  * ユーザーがグループに所属していることを表すドメインモデル。
  */
 export interface Membership {

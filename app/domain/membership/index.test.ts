@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PermissionTable } from "../authz";
-import { canPerform, MembershipRole, type Membership } from ".";
+import { canPerform, isMembershipRole, MembershipRole, type Membership } from ".";
 
 /**
  * canPerform の検証用に用意した表。
@@ -51,5 +51,26 @@ describe("canPerform", () => {
   it("役割を 1 つも持たない所属は何も許可されない", () => {
     // toMembershipRoles を通せば空にはならないが、判定側でも取りこぼさないこと
     expect(canPerform(table, membershipOf(), TestAction.Harmless)).toBe(false);
+  });
+});
+
+describe("isMembershipRole", () => {
+  it.each(Object.values(MembershipRole))("%o はこのアプリの役割として認める", (role) => {
+    expect(isMembershipRole(role)).toBe(true);
+  });
+
+  it.each([
+    // Better Auth の既定の役割。設定側の roles に無くても API からは指定できてしまうため、
+    // ここで弾けることが認可の前提になっている
+    "owner",
+    // 大文字小文字は区別する。DB には小文字しか入らない
+    "Admin",
+    "ADMIN",
+    // カンマ区切りは呼び出し側が分解してから渡す
+    "admin,member",
+    "",
+    " admin",
+  ])("%o は役割として認めない", (value) => {
+    expect(isMembershipRole(value)).toBe(false);
   });
 });
