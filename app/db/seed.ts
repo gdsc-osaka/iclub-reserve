@@ -40,10 +40,10 @@ import {
   membershipTable,
   MembershipRole,
   reservationTable,
-  ReservationStatus,
   user as userTable,
 } from "~/db/schema";
 import type { Database } from "~/infra/db";
+import { ReservationStatus } from "~/domain/reservation";
 
 /** シードで入れる行の ID につける接頭辞。 */
 const SEED_ID_PREFIX = "seed_";
