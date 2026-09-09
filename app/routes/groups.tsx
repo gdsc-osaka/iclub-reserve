@@ -12,12 +12,12 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { GroupErrorCode, GroupStatus } from "~/domain/group";
+import { GroupStatusBadge, groupStatusLabel } from "~/components/group/group-status-badge";
+import { GroupErrorCode } from "~/domain/group";
 import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { cn } from "~/lib/utils";
 import { getGroupUseCase } from "~/usecases/group/get-group";
 
 import type { Route } from "./+types/groups";
@@ -102,46 +102,6 @@ export default function Group({ loaderData: group }: Route.ComponentProps) {
         </CardContent>
       </Card>
     </main>
-  );
-}
-
-/** グループの状態を利用者向けの日本語にする。 */
-const groupStatusLabel: Record<GroupStatus, string> = {
-  [GroupStatus.Enabled]: "活動中",
-  [GroupStatus.Pending]: "承認待ち",
-  [GroupStatus.Disabled]: "停止中",
-};
-
-/** 状態ごとの配色。活動中だけを目立たせ、承認待ちは注意を促す色にする。 */
-const groupStatusStyle: Record<GroupStatus, { readonly badge: string; readonly dot: string }> = {
-  [GroupStatus.Enabled]: {
-    badge: "bg-primary/10 text-primary ring-primary/20",
-    dot: "bg-primary",
-  },
-  [GroupStatus.Pending]: {
-    badge: "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-400",
-    dot: "bg-amber-500",
-  },
-  [GroupStatus.Disabled]: {
-    badge: "bg-muted text-muted-foreground ring-foreground/10",
-    dot: "bg-muted-foreground",
-  },
-};
-
-/** グループの状態をひと目で分かるようにする小さなラベル。 */
-function GroupStatusBadge({ status }: Readonly<{ status: GroupStatus }>) {
-  const style = groupStatusStyle[status];
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        style.badge,
-      )}
-    >
-      <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
-      {groupStatusLabel[status]}
-    </span>
   );
 }
 
