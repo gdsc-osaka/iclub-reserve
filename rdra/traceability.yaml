@@ -244,6 +244,12 @@ elements:
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["GOAL-006"]
 
+  - id: "REQ-035"
+    type: requirement
+    name: "メールアドレスの変更"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["GOAL-006"]
+
   # ビジネスユースケース
   - id: "BUC-001"
     type: business_usecase
@@ -383,6 +389,12 @@ elements:
     defined_in: "rdra/contexts/group-management.md"
     traces_to: ["REQ-017"]
 
+  - id: "BUC-024"
+    type: business_usecase
+    name: "メールアドレスの変更"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["REQ-035"]
+
   # ユースケース
   - id: "UC-001"
     type: usecase
@@ -516,15 +528,21 @@ elements:
     defined_in: "rdra/contexts/group-management.md"
     traces_to: ["BUC-023"]
 
+  - id: "UC-023"
+    type: usecase
+    name: "メールアドレスを変更する"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["BUC-024"]
+
 coverage:
   total_goals: 6
   goals_with_requirements: 6
-  total_requirements: 34
-  requirements_with_bucs: 34
-  total_bucs: 23
-  bucs_with_ucs: 22
-  total_ucs: 22
+  total_requirements: 35
+  requirements_with_bucs: 35
+  total_bucs: 24
+  bucs_with_ucs: 23
+  total_ucs: 23
   orphaned_elements: []
   notes:
-    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=22）"
+    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=23）"
     - "SCR-011（アカウント登録フォーム）は廃止。認証コード方式では登録とログインの処理が同一のため、SCR-012（ログイン・新規登録画面）に統合した。詳細は change-log.md を参照"
