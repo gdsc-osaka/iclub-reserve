@@ -1,9 +1,12 @@
-import { ReservationStatus, MembershipRole } from "../../app/db/schema/reservation.js";
+import { ReservationStatus } from "~/db/schema/reservation";
+import { GroupStatus } from "~/domain/group";
+import { MembershipRole } from "~/domain/membership";
+import * as schema from "~/db/schema";
 
 /**
  * 施設・備品のシードデータ
  */
-export const seedFacilities = [
+export const seedFacilities: (typeof schema.facilityTable.$inferInsert)[] = [
   {
     id: "fac_meeting_a",
     name: "ミーティングルーム A",
@@ -55,7 +58,7 @@ export const seedFacilities = [
  * テスト用ユーザーのシードデータ
  * 大阪大学の許可ドメイン（@osaka-u.ac.jp / @*.osaka-u.ac.jp）に準拠
  */
-export const seedUsers = [
+export const seedUsers: (typeof schema.user.$inferInsert)[] = [
   {
     id: "usr_staff_01",
     name: "管理者スタッフ",
@@ -84,44 +87,66 @@ export const seedUsers = [
 
 /**
  * サンプル団体のシードデータ
+ *
+ * NOTE: slug に id をそのまま入れないこと。
+ * slug は「所属していない人にも見える可能性がある値」として扱う必要がある一方、
+ * id は所属している人にしか知られたくない値。
+ * 同じにすると、片方が漏れたときにもう片方も分かってしまう。
  */
-export const seedGroups = [
+export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
-    isActive: true,
+    slug: "robotics-dev",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    status: GroupStatus.Enabled,
   },
   {
     id: "grp_ai_hackers",
     name: "AI ハッカソンチーム",
-    isActive: true,
+    slug: "ai-hackers",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    status: GroupStatus.Pending,
+  },
+  {
+    id: "grp_disabled_group",
+    name: "無効化された団体",
+    slug: "disabled-group",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    status: GroupStatus.Disabled,
   },
 ];
 
 /**
  * 団体メンバーシップのシードデータ
  */
-export const seedMemberships = [
+export const seedMembers: (typeof schema.member.$inferInsert)[] = [
   {
     id: "mem_taro_robotics",
-    name: "阪大 太郎",
+    organizationId: "grp_robotics",
     userId: "usr_student_01",
-    groupId: "grp_robotics",
-    role: MembershipRole.Owner,
+    role: MembershipRole.Admin,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   },
   {
     id: "mem_hanako_robotics",
-    name: "阪大 花子",
+    organizationId: "grp_robotics",
     userId: "usr_student_02",
-    groupId: "grp_robotics",
     role: MembershipRole.Member,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   },
   {
     id: "mem_taro_ai",
-    name: "阪大 太郎",
+    organizationId: "grp_ai_hackers",
     userId: "usr_student_01",
-    groupId: "grp_ai_hackers",
     role: MembershipRole.Member,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   },
 ];
 
@@ -132,7 +157,7 @@ export const seedMemberships = [
 const now = Date.now();
 const oneDayMs = 24 * 60 * 60 * 1000;
 
-export const seedReservations = [
+export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] = [
   {
     id: "res_sample_approved",
     groupId: "grp_robotics",

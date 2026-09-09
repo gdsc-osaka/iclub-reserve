@@ -7,10 +7,10 @@ import * as schema from "../app/db/schema/index.js";
 import { createLocalDrizzleDb } from "./lib/d1.js";
 import {
   seedFacilities,
-  seedGroups,
-  seedMemberships,
+  seedOrganizations,
   seedReservations,
   seedUsers,
+  seedMembers,
 } from "./seed/seed-data.js";
 
 /**
@@ -49,10 +49,10 @@ async function seedLocal() {
     await db.insert(schema.user).values(seedUsers).onConflictDoNothing();
 
     console.log("3/5 団体データを投入中...");
-    await db.insert(schema.groupTable).values(seedGroups).onConflictDoNothing();
+    await db.insert(schema.organization).values(seedOrganizations).onConflictDoNothing();
 
     console.log("4/5 団体メンバーシップデータを投入中...");
-    await db.insert(schema.membershipTable).values(seedMemberships).onConflictDoNothing();
+    await db.insert(schema.member).values(seedMembers).onConflictDoNothing();
 
     console.log("5/5 サンプル予約データを投入中...");
     await db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing();
@@ -82,11 +82,9 @@ function seedRemote() {
       ),
       toExecutableSql(db.insert(schema.user).values(seedUsers).onConflictDoNothing().toSQL()),
       toExecutableSql(
-        db.insert(schema.groupTable).values(seedGroups).onConflictDoNothing().toSQL(),
+        db.insert(schema.organization).values(seedOrganizations).onConflictDoNothing().toSQL(),
       ),
-      toExecutableSql(
-        db.insert(schema.membershipTable).values(seedMemberships).onConflictDoNothing().toSQL(),
-      ),
+      toExecutableSql(db.insert(schema.member).values(seedMembers).onConflictDoNothing().toSQL()),
       toExecutableSql(
         db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing().toSQL(),
       ),

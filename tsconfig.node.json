@@ -1,6 +1,12 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["drizzle.config.ts", "vite.config.ts", "scripts/**/*.ts", "app/db/schema/**/*"],
+  "include": [
+    "drizzle.config.ts",
+    "vite.config.ts",
+    "scripts/**/*.ts",
+    "app/db/schema/**/*",
+    "app/domain/**/*"
+  ],
   "compilerOptions": {
     "composite": true,
     "strict": true,
