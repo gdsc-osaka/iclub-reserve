@@ -257,11 +257,11 @@ entities:
       - name: "email"
         type: "string"
         required: true
-        description: "メールアドレス（osaka-u.ac.jpドメイン必須・一意）"
+        description: "メールアドレス（一意）。保存する値のドメインは制限しない。osaka-u.ac.jpドメイン（サブドメイン含む）であることを求めるのはアカウント作成時とメールアドレス変更時の入力に対してであり、既存の値やログインには適用しない（COND-004）。"
       - name: "name"
         type: "string"
         required: true
-        description: "氏名。アカウント作成の直後は未設定であり、初回セットアップ（SCR-014）で登録して本登録が完了する。"
+        description: "氏名。NULLは許さず、未設定は空文字で表す。アカウント作成の直後は空文字であり、初回セットアップ（SCR-014）で登録して本登録が完了する。空白のみの値も未設定として扱う。"
       - name: "email_verified"
         type: "boolean"
         required: true

@@ -8,7 +8,7 @@
 
 現在のアーキテクチャは、DDD をイメージした 4 層構成になっている。
 
-```
+```text
 routes/     … React Router の loader / action。HTTP と画面のことだけを知る
 usecases/   … 依存 (ポート) を引数で受け取る関数。認可判定と入力検証を行う
 domain/     … Entity と Repository ポート。DB を知らない
@@ -49,7 +49,7 @@ CQRS の考え方を軽量に取り入れ、**読み取り専用の Query 層 (`
 
 ### 1. レイヤー構成
 
-```
+```text
 app/
   domain/           書き込み側: Entity と Repository ポート (現状のまま)
     group/index.ts
@@ -89,7 +89,7 @@ app/
 
 > **そのクエリを呼ぶとき、引数に渡す ID は何か。その ID の集約がフォルダ。**
 
-```
+```text
 app/query/group/group-member-list.ts
           ~~~~~ 入口 (引数は groupId)
                 ~~~~~~~~~~~~~~~~~ 出口 (メンバーの一覧が返る)
@@ -135,7 +135,7 @@ Membership は認可判定のための概念であり、
 
 ### 5. 同じ組み合わせが 2 つのフォルダに現れるのは、重複ではなく正解
 
-```
+```text
 query/group/group-member-list.ts   SCR-007 団体管理: 「このグループに誰がいる？」
 query/user/user-group-list.ts      SCR-008 団体一覧: 「私はどのグループにいる？」
 ```
@@ -147,7 +147,7 @@ query/user/user-group-list.ts      SCR-008 団体一覧: 「私はどのグル�
 
 ### 6. 命名規則
 
-```
+```text
 app/query/group/group-member-list.ts        型: GroupMemberList / GroupMemberListQuery
                                             メソッド: findByGroupId(groupId)
 app/infra/group/group-member-list-query.ts  実装: createGroupMemberListQuery(db)
