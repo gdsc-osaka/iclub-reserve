@@ -8,7 +8,7 @@ value:
   goals: ["GOAL-004"]
   requirements:
     - id: "REQ-026"
-      description: "施設・設備ごとに専用のGoogle Calendarを作成し公開する（Google Service Account使用）。承認済み予約を自動登録する。公開情報は団体名・施設名・日時のみ。"
+      description: "施設・設備ごとに専用のGoogle Calendarを作成し公開する（Google Service Account使用）。承認済み予約を自動登録する。公開情報は施設名・日時のみとし、団体名は載せない（COND-008）。"
       traces_to: ["GOAL-004"]
     - id: "REQ-027"
       description: "承認済み予約がキャンセルされた際（団体・事務局どちらでも）にGoogle Calendarから自動削除する。"
@@ -53,7 +53,7 @@ boundary:
     - id: "EVT-009"
       name: "Google Calendar登録"
       trigger: "UC-006（承認時）またはUC-008（事務局直接作成時）"
-      description: "承認済み予約を Google Calendar に登録する。公開情報: 団体名・施設名・日時。"
+      description: "承認済み予約を Google Calendar に登録する。公開情報: 施設名・日時。団体名・使用人数・備考は載せない（COND-008）。"
     - id: "EVT-010"
       name: "Google Calendar削除"
       trigger: "UC-004（団体キャンセル）/ UC-007（事務局キャンセル）/ UC-005（施設・日時変更で仮予約に戻る場合）/ UC-008（事務局が承認済み予約を直接削除する場合）"
@@ -73,6 +73,8 @@ system:
 # BIZ-005: カレンダー連携
 
 承認済み予約のGoogle Calendarへの自動登録・更新・削除を担うコンテキスト。
+
+Google Calendarは購読URLを知っていれば誰でも閲覧できるため、COND-008の3段階のうち最も狭い開示範囲——施設名と日時だけ——を載せる。どの団体が使っているかは学内の利用者どうしで共有すれば足りる情報であり、外部に出す必要はないためである。
 
 ## ビジネスコンテキスト図
 
