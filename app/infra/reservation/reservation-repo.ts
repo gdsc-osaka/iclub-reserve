@@ -8,7 +8,6 @@ import {
 import type { Database } from "../db";
 import { eq } from "drizzle-orm";
 import { reservationTable } from "~/db/schema";
-import { error } from "better-auth/api";
 
 export const createReservationRepository = (db: Database): ReservationRepository => {
   const findById = (id: string): ResultAsync<Reservation, ReservationError> => {
