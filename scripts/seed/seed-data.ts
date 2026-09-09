@@ -1,4 +1,4 @@
-import { ReservationStatus } from "~/db/schema/reservation";
+import { ReservationStatus } from "~/domain/reservation";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import * as schema from "~/db/schema";

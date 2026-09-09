@@ -14,4 +14,5 @@ export default [
   route("api/auth/*", "routes/api.auth.$.ts"),
   route("groups/:groupId", "routes/groups.tsx"),
   route("facility/:facilityId", "routes/facility.tsx"),
+  route("reservation/:reservationId", "routes/reservation.tsx"),
 ] satisfies RouteConfig;
