@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { MembershipRole } from "~/domain/membership";
 import {
   assertAllowedOrganizationRequest,
+  BLOCKED_ORGANIZATION_PATHS,
+  ENDPOINT_NOT_AVAILABLE_CODE,
   INVALID_MEMBERSHIP_ROLE_CODE,
   parseRequestedRoles,
   ROLE_INPUT_ORGANIZATION_PATHS,
@@ -21,6 +23,42 @@ const rejectionOf = (path: string, body?: unknown): { status: string; code: stri
     return { status: String(error.status), code: String(error.body?.code) };
   }
 };
+
+describe("塞いだエンドポイント", () => {
+  it.each([...BLOCKED_ORGANIZATION_PATHS])("%s は 404 で拒否する", (path) => {
+    // 403 だと「あるが使えない」と分かるので、存在ごと隠す
+    expect(rejectionOf(path)).toEqual({
+      status: "NOT_FOUND",
+      code: ENDPOINT_NOT_AVAILABLE_CODE,
+    });
+  });
+
+  it.each([
+    // 自前の loader が使う経路ではなく、Better Auth 側で所属が確認されるもの。
+    // 塞ぎすぎると招待や役割変更が作れなくなるので、通ることを固定しておく
+    "/organization/list",
+    "/organization/list-members",
+    "/organization/set-active",
+    "/organization/leave",
+    "/organization/update",
+    "/organization/create",
+    // 認証まわりは組織とは無関係なので当然通る
+    "/sign-in/email",
+    "/email-otp/send-verification-otp",
+  ])("%s は通す", (path) => {
+    expect(rejectionOf(path)).toBeNull();
+  });
+
+  it("塞ぐ経路は存在秘匿と物理削除の防止だけに絞る", () => {
+    // 増やすときは organization-guard.ts に理由を書くこと
+    expect([...BLOCKED_ORGANIZATION_PATHS].sort()).toEqual([
+      "/organization/check-slug",
+      "/organization/delete",
+      "/organization/get-full-organization",
+      "/organization/get-organization",
+    ]);
+  });
+});
 
 describe("parseRequestedRoles", () => {
   it.each([

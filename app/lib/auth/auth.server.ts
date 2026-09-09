@@ -110,7 +110,7 @@ const createAuth = () => {
 
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        // 組織エンドポイントに渡された役割の検証。
+        // 使っていない組織エンドポイントの遮断と、役割の値の検証。
         // 判定の中身と理由は organization-guard.ts を参照。
         assertAllowedOrganizationRequest(ctx);
 

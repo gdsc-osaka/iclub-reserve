@@ -87,12 +87,17 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
 
 /**
  * サンプル団体のシードデータ
+ *
+ * NOTE: slug に id をそのまま入れないこと。
+ * slug は「所属していない人にも見える可能性がある値」として扱う必要がある一方、
+ * id は所属している人にしか知られたくない値。
+ * 同じにすると、片方が漏れたときにもう片方も分かってしまう。
  */
 export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
-    slug: "grp_robotics",
+    slug: "robotics-dev",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Enabled,
@@ -100,7 +105,7 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_ai_hackers",
     name: "AI ハッカソンチーム",
-    slug: "grp_ai_hackers",
+    slug: "ai-hackers",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Pending,
@@ -108,7 +113,7 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_disabled_group",
     name: "無効化された団体",
-    slug: "grp_disabled_group",
+    slug: "disabled-group",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Disabled,
