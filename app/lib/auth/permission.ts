@@ -14,8 +14,7 @@ import { MembershipRole } from "~/domain/membership";
 export const ac = createAccessControl(defaultStatements);
 
 /**
- * ドメインの権限表 (app/domain/group.ts の groupPermissions) を
- * Better Auth の statement に翻訳する。
+ * ドメインの権限表を Better Auth の statement に翻訳する。
  *
  * Better Auth 内蔵の組織 API (updateOrganization / createInvitation など) は
  * ここで作ったロールを使って認可するため、ドメイン側の表と必ず一致していないと
@@ -26,7 +25,7 @@ export const ac = createAccessControl(defaultStatements);
  * 「ある役割が結局なにを許されているか」を一望したいときはここを見る。
  *
  * NOTE: GroupAction.View に対応する statement は Better Auth 側に無い。
- * 閲覧の認可は自前のユースケース (app/usecases/group/get-group.ts) が担当する。
+ * 閲覧の認可は自前のユースケースが担当する。
  */
 const toStatements = (role: MembershipRole) =>
   ({
@@ -36,11 +35,6 @@ const toStatements = (role: MembershipRole) =>
       ? ["create", "cancel"]
       : [],
 
-    /*
-     * member の statement は「招待」ではなく、メンバーの追放 (delete) と
-     * 役割の変更 (update) の権限。まだ要件に無いので誰にも許可しない。
-     * 必要になったら GroupAction に RemoveMember などを足して、ここから導出する。
-     */
     member: [
       ...(roleCan(groupPermissions, role, GroupAction.RemoveMember) ? (["delete"] as const) : []),
       ...(roleCan(groupPermissions, role, GroupAction.UpdateMemberRole)

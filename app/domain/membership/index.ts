@@ -46,7 +46,7 @@ export interface Membership {
  * 各ドメインが `membership !== null` を自前で書く形にすると、
  * いつか書き忘れが起きる。
  *
- * 表そのものは資源ごとのドメインが持つ (app/domain/group.ts の `groupPermissions` など)。
+ * 表そのものは資源ごとのドメインが持つ。
  * ここが知っているのは「Membership が表に対して何を意味するか」だけ。
  */
 export const canPerform = <A extends string>(

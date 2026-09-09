@@ -54,7 +54,7 @@ export type GroupAction = (typeof GroupAction)[keyof typeof GroupAction];
  * (app/lib/auth/permission.ts) もこの表から導出しているので、
  * 権限を変えたいときはここだけを直せばよい。
  *
- * 判定するときは `canPerform` (app/domain/membership.ts) にこの表を渡すこと。
+ * 判定するときは Membership の `canPerform` にこの表を渡すこと。
  * この表を直接読むと「所属しているか」の判定が抜け落ちる。
  *
  * NOTE: グループの削除は意図的に含めていない。

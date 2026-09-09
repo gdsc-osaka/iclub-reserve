@@ -4,8 +4,7 @@ import { roleCan, rolesCan, type PermissionTable } from ".";
 
 /**
  * 仕組みだけを検証したいので、実在する役割や操作は使わない。
- * 実際の権限表 (app/domain/group.ts の groupPermissions) の中身は
- * group.test.ts が検証する。
+ * 実際の権限表の中身は各ドメインのテストが検証する。
  */
 const Role = {
   Reader: "reader",

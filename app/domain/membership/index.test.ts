@@ -6,8 +6,7 @@ import { canPerform, isMembershipRole, MembershipRole, type Membership } from ".
 /**
  * canPerform の検証用に用意した表。
  *
- * 実際の権限表 (app/domain/group.ts の groupPermissions) を使うと、
- * ここの検証がグループの権限の中身に引きずられる。
+ * 実際の権限表を使うと、ここの検証がグループの権限の中身に引きずられる。
  * このファイルで確かめたいのは「Membership を表にどう当てるか」だけなので、
  * 中身が変わらない表を自前で用意する。
  */

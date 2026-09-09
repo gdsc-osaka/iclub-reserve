@@ -24,7 +24,7 @@ export type PermissionTable<R extends string, A extends string> = Readonly<Recor
  * その役割単体で操作が許可されるかを判定する。
  *
  * 誰かがその役割を持っているかどうかは見ない。認可の判定に使うときは、
- * 所属の有無まで含めて判定する `canPerform` (app/domain/membership.ts) を通すこと。
+ * 所属の有無まで含めて判定する Membership の `canPerform` を通すこと。
  * この関数を直接使ってよいのは、役割から Better Auth の statement を
  * 組み立てる app/lib/auth/permission.ts のように、
  * 特定の誰かではなく役割そのものを対象にする場合だけ。
@@ -33,7 +33,7 @@ export const roleCan = <R extends string, A extends string>(
   table: PermissionTable<R, A>,
   role: R,
   action: A,
-): boolean => table[role].includes(action);
+): boolean => table[role]?.includes(action) ?? false;
 
 /**
  * 複数の役割のうち、いずれか 1 つでも許可していれば許可する。
