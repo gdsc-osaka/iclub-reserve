@@ -51,6 +51,18 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 
 - **React Router**: Keep data loaders and actions collocated with route components where possible to maintain feature-based cohesion.
 - **UI Components**: Rely on `shadcn/ui` components before creating custom ones. Keep styling isolated via Tailwind utility classes.
+- **Repository と Query の使い分け**: 表示のためだけの読み取りは `app/domain/` の Repository ではなく、`app/query/` の Query ポートに書く（`docs/adr/001-read-model-separation.md`）。
+
+  |                      | Repository                     | Query                      |
+  | -------------------- | ------------------------------ | -------------------------- |
+  | 返すもの             | 集約 1 件 (Entity)             | 画面 1 つ分のデータ (View) |
+  | 置き場所             | `app/domain/`                  | `app/query/`               |
+  | 用途                 | 更新に使う / 不変条件を守る    | 表示するだけ               |
+  | JOIN                 | 集約の内側をまとめて読むなら可 | 自由 (集計・ページングも)  |
+  | 結果で更新してよいか | **よい**                       | **いけない**               |
+
+  判断基準は JOIN の有無ではなく、**取得したデータで更新するか**の 1 点。フォルダは「引数に渡す ID の集約」で決める（`groupId` を渡すなら `app/query/group/`、ID を渡さないなら返る一覧の 1 行が何かで決める）。実装は `app/infra/<集約>/*-query.ts` に置き、認可は Query ではなく usecase 層で行う。
+- **Cloudflare D1**: 1 クエリごとにネットワーク往復が入るため、1 画面 1 クエリを目安にする。独立した複数クエリは `Promise.all([...])` で同時に投げること。**`db.batch([...])` は使わない** —— 結果を列名のオブジェクト経由で戻す都合上、複数テーブルの `id` や `name` を同時に選ぶと値が 1 列ずつずれて返る（エラーは出ない）。
 - **Constraints**: Do not introduce unnecessary dependencies. Ensure code runs on Edge environments (Cloudflare Workers). Node.js specific APIs (`fs`, `path`, etc.) might not be available or require special handling.
 
 ## 6. Bundled Skills

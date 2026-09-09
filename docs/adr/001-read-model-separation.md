@@ -430,7 +430,15 @@ const fakeQuery: GroupMemberListQuery = {
 
 - **N+1 が致命的。** クエリごとにネットワーク往復が入るため、1 画面 = 1 クエリを目標にする。
   ローカルの SQLite では速度差が出ないので、レビューでクエリ本数を見ること。
-- **独立した複数クエリが避けられない場合は `db.batch([...])`** で 1 往復にまとめられる。
+- **独立した複数クエリが避けられない場合は `Promise.all([...])`** で同時に投げる。
+  互いの結果を待たないので、待ち時間は 1 往復分に収まる。
+- **`db.batch([...])` は使わないこと。** batch の結果だけは列名をキーにした
+  オブジェクトを経由して配列に戻される (drizzle の `d1ToRawMapping`) ため、
+  `organization.id` と `facility.id` のように**同じ列名を同時に選ぶと、
+  同名の列がオブジェクト上で 1 つに潰れ、値が 1 列ずつずれて返る**。
+  通常の実行は列の順番のまま読むので、この問題は起きない。
+  例外も型エラーも出ず、別の列の値が静かに入るだけなので気づきにくい
+  (`app/infra/user/user-reservation-list-query.ts` で実際に踏んだ)。
 - **JOIN に使う列のインデックスを確認する。** `member_organizationId_idx` と
   `member_userId_idx` は既にあるので、上記のクエリは問題ない。
   新しい Query を追加するときは、WHERE と JOIN の列にインデックスがあるか確認する。
@@ -454,3 +462,7 @@ const fakeQuery: GroupMemberListQuery = {
 3. 以降、**JOIN や集計が必要になった画面から**順に Query へ切り出す
 
 最初から全画面を CQRS 化する必要はない。
+
+実際の初適用は、SCR-007 ではなくトップページ (SCR-003 の団体側) の
+`app/query/user/user-reservation-list.ts` になった。
+画面を 1 つ動かすのに一覧が必要になったのがここだったためで、手順そのものは変えていない。
