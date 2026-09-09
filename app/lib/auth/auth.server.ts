@@ -4,7 +4,7 @@ import type {} from "zod/v4/core";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { emailOTP } from "better-auth/plugins";
+import { emailOTP, organization } from "better-auth/plugins";
 import { env } from "cloudflare:workers";
 import { createDb } from "~/infra/db";
 import {
@@ -17,6 +17,10 @@ import {
   OTP_EXPIRES_IN_SECONDS,
 } from "~/usecases/mail/send-verification-otp.server";
 import { passkey } from "@better-auth/passkey";
+import { GroupStatus } from "~/domain/group";
+import { MembershipRole } from "~/domain/membership";
+import { assertAllowedOrganizationRequest } from "./organization-guard";
+import { ac, admin, member } from "./permission";
 
 /** 許可外のドメインを拒否するときに返す説明文。 */
 const NOT_ALLOWED_MESSAGE = `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`;
@@ -105,18 +109,22 @@ const createAuth = () => {
     },
 
     hooks: {
-      /**
-       * 新規登録につながらない宛先には、そもそも認証コードを送らない。
-       *
-       * ユーザー作成時のチェックだけだと、部外者にもメールが届いたうえで
-       * 最後の最後に失敗することになる（迷惑メールの踏み台にもなりうる）。
-       * そのため送信リクエストの時点で 403 を返す。
-       *
-       * ただし制限したいのは「誰が登録できるか」であって、
-       * 既に登録済みの人を締め出すことではない。
-       * そのため、アカウントが既にある場合はドメインを問わず通す。
-       */
       before: createAuthMiddleware(async (ctx) => {
+        // 使っていない組織エンドポイントの遮断と、役割の値の検証。
+        // 判定の中身と理由は organization-guard.ts を参照。
+        assertAllowedOrganizationRequest(ctx);
+
+        /*
+         * 新規登録につながらない宛先には、そもそも認証コードを送らない。
+         *
+         * ユーザー作成時のチェックだけだと、部外者にもメールが届いたうえで
+         * 最後の最後に失敗することになる（迷惑メールの踏み台にもなりうる）。
+         * そのため送信リクエストの時点で 403 を返す。
+         *
+         * ただし制限したいのは「誰が登録できるか」であって、
+         * 既に登録済みの人を締め出すことではない。
+         * そのため、アカウントが既にある場合はドメインを問わず通す。
+         */
         if (ctx.path !== "/email-otp/send-verification-otp") return;
 
         const email = (ctx.body as { email?: unknown } | undefined)?.email;
@@ -194,6 +202,73 @@ const createAuth = () => {
           // 生体認証・PIN の要求。"required" だと毎回必ず求められて煩わしいので既定のまま。
           userVerification: "preferred",
         },
+      }),
+
+      // グループの管理機能 (ロール・招待など)
+      organization({
+        schema: {
+          organization: {
+            additionalFields: {
+              /*
+               * `input: false` なのでクライアントからは決して渡ってこない。
+               * `defaultValue` が無いと作成時に値を埋める経路がどこにも無くなり、
+               * `NOT NULL constraint failed: organization.status` で必ず失敗する。
+               *
+               * 既定を Pending にしているのは、作られた直後は承認待ちだから。
+               * 作り方によって状態を変えたくなったら beforeCreateOrganization で上書きする。
+               */
+              status: {
+                type: Object.values(GroupStatus),
+                input: false,
+                required: true,
+                defaultValue: GroupStatus.Pending,
+              },
+              updatedAt: { type: "date", input: false, required: true },
+            },
+          },
+          member: {
+            additionalFields: {
+              updatedAt: { type: "date", input: false, required: true },
+            },
+          },
+        },
+        organizationHooks: {
+          beforeCreateOrganization: async ({ organization }) => ({
+            data: { ...organization, updatedAt: new Date() },
+          }),
+          beforeUpdateOrganization: async ({ organization }) => ({
+            data: { ...organization, updatedAt: new Date() },
+          }),
+          beforeAddMember: async ({ member }) => ({
+            data: { ...member, updatedAt: new Date() },
+          }),
+          /*
+           * NOTE: beforeUpdateMemberRole は意図的に定義していない。
+           *
+           * 他の before フックには「これから書き込む値」が渡ってくるので
+           * `{ ...x, updatedAt }` と足せばよいが、このフックにだけは
+           * **更新前の既存行**が渡ってくる。そのまま展開すると古い role が混ざり、
+           * Better Auth 側の `response.data.role || newRole` が古い role を採用して、
+           * 役割変更が 200 を返しながら何も起きない、という壊れ方をする。
+           *
+           * そもそも Better Auth の updateMember(memberId, role) は role しか書かないので、
+           * ここで updatedAt を足しても捨てられる。定義する意味が無い。
+           * 役割変更で member.updatedAt を更新したくなったら afterUpdateMemberRole で
+           * 自前に UPDATE を投げること。
+           */
+        },
+        ac,
+        roles: { admin, member },
+        creatorRole: MembershipRole.Admin,
+
+        /*
+         * 団体は運営が承認して作るものなので、利用者が自分で作れないようにする。
+         * 既定は true で、ログイン済みなら誰でも自分を admin とする団体を作れてしまう。
+         *
+         * false にしても、セッションを介さずサーバ側から userId を指定して呼ぶ経路
+         * (auth.api.createOrganization) は残るので、承認フローはそちらで実装できる。
+         */
+        allowUserToCreateOrganization: false,
       }),
     ],
   });

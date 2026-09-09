@@ -1,0 +1,3 @@
+# Claude Code がローカルに生成するものはコミットしない
+worktrees/
+settings.local.json

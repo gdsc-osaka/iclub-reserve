@@ -27,6 +27,8 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 
 - **Install dependencies**: `pnpm install`
 - **Apply DB Migrations**: `pnpm run db:migrate:local`
+- **Seed DB (Local)**: `pnpm run db:seed`
+- **Seed DB (Preview)**: `pnpm run db:seed:preview`
 - **Start development server**: `pnpm run dev`
 - **Database**: We are using SQLite (D1), **NOT** PostgreSQL. Keep this in mind when writing Drizzle schema or migrations.
 
@@ -50,3 +52,7 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 - **React Router**: Keep data loaders and actions collocated with route components where possible to maintain feature-based cohesion.
 - **UI Components**: Rely on `shadcn/ui` components before creating custom ones. Keep styling isolated via Tailwind utility classes.
 - **Constraints**: Do not introduce unnecessary dependencies. Ensure code runs on Edge environments (Cloudflare Workers). Node.js specific APIs (`fs`, `path`, etc.) might not be available or require special handling.
+
+## 6. Bundled Skills
+
+- **`rdra`** — a requirement-analysis skill based on RDRA 3.0. The skill itself lives in `.agents/skills/rdra/`; `.claude/skills/rdra` is a symlink to it so that Claude Code picks it up. Use it for requirement analysis, PRD/ADR generation, requirement review, and requirement updates. Its outputs belong in `rdra/` and `docs/`.

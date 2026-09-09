@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
-import { user } from "./auth";
+import { organization } from "./auth";
 import { ReservationStatus } from "~/domain/reservation";
 
 export const facilityTable = sqliteTable("facility", {
@@ -29,30 +29,13 @@ export const facilityTable = sqliteTable("facility", {
     .$defaultFn(() => new Date()),
 });
 
-export const groupTable = sqliteTable("group", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-
-  name: text("name", { length: 100 }).notNull(),
-
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
 export const reservationTable = sqliteTable("reservation", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
 
   groupId: text("group_id")
-    .references(() => groupTable.id)
+    .references(() => organization.id)
     .notNull(),
 
   facilityId: text("facility_id")
@@ -88,39 +71,3 @@ export const reservationTable = sqliteTable("reservation", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
-
-export const MembershipRole = {
-  Owner: "owner",
-  Member: "member",
-} as const;
-
-export type MembershipRole = (typeof MembershipRole)[keyof typeof MembershipRole];
-
-export const membershipTable = sqliteTable("membership", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-
-  name: text("name", { length: 100 }).notNull(),
-
-  userId: text("user_id")
-    .references(() => user.id)
-    .notNull(),
-
-  groupId: text("group_id")
-    .references(() => groupTable.id)
-    .notNull(),
-
-  role: text("role").$type<MembershipRole>().notNull(),
-
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
-
-export type Group = typeof groupTable.$inferSelect;
-export type NewGroup = typeof groupTable.$inferInsert;

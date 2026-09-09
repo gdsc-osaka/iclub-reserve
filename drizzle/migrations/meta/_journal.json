@@ -71,6 +71,13 @@
       "when": 1788329824320,
       "tag": "0009_sour_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788928712259,
+      "tag": "0010_rainy_frightful_four",
+      "breakpoints": true
     }
   ]
 }

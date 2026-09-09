@@ -12,9 +12,11 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { GroupErrorCode } from "~/domain/group";
+import { GroupErrorCode, GroupStatus } from "~/domain/group";
 import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
+import { createMembershipRepository } from "~/infra/membership/membership-repo";
+import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { cn } from "~/lib/utils";
 import { getGroupUseCase } from "~/usecases/group/get-group";
 
@@ -31,17 +33,24 @@ export function meta({ loaderData: group }: Route.MetaArgs) {
  *
  * `export default function Group({ loaderData: group }: Route.ComponentProps)`
  * として取得できる。
+ *
+ * 取得できるのは自分が所属しているグループだけ。所属していないグループは
+ * 存在を隠すため、権限がない旨ではなく 404 を返す。判定はユースケース側で行う。
  */
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ params, context }: Route.LoaderArgs) {
   const groupId = params.groupId;
+
+  // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
+  const user = requireRequestUser(context);
 
   const db = createDb(env.DB);
 
   const groupResult = await getGroupUseCase(
     {
       groupRepository: createGroupRepository(db),
+      membershipRepository: createMembershipRepository(db),
     },
-    { groupId },
+    { groupId, actorUserId: user.id },
   );
 
   if (groupResult.isErr()) {
@@ -67,7 +76,7 @@ export default function Group({ loaderData: group }: Route.ComponentProps) {
           <CardTitle className="text-xl">{group.name}</CardTitle>
           <CardDescription>グループの登録情報</CardDescription>
           <CardAction>
-            <GroupStatusBadge isActive={group.isActive} />
+            <GroupStatusBadge status={group.status} />
           </CardAction>
         </CardHeader>
 
@@ -79,7 +88,7 @@ export default function Group({ loaderData: group }: Route.ComponentProps) {
             </InfoItem>
 
             <InfoItem icon={ToggleLeft} label="状態">
-              {group.isActive ? "活動中" : "停止中"}
+              {groupStatusLabel[group.status]}
             </InfoItem>
 
             <InfoItem icon={CalendarPlus} label="登録日時">
@@ -96,22 +105,42 @@ export default function Group({ loaderData: group }: Route.ComponentProps) {
   );
 }
 
-/** 活動中かどうかをひと目で分かるようにする小さなラベル。 */
-function GroupStatusBadge({ isActive }: Readonly<{ isActive: boolean }>) {
+/** グループの状態を利用者向けの日本語にする。 */
+const groupStatusLabel: Record<GroupStatus, string> = {
+  [GroupStatus.Enabled]: "活動中",
+  [GroupStatus.Pending]: "承認待ち",
+  [GroupStatus.Disabled]: "停止中",
+};
+
+/** 状態ごとの配色。活動中だけを目立たせ、承認待ちは注意を促す色にする。 */
+const groupStatusStyle: Record<GroupStatus, { readonly badge: string; readonly dot: string }> = {
+  [GroupStatus.Enabled]: {
+    badge: "bg-primary/10 text-primary ring-primary/20",
+    dot: "bg-primary",
+  },
+  [GroupStatus.Pending]: {
+    badge: "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-400",
+    dot: "bg-amber-500",
+  },
+  [GroupStatus.Disabled]: {
+    badge: "bg-muted text-muted-foreground ring-foreground/10",
+    dot: "bg-muted-foreground",
+  },
+};
+
+/** グループの状態をひと目で分かるようにする小さなラベル。 */
+function GroupStatusBadge({ status }: Readonly<{ status: GroupStatus }>) {
+  const style = groupStatusStyle[status];
+
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        isActive
-          ? "bg-primary/10 text-primary ring-primary/20"
-          : "bg-muted text-muted-foreground ring-foreground/10",
+        style.badge,
       )}
     >
-      <span
-        aria-hidden
-        className={cn("size-1.5 rounded-full", isActive ? "bg-primary" : "bg-muted-foreground")}
-      />
-      {isActive ? "活動中" : "停止中"}
+      <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
+      {groupStatusLabel[status]}
     </span>
   );
 }
