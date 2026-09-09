@@ -28,7 +28,7 @@ models:
       - from: "[*]"
         to: "仮予約"
         trigger: "UC-002"
-        condition: "同一施設・同一時間帯に承認済み予約が存在しないこと（COND-001）"
+        condition: "同一施設・同一時間帯に承認済み予約が存在しないこと（COND-001）。かつ申請元の団体が有効（enabled）であること（COND-006）"
       - from: "[*]"
         to: "承認済み"
         trigger: "UC-008（事務局直接作成）"
@@ -58,6 +58,43 @@ models:
         trigger: "UC-005（施設・日時の変更）"
         condition: "COND-005 / COND-001: 施設・日時変更時のみ。変更後の時間帯に承認済み予約が存在しないこと"
     traces_to: ["UC-002", "UC-003", "UC-004", "UC-005", "UC-006", "UC-007", "UC-008"]
+
+  - id: "STATE-002"
+    entity: "INFO-003"
+    name: "団体ステータス"
+    description: "団体アカウントのライフサイクル。作成直後は承認待ちで、事務局が有効化して初めて予約を申請できる。削除はせず、無効化で終える。"
+    states:
+      - name: "承認待ち"
+        status_value: "pending"
+        description: "作成された直後の状態。事務局の有効化を待っている。予約は申請できない（COND-006）。"
+      - name: "有効"
+        status_value: "enabled"
+        description: "事務局が有効化した状態。予約を申請できる。"
+      - name: "無効"
+        status_value: "disabled"
+        description: "事務局が無効化した状態。予約を申請できない。既存の予約と過去の利用記録は残る。"
+    transitions:
+      - from: "[*]"
+        to: "承認待ち"
+        trigger: "UC-010（団体の新規作成）"
+        condition: "作成者が初期の管理者になる（REQ-016）"
+      - from: "承認待ち"
+        to: "有効"
+        trigger: "UC-014（事務局が有効化）"
+        condition: "事務局のみ実行できる（COND-009）"
+      - from: "承認待ち"
+        to: "無効"
+        trigger: "UC-014（事務局が承認せず無効化）"
+        condition: "事務局のみ実行できる（COND-009）"
+      - from: "有効"
+        to: "無効"
+        trigger: "UC-014（事務局が無効化）"
+        condition: "事務局のみ実行できる（COND-009）"
+      - from: "無効"
+        to: "有効"
+        trigger: "UC-014（事務局が再度有効化）"
+        condition: "事務局のみ実行できる（COND-009）"
+    traces_to: ["UC-010", "UC-014"]
 ---
 
 # 状態モデル（横断）
@@ -79,3 +116,16 @@ stateDiagram-v2
     キャンセル済み --> [*]
     事務局キャンセル済み --> [*]
 ```
+
+## STATE-002: 団体ステータス
+
+```mermaid
+stateDiagram-v2
+    [*] --> 承認待ち : 団体を作成 [UC-010]
+    承認待ち --> 有効 : 事務局が有効化 [UC-014]
+    承認待ち --> 無効 : 事務局が無効化 [UC-014]
+    有効 --> 無効 : 事務局が無効化 [UC-014]
+    無効 --> 有効 : 事務局が再度有効化 [UC-014]
+```
+
+予約を申請できるのは「有効」の団体だけである（COND-006）。団体を削除する遷移は用意しない。予約が紐づく団体を消すと、過去に誰がいつ利用したかをたどれなくなるためである（GOAL-001）。

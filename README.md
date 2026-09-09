@@ -13,7 +13,8 @@
 - **データベース**: [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite)
   - ORM: [Drizzle ORM](https://orm.drizzle.team/)
 - **認証**: [Better Auth](https://better-auth.com/)
-  - `osaka-u.ac.jp` ドメイン限定のメール（マジックリンク / 認証コード）認証
+  - メールの認証コード（OTP）とパスキー（WebAuthn）によるログイン。パスワードは扱いません
+  - アカウントを作成できるのは `osaka-u.ac.jp` ドメイン（サブドメイン含む）のメールアドレスのみ
 - **インフラ・ホスティング**: [Cloudflare Workers](https://www.cloudflare.com/products/workers/)
   - IaC: [Terraform](https://developer.hashicorp.com/terraform) を用いたインフラ定義と管理
 - **パッケージマネージャー**: [pnpm](https://pnpm.io/)
@@ -22,6 +23,8 @@
 
 - [製品要件定義書 (PRD)](./docs/prd.md)
 - [RDRA成果物・要件定義](./rdra/)
+- [実装状況](./docs/implementation-status.md)
+- [要件変更履歴](./change-log.md)
 
 ## AI エージェント向けスキル
 
