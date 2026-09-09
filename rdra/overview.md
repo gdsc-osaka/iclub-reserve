@@ -13,7 +13,7 @@ actors:
   - id: "ACTOR-003"
     name: "Google Calendar"
     type: system
-    description: "予約状況を一般公開するカレンダー。承認済み予約を自動反映する。"
+    description: "施設の利用状況を一般公開するカレンダー。承認済み予約の施設名と日時のみを自動反映する。"
 
 goals:
   - id: "GOAL-001"
@@ -34,7 +34,7 @@ goals:
     actors: ["ACTOR-001", "ACTOR-002"]
   - id: "GOAL-004"
     name: "Google Calendarへの自動反映"
-    description: "予約状況をGoogle Calendarに自動反映し、外部への情報公開を維持する。"
+    description: "予約状況をGoogle Calendarに自動反映し、施設がいつ埋まっているかを外部からも分かるようにする。公開するのは施設名と日時のみで、どの団体が使うかは載せない（COND-008）。"
     actors: ["ACTOR-001", "ACTOR-002", "ACTOR-003"]
   - id: "GOAL-005"
     name: "予約単位のコミュニケーション"
@@ -57,7 +57,7 @@ contexts:
   - id: "BIZ-003"
     name: "group-management"
     display_name: "団体管理"
-    description: "団体アカウントの作成、メンバー・オーナー管理、団体情報の編集、事務局による無効化。"
+    description: "団体アカウントの作成、招待によるメンバー管理、管理者の昇格・降格、団体情報の編集、事務局による有効化・無効化。"
     primary_actors: ["ACTOR-001", "ACTOR-002"]
     goals: ["GOAL-001"]
   - id: "BIZ-004"
@@ -75,7 +75,7 @@ contexts:
   - id: "BIZ-006"
     name: "user-authentication"
     display_name: "ユーザー認証"
-    description: "阪大関係者のみに利用を限定するアカウント登録（メール認証コード）・ログイン。将来的にSSO連携を想定。"
+    description: "阪大関係者のみに利用を限定するアカウント登録（メール認証コード）と、認証コード・パスキーによるログイン。パスワードは扱わない。将来的にSSO連携を想定。"
     primary_actors: ["ACTOR-001", "ACTOR-002"]
     goals: ["GOAL-006"]
 ---
