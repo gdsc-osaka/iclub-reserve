@@ -8,6 +8,7 @@ import {
 import type { Database } from "../db";
 import { eq } from "drizzle-orm";
 import { reservationTable } from "~/db/schema";
+import { error } from "better-auth/api";
 
 export const createReservationRepository = (db: Database): ReservationRepository => {
   const findById = (id: string): ResultAsync<Reservation, ReservationError> => {
@@ -32,5 +33,16 @@ export const createReservationRepository = (db: Database): ReservationRepository
     });
   };
 
-  return { findById };
+  const create = (reservation: Reservation): ResultAsync<null, ReservationError> => {
+    return ResultAsync.fromPromise(
+      db.insert(reservationTable).values(reservation),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "Failed to insert reservation",
+        cause: error,
+      }),
+    ).map(() => null);
+  };
+
+  return { findById, create };
 };
