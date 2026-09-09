@@ -2,8 +2,9 @@
 
 > **ステータス**: Draft  
 > **最終更新**: 2026-09-09  
-> **RDRA成果物バージョン**: chore/sync-docs-with-code ブランチ時点 (`9135c184ed78dc178e0baeef8cdba5f5030e2a14`)  
-> **前回からの変更**: 実装との乖離を解消するため、認証方式・団体管理・予約の可視範囲を中心に改訂。詳細は [`change-log.md`](../change-log.md) を参照。
+> **準拠する RDRA 成果物**: [`change-log.md`](../change-log.md) の 2026-09-09 エントリ（第1回〜第3回）時点  
+> **前回からの変更**: 実装との乖離を解消するため、認証方式・団体管理・予約の可視範囲を中心に改訂。  
+> **実装状況**: 各要求がどこまで実装されているかは [`implementation-status.md`](implementation-status.md) を参照。
 
 ---
 
