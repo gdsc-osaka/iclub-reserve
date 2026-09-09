@@ -153,6 +153,9 @@ export const seedMembers: (typeof schema.member.$inferInsert)[] = [
 /**
  * サンプル予約のシードデータ
  * 現在日時から相対的な日時（明日、3日後など）を設定
+ *
+ * トップページは「これから」と「履歴」に分けて表示するため、
+ * 終わった予約と却下された予約も入れて、両方の並びを確かめられるようにしている。
  */
 const now = Date.now();
 const oneDayMs = 24 * 60 * 60 * 1000;
@@ -168,6 +171,30 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
     note: "週次プロジェクト定例ミーティング",
     status: ReservationStatus.Approved,
     statusReason: "承認済み",
+    createdBy: "usr_student_01",
+  },
+  {
+    id: "res_sample_finished",
+    groupId: "grp_robotics",
+    facilityId: "fac_meeting_b",
+    startAt: new Date(now - 7 * oneDayMs),
+    endAt: new Date(now - 7 * oneDayMs + 2 * 60 * 60 * 1000),
+    headCount: 6,
+    note: "新歓ミーティング",
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    createdBy: "usr_student_02",
+  },
+  {
+    id: "res_sample_rejected",
+    groupId: "grp_robotics",
+    facilityId: "fac_event_hall",
+    startAt: new Date(now + 5 * oneDayMs),
+    endAt: new Date(now + 5 * oneDayMs + 6 * 60 * 60 * 1000),
+    headCount: 40,
+    note: "作品展示会のリハーサル",
+    status: ReservationStatus.Rejected,
+    statusReason: "同じ時間帯に事務局主催のイベントが入っているため",
     createdBy: "usr_student_01",
   },
   {
