@@ -1,63 +1,61 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
-import type { GroupMembership, GroupRepository } from "~/domain/group";
-import { GroupErrorCode, GroupStatus } from "~/domain/group";
+import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
+import { QueryErrorCode } from "~/query/error";
+import type {
+  UserGroupList,
+  UserGroupListItem,
+  UserGroupListQuery,
+} from "~/query/user/user-group-list";
 import { listMyGroupsUseCase } from "./list-my-groups";
 
 /** 活動中の団体に管理者として所属している状態 */
-const roboticsMembership: GroupMembership = {
-  group: {
-    id: "grp_robotics",
-    name: "ロボティクス開発プロジェクト",
-    status: GroupStatus.Enabled,
-    createdAt: new Date("2026-01-01T00:00:00.000Z"),
-    updatedAt: new Date("2026-01-02T00:00:00.000Z"),
-  },
+const roboticsGroup: UserGroupListItem = {
+  id: "grp_robotics",
+  name: "ロボティクス開発プロジェクト",
+  status: GroupStatus.Enabled,
   roles: [MembershipRole.Admin],
 };
 
 /**
- * D1 を使わないダミーのグループリポジトリ。
+ * D1 を使わないダミーの Query。
  *
  * 問い合わせに使われたユーザー ID を控えている。
  * 引数のユーザー以外の所属を取りに行っていないことを検証するために必要。
  */
-const createFakeGroupRepository = (memberships: readonly GroupMembership[]) => {
+const createFakeUserGroupListQuery = (groups: UserGroupList) => {
   const askedUserIds: string[] = [];
 
-  const repository: GroupRepository = {
-    // このユースケースでは使わないが、GroupRepository を満たすために置いている
-    findById: () => errAsync({ code: GroupErrorCode.GroupNotFound, message: "Group not found" }),
-
-    findAllByMemberUserId: (userId) => {
+  const query: UserGroupListQuery = {
+    findByUserId: (userId) => {
       askedUserIds.push(userId);
 
-      return okAsync(memberships);
+      return okAsync(groups);
     },
   };
 
-  return { repository, askedUserIds };
+  return { query, askedUserIds };
 };
 
 describe("listMyGroupsUseCase", () => {
-  it("所属しているグループを役割つきで返す", async () => {
-    const groups = createFakeGroupRepository([roboticsMembership]);
+  it("所属している団体を役割つきで返す", async () => {
+    const groups = createFakeUserGroupListQuery([roboticsGroup]);
 
     const result = await listMyGroupsUseCase(
-      { groupRepository: groups.repository },
+      { userGroupListQuery: groups.query },
       { actorUserId: "usr_admin" },
     );
 
     expect(result.isOk()).toBe(true);
-    expect(result._unsafeUnwrap()).toEqual([roboticsMembership]);
+    expect(result._unsafeUnwrap()).toEqual([roboticsGroup]);
   });
 
   it("自分以外の所属は問い合わせない", async () => {
-    const groups = createFakeGroupRepository([roboticsMembership]);
+    const groups = createFakeUserGroupListQuery([roboticsGroup]);
 
-    await listMyGroupsUseCase({ groupRepository: groups.repository }, { actorUserId: "usr_admin" });
+    await listMyGroupsUseCase({ userGroupListQuery: groups.query }, { actorUserId: "usr_admin" });
 
     // 引数で受け取ったユーザー ID 以外で問い合わせていないこと。
     // ここが崩れると、他人の所属団体が画面に出てしまう
@@ -65,10 +63,10 @@ describe("listMyGroupsUseCase", () => {
   });
 
   it("1 件も所属していないときは空の配列を返す", async () => {
-    const groups = createFakeGroupRepository([]);
+    const groups = createFakeUserGroupListQuery([]);
 
     const result = await listMyGroupsUseCase(
-      { groupRepository: groups.repository },
+      { userGroupListQuery: groups.query },
       { actorUserId: "usr_newcomer" },
     );
 
@@ -79,18 +77,17 @@ describe("listMyGroupsUseCase", () => {
   });
 
   it("DB アクセスに失敗したら DATABASE_ERROR がそのまま伝播する", async () => {
-    const repository: GroupRepository = {
-      findById: () => errAsync({ code: GroupErrorCode.GroupNotFound, message: "Group not found" }),
-      findAllByMemberUserId: () =>
+    const query: UserGroupListQuery = {
+      findByUserId: () =>
         errAsync({
-          code: GroupErrorCode.DatabaseError,
-          message: "Failed to query the database",
+          code: QueryErrorCode.DatabaseError,
+          message: "所属している団体の取得に失敗しました。",
           cause: new Error("D1 との接続に失敗しました"),
         }),
     };
 
     const result = await listMyGroupsUseCase(
-      { groupRepository: repository },
+      { userGroupListQuery: query },
       {
         actorUserId: "usr_admin",
       },
@@ -98,6 +95,6 @@ describe("listMyGroupsUseCase", () => {
 
     // 障害を「所属が 0 件」に潰すと、団体が消えたように見えて原因に気づけなくなる
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.DatabaseError);
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.DatabaseError);
   });
 });

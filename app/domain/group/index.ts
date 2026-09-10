@@ -82,33 +82,6 @@ export interface GroupError extends BaseError {
   readonly code: GroupErrorCode;
 }
 
-/**
- * 自分が所属しているグループと、そのグループでの役割の組。
- *
- * 画面の共通部分（サイドバー・ボトムバー）とダッシュボードは
- * 「どの団体に所属しているか」と「その団体で管理者か」の両方を必要とする。
- * 2 回に分けて問い合わせると DB へのアクセスが増えるので、1 つにまとめている。
- */
-export interface GroupMembership {
-  readonly group: Group;
-  readonly roles: readonly MembershipRole[];
-}
-
 export interface GroupRepository {
   findById(id: string): ResultAsync<Group, GroupError>;
-
-  /**
-   * 指定したユーザーが所属しているグループを、すべて取得する。
-   *
-   * - 1 件も所属していない場合: ok([])
-   * - DB アクセスに失敗した場合: err(DATABASE_ERROR)
-   *
-   * NOTE: 所属が 0 件なのは異常ではないので、GROUP_NOT_FOUND にはしない。
-   * ここをエラーにすると、まだどの団体にも入っていない人の画面が
-   * 「グループが見つかりません」になってしまう。
-   *
-   * 並び順は名前の昇順で固定する。順序を決めずに返すと、
-   * 再読み込みのたびにサイドバーの並びが入れ替わって見えるおそれがある。
-   */
-  findAllByMemberUserId(userId: string): ResultAsync<readonly GroupMembership[], GroupError>;
 }

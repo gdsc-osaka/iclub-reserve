@@ -7,9 +7,9 @@ import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { createDb } from "~/infra/db";
-import { createGroupRepository } from "~/infra/group/group-repo";
+import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { listMyGroupsUseCase } from "~/usecases/group/list-my-groups";
+import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
 
 import type { Route } from "./+types/home";
 
@@ -38,7 +38,7 @@ export async function loader({ context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
 
   const groupsResult = await listMyGroupsUseCase(
-    { groupRepository: createGroupRepository(createDb(env.DB)) },
+    { userGroupListQuery: createUserGroupListQuery(createDb(env.DB)) },
     { actorUserId: user.id },
   );
 
@@ -47,11 +47,11 @@ export async function loader({ context }: Route.LoaderArgs) {
   }
 
   const groups = groupsResult.value.map(
-    ({ group, roles }): DashboardGroup => ({
+    (group): DashboardGroup => ({
       id: group.id,
       name: group.name,
       status: group.status,
-      isAdmin: roles.includes(MembershipRole.Admin),
+      isAdmin: group.roles.includes(MembershipRole.Admin),
     }),
   );
 
