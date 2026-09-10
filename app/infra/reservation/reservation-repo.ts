@@ -32,5 +32,16 @@ export const createReservationRepository = (db: Database): ReservationRepository
     });
   };
 
-  return { findById };
+  const create = (reservation: Reservation): ResultAsync<null, ReservationError> => {
+    return ResultAsync.fromPromise(
+      db.insert(reservationTable).values(reservation),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "Failed to insert reservation",
+        cause: error,
+      }),
+    ).map(() => null);
+  };
+
+  return { findById, create };
 };

@@ -1,4 +1,6 @@
 import type { ResultAsync } from "neverthrow";
+import type { PermissionTable } from "./authz";
+import { MembershipRole } from "./membership";
 
 export const ReservationStatus = {
   Provisional: "provisional",
@@ -14,6 +16,7 @@ export type ReservationStatus = (typeof ReservationStatus)[keyof typeof Reservat
 export interface Reservation {
   id: string;
   facilityId: string;
+  groupId: string;
   startAt: Date;
   endAt: Date;
   headCount: number;
@@ -25,8 +28,19 @@ export interface Reservation {
   updatedAt: Date;
 }
 
+export const ReservationAction = {
+  CreateProvisional: "create_provisional",
+} as const;
+export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
+
+export const reservationPermissions: PermissionTable<MembershipRole, ReservationAction> = {
+  [MembershipRole.Admin]: [ReservationAction.CreateProvisional],
+  [MembershipRole.Member]: [ReservationAction.CreateProvisional],
+};
+
 export const ReservationErrorCode = {
   ReservationNotFound: "RESERVATION_NOT_FOUND",
+  ReservationForbidden: "RESERVATION_FORBIDDEN",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type ReservationErrorCode = (typeof ReservationErrorCode)[keyof typeof ReservationErrorCode];
@@ -39,4 +53,5 @@ export interface ReservationError {
 
 export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
+  create(reservation: Reservation): ResultAsync<null, ReservationError>;
 }
