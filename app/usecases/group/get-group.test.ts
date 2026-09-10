@@ -54,6 +54,9 @@ const createFakeGroupRepository = (groups: Group[]) => {
 
       return okAsync(found);
     },
+
+    // このユースケースでは使わないが、GroupRepository を満たすために置いている
+    findAllByMemberUserId: () => okAsync([]),
   };
 
   return { repository, findByIdCallCount: () => findByIdCallCount };
@@ -93,6 +96,9 @@ const createFailingGroupRepository = (): GroupRepository => ({
       message: "グループ情報の取得に失敗しました。",
       cause: new Error("D1 との接続に失敗しました"),
     }),
+
+  // このユースケースでは使わないが、GroupRepository を満たすために置いている
+  findAllByMemberUserId: () => okAsync([]),
 });
 
 describe("getGroupUseCase", () => {
