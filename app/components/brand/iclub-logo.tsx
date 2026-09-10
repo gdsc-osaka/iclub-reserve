@@ -18,23 +18,48 @@ import { cn } from "~/lib/utils";
 /** 稲妻に使う i-Club の指定色。 */
 const BOLT_COLOR = "#FDD000";
 
+/** ワードマーク全体が収まる範囲。配布 SVG の viewBox。 */
+export const ICLUB_WORDMARK_VIEW_BOX = { width: 275.016, height: 44.54 } as const;
+
+/**
+ * ワードマークの中で稲妻が占めている範囲。
+ *
+ * ワードマークを拡大・移動させて稲妻だけを見せたいとき（サイドバーを畳むときなど）に、
+ * どれだけ動かせばよいかを計算するために使う。
+ *
+ * NOTE: y が負なのは、稲妻の先端がワードマークの viewBox の上辺より
+ * わずかに外へ出ているため。誤りではない。
+ */
+export const ICLUB_BOLT_BOX = {
+  x: 178.353,
+  y: -0.601,
+  width: 17.296,
+  height: 27.245,
+} as const;
+
 /**
  * ロゴの全体（"Innovators' Club" のワードマーク）。
  *
  * 縦横比が約 6.2:1 と横に長いので、幅に余裕がある場所でだけ使う。
  * サイドバーのように幅が決まっている場所では `className` で幅を指定する
  * （高さは縦横比から自動で決まる）。
+ *
+ * `lettersClassName` は文字の部分だけに当たる。稲妻を残したまま文字を消したい
+ * 場面（サイドバーを畳むときなど）のために、稲妻とは別に指定できるようにしている。
  */
-export function IclubWordmark({ className }: Readonly<{ className?: string }>) {
+export function IclubWordmark({
+  className,
+  lettersClassName,
+}: Readonly<{ className?: string; lettersClassName?: string }>) {
   return (
     <svg
-      viewBox="0 0 275.016 44.54"
+      viewBox={`0 0 ${ICLUB_WORDMARK_VIEW_BOX.width} ${ICLUB_WORDMARK_VIEW_BOX.height}`}
       role="img"
       aria-label="Innovators' Club"
       className={cn("h-auto w-full", className)}
     >
       {/* 文字。fill を持たせず、この g の currentColor を継がせている */}
-      <g fill="currentColor">
+      <g fill="currentColor" className={lettersClassName}>
         <path d="M0,20.141V16.84h11.308v3.301l-2.926,0.563v19.598l2.926,0.563v3.282H0v-3.282l2.926-0.563V20.704L0,20.141z" />
         <path d="M12.837,40.864l2.626-0.563V27.718l-2.907-0.563v-3.301h8.008l0.244,2.907c0.675-1.038,1.507-1.844,2.494-2.419 c0.988-0.575,2.094-0.863,3.319-0.863c2.05,0,3.651,0.644,4.801,1.932c1.15,1.288,1.725,3.307,1.725,6.057v8.833l2.625,0.563v3.282 H25.309v-3.282l2.344-0.563v-8.814c0-1.363-0.275-2.328-0.825-2.897c-0.55-0.569-1.382-0.853-2.494-0.853 c-0.725,0-1.376,0.147-1.951,0.441c-0.575,0.294-1.057,0.71-1.444,1.247v10.877l2.213,0.563v3.282H12.837V40.864z" />
         <path d="M36.833,40.864l2.626-0.563V27.718l-2.907-0.563v-3.301h8.008l0.244,2.907c0.675-1.038,1.507-1.844,2.494-2.419 c0.988-0.575,2.094-0.863,3.319-0.863c2.05,0,3.651,0.644,4.801,1.932c1.15,1.288,1.725,3.307,1.725,6.057v8.833l2.625,0.563v3.282 H49.305v-3.282l2.344-0.563v-8.814c0-1.363-0.275-2.328-0.825-2.897c-0.55-0.569-1.382-0.853-2.494-0.853 c-0.725,0-1.376,0.147-1.951,0.441c-0.575,0.294-1.057,0.71-1.444,1.247v10.877l2.213,0.563v3.282H36.833V40.864z" />
@@ -62,13 +87,16 @@ export function IclubWordmark({ className }: Readonly<{ className?: string }>) {
 /**
  * ロゴのうち稲妻だけを切り出したマーク。
  *
- * サイドバーを畳んだとき（幅 3rem）のように、ワードマークが入らない場所で使う。
- * viewBox は配布 SVG の中で稲妻が占めている範囲を計算した値。
+ * スマホのヘッダーのように、ワードマークが入らない場所で使う。
+ *
+ * サイドバーを畳んだときはこれではなく、ワードマークを変形させたものを使っている
+ * （app/components/layout/brand-header.tsx）。畳む途中で稲妻を滑らかに動かすには、
+ * 同じ要素であり続ける必要があるため。
  */
 export function IclubMark({ className }: Readonly<{ className?: string }>) {
   return (
     <svg
-      viewBox="178.353 -0.601 17.296 27.245"
+      viewBox={`${ICLUB_BOLT_BOX.x} ${ICLUB_BOLT_BOX.y} ${ICLUB_BOLT_BOX.width} ${ICLUB_BOLT_BOX.height}`}
       aria-hidden
       focusable="false"
       className={cn("w-auto", className)}

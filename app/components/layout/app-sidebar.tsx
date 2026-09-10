@@ -1,6 +1,5 @@
 import { Link, useLocation } from "react-router";
 
-import { IclubMark, IclubWordmark } from "~/components/brand/iclub-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -17,6 +16,7 @@ import {
 } from "~/components/ui/sidebar";
 
 import { AccountMenu } from "./account-menu";
+import { BrandHeader } from "./brand-header";
 import { commonNavItems, isNavItemActive, staffNavItems, type NavItem } from "./nav-items";
 import type { ShellUser } from "./shell-user";
 
@@ -76,32 +76,6 @@ export function AppSidebar({ user }: Readonly<{ user: ShellUser }>) {
       {/* サイドバーの端をつかんで開閉できるようにする細い帯 */}
       <SidebarRail />
     </Sidebar>
-  );
-}
-
-/**
- * ロゴとサービス名。
- *
- * ロゴ（Innovators' Club）は団体の名前であってこのシステムの名前ではないので、
- * サービス名を組にして出す。横に並べるとサイドバーの幅（16rem）に収まらないため、
- * ロゴの下に小さく添えている。
- *
- * 畳んで幅が 3rem になったときは、ワードマークの代わりに稲妻のマークだけを出す。
- */
-function BrandHeader() {
-  return (
-    <Link
-      to="/"
-      // 畳む・開くときに幅が変わる。はみ出した分は切り落として、
-      // 文字が折り返して一瞬崩れて見えるのを防ぐ
-      className="flex flex-col items-start gap-1.5 overflow-hidden rounded-md px-2 py-1.5 hover:bg-sidebar-accent group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0"
-    >
-      <IclubWordmark className="w-36 group-data-[collapsible=icon]:hidden" />
-      <span className="text-[11px] leading-tight tracking-wide whitespace-nowrap text-muted-foreground group-data-[collapsible=icon]:hidden">
-        施設・設備 予約システム
-      </span>
-      <IclubMark className="hidden h-5 group-data-[collapsible=icon]:block" />
-    </Link>
   );
 }
 
