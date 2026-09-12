@@ -5,17 +5,18 @@ import type { Database } from "../db";
 import { eq } from "drizzle-orm";
 import { toGroup } from "./group-converter";
 
+/** DB アクセスの失敗を、この層のエラーに包む。文言を 1 か所にまとめるためのもの。 */
+const databaseError = (error: unknown): GroupError => ({
+  code: GroupErrorCode.DatabaseError,
+  message: "Failed to query the database",
+  cause: error,
+});
+
 export const createGroupRepository = (db: Database): GroupRepository => {
   const findById = (id: string): ResultAsync<Group, GroupError> =>
     ResultAsync.fromPromise(
       db.select().from(organization).where(eq(organization.id, id)).limit(1),
-      (error): GroupError => {
-        return {
-          code: GroupErrorCode.DatabaseError,
-          message: "Failed to query the database",
-          cause: error,
-        };
-      },
+      databaseError,
     ).andThen((rows) => {
       const row = rows.at(0);
 

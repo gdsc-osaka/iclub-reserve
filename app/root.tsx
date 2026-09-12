@@ -48,7 +48,7 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="ja">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -68,16 +68,27 @@ export default function App() {
   return <Outlet />;
 }
 
+/**
+ * どの画面でも拾えなかったエラーを最後に受け止める画面。
+ *
+ * ここが出るときは共通の外枠（サイドバー）も一緒に落ちているので、
+ * 戻る先としてトップページへのリンクだけは必ず置いておく。
+ * 画面ごとの案内を出したい場合は、そのルートに ErrorBoundary を書くこと
+ * （例: app/routes/groups.tsx）。
+ */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
+  let message = "エラーが発生しました";
+  let details = "時間をおいて、もう一度お試しください。";
   let stack: string | undefined;
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404 ? "The requested page could not be found." : error.statusText || details;
+    const isNotFound = error.status === 404;
+    message = isNotFound ? "ページが見つかりません" : "エラーが発生しました";
+    details = isNotFound
+      ? "URL が間違っているか、このページは削除された可能性があります。"
+      : error.statusText || details;
   } else if (import.meta.env.DEV && error && error instanceof Error) {
+    // 開発中だけ、原因が分かるように内容をそのまま出す
     details = error.message;
     stack = error.stack;
   }
@@ -91,6 +102,9 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <code>{stack}</code>
         </pre>
       )}
+      <a href="/" className="text-sm text-primary underline underline-offset-4">
+        ホームへ戻る
+      </a>
     </main>
   );
 }
