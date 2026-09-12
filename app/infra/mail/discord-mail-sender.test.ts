@@ -99,6 +99,24 @@ describe("createDiscordMailSender", () => {
     expect(String(error.cause)).toContain("Unknown Channel");
   });
 
+  it("応答を待ち続けないよう、打ち切り用の signal を渡す", async () => {
+    respondWith(200, "{}");
+
+    await createDiscordMailSender(config).send(message);
+
+    // Workers は fetch そのものに時間の上限を設けないため、渡していないと
+    // Discord が応答を返さないまま送信処理が待ち続けてしまう。
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("時間切れになったら connection_failed を返す", async () => {
+    fetchMock.mockRejectedValue(new DOMException("The operation was aborted", "TimeoutError"));
+
+    const result = await createDiscordMailSender(config).send(message);
+
+    expect(result._unsafeUnwrapErr().type).toBe("connection_failed");
+  });
+
   it("接続できなければ connection_failed を返す", async () => {
     fetchMock.mockRejectedValue(new Error("network error"));
 

@@ -15,6 +15,15 @@ const MAX_DESCRIPTION_LENGTH = 4096;
 /** 埋め込みの左端に出る帯の色 */
 const EMBED_COLOR = 0x3b82f6;
 
+/**
+ * Discord からの応答を待つ上限（ミリ秒）。
+ *
+ * Workers は fetch そのものに時間の上限を設けないため、Discord が応答を返さないと
+ * 送信処理がいつまでも待ち続けてしまう。認証コードは 5 分で失効するので、
+ * 長く待つ意味はない。届かなければ諦めて、失敗としてログに残す。
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 /** 差出人・宛先を `名前 <address>` の形に整える */
 const formatAddressee = (addressee: MailAddressee): string =>
   addressee.name ? `${addressee.name} <${addressee.address.value}>` : addressee.address.value;
@@ -74,7 +83,13 @@ const toMailSendError = (status: number, body: string): MailSendError => {
   return { type: "send_failed", cause };
 };
 
-/** 応答を Result に振り分ける。失敗時は本文にエラーの詳細が入っているので原因として残す。 */
+/**
+ * 応答を Result に振り分ける。失敗時は本文にエラーの詳細が入っているので原因として残す。
+ *
+ * 本文の読み取りは、上の signal によって途中で打ち切られることがある。その場合でも
+ * ステータスコードの方が原因の手がかりとして有用なので、本文は空として扱い、
+ * 分類はステータスコードに従う。
+ */
 const toResult = (response: Response): ResultAsync<void, MailSendError> => {
   if (response.ok) return okAsync(undefined);
 
@@ -99,9 +114,10 @@ export const createDiscordMailSender = (config: DiscordWebhookConfig): MailSende
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(buildPayload(message)),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       }),
-      // fetch が例外を投げるのは接続そのものに失敗したときだけ。
-      // HTTP のエラー応答は例外にならないので、下の toResult で扱う。
+      // fetch が例外を投げるのは、接続そのものに失敗したときと時間切れのとき。
+      // HTTP のエラー応答は例外にならないので、そちらは下の toResult で扱う。
       (cause): MailSendError => ({ type: "connection_failed", cause }),
     ).andThen(toResult);
   },
