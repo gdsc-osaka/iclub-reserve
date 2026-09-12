@@ -34,11 +34,29 @@
   "main": "./workers/app.ts",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+    },
   },
   "upload_source_maps": true,
 
   "vars": {
+    /**
+     * 実行環境の名前。認証コード（OTP）の届け先の切り替えに使う。
+     * 対応は app/infra/mail/mail-sender-factory.server.ts を参照。
+     *
+     * デプロイ先とこの値が食い違うと、プレビューの認証コードが実メールで飛んだり、
+     * 逆に本番の認証コードが Discord に流れたりする。環境を増やすときは必ず見直すこと。
+     */
+    "APP_ENV": "local",
     "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
     /**
      * Oracle Email Delivery（SMTP 送信）の設定。
@@ -73,6 +91,8 @@
        */
       "preview_urls": false,
       "vars": {
+        // 実行環境の名前。詳細はトップレベルの `vars` のコメントを参照。
+        "APP_ENV": "production",
         "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
         // SMTP の設定についてはトップレベルの `vars` のコメントを参照。
         "SMTP_HOST": "smtp.email.ap-osaka-1.oci.oraclecloud.com",
@@ -102,6 +122,9 @@
       // 派生ブランチごとのプレビュー URL を発行するために必要。
       "preview_urls": true,
       "vars": {
+        // 実行環境の名前。詳細はトップレベルの `vars` のコメントを参照。
+        // これが "preview" のときだけ、認証コードはメールではなく Discord のスレッドへ届く。
+        "APP_ENV": "preview",
         "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
         // SMTP の設定についてはトップレベルの `vars` のコメントを参照。
         "SMTP_HOST": "smtp.email.ap-osaka-1.oci.oraclecloud.com",

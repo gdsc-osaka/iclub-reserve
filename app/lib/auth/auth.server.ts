@@ -20,6 +20,7 @@ import { passkey } from "@better-auth/passkey";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { assertAllowedOrganizationRequest } from "./organization-guard";
+import { buildPreviewTrustedOrigins } from "./preview-trusted-origins";
 import { ac, admin, member } from "./permission";
 
 /** 許可外のドメインを拒否するときに返す説明文。 */
@@ -68,6 +69,16 @@ const createAuth = () => {
     appName: APP_NAME,
     secret: BETTER_AUTH_SECRET,
     baseURL: BETTER_AUTH_URL,
+
+    /**
+     * CSRF 対策として、ここに挙げた origin からのリクエストだけを受け付ける。
+     * baseURL の origin は Better Auth が自動で足すので、それ以外を渡す。
+     *
+     * プレビューだけ、ブランチごとのプレビュー URL を信頼する必要がある。
+     * 理由と作り方は buildPreviewTrustedOrigins のコメントを参照。
+     */
+    trustedOrigins: env.APP_ENV === "preview" ? buildPreviewTrustedOrigins(BETTER_AUTH_URL) : [],
+
     database: drizzleAdapter(createDb(env.DB), {
       provider: "sqlite",
     }),
