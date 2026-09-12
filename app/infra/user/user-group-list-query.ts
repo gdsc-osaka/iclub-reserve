@@ -32,7 +32,11 @@ export const createUserGroupListQuery = (db: Database): UserGroupListQuery => ({
         .from(member)
         .innerJoin(organization, eq(member.organizationId, organization.id))
         .where(eq(member.userId, userId))
-        .orderBy(asc(organization.name)),
+        /*
+         * 同名の団体があっても並びが入れ替わらないよう、主キーを第 2 キーにする。
+         * 団体名には一意制約がなく、名前だけで並べると同名どうしの順序を SQL が保証しない。
+         */
+        .orderBy(asc(organization.name), asc(organization.id)),
       (error): QueryError => ({
         code: QueryErrorCode.DatabaseError,
         message: "所属している団体の取得に失敗しました。",
