@@ -127,6 +127,11 @@ Cloudflare 上には本番とプレビューの 2 つの環境があり、Worker
 
 デプロイは Cloudflare Workers Builds が自動で行うため、通常は手元から実行する必要はありません。
 
+> [!NOTE]
+> `develop` の派生ブランチは `https://<ブランチ名>-iclub-reserve-preview.gdsc-osaka.workers.dev` でも公開されます（PR ごとのプレビュー）。
+> この URL からでもログインできるよう、Better Auth が信頼する origin（`trustedOrigins`）にこの形の URL を追加してあります。
+> ただし**パスキーはこの URL では使えません**。パスキーは登録したときのドメインに紐づいており、ブランチごとの URL は別のドメインとして扱われるためです。認証コードでログインしてください。
+
 ### `--env` の指定について
 
 このプロジェクトは `@cloudflare/vite-plugin` を使っており、**環境の切り替えはビルド時に決まります**。`wrangler deploy --env production` のように後から `--env` を付けても、ビルド済みの設定が優先されるため切り替わりません。
