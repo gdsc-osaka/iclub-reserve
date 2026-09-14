@@ -55,3 +55,19 @@ export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
   create(reservation: Reservation): ResultAsync<null, ReservationError>;
 }
+
+/**
+ * 空き状況カレンダー（SCR-001）に描くステータス。
+ *
+ * 終了した予約（取り消し済み・却下済み・キャンセル済み・事務局キャンセル済み）は描かない。
+ * これらを描くと、実際には空いている時間帯が埋まっているように見えてしまい、
+ * 「空き状況を確認する」（UC-001）という画面の目的が果たせなくなるため。
+ *
+ * COND-008 が「ステータスを問わず表示する」と定めているのは
+ * **どこまでの項目を開示するか**の話であり、どの予約を描くかの話ではない。
+ * 終了した予約は予約一覧（SCR-003）と予約詳細（SCR-005）で確認できる。
+ */
+export const calendarVisibleStatuses = [
+  ReservationStatus.Provisional,
+  ReservationStatus.Approved,
+] as const;
