@@ -44,7 +44,7 @@ export function AvailabilityWeekAgenda({
               <button
                 type="button"
                 onClick={() => onSelectDay(day)}
-                aria-label={`${formatMonthDay(day.date)} の予約を作成`}
+                aria-label={`${formatMonthDay(day.date)} の仮予約を申請`}
                 className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Plus aria-hidden className="size-4" />

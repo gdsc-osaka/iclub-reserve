@@ -156,6 +156,54 @@ export const parseTokyoDateKey = (value: string | null): Date | null => {
   return new Date(parsed.getTime() - TOKYO_OFFSET_MS);
 };
 
+/** "HH:MM" の形かどうかを見るための形式。24 時以降や 60 分以降は弾く */
+const TIME_KEY_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * "HH:MM" を「その日の 0 時から何分か」に変換する。
+ *
+ * フォームの `<select>` やクエリから受け取った時刻を、
+ * タイムライン上の位置（分）と同じ単位にそろえるために使う。
+ *
+ * 値は利用者が自由に書き換えられるので、形式が違うときは null を返す。
+ * 呼び出し側で「その場合は未選択にする」といった既定値を決めること。
+ *
+ * @example parseTokyoTimeKey("09:30") // → 570
+ */
+export const parseTokyoTimeKey = (value: string | null): number | null => {
+  if (value === null) return null;
+
+  const matched = TIME_KEY_PATTERN.exec(value);
+  if (matched === null) return null;
+
+  return Number(matched[1]) * 60 + Number(matched[2]);
+};
+
+/**
+ * 「その日の 0 時から何分か」を "HH:MM" にする。
+ *
+ * 24:00（＝1440 分）も表せる。利用可能時間の終わりが 24 時になった場合に、
+ * 終了時刻の選択肢を「0:00」と書いて前日に見せてしまわないようにするため。
+ *
+ * @example toTokyoTimeKey(570) // → "09:30"
+ */
+export const toTokyoTimeKey = (minutes: number): string => {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+};
+
+/**
+ * 日本時間の「その日の 0 時から指定した分だけ進んだ時刻」を返す。
+ *
+ * タイムライン上の位置（分）を日時に戻すのに使う。
+ * `atTokyoTime(day, 0, minutes)` と結果は同じだが、
+ * 「時と分」ではなく「0 時からの分」を扱っていることが読めるように分けている。
+ */
+export const atTokyoMinutes = (day: Date, minutes: number): Date =>
+  new Date(startOfTokyoDay(day).getTime() + minutes * MINUTE_MS);
+
 /**
  * 日本時間の「その日の指定した時・分」を返す。
  *
@@ -164,7 +212,7 @@ export const parseTokyoDateKey = (value: string | null): Date | null => {
  * @param minute 0-59 の分（省略時は 0）
  */
 export const atTokyoTime = (day: Date, hour: number, minute = 0): Date =>
-  new Date(startOfTokyoDay(day).getTime() + (hour * 60 + minute) * MINUTE_MS);
+  atTokyoMinutes(day, hour * 60 + minute);
 
 /** 2 つの日付が日本時間で同じ日かどうか */
 export const isSameTokyoDay = (a: Date, b: Date): boolean =>

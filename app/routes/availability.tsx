@@ -28,6 +28,7 @@ import {
   parseTokyoDateKey,
   startOfTokyoWeek,
   toTokyoDateKey,
+  toTokyoTimeKey,
 } from "~/lib/date";
 import { cn } from "~/lib/utils";
 import { QueryErrorCode } from "~/query/error";
@@ -62,6 +63,22 @@ type CalendarSelection =
 /** この画面の URL を組み立てる。施設と週を両方持ち回るので、リンクは必ずここを通す */
 const toCalendarPath = (facilityId: string, date: Date): string =>
   `/availability?facility=${encodeURIComponent(facilityId)}&date=${toTokyoDateKey(date)}`;
+
+/**
+ * 予約申請フォーム（SCR-002）の URL を組み立てる。
+ *
+ * 押した場所で分かっていることだけをクエリに載せる。
+ * 日付や時刻が決まっていないのに埋めてしまうと、
+ * フォームを開いた人が「自分が選んだ値なのか」を確かめ直すことになる。
+ */
+const toApplicationPath = (draft: ReservationDraft): string => {
+  const params = new URLSearchParams({ facility: draft.facility.id });
+
+  if (draft.day !== null) params.set("date", draft.day.dateKey);
+  if (draft.startHour !== null) params.set("start", toTokyoTimeKey(draft.startHour * 60));
+
+  return `/reservations/new?${params.toString()}`;
+};
 
 /**
  * 空き状況カレンダー（SCR-001）に出すデータを取る。
@@ -112,7 +129,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw data({ message: "Internal server error" }, { status: 500 });
   }
 
-  return { calendar: result.value, weekStart, now, isStaff: user.is_staff };
+  return { calendar: result.value, weekStart, now };
 }
 
 /**
@@ -126,7 +143,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
  * 申請が重なっていることに気づけないまま同じ時間帯を申請してしまう。
  */
 export default function Availability({ loaderData }: Route.ComponentProps) {
-  const { calendar, weekStart, now, isStaff } = loaderData;
+  const { calendar, weekStart, now } = loaderData;
   const { facility, facilities, reservations, canApplyReservation } = calendar;
 
   const days = buildWeekDays(weekStart, now);
@@ -163,7 +180,7 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
      * あふれる部分は中の `overflow` に任せる。
      */
     <main className="mx-auto flex h-(--app-content-height) w-full max-w-6xl flex-col gap-4 overflow-hidden p-4 md:p-6">
-      {!canApplyReservation && <CannotApplyNotice isStaff={isStaff} />}
+      {!canApplyReservation && <CannotApplyNotice />}
 
       <FacilityTabs facilities={facilities} current={facility} weekStart={weekStart} />
 
@@ -181,7 +198,7 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
               onClick={() => selectDraft({ facility, day: null, startHour: null })}
             >
               <Plus aria-hidden />
-              {isStaff ? "予約を作成" : "仮予約を申請"}
+              仮予約を申請
             </Button>
           )}
 
@@ -189,7 +206,7 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
         </CardHeader>
 
         {selection?.kind === "slot" && (
-          <DraftPanel draft={selection.draft} isStaff={isStaff} onClear={() => setSelected(null)} />
+          <DraftPanel draft={selection.draft} onClear={() => setSelected(null)} />
         )}
 
         {selectedReservation !== null && (
@@ -356,17 +373,11 @@ function Legend() {
  * 押した場所によって、申請フォームへ持っていける情報が変わる。
  * 何が決まっていて何がまだ決まっていないかを先に見せておかないと、
  * フォームを開いてから「日付が入っていない」と戸惑うことになる。
- *
- * NOTE: 予約申請フォーム（SCR-002）はまだ送信先のルートが無く動かないため、
- * 申請のボタンは押せない状態にしている。
- * フォームができたら、このボタンを `Link` に置き換えて
- * 施設・日付・開始時刻をクエリで渡すこと。
  */
 function DraftPanel({
   draft,
-  isStaff,
   onClear,
-}: Readonly<{ draft: ReservationDraft; isStaff: boolean; onClear: () => void }>) {
+}: Readonly<{ draft: ReservationDraft; onClear: () => void }>) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b bg-accent/40 px-4 py-3">
       <dl className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1 text-sm">
@@ -380,9 +391,8 @@ function DraftPanel({
       </dl>
 
       <div className="flex shrink-0 items-center gap-2">
-        {/* 送信先の画面がまだ動かないので、押せない状態で置いている */}
-        <Button type="button" size="sm" disabled>
-          {isStaff ? "予約を作成" : "仮予約を申請"}（準備中）
+        <Button asChild size="sm">
+          <Link to={toApplicationPath(draft)}>仮予約を申請</Link>
         </Button>
 
         <Button type="button" size="sm" variant="ghost" onClick={onClear}>
@@ -392,7 +402,7 @@ function DraftPanel({
       </div>
 
       <p className="w-full text-xs text-muted-foreground">
-        予約申請フォームはまだ準備中です。ここで選んだ内容は、フォームができ次第そのまま引き継げるようにします。
+        ここで選んだ内容は申請フォームに引き継がれます。まだ決まっていない項目はフォームで選べます。
       </p>
     </div>
   );
@@ -475,16 +485,18 @@ function Undecided() {
  *
  * 申請の導線を消さずに、押せない理由を書いている。
  * 導線ごと消すと、なぜ申請できないのかが分からないまま画面を探し回ることになる。
+ *
+ * 事務局かどうかで文言を分けていないのは、事務局がここに来ないため。
+ * 事務局は所属に関わらず任意の団体として申請できるので（COND-009）、
+ * `canApplyReservation` が false になることがない。
  */
-function CannotApplyNotice({ isStaff }: Readonly<{ isStaff: boolean }>) {
+function CannotApplyNotice() {
   return (
     <Alert className="shrink-0 border-amber-500/30 bg-amber-500/5">
       <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
       <AlertTitle>まだ予約を申請できません</AlertTitle>
       <AlertDescription>
-        {isStaff
-          ? "予約を申請できる団体に所属していません。"
-          : "予約を申請できるのは、事務局が有効にした団体だけです。所属している団体が承認待ちの場合は、承認されるまでお待ちください。"}
+        予約を申請できるのは、事務局が有効にした団体だけです。所属している団体が承認待ちの場合は、承認されるまでお待ちください。
         空き状況の確認はこのままご利用いただけます。
       </AlertDescription>
     </Alert>

@@ -210,7 +210,7 @@ function DayColumn({
             aria-label={
               isOccupied
                 ? `${formatMonthDay(day.date)} ${hour}:00 は予約済み`
-                : `${formatMonthDay(day.date)} ${hour}:00 から予約を作成`
+                : `${formatMonthDay(day.date)} ${hour}:00 から仮予約を申請`
             }
             className="border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none"
           />
