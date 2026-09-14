@@ -48,10 +48,15 @@ export interface AvailabilityReservationDetail {
   readonly note: string | null;
 }
 
-/** 画面へ渡してよい予約 1 件分。COND-008 に従ってマスク済み。 */
+/**
+ * 画面へ渡してよい予約 1 件分。COND-008 に従ってマスク済み。
+ *
+ * 団体の ID を持たせていないのは、COND-008 が他団体に見せてよいとしているのが
+ * 団体「名」までのため。画面は団体名しか出さないので ID は要らない。
+ * 使わない識別子を載せると、通信の中身を見れば団体を特定できてしまう。
+ */
 export interface AvailabilityReservation {
   readonly id: string;
-  readonly groupId: string;
   readonly groupName: string;
   readonly startAt: Date;
   readonly endAt: Date;

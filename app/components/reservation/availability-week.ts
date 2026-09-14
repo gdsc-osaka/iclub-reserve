@@ -106,6 +106,37 @@ export const toDayBlocks = (
     }));
 };
 
+/**
+ * 承認済みの予約で埋まっている「時」を返す。
+ *
+ * ここに入る時間帯からは申請を始められないようにする。
+ * 重複を禁じているのは承認済みの予約に対してだけなので（COND-001）、
+ * 仮予約どうしは重なってよい。仮予約まで塞ぐと、
+ * 同じ時間帯に別の団体が申請して事務局に選んでもらう、という使い方ができなくなる。
+ *
+ * 1 時間の枠に少しでもかかっていれば埋まっている扱いにする。
+ * この画面が押させるのは 1 時間単位の枠なので、
+ * 「10:30 まで埋まっている 10 時の枠」を押せるようにしても、
+ * 申請できる時間帯を選び直せる場所がまだ無い。
+ */
+export const toOccupiedHours = (blocks: readonly AvailabilityBlock[]): ReadonlySet<number> => {
+  const occupied = new Set<number>();
+
+  for (const block of blocks) {
+    if (block.reservation.status !== ReservationStatus.Approved) continue;
+
+    for (const hour of slotHours) {
+      const slotStart = hour * 60;
+
+      if (block.startMinutes < slotStart + 60 && block.endMinutes > slotStart) {
+        occupied.add(hour);
+      }
+    }
+  }
+
+  return occupied;
+};
+
 /** 位置（分）を時間軸の中の百分率にする。`top` と `height` の両方に使う */
 export const toAxisPercent = (minutes: number): number => (minutes / AXIS_MINUTES) * 100;
 

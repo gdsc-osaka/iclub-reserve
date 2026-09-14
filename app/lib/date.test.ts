@@ -4,6 +4,7 @@ import {
   addDays,
   atTokyoTime,
   formatTime,
+  formatTimeRange,
   isSameTokyoDay,
   parseTokyoDateKey,
   startOfTokyoDay,
@@ -118,5 +119,45 @@ describe("isSameTokyoDay", () => {
     expect(
       isSameTokyoDay(new Date("2026-09-12T23:50:00+09:00"), new Date("2026-09-13T00:10:00+09:00")),
     ).toBe(false);
+  });
+});
+
+describe("formatTimeRange", () => {
+  it("同じ日に終わる予約は時刻だけで表す", () => {
+    const result = formatTimeRange(
+      new Date("2026-09-12T10:00:00+09:00"),
+      new Date("2026-09-12T12:00:00+09:00"),
+    );
+
+    expect(result).toBe("10:00〜12:00");
+  });
+
+  it("翌日に終わる予約には「翌」を付ける", () => {
+    // ここを時刻だけで書くと「20:00〜10:00」となり、逆向きの範囲に見える
+    const result = formatTimeRange(
+      new Date("2026-09-12T20:00:00+09:00"),
+      new Date("2026-09-13T10:00:00+09:00"),
+    );
+
+    expect(result).toBe("20:00〜翌10:00");
+  });
+
+  it("2 日以上またぐ予約には終わりの日付を書く", () => {
+    const result = formatTimeRange(
+      new Date("2026-09-12T20:00:00+09:00"),
+      new Date("2026-09-14T10:00:00+09:00"),
+    );
+
+    expect(result).toBe("20:00〜9月14日(月) 10:00");
+  });
+
+  it("日をまたぐ判定は日本時間で行う", () => {
+    // どちらも UTC では 9/12 だが、日本時間では 9/12 と 9/13
+    const result = formatTimeRange(
+      new Date("2026-09-12T23:00:00+09:00"),
+      new Date("2026-09-13T01:00:00+09:00"),
+    );
+
+    expect(result).toBe("23:00〜翌01:00");
   });
 });

@@ -169,3 +169,31 @@ export const atTokyoTime = (day: Date, hour: number, minute = 0): Date =>
 /** 2 つの日付が日本時間で同じ日かどうか */
 export const isSameTokyoDay = (a: Date, b: Date): boolean =>
   startOfTokyoDay(a).getTime() === startOfTokyoDay(b).getTime();
+
+/**
+ * 予約の開始〜終了を 1 つの文字列にする。
+ *
+ * 日をまたぐ予約を時刻だけで書くと「20:00〜10:00」となり、
+ * 逆向きの範囲を書いたように見えてしまう。そのため、終わりが翌日以降なら
+ * 日付が変わることを添える。
+ *
+ * @example formatTimeRange(9/12 10:00, 9/12 12:00) // → "10:00〜12:00"
+ * @example formatTimeRange(9/12 20:00, 9/13 10:00) // → "20:00〜翌10:00"
+ * @example formatTimeRange(9/12 20:00, 9/14 10:00) // → "20:00〜9月14日(月) 10:00"
+ */
+export const formatTimeRange = (startAt: Date, endAt: Date): string => {
+  if (isSameTokyoDay(startAt, endAt)) {
+    return `${formatTime(startAt)}〜${formatTime(endAt)}`;
+  }
+
+  /*
+   * 翌日までなら「翌」の 1 文字で足りる。カレンダーの帯は 1 日ぶんの幅しかなく、
+   * 日付をそのまま入れると団体名まで押し出してしまう。
+   * 2 日以上またぐ予約は珍しいので、そのときだけ日付を書く。
+   */
+  if (isSameTokyoDay(addDays(startAt, 1), endAt)) {
+    return `${formatTime(startAt)}〜翌${formatTime(endAt)}`;
+  }
+
+  return `${formatTime(startAt)}〜${formatMonthDay(endAt)} ${formatTime(endAt)}`;
+};

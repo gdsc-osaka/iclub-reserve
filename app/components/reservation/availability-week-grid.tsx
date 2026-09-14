@@ -1,4 +1,4 @@
-import { formatMonthDay, formatTime, tokyoMinutesOfDay } from "~/lib/date";
+import { formatMonthDay, formatTimeRange, tokyoMinutesOfDay } from "~/lib/date";
 import { cn } from "~/lib/utils";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 
@@ -11,6 +11,7 @@ import {
   slotHours,
   toAxisPercent,
   toDayBlocks,
+  toOccupiedHours,
   type AvailabilityBlock,
   type AvailabilityDay,
 } from "./availability-week";
@@ -172,7 +173,9 @@ function DayColumn({
   onSelectSlot: (day: AvailabilityDay, hour: number) => void;
   onSelectReservation: (reservation: AvailabilityReservation) => void;
 }>) {
-  const placements = layoutTimelineItems(toDayBlocks(day, reservations));
+  const blocks = toDayBlocks(day, reservations);
+  const placements = layoutTimelineItems(blocks);
+  const occupiedHours = toOccupiedHours(blocks);
   const nowMinutes = tokyoMinutesOfDay(now);
   const showNowLine = day.isToday && nowMinutes >= OPEN_MINUTES && nowMinutes <= CLOSE_MINUTES;
 
@@ -190,16 +193,29 @@ function DayColumn({
         minHeight: `${GRID_MIN_HEIGHT_REM}rem`,
       }}
     >
-      {slotHours.map((hour) => (
-        <button
-          key={hour}
-          type="button"
-          disabled={!canApply}
-          onClick={() => onSelectSlot(day, hour)}
-          aria-label={`${formatMonthDay(day.date)} ${hour}:00 から予約を作成`}
-          className="border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none"
-        />
-      ))}
+      {slotHours.map((hour) => {
+        /*
+         * 承認済みの予約で埋まっている枠は押せなくする（COND-001）。
+         * 帯を重ねて隠しているだけだと、帯の掛かっていない部分をクリックしたり
+         * キーボードで送ったりして、埋まっている時間から申請を始められてしまう。
+         */
+        const isOccupied = occupiedHours.has(hour);
+
+        return (
+          <button
+            key={hour}
+            type="button"
+            disabled={!canApply || isOccupied}
+            onClick={() => onSelectSlot(day, hour)}
+            aria-label={
+              isOccupied
+                ? `${formatMonthDay(day.date)} ${hour}:00 は予約済み`
+                : `${formatMonthDay(day.date)} ${hour}:00 から予約を作成`
+            }
+            className="border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none"
+          />
+        );
+      })}
 
       {showNowLine && (
         <div
@@ -254,8 +270,10 @@ function ReservationBlock({
    * 帯に出す時刻は、切り詰めた位置ではなく予約そのものの値を使う。
    * 9 時前から続いている予約を「9:00 開始」と書いてしまうと、
    * 実際の予約時間を読み違えることになる。
+   * 日をまたぐ予約が「20:00〜10:00」と逆向きに見えないよう、
+   * 表記は一覧（{@link AvailabilityWeekAgenda}）と同じ関数に任せる。
    */
-  const timeRange = `${formatTime(reservation.startAt)}〜${formatTime(reservation.endAt)}`;
+  const timeRange = formatTimeRange(reservation.startAt, reservation.endAt);
 
   return (
     <button

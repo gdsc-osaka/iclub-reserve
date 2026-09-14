@@ -39,6 +39,10 @@ export interface GetAvailabilityCalendarArgs {
  *
  * 使用人数と備考を落とすのをここで行うのは、画面に渡す前に落とす必要があるため。
  * 画面へ渡してから隠しても、通信の中身を見れば読めてしまう。
+ *
+ * 団体の ID も同じ理由で落としている。所属の判定にはここで使うが、
+ * 画面は団体名しか出さないので、そのまま渡すと使い道の無い識別子だけが
+ * 他団体のぶんまで手元に残ることになる。
  */
 const toVisibleReservation = (
   row: AvailabilityReservationRow,
@@ -49,7 +53,6 @@ const toVisibleReservation = (
 
   return {
     id: row.id,
-    groupId: row.groupId,
     groupName: row.groupName,
     startAt: row.startAt,
     endAt: row.endAt,

@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 
-import { formatMonthDay, formatTime } from "~/lib/date";
+import { formatMonthDay, formatTimeRange } from "~/lib/date";
 import { cn } from "~/lib/utils";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 
@@ -83,8 +83,13 @@ function DayReservations({
             <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", style.rail)} />
 
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {/*
+               * 日をまたぐ予約は 2 日ぶんの欄に出るので、時刻だけで書くと
+               * どちらの欄でも「20:00〜10:00」と逆向きに見える。
+               * 表記はカレンダーの帯と同じ関数に任せる。
+               */}
               <span className="text-sm font-medium tabular-nums">
-                {formatTime(reservation.startAt)}〜{formatTime(reservation.endAt)}
+                {formatTimeRange(reservation.startAt, reservation.endAt)}
               </span>
               <ReservationStatusBadge status={reservation.status} />
               {reservation.isOwnGroup && (

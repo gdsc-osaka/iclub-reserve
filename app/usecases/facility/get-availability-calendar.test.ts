@@ -103,6 +103,17 @@ describe("getAvailabilityCalendarUseCase", () => {
     expect(JSON.stringify(other)).not.toContain("ハッカソンのキックオフ");
   });
 
+  it("予約に団体の ID を載せない", async () => {
+    const result = await getAvailabilityCalendarUseCase(createDeps(enabledMembership), args);
+
+    const reservations = result._unsafeUnwrap().reservations;
+
+    // COND-008 が他団体に見せてよいのは団体名まで。画面も団体名しか出さないので、
+    // 自団体のぶんも含めて ID は渡さない
+    expect(JSON.stringify(reservations)).not.toContain("grp_ai_hackers");
+    expect(JSON.stringify(reservations)).not.toContain("grp_robotics");
+  });
+
   it("他団体の予約でも団体名・日時・ステータスは残す", async () => {
     const result = await getAvailabilityCalendarUseCase(createDeps(enabledMembership), args);
 

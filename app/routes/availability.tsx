@@ -24,7 +24,7 @@ import {
   addDays,
   formatFullDate,
   formatMonthDay,
-  formatTime,
+  formatTimeRange,
   parseTokyoDateKey,
   startOfTokyoWeek,
   toTokyoDateKey,
@@ -49,10 +49,15 @@ export function meta(_: Route.MetaArgs) {
  * 「空き枠を選んで申請に進む」と「入っている予約の中身を見る」を
  * 1 つの状態にまとめているのは、出す場所が同じ（カレンダーの上）ため。
  * 別々に持つと、両方が同時に開いて表の位置が 2 段ぶんずれる。
+ *
+ * 予約は中身ではなく ID だけを覚えておき、表示のたびにローダーの結果から引き直す。
+ * 中身をそのまま持つと、同じ施設・同じ週のままローダーが読み直されたときに
+ * 古い中身が残ってしまう。団体から外れた直後などに、
+ * もう渡されていないはずの使用人数・備考を出し続けることになる（COND-008）。
  */
 type CalendarSelection =
   | { readonly kind: "slot"; readonly draft: ReservationDraft }
-  | { readonly kind: "reservation"; readonly reservation: AvailabilityReservation };
+  | { readonly kind: "reservation"; readonly reservationId: string };
 
 /** この画面の URL を組み立てる。施設と週を両方持ち回るので、リンクは必ずここを通す */
 const toCalendarPath = (facilityId: string, date: Date): string =>
@@ -139,6 +144,15 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
   const select = (value: CalendarSelection) => setSelected({ key: viewKey, value });
   const selectDraft = (draft: ReservationDraft) => select({ kind: "slot", draft });
 
+  /*
+   * 選んだ予約は、いま届いている一覧から引き直す。
+   * 取り消されるなどして一覧から消えていれば、詳細も出さない。
+   */
+  const selectedReservation =
+    selection?.kind === "reservation"
+      ? (reservations.find((reservation) => reservation.id === selection.reservationId) ?? null)
+      : null;
+
   return (
     /*
      * この画面だけは、ページ全体ではなくカレンダーの中身をスクロールさせる。
@@ -178,9 +192,9 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
           <DraftPanel draft={selection.draft} isStaff={isStaff} onClear={() => setSelected(null)} />
         )}
 
-        {selection?.kind === "reservation" && (
+        {selectedReservation !== null && (
           <ReservationDetailPanel
-            reservation={selection.reservation}
+            reservation={selectedReservation}
             onClear={() => setSelected(null)}
           />
         )}
@@ -199,11 +213,11 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
               reservations={reservations}
               now={now}
               canApply={canApplyReservation}
-              selectedReservationId={
-                selection?.kind === "reservation" ? selection.reservation.id : null
-              }
+              selectedReservationId={selectedReservation?.id ?? null}
               onSelectSlot={(day, hour) => selectDraft({ facility, day, startHour: hour })}
-              onSelectReservation={(reservation) => select({ kind: "reservation", reservation })}
+              onSelectReservation={(reservation) =>
+                select({ kind: "reservation", reservationId: reservation.id })
+              }
             />
           </div>
 
@@ -410,8 +424,8 @@ function ReservationDetailPanel({
 
         <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <PanelItem label="日時">
-            {formatMonthDay(reservation.startAt)} {formatTime(reservation.startAt)}〜
-            {formatTime(reservation.endAt)}
+            {formatMonthDay(reservation.startAt)}{" "}
+            {formatTimeRange(reservation.startAt, reservation.endAt)}
           </PanelItem>
 
           {reservation.detail !== null && (
