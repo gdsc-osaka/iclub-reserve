@@ -7,6 +7,7 @@ import type { ShellUser } from "~/components/layout/shell-user";
 import { SIDEBAR_COOKIE_NAME, SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { cn } from "~/lib/utils";
 
 import type { Route } from "./+types/app-layout";
 
@@ -81,8 +82,22 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           {/*
            * ボトムバーは画面の下端に固定されているので、
            * その分だけ下に余白を空けておかないと最後の行が隠れて読めなくなる。
+           *
+           * --app-content-height は「上下の帯を除いた、中身に使える高さ」。
+           * 画面をスクロールさせず中身だけをスクロールさせたい画面
+           * （空き状況カレンダーなど）が `h-(--app-content-height)` で使う。
+           * 帯の高さを各画面に書き写すと、帯の高さを変えたときに
+           * 直し漏れた画面だけが縦にはみ出す。
            */}
-          <div className="flex flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+          <div
+            className={cn(
+              "flex flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0",
+              // スマホ: 上の帯 3.5rem + ボトムバー 3.5rem（+ ホームバーの余白）
+              "[--app-content-height:calc(100svh_-_3.5rem_-_3.5rem_-_env(safe-area-inset-bottom))]",
+              // PC・タブレット: 上の帯 3rem のみ
+              "md:[--app-content-height:calc(100svh_-_3rem)]",
+            )}
+          >
             <Outlet />
           </div>
 
