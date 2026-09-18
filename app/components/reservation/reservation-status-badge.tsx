@@ -1,5 +1,8 @@
 import { ReservationStatus } from "~/domain/reservation";
-import { cn } from "~/lib/utils";
+import { Badge, badgeVariants } from "../ui/badge";
+import type { VariantProps } from "class-variance-authority";
+import { Check, Ellipsis, X } from "lucide-react";
+import type { JSX } from "react/jsx-runtime";
 
 /**
  * 予約の状態を利用者向けの日本語にする。
@@ -26,31 +29,34 @@ export const reservationStatusLabel: Record<ReservationStatus, string> = {
  */
 const reservationStatusStyle: Record<
   ReservationStatus,
-  { readonly badge: string; readonly dot: string }
+  {
+    readonly badge: JSX.Element;
+    variant: VariantProps<typeof badgeVariants>["variant"];
+  }
 > = {
   [ReservationStatus.Approved]: {
-    badge: "bg-primary/10 text-primary ring-primary/20",
-    dot: "bg-primary",
+    badge: <Check />,
+    variant: "default",
   },
   [ReservationStatus.Provisional]: {
-    badge: "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-400",
-    dot: "bg-amber-500",
+    badge: <Ellipsis />,
+    variant: "outline",
   },
   [ReservationStatus.Withdrawn]: {
-    badge: "bg-muted text-muted-foreground ring-foreground/10",
-    dot: "bg-muted-foreground",
+    badge: <X />,
+    variant: "destructive",
   },
   [ReservationStatus.Rejected]: {
-    badge: "bg-destructive/10 text-destructive ring-destructive/20",
-    dot: "bg-destructive",
+    badge: <X />,
+    variant: "destructive",
   },
   [ReservationStatus.Cancelled]: {
-    badge: "bg-muted text-muted-foreground ring-foreground/10",
-    dot: "bg-muted-foreground",
+    badge: <X />,
+    variant: "destructive",
   },
   [ReservationStatus.CancelledByStaff]: {
-    badge: "bg-muted text-muted-foreground ring-foreground/10",
-    dot: "bg-muted-foreground",
+    badge: <X />,
+    variant: "destructive",
   },
 };
 
@@ -62,15 +68,9 @@ export function ReservationStatusBadge({
   const style = reservationStatusStyle[status];
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        style.badge,
-        className,
-      )}
-    >
-      <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
+    <Badge className={className} variant={style.variant}>
+      {style.badge}
       {reservationStatusLabel[status]}
-    </span>
+    </Badge>
   );
 }
