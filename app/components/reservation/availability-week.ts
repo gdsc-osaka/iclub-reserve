@@ -1,13 +1,26 @@
 import { FACILITY_CLOSE_HOUR, FACILITY_OPEN_HOUR } from "~/domain/facility";
 import { ReservationStatus } from "~/domain/reservation";
-import { addDays, atTokyoTime, isSameTokyoDay, startOfTokyoDay, toTokyoDateKey } from "~/lib/date";
+import {
+  addDays,
+  atTokyoTime,
+  isSameTokyoDay,
+  startOfTokyoDay,
+  tokyoDayOfWeek,
+  toTokyoDateKey,
+} from "~/lib/date";
 import type {
   AvailabilityFacility,
   AvailabilityReservation,
 } from "~/query/facility/facility-availability-calendar";
 
-/** 1 週間に並べる日数。週の始まりは月曜（`startOfTokyoWeek`）。 */
+/** 1 週間に並べる日数。週の始まりは日曜（`startOfTokyoWeek`）。 */
 export const DAYS_IN_WEEK = 7;
+
+/** 日曜。`tokyoDayOfWeek` が返す値に合わせている */
+const SUNDAY = 0;
+
+/** 土曜。`tokyoDayOfWeek` が返す値に合わせている */
+const SATURDAY = 6;
 
 /** 時間軸の開始・終了を「0 時から何分」で表したもの。位置の計算はすべてこの単位で行う。 */
 export const OPEN_MINUTES = FACILITY_OPEN_HOUR * 60;
@@ -37,10 +50,11 @@ export const slotHours: readonly number[] = Array.from(
  * 空き枠 1 つ（1 時間）の最低の高さ（rem）。
  *
  * 画面が高いときは余白いっぱいまで伸ばすが、ここより低くはしない。
- * 予約の帯には時刻と団体名を 2 行で入れているので、
- * これ以上潰すと文字が切れて読めなくなる。
+ * 1 時間の帯に「時刻 1 行 + 団体名 2 行」が入る高さにしてある（`blockContent`）。
+ * 団体名を 1 行で切ると「ロボティクス開発プロジ…」のように読めなくなるため、
+ * 折り返せるだけの高さをここで確保している。
  */
-export const SLOT_MIN_HEIGHT_REM = 2.75;
+export const SLOT_MIN_HEIGHT_REM = 3.25;
 
 /** 時間軸ぜんぶの最低の高さ（rem）。これより狭い画面ではカレンダーの中を縦にスクロールさせる */
 export const GRID_MIN_HEIGHT_REM = slotHours.length * SLOT_MIN_HEIGHT_REM;
@@ -53,10 +67,12 @@ export interface AvailabilityDay {
   readonly dateKey: string;
   /** 今日かどうか。列を目立たせるために使う */
   readonly isToday: boolean;
+  /** 曜日（0 が日曜、6 が土曜）。土日の色分けに使う */
+  readonly weekday: number;
 }
 
 /**
- * 週の月曜から 7 日分を作る。
+ * 週の日曜から 7 日分を作る。
  *
  * `today` を引数で受け取っているのは、「今日」をサーバーとブラウザで
  * 同じ値にするため。ここで `new Date()` を呼ぶと、サーバーで描いた内容と
@@ -66,8 +82,51 @@ export const buildWeekDays = (weekStart: Date, today: Date): readonly Availabili
   Array.from({ length: DAYS_IN_WEEK }, (_, index) => {
     const date = addDays(startOfTokyoDay(weekStart), index);
 
-    return { date, dateKey: toTokyoDateKey(date), isToday: isSameTokyoDay(date, today) };
+    /*
+     * 曜日は index ではなく日付から取る。いまは週が日曜始まりなので
+     * 両者は一致するが、週の始まりを変えたときに index だけが取り残されて
+     * 土日の色がずれるのを防ぐ。
+     */
+    return {
+      date,
+      dateKey: toTokyoDateKey(date),
+      isToday: isSameTokyoDay(date, today),
+      weekday: tokyoDayOfWeek(date),
+    };
   });
+
+/**
+ * 曜日ごとの色。土曜を青系、日曜を赤系にしているのは、
+ * 紙のカレンダーと同じ見分け方にするため。
+ *
+ * 色を付けるのは**曜日の文字だけ**（`label`）で、日付の数字には付けない。
+ * 「9月13日(日)」をまるごと赤くすると、日付そのものが誤っているように見える。
+ *
+ * `surface` は日付の見出しと時間帯の列の**両方**に敷く。
+ * その日の性質を面の色で表す、という点を「今日」と揃えるため。
+ * 片方にしか色が無いと、見出しと列が別のものに見えてしまう。
+ * 濃さの差（今日は塗りつぶし、週末は 5%）がそのまま目立たせたい順になる。
+ *
+ * 面をごく薄くしているのは、予約の帯の色（承認済み = 緑系、仮予約 = 橙系）と
+ * ぶつけないため。週末かどうかは曜日の文字色で読めるので、面は
+ * 「週末がひとまとまりに見える」程度で足りる。
+ *
+ * 平日は `null` を返す。呼び出し側で「色を付けない」と「今日の色で塗る」を
+ * 区別できるようにするため。
+ */
+export const weekdayStyle = (
+  weekday: number,
+): { readonly label: string | null; readonly surface: string | null } => {
+  if (weekday === SATURDAY) {
+    return { label: "text-blue-600 dark:text-blue-400", surface: "bg-blue-500/5" };
+  }
+
+  if (weekday === SUNDAY) {
+    return { label: "text-red-600 dark:text-red-400", surface: "bg-red-500/5" };
+  }
+
+  return { label: null, surface: null };
+};
 
 /** タイムラインに描く帯 1 本。位置はその日の 0 時からの分で表す。 */
 export interface AvailabilityBlock {
@@ -143,11 +202,16 @@ export const toAxisPercent = (minutes: number): number => (minutes / AXIS_MINUTE
 /**
  * 帯の配色。
  *
- * 色みで**ステータス**を、濃さで**自団体かどうか**を表している。
- * 2 つを別々の印（色と枠線の形など）で表すと、スマホの幅では細かすぎて読めない。
+ * 色みで**ステータス**だけを表す。自団体かどうかは色で表さない。
+ * 以前は同じ色の濃淡（20% と 10%）で分けていたが、離れた列どうしでは
+ * 見比べられず、色の見え方によっては差がほとんど消えてしまう。
  *
- * 自団体の予約を濃くしているのは、この画面で真っ先に探すのが
- * 「自分たちの予約がいつ入っているか」だと考えられるため。
+ * 代わりに自団体の帯は、色以外の印を重ねて目立たせている（`availability-week-grid.tsx`）。
+ *
+ * - 左端の線を太くする
+ * - 枠線を濃くする
+ * - 団体名を太字にする
+ * - 高さに余裕があれば「自団体」と書く（`blockContent`）
  */
 export const blockStyle = (
   status: ReservationStatus,
@@ -155,20 +219,104 @@ export const blockStyle = (
 ): { readonly box: string; readonly rail: string } => {
   if (status === ReservationStatus.Approved) {
     return isOwnGroup
-      ? { box: "border-primary/40 bg-primary/20 text-foreground", rail: "bg-primary" }
+      ? { box: "border-primary/70 bg-primary/25 text-foreground", rail: "bg-primary" }
       : { box: "border-primary/25 bg-primary/10 text-foreground/80", rail: "bg-primary/40" };
   }
 
   // 仮予約はまだ確定していないので、枠線を破線にして「これから決まる枠」だと分かるようにする
   return isOwnGroup
     ? {
-        box: "border-dashed border-amber-500/50 bg-amber-500/20 text-foreground",
+        box: "border-dashed border-amber-500/80 bg-amber-500/25 text-foreground",
         rail: "bg-amber-500",
       }
     : {
         box: "border-dashed border-amber-500/30 bg-amber-500/10 text-foreground/80",
         rail: "bg-amber-500/40",
       };
+};
+
+/** 帯の中の文字 1 行の高さ（rem）。`text-[11px] leading-tight`（11px × 1.25）を rem にしたもの */
+const BLOCK_LINE_HEIGHT_REM = 0.875;
+
+/** 帯の上下に取られる高さ（rem）。上下の余白（`py-1`）と枠線の合計 */
+const BLOCK_PADDING_REM = 0.625;
+
+/** 団体名を折り返す上限の行数。1 列ぶんの幅があれば、これで長い団体名も収まる */
+const MAX_NAME_LINES = 3;
+
+/**
+ * 横に並んでいるときの、団体名を折り返す上限の行数。
+ *
+ * 1 行に入る文字数が半分以下になるぶん、行数で取り返す。
+ * 上限を設けているのは、長い帯で団体名だけが縦に伸びないようにするため。
+ */
+const MAX_NARROW_NAME_LINES = 6;
+
+/**
+ * 帯の長さ（分）から、文字が何行入るかを見積もる。
+ *
+ * 高さの基準に `SLOT_MIN_HEIGHT_REM` を使っているのは、これが帯の最小の高さだから。
+ * 画面が高いときは帯も伸びるので、ここで数えた行数より余裕がある。
+ * 逆に伸びたぶんまで当てにすると、画面が低いときに文字がはみ出す。
+ */
+const linesInBlock = (durationMinutes: number): number => {
+  const heightRem = (durationMinutes / 60) * SLOT_MIN_HEIGHT_REM;
+
+  return Math.max(1, Math.floor((heightRem - BLOCK_PADDING_REM) / BLOCK_LINE_HEIGHT_REM));
+};
+
+/** 帯 1 本に何を書けるか。 */
+export interface BlockContent {
+  /** 時刻を出すか */
+  readonly showTime: boolean;
+  /** ステータス（と自団体かどうか）を出すか */
+  readonly showStatus: boolean;
+  /** 使用人数を出すか */
+  readonly showHeadCount: boolean;
+  /** 団体名を何行まで折り返すか */
+  readonly nameLines: number;
+}
+
+/**
+ * 帯に書く中身を、入る高さと幅から決める。
+ *
+ * 短い帯にすべてを書こうとすると、どの行も切れて読めなくなる。
+ * 逆に長い帯は、時刻と団体名だけだと上に寄って下が空く。
+ * そこで「入る行数」を数えて、入るぶんだけ書く。
+ *
+ * 横に並んでいるとき（`columnCount` が 2 以上）は団体名だけにする。
+ * 幅が半分以下になり、狭い画面では 1 行に 3 文字ほどしか入らないので、
+ * 時刻やステータスまで書くとどの行も数文字で切れてしまう。
+ * 書かなかったぶんは帯を押せば出るので、この画面でいちばん知りたい
+ * 「どの団体の予約か」に行をすべて回す。
+ *
+ * @param durationMinutes 帯の長さ（分）。表示範囲に切り詰めたあとの長さ
+ * @param columnCount その帯が横に何列で並んでいるか
+ */
+export const blockContent = (durationMinutes: number, columnCount: number): BlockContent => {
+  const lines = linesInBlock(durationMinutes);
+
+  if (columnCount > 1) {
+    return {
+      showTime: false,
+      showStatus: false,
+      showHeadCount: false,
+      nameLines: Math.min(MAX_NARROW_NAME_LINES, lines),
+    };
+  }
+
+  const showTime = lines >= 3;
+  const showStatus = lines >= 5;
+  const showHeadCount = lines >= 6;
+
+  const usedLines = [showTime, showStatus, showHeadCount].filter(Boolean).length;
+
+  return {
+    showTime,
+    showStatus,
+    showHeadCount,
+    nameLines: Math.min(MAX_NAME_LINES, Math.max(1, lines - usedLines)),
+  };
 };
 
 /**
