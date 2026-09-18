@@ -7,6 +7,7 @@ export default [
    */
   layout("routes/app-layout.tsx", [
     index("routes/home.tsx"),
+    route("availability", "routes/availability.tsx"),
     route("reservation", "routes/group_reservation.tsx"),
     route("facility", "routes/registration.tsx"),
     route("groups/:groupId", "routes/groups.tsx"),

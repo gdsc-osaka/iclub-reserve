@@ -64,7 +64,7 @@ export const commonNavItems: readonly NavItem[] = [
     label: "空き状況",
     to: "/availability",
     icon: CalendarDays,
-    enabled: false,
+    enabled: true,
     screen: "SCR-001",
   },
   {

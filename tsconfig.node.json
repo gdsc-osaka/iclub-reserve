@@ -5,7 +5,8 @@
     "vite.config.ts",
     "scripts/**/*.ts",
     "app/db/schema/**/*",
-    "app/domain/**/*"
+    "app/domain/**/*",
+    "app/lib/date.ts"
   ],
   "compilerOptions": {
     "composite": true,

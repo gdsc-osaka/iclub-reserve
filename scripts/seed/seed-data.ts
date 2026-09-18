@@ -2,6 +2,7 @@ import { ReservationStatus } from "~/domain/reservation";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import * as schema from "~/db/schema";
+import { addDays, atTokyoTime, startOfTokyoWeek } from "~/lib/date";
 
 /**
  * 施設・備品のシードデータ
@@ -152,18 +153,24 @@ export const seedMembers: (typeof schema.member.$inferInsert)[] = [
 
 /**
  * サンプル予約のシードデータ
- * 現在日時から相対的な日時（明日、3日後など）を設定
+ *
+ * 日時は「今週の月曜」を起点に組み立てている。
+ * 実行した日に関わらず、空き状況カレンダー（SCR-001）の初期表示に
+ * かならず予約が並ぶようにするため。
+ * 時刻は施設の利用可能時間（FACILITY_OPEN_HOUR〜FACILITY_CLOSE_HOUR）の中に収める。
  */
-const now = Date.now();
-const oneDayMs = 24 * 60 * 60 * 1000;
+const weekStart = startOfTokyoWeek(new Date());
+
+/** 今週の月曜から days 日後の、日本時間 hour 時 */
+const atWeek = (days: number, hour: number) => atTokyoTime(addDays(weekStart, days), hour);
 
 export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] = [
   {
     id: "res_sample_approved",
     groupId: "grp_robotics",
     facilityId: "fac_meeting_a",
-    startAt: new Date(now + oneDayMs),
-    endAt: new Date(now + oneDayMs + 2 * 60 * 60 * 1000),
+    startAt: atWeek(1, 10),
+    endAt: atWeek(1, 12),
     headCount: 4,
     note: "週次プロジェクト定例ミーティング",
     status: ReservationStatus.Approved,
@@ -174,12 +181,57 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
     id: "res_sample_provisional",
     groupId: "grp_ai_hackers",
     facilityId: "fac_event_hall",
-    startAt: new Date(now + 3 * oneDayMs),
-    endAt: new Date(now + 3 * oneDayMs + 4 * 60 * 60 * 1000),
+    startAt: atWeek(3, 13),
+    endAt: atWeek(3, 17),
     headCount: 20,
     note: "AI勉強会＆ハッカソンキックオフ",
     status: ReservationStatus.Provisional,
     statusReason: null,
+    createdBy: "usr_student_01",
+  },
+  /*
+   * 重なった仮予約。COND-001 が重複を禁じているのは承認済みの予約に対してだけなので、
+   * 仮予約どうしは同じ時間帯に並ぶことがある。
+   * カレンダーが帯を横に分けて描けているかは、この 2 件で確かめられる。
+   */
+  {
+    id: "res_overlap_robotics",
+    groupId: "grp_robotics",
+    facilityId: "fac_meeting_a",
+    startAt: atWeek(2, 14),
+    endAt: atWeek(2, 16),
+    headCount: 6,
+    note: "ハードウェア班のレビュー",
+    status: ReservationStatus.Provisional,
+    statusReason: null,
+    createdBy: "usr_student_01",
+  },
+  {
+    id: "res_overlap_ai",
+    groupId: "grp_ai_hackers",
+    facilityId: "fac_meeting_a",
+    startAt: atWeek(2, 15),
+    endAt: atWeek(2, 18),
+    headCount: 8,
+    note: "モデルの評価会",
+    status: ReservationStatus.Provisional,
+    statusReason: null,
+    createdBy: "usr_student_01",
+  },
+  /*
+   * 終了した予約。空き状況カレンダーには出ない（calendarVisibleStatuses）。
+   * 却下された枠が埋まって見えていないかを確かめるために入れている。
+   */
+  {
+    id: "res_rejected",
+    groupId: "grp_robotics",
+    facilityId: "fac_meeting_a",
+    startAt: atWeek(3, 10),
+    endAt: atWeek(3, 12),
+    headCount: 4,
+    note: "別の団体と重なったため却下された枠",
+    status: ReservationStatus.Rejected,
+    statusReason: "同じ時間帯に承認済みの予約があります",
     createdBy: "usr_student_01",
   },
 ];

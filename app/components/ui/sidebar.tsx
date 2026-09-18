@@ -294,8 +294,17 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
       data-slot="sidebar-inset"
+      /*
+       * min-w-0 は消さないこと（shadcn の原型には無い）。
+       *
+       * ここは flex の子なので、指定が無いと最小幅が「中身の最小幅」になる。
+       * 中に横スクロールする表（空き状況カレンダーなど）があると、
+       * その表の最小幅までこの領域が広がり、ページ全体が横に伸びてしまう。
+       * そうなると position: sticky の上部の帯は横スクロールに追随して左へ動き、
+       * 画面に固定されているサイドバーの上に乗り上げる。
+       */
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ms-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ms-2",
+        "relative flex w-full min-w-0 flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ms-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ms-2",
         className,
       )}
       {...props}
