@@ -304,7 +304,7 @@ function WeekNavigation({
           </Link>
         </Button>
 
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline">
           <Link to={toCalendarPath(facilityId, today)}>今週</Link>
         </Button>
 
