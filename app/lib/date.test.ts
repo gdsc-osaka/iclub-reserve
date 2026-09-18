@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   atTokyoTime,
+  formatMonthDayParts,
   formatTime,
   formatTimeRange,
   isSameTokyoDay,
@@ -61,24 +62,38 @@ describe("parseTokyoDateKey", () => {
   });
 });
 
+describe("formatMonthDayParts", () => {
+  it("日付と曜日を分けて返す", () => {
+    expect(formatMonthDayParts(new Date("2026-09-12T10:00:00+09:00"))).toEqual({
+      monthDay: "9月12日",
+      weekday: "土",
+    });
+  });
+
+  it("日本時間で判定する", () => {
+    // UTC で読むと 9 月 12 日 15 時（＝日本時間 13 日 0 時）が 12 日のままになる
+    expect(formatMonthDayParts(new Date("2026-09-13T00:30:00+09:00")).weekday).toBe("日");
+  });
+});
+
 describe("startOfTokyoWeek", () => {
-  it("週の途中の日からその週の月曜を返す", () => {
-    // 2026-09-12 は土曜日
-    expect(toTokyoDateKey(startOfTokyoWeek(new Date("2026-09-12T14:00:00+09:00")))).toBe(
-      "2026-09-07",
+  it("週の途中の日からその週の日曜を返す", () => {
+    // 2026-09-09 は水曜日
+    expect(toTokyoDateKey(startOfTokyoWeek(new Date("2026-09-09T14:00:00+09:00")))).toBe(
+      "2026-09-06",
     );
   });
 
-  it("日曜はその週の月曜（6 日前）を返す", () => {
-    // 日曜を「次の週の始まり」と取り違えると、日曜だけ 1 週ずれる
-    expect(toTokyoDateKey(startOfTokyoWeek(new Date("2026-09-13T10:00:00+09:00")))).toBe(
-      "2026-09-07",
+  it("土曜はその週の日曜（6 日前）を返す", () => {
+    // 土曜を「次の週の始まり」と取り違えると、土曜だけ 1 週ずれる
+    expect(toTokyoDateKey(startOfTokyoWeek(new Date("2026-09-12T10:00:00+09:00")))).toBe(
+      "2026-09-06",
     );
   });
 
-  it("月曜はその日を返す", () => {
-    expect(toTokyoDateKey(startOfTokyoWeek(new Date("2026-09-07T00:00:00+09:00")))).toBe(
-      "2026-09-07",
+  it("日曜はその日を返す", () => {
+    expect(toTokyoDateKey(startOfTokyoWeek(new Date("2026-09-13T00:00:00+09:00")))).toBe(
+      "2026-09-13",
     );
   });
 });
