@@ -6,6 +6,7 @@ import type { AvailabilityReservation } from "~/query/facility/facility-availabi
 
 import { blockStyle, toDayBlocks, type AvailabilityDay } from "./availability-week";
 import { ReservationStatusBadge } from "./reservation-status-badge";
+import { Button } from "../ui/button";
 
 /**
  * 1 週間分の予約を日ごとに縦に並べたもの（スマホ向け）。
@@ -41,14 +42,15 @@ export function AvailabilityWeekAgenda({
             </h3>
 
             {canApply && (
-              <button
+              <Button
                 type="button"
                 onClick={() => onSelectDay(day)}
                 aria-label={`${formatMonthDay(day.date)} の予約を作成`}
-                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-ring"
+                size="icon"
+                variant="secondary"
               >
-                <Plus aria-hidden className="size-4" />
-              </button>
+                <Plus />
+              </Button>
             )}
           </div>
 
