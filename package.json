@@ -51,7 +51,7 @@
     "worker-mailer": "^1.2.1"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.42.1",
+    "@cloudflare/vite-plugin": "^1.56.0",
     "@react-router/dev": "8.0.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/better-sqlite3": "^9.6.0",
