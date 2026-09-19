@@ -1,10 +1,5 @@
 import type { ResultAsync } from "neverthrow";
-/*
- * ドメインから `~/lib` を参照しているのはここだけ。
- * `app/lib/date.ts` は何も import しない純粋な日付計算なので、
- * 参照しても外側（DB・画面・通信）への依存は増えない。
- * 日本時間での判定を自前で書き直すと、同じ計算が 2 か所に散らばる。
- */
+
 import type { PermissionTable } from "../authz";
 import { MembershipRole } from "../membership";
 
@@ -36,12 +31,29 @@ export interface Reservation {
 
 export const ReservationAction = {
   CreateProvisional: "create_provisional",
+  Withdraw: "withdraw",
+  Cancel: "cancel",
 } as const;
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
 
+/**
+ * 団体の中での役割ごとに許可する操作。
+ *
+ * 承認・却下・事務局キャンセルはここに無い。事務局の権限は団体での役割とは
+ * 別の軸にあり（COND-009）、団体に所属していない事務局の人にも成り立つため、
+ * 役割の表では表せない。判定は transition.ts の canTransition の `isStaff` で行う。
+ */
 export const reservationPermissions: PermissionTable<MembershipRole, ReservationAction> = {
-  [MembershipRole.Admin]: [ReservationAction.CreateProvisional],
-  [MembershipRole.Member]: [ReservationAction.CreateProvisional],
+  [MembershipRole.Admin]: [
+    ReservationAction.CreateProvisional,
+    ReservationAction.Withdraw,
+    ReservationAction.Cancel,
+  ],
+  [MembershipRole.Member]: [
+    ReservationAction.CreateProvisional,
+    ReservationAction.Withdraw,
+    ReservationAction.Cancel,
+  ],
 };
 
 export const ReservationErrorCode = {
@@ -51,7 +63,12 @@ export const ReservationErrorCode = {
   ReservationInvalidPeriod: "RESERVATION_INVALID_PERIOD",
   /** 利用時間以外の入力が不正（使用人数・備考） */
   ReservationInvalidInput: "RESERVATION_INVALID_INPUT",
-  /** 同一施設・同一時間帯に承認済みの予約がある（COND-001） */
+  /** 不正なステータス遷移（許可されていない状態からの操作） */
+  ReservationInvalidTransition: "RESERVATION_INVALID_TRANSITION",
+  /**
+   * 同一施設・同一時間帯に承認済みの予約がある（COND-001）、
+   * または同じ予約に対する別の操作が先に反映された
+   */
   ReservationConflict: "RESERVATION_CONFLICT",
   /** 申請元に選んだ団体が有効でない（COND-006） */
   ReservationGroupNotEligible: "RESERVATION_GROUP_NOT_ELIGIBLE",
@@ -74,6 +91,29 @@ export interface ReservationOverlapArgs {
   readonly endAt: Date;
 }
 
+/** 予約ステータスを条件付きで更新するときの引数 */
+export interface ApplyStatusTransitionArgs {
+  readonly id: string;
+  /**
+   * 操作前の予約ステータス（読んだときの状態）。
+   *
+   * DB がこの状態のままでなければ 1 件も更新しない。同じ予約を 2 人が同時に
+   * 操作したとき、あとから届いた方が相手の結果を上書きしてしまうのを防ぐ。
+   */
+  readonly expectedStatus: ReservationStatus;
+  /** 更新後の予約ステータス */
+  readonly status: ReservationStatus;
+  readonly statusReason: string | null;
+  readonly updatedAt: Date;
+  /**
+   * 承認（approve）のときだけ true。
+   *
+   * 同一施設・同一時間帯に承認済みの予約が無いこと（COND-001）を、
+   * ステータスの更新と同じ 1 文の中で確かめる。
+   */
+  readonly requireNoApprovedOverlap: boolean;
+}
+
 export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
   create(reservation: Reservation): ResultAsync<null, ReservationError>;
@@ -87,6 +127,16 @@ export interface ReservationRepository {
    * 終了時刻は予約に含まれないので、10:00 に終わる予約と 10:00 に始まる予約は重ならない。
    */
   existsApprovedOverlap(args: ReservationOverlapArgs): ResultAsync<boolean, ReservationError>;
+  /**
+   * 予約のステータス・理由・更新日時を、条件付きで更新する。
+   *
+   * 「条件付き」なのは、確かめてから書くまでの間に別の操作が割り込めるため。
+   * D1 は対話的なトランザクションを張れないので、確認と更新を 1 つの UPDATE 文に
+   * まとめる（`expectedStatus` と `requireNoApprovedOverlap`）ことで割り込みを防ぐ。
+   *
+   * @returns 更新できたら true。条件に合わず 0 件だったら false（競合）。
+   */
+  applyStatusTransition(args: ApplyStatusTransitionArgs): ResultAsync<boolean, ReservationError>;
 }
 
 /**

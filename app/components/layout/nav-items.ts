@@ -72,7 +72,7 @@ export const commonNavItems: readonly NavItem[] = [
     label: "予約",
     to: "/reservations",
     icon: CalendarCheck,
-    enabled: false,
+    enabled: true,
     screen: "SCR-003",
   },
   {
@@ -107,7 +107,7 @@ export const staffNavItems: readonly NavItem[] = [
     label: "予約の承認",
     to: "/staff/reservations",
     icon: ClipboardCheck,
-    enabled: false,
+    enabled: true,
     screen: "SCR-003",
   },
   {
