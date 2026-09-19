@@ -9,7 +9,9 @@ import { createReservationListQuery } from "~/infra/reservation/reservation-list
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { toSamePagePath } from "~/lib/form-redirect";
 import { QueryErrorCode } from "~/query/error";
+import { toActionErrorMessage } from "~/routes/reservations/list/action-error";
 import { parseReservationListParams } from "~/routes/reservations/list/query-params";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
@@ -58,7 +60,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     if (result.error.code === QueryErrorCode.Forbidden) {
       throw data({ message: "Forbidden" }, { status: 403 });
     }
-    throw data({ message: result.error.message }, { status: 500 });
+    /*
+     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
+     * こちらの内部の事情だけが伝わってしまう。詳しい原因はサーバー側のログに残る。
+     */
+    throw data({ message: "Internal server error" }, { status: 500 });
   }
 
   return {
@@ -118,11 +124,10 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
 
   if (result.isErr()) {
-    return { error: result.error.message };
+    return { error: toActionErrorMessage(result.error) };
   }
 
-  const url = new URL(request.url);
-  return redirect(url.pathname + url.search);
+  return redirect(toSamePagePath(request));
 }
 
 export default function StaffReservationListRoute({
