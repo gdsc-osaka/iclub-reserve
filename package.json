@@ -67,7 +67,7 @@
     "shadcn": "^4.11.0",
     "tailwindcss": "^4.2.2",
     "tsx": "^4.23.13",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vite": "^8.0.3",
     "vitest": "^5.0.0",
     "wrangler": "^4.103.0",
