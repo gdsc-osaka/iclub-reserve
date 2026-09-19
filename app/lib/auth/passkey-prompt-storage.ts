@@ -2,7 +2,7 @@ import {
   parsePasskeyPromptState,
   recordDismissal,
   shouldSuggestPasskey,
-} from "~/domain/auth/passkey-prompt";
+} from "~/domain/authn/passkey-prompt";
 
 /**
  * 「あとで」の記録を端末に保存するためのキー。

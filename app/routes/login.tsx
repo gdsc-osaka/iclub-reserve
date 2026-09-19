@@ -7,9 +7,9 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { ALLOWED_EMAIL_DOMAINS_LABEL } from "~/domain/auth/allowed-email-domain";
-import { type LoginMethod, toLoginMethodOrder } from "~/domain/auth/login-method";
-import { isProfileCompleted } from "~/domain/auth/user-profile";
+import { ALLOWED_EMAIL_DOMAINS_LABEL } from "~/domain/authn/allowed-email-domain";
+import { type LoginMethod, toLoginMethodOrder } from "~/domain/authn/login-method";
+import { isProfileCompleted } from "~/domain/authn/user-profile";
 import { authClient } from "~/lib/auth/auth-client";
 import { isPasskeyCancelledError, toAuthErrorMessage } from "~/lib/auth/auth-error-message";
 import {

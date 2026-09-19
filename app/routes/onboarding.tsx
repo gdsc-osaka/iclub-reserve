@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { isProfileCompleted } from "~/domain/auth/user-profile";
+import { isProfileCompleted } from "~/domain/authn/user-profile";
 import { authClient } from "~/lib/auth/auth-client";
 import { toAuthErrorMessage } from "~/lib/auth/auth-error-message";
 import { LOGIN_PATH, readRedirectTo, withRedirectTo } from "~/lib/auth/auth-redirect";
