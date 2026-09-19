@@ -59,13 +59,11 @@ const ensureCanCreate = (
 
   return deps.membershipRepository
     .findByGroupAndUser(args.reservation.groupId, args.actorUserId)
-    .mapErr(
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "所属の確認に失敗しました。",
-        cause: error,
-      }),
-    )
+    .mapErr((error): ReservationError => ({
+      code: ReservationErrorCode.DatabaseError,
+      message: "所属の確認に失敗しました。",
+      cause: error,
+    }))
     .andThen((membership) =>
       canPerform(reservationPermissions, membership, ReservationAction.CreateProvisional)
         ? okAsync(null)
@@ -88,18 +86,17 @@ const ensureGroupIsEnabled = (
 ): ResultAsync<null, ReservationError> =>
   deps.groupRepository
     .findById(groupId)
-    .mapErr(
-      (error): ReservationError =>
-        error.code === GroupErrorCode.GroupNotFound
-          ? {
-              code: ReservationErrorCode.ReservationGroupNotEligible,
-              message: "選んだ団体が見つかりません。",
-            }
-          : {
-              code: ReservationErrorCode.DatabaseError,
-              message: "団体の確認に失敗しました。",
-              cause: error,
-            },
+    .mapErr((error): ReservationError =>
+      error.code === GroupErrorCode.GroupNotFound
+        ? {
+            code: ReservationErrorCode.ReservationGroupNotEligible,
+            message: "選んだ団体が見つかりません。",
+          }
+        : {
+            code: ReservationErrorCode.DatabaseError,
+            message: "団体の確認に失敗しました。",
+            cause: error,
+          },
     )
     .andThen((group) =>
       group.status === GroupStatus.Enabled
@@ -126,18 +123,17 @@ const ensureFacilityIsAvailable = (
 ): ResultAsync<null, ReservationError> =>
   deps.facilityRepository
     .findById(facilityId)
-    .mapErr(
-      (error): ReservationError =>
-        error.code === FacilityErrorCode.FacilityNotFound
-          ? {
-              code: ReservationErrorCode.ReservationFacilityNotAvailable,
-              message: "選んだ施設・設備が見つかりません。",
-            }
-          : {
-              code: ReservationErrorCode.DatabaseError,
-              message: "施設・設備の確認に失敗しました。",
-              cause: error,
-            },
+    .mapErr((error): ReservationError =>
+      error.code === FacilityErrorCode.FacilityNotFound
+        ? {
+            code: ReservationErrorCode.ReservationFacilityNotAvailable,
+            message: "選んだ施設・設備が見つかりません。",
+          }
+        : {
+            code: ReservationErrorCode.DatabaseError,
+            message: "施設・設備の確認に失敗しました。",
+            cause: error,
+          },
     )
     .andThen((facility) =>
       facility.isActive

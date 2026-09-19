@@ -17,7 +17,7 @@ import type { Route } from "./+types/route";
 import { CalendarCard } from "./calendar-card";
 import { FacilityTabs } from "./facility-tabs";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "空き状況 | iclub-reserve" }];
 }
 

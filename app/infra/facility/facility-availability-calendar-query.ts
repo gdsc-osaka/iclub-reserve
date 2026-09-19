@@ -134,12 +134,10 @@ export const createFacilityAvailabilityCalendarQuery = (
         ResultAsync.fromPromise(
           selectReservations(db, facility.id, args.from, args.to),
           toDatabaseError("予約の取得に失敗しました。"),
-        ).map(
-          (rows): FacilityAvailabilityCalendar => ({
-            facilities,
-            facility,
-            reservations: rows,
-          }),
-        ),
+        ).map((rows): FacilityAvailabilityCalendar => ({
+          facilities,
+          facility,
+          reservations: rows,
+        })),
       ),
 });

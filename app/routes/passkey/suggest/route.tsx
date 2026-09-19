@@ -13,7 +13,7 @@ import { usePasskeySupport } from "~/lib/auth/passkey-support";
 
 import type { Route } from "./+types/route";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "パスキーの登録 | iclub-reserve" }];
 }
 

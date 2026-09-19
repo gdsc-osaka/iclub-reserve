@@ -18,7 +18,7 @@ import { detectPasskeySupport } from "~/lib/auth/passkey-support";
 import type { Route } from "./+types/route";
 import { NAME_STEP_DESCRIPTION, NAME_STEP_TITLE, NameStep } from "./name-step";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "お名前の登録 | iclub-reserve" }];
 }
 

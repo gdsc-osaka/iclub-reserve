@@ -93,15 +93,14 @@ const findCreated = (
   return deps.reservationRepository
     .findById(args.createdReservationId)
     .map((reservation) => (reservation.createdBy === args.actorUserId ? reservation : null))
-    .orElse(
-      (error): ResultAsync<Reservation | null, QueryError> =>
-        error.code === ReservationErrorCode.ReservationNotFound
-          ? okAsync(null)
-          : errAsync({
-              code: QueryErrorCode.DatabaseError,
-              message: error.message,
-              cause: error.cause,
-            }),
+    .orElse((error): ResultAsync<Reservation | null, QueryError> =>
+      error.code === ReservationErrorCode.ReservationNotFound
+        ? okAsync(null)
+        : errAsync({
+            code: QueryErrorCode.DatabaseError,
+            message: error.message,
+            cause: error.cause,
+          }),
     );
 };
 
