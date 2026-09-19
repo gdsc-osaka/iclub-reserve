@@ -12,7 +12,7 @@ import type { Route } from "./+types/route";
 import { EmailStep } from "./email-step";
 import { useLoginForm } from "./use-login-form";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "ログイン・新規登録 | iclub-reserve" }];
 }
 

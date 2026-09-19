@@ -12,7 +12,7 @@ import type { Route } from "./+types/route";
 import { toDashboardGroup, type DashboardGroup } from "./dashboard-group";
 import { MyGroupsSection } from "./my-groups-section";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "ダッシュボード | iclub-reserve" }];
 }
 
