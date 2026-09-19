@@ -57,6 +57,8 @@ export const ReservationErrorCode = {
   ReservationConflict: "RESERVATION_CONFLICT",
   /** 申請元に選んだ団体が有効でない（COND-006） */
   ReservationGroupNotEligible: "RESERVATION_GROUP_NOT_ELIGIBLE",
+  /** 申請先に選んだ施設・設備が見つからない、または無効になっている */
+  ReservationFacilityNotAvailable: "RESERVATION_FACILITY_NOT_AVAILABLE",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type ReservationErrorCode = (typeof ReservationErrorCode)[keyof typeof ReservationErrorCode];

@@ -92,11 +92,6 @@ export function AvailabilityReservationCard({
  * 押した場所によって、申請フォームへ持っていける情報が変わる。
  * 何が決まっていて何がまだ決まっていないかを先に見せておかないと、
  * フォームを開いてから「日付が入っていない」と戸惑うことになる。
- *
- * NOTE: 予約申請フォーム（SCR-002）はまだ送信先のルートが無く動かないため、
- * 申請のボタンは押せない状態にしている。
- * フォームができたら、このボタンを `Link` に置き換えて
- * 施設・日付・開始時刻をクエリで渡すこと。
  */
 export function AvailabilityDraftCard({ draft }: Readonly<{ draft: ReservationDraft }>) {
   return (
@@ -111,8 +106,12 @@ export function AvailabilityDraftCard({ draft }: Readonly<{ draft: ReservationDr
         </CardItem>
       </dl>
 
-      {/* 送信先の画面がまだ動かないので、押せない状態で置いている */}
-      <Button asChild type="button" size="sm" className="w-full" disabled>
+      {/*
+       * `asChild` で中身の `Link` に見た目だけを着せている。
+       * `disabled` や `type` を渡さないこと。どちらも `<a>` には効かず、
+       * 押せないように見えて実際には押せる、という食い違いになる。
+       */}
+      <Button asChild size="sm" className="w-full">
         <Link to={toApplicationPath(draft)}>仮予約を申請</Link>
       </Button>
 

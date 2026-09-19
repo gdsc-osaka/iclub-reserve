@@ -41,6 +41,7 @@ import {
   type ReservationError,
 } from "~/domain/reservation";
 import { createDb } from "~/infra/db";
+import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationFormQuery } from "~/infra/reservation/reservation-form-query";
@@ -304,6 +305,9 @@ const toFormErrors = (
     case ReservationErrorCode.ReservationGroupNotEligible:
       return { fieldErrors: { groupId: error.message }, formError: null };
 
+    case ReservationErrorCode.ReservationFacilityNotAvailable:
+      return { fieldErrors: { facilityId: error.message }, formError: null };
+
     case ReservationErrorCode.ReservationInvalidInput:
       return { fieldErrors: {}, formError: error.message };
 
@@ -345,6 +349,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       reservationRepository: createReservationRepository(db),
       membershipRepository: createMembershipRepository(db),
       groupRepository: createGroupRepository(db),
+      facilityRepository: createFacilityRepository(db),
     },
     { actorUserId: user.id, isStaff: user.is_staff, now, reservation },
   );
@@ -526,7 +531,18 @@ function ApplicationForm({
   );
 
   const days = buildWeekDays(weekStart, now);
-  const day = parseTokyoDateKey(dateKey) ?? weekStart;
+  /*
+   * 選んでいる日は、必ずいま出している週の中から選ぶ。
+   *
+   * 前後の週へ移ってもこの画面は同じまま（クエリだけが変わる）なので、
+   * React の状態はそこで消えない。前の週の日付を持ったままにすると、
+   * 日付のラジオはどれも選ばれていないのに、タイムラインと確認欄だけが
+   * 前の週を指すことになる。そのタイムラインには前の週の予約が無い
+   * （ローダーは出している週のぶんしか読んでいない）ので、
+   * 実際には埋まっている時間帯が空いているように見えてしまう。
+   */
+  const selectedDateKey = days.some((item) => item.dateKey === dateKey) ? dateKey : initial.dateKey;
+  const day = parseTokyoDateKey(selectedDateKey) ?? weekStart;
   const facility = facilities.find((item) => item.id === facilityId) ?? facilities[0];
   const group = groups.find((item) => item.id === groupId) ?? null;
 
@@ -542,7 +558,16 @@ function ApplicationForm({
     (item) => item.reservation.status === ReservationStatus.Provisional,
   );
 
-  const canSubmit = range !== null && approvedConflicts.length === 0 && !isSubmitting;
+  /*
+   * 送信を止めるのは、承認済みの予約と重なっているとき（COND-001）と送信中だけ。
+   *
+   * 「まだ時間帯を選んでいない」を理由に止めてはいけない。`range` は
+   * タイムラインと `<select>` の `onChange` でしか動かない React の状態なので、
+   * JavaScript が動かない環境では最後まで null のままになり、
+   * プルダウンで時刻を選んでもボタンが押せないままになる。
+   * 未選択のまま送ることは、開始・終了の `<select>` に付けた `required` が止める。
+   */
+  const canSubmit = approvedConflicts.length === 0 && !isSubmitting;
 
   return (
     /*
@@ -631,7 +656,7 @@ function ApplicationForm({
         >
           <WeekPicker
             days={days}
-            dateKey={dateKey}
+            dateKey={selectedDateKey}
             weekStart={weekStart}
             now={now}
             facilityId={facilityId}
@@ -932,7 +957,8 @@ function WeekPicker({
         </div>
       </fieldset>
 
-      <p className="text-xs text-muted-foreground">別の週を選ぶと、入力しかけの内容は消えます。</p>
+      {/* 日付だけが選び直しになることを書いておかないと、確認欄の日付が変わったことに気づけない */}
+      <p className="text-xs text-muted-foreground">別の週へ移ると、日付は選び直しになります。</p>
     </div>
   );
 }

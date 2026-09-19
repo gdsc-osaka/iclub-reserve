@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 
+import { FacilityErrorCode, type FacilityRepository } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type GroupRepository } from "~/domain/group";
 import { canPerform, type MembershipRepository } from "~/domain/membership";
 import {
@@ -19,6 +20,8 @@ export interface CreateProvisionalReservationDeps {
   readonly membershipRepository: MembershipRepository;
   /** 申請元の団体が有効かを確かめるために使う（COND-006） */
   readonly groupRepository: GroupRepository;
+  /** 申請先の施設・設備が使えるかを確かめるために使う */
+  readonly facilityRepository: FacilityRepository;
 }
 
 export interface CreateProvisionalReservationArgs {
@@ -108,6 +111,44 @@ const ensureGroupIsEnabled = (
     );
 
 /**
+ * 申請先の施設・設備が使えるかを確かめる。
+ *
+ * 画面（SCR-002）の選択肢は有効な施設だけに絞ってあるが、それとは別にここでも確かめる。
+ * `facility_id` は POST を組み立てれば自由に送れるので、選択肢だけに頼ると
+ * 無効化された施設の予約が作れてしまう。その予約は空き状況カレンダーにも
+ * 申請フォームにも出ない（どちらも `is_active` で絞っている）ので、
+ * 誰の画面にも現れないまま残り続ける。無効化の条件（COND-003: 将来の予約が
+ * すべて終了していること）も、後から予約を足せるなら意味をなさない。
+ */
+const ensureFacilityIsAvailable = (
+  deps: CreateProvisionalReservationDeps,
+  facilityId: string,
+): ResultAsync<null, ReservationError> =>
+  deps.facilityRepository
+    .findById(facilityId)
+    .mapErr(
+      (error): ReservationError =>
+        error.code === FacilityErrorCode.FacilityNotFound
+          ? {
+              code: ReservationErrorCode.ReservationFacilityNotAvailable,
+              message: "選んだ施設・設備が見つかりません。",
+            }
+          : {
+              code: ReservationErrorCode.DatabaseError,
+              message: "施設・設備の確認に失敗しました。",
+              cause: error,
+            },
+    )
+    .andThen((facility) =>
+      facility.isActive
+        ? okAsync(null)
+        : errAsync({
+            code: ReservationErrorCode.ReservationFacilityNotAvailable,
+            message: "選んだ施設・設備は、いま予約を受け付けていません。",
+          } satisfies ReservationError),
+    );
+
+/**
  * 同一施設・同一時間帯に承認済みの予約が無いかを確かめる（COND-001）。
  *
  * 確認から作成までの間に別の予約が承認される可能性は残るが、
@@ -146,7 +187,8 @@ const ensureNoApprovedOverlap = (
  * 1. 入力そのもの（利用可能時間・刻み・過去日時・使用人数・備考）— DB を引かずに分かる
  * 2. 権限（COND-009 / 権限表）— 団体の状態を他人に読み取らせないため、団体の確認より先
  * 3. 申請元の団体が有効か（COND-006）
- * 4. 承認済みの予約との重複（COND-001）— 作成の直前に置いて、確認から作成までを短くする
+ * 4. 申請先の施設・設備が使えるか
+ * 5. 承認済みの予約との重複（COND-001）— 作成の直前に置いて、確認から作成までを短くする
  *
  * NOTE: 申請の通知（EVT-001）はまだ送っていない。宛先（申請者・団体管理者全員・事務局）を
  * 引く Query が要るので、別の変更として入れること。
@@ -170,6 +212,7 @@ export const createProvisionalReservationUseCase = (
   return validateReservationDraft(args.reservation, now)
     .asyncAndThen(() => ensureCanCreate(deps, args))
     .andThen(() => ensureGroupIsEnabled(deps, args.reservation.groupId))
+    .andThen(() => ensureFacilityIsAvailable(deps, args.reservation.facilityId))
     .andThen(() => ensureNoApprovedOverlap(deps, args))
     .andThen(() => deps.reservationRepository.create(reservation))
     .map(() => ({ reservationId: id }));
