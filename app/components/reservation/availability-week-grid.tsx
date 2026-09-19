@@ -12,6 +12,7 @@ import {
   blockStyle,
   CLOSE_MINUTES,
   GRID_MIN_HEIGHT_REM,
+  isPastHour,
   OPEN_MINUTES,
   slotHours,
   toAxisPercent,
@@ -72,7 +73,6 @@ export function AvailabilityWeekGrid({
   facility,
   now,
   canApply,
-  isStaff,
 }: Readonly<{
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
@@ -82,8 +82,6 @@ export function AvailabilityWeekGrid({
   now: Date;
   /** 空き枠を押して申請へ進めるかどうか（COND-006） */
   canApply: boolean;
-  /** 事務局かどうか。申請ボタンの文言を変えるのに使う */
-  isStaff: boolean;
 }>) {
   return (
     /*
@@ -121,7 +119,6 @@ export function AvailabilityWeekGrid({
             facility={facility}
             now={now}
             canApply={canApply}
-            isStaff={isStaff}
           />
         ))}
       </div>
@@ -211,14 +208,12 @@ function DayColumn({
   facility,
   now,
   canApply,
-  isStaff,
 }: Readonly<{
   day: AvailabilityDay;
   reservations: readonly AvailabilityReservation[];
   facility: AvailabilityFacility;
   now: Date;
   canApply: boolean;
-  isStaff: boolean;
 }>) {
   const blocks = toDayBlocks(day, reservations);
   const placements = layoutTimelineItems(blocks);
@@ -253,8 +248,12 @@ function DayColumn({
            * キーボードで送ったりして、埋まっている時間から申請を始められてしまう。
            */
           isOccupied={occupiedHours.has(hour)}
+          /*
+           * 過ぎた時刻からは申請できない。今日の列の現在時刻より前と、
+           * 過ぎた日（前の週へ送れば出てくる）の枠がここに入る。
+           */
+          isPast={isPastHour(day, hour, now)}
           canApply={canApply}
-          isStaff={isStaff}
         />
       ))}
 
@@ -289,24 +288,35 @@ function AvailableSlot({
   hour,
   facility,
   isOccupied,
+  isPast,
   canApply,
-  isStaff,
 }: Readonly<{
   day: AvailabilityDay;
   hour: number;
   facility: AvailabilityFacility;
   isOccupied: boolean;
+  /** 開始時刻が過ぎた枠かどうか。過ぎた時間帯では申請を始められない */
+  isPast: boolean;
   canApply: boolean;
-  isStaff: boolean;
 }>) {
   const label = isOccupied
     ? `${formatMonthDay(day.date)} ${hour}:00 は予約済み`
-    : `${formatMonthDay(day.date)} ${hour}:00 から予約を作成`;
+    : isPast
+      ? `${formatMonthDay(day.date)} ${hour}:00 は過ぎています`
+      : `${formatMonthDay(day.date)} ${hour}:00 から仮予約を申請`;
 
-  const className =
-    "border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none";
+  const className = cn(
+    "border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none",
+    /*
+     * 過ぎた枠は面を落とす。押せないことを読み上げ名だけで伝えると、
+     * 目で見ている人には空き枠と同じに見えてしまう。
+     * 現在時刻の線（`showNowLine`）は今日の列にしか引かれないので、
+     * 過ぎた日はこの色だけが手がかりになる。
+     */
+    isPast && "bg-muted/40",
+  );
 
-  if (!canApply || isOccupied) {
+  if (!canApply || isOccupied || isPast) {
     return <button type="button" disabled aria-label={label} className={className} />;
   }
 
@@ -317,7 +327,7 @@ function AvailableSlot({
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-72">
-        <AvailabilityDraftCard draft={{ facility, day, startHour: hour }} isStaff={isStaff} />
+        <AvailabilityDraftCard draft={{ facility, day, startHour: hour }} />
       </PopoverContent>
     </Popover>
   );

@@ -8,11 +8,17 @@ export default [
   layout("routes/app-layout.tsx", [
     index("routes/home.tsx"),
     route("availability", "routes/availability.tsx"),
-    route("reservation", "routes/group_reservation.tsx"),
     route("facility", "routes/registration.tsx"),
     route("groups/:groupId", "routes/groups.tsx"),
     route("facility/:facilityId", "routes/facility.tsx"),
-    route("reservation/:reservationId", "routes/reservation.tsx"),
+    /*
+     * 予約は複数形の `reservations` にそろえる。
+     * 一覧（SCR-003）が `/reservations` に入る想定なので（`nav-items.ts`）、
+     * 新規作成と詳細もその下にぶら下げる。
+     * `new` は `:reservationId` より具体的なので、先に書いていなくても先に選ばれる。
+     */
+    route("reservations/new", "routes/reservations/new/route.tsx"),
+    route("reservations/:reservationId", "routes/reservation.tsx"),
   ]),
 
   /*

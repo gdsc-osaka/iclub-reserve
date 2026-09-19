@@ -1,13 +1,16 @@
+import { and, eq, gt, lt } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
+
+import { reservationTable } from "~/db/schema";
 import {
   ReservationErrorCode,
+  ReservationStatus,
   type Reservation,
   type ReservationError,
+  type ReservationOverlapArgs,
   type ReservationRepository,
 } from "~/domain/reservation";
 import type { Database } from "../db";
-import { eq } from "drizzle-orm";
-import { reservationTable } from "~/db/schema";
 
 export const createReservationRepository = (db: Database): ReservationRepository => {
   const findById = (id: string): ResultAsync<Reservation, ReservationError> => {
@@ -43,5 +46,35 @@ export const createReservationRepository = (db: Database): ReservationRepository
     ).map(() => null);
   };
 
-  return { findById, create };
+  /**
+   * 重なっている承認済みの予約を 1 件だけ探す（COND-001）。
+   *
+   * 件数は要らないので `limit(1)` で打ち切る。重複が 1 件でもあれば申請を止めるため、
+   * 何件あるかを数えても使い道がない。
+   */
+  const existsApprovedOverlap = (
+    args: ReservationOverlapArgs,
+  ): ResultAsync<boolean, ReservationError> =>
+    ResultAsync.fromPromise(
+      db
+        .select({ id: reservationTable.id })
+        .from(reservationTable)
+        .where(
+          and(
+            eq(reservationTable.facilityId, args.facilityId),
+            eq(reservationTable.status, ReservationStatus.Approved),
+            // 終了時刻は予約に含まれないので、境界がぴったり接する予約は重なりに含めない
+            lt(reservationTable.startAt, args.endAt),
+            gt(reservationTable.endAt, args.startAt),
+          ),
+        )
+        .limit(1),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "重複する予約の確認に失敗しました。",
+        cause: error,
+      }),
+    ).map((rows) => rows.length > 0);
+
+  return { findById, create, existsApprovedOverlap };
 };

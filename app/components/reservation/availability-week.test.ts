@@ -5,6 +5,9 @@ import type { AvailabilityReservation } from "~/query/facility/facility-availabi
 
 import {
   blockContent,
+  isPastDay,
+  isPastHour,
+  slotHours,
   toDayBlocks,
   toOccupiedHours,
   weekdayStyle,
@@ -165,5 +168,42 @@ describe("blockContent", () => {
   it("団体名の折り返しは 3 行で打ち止めにする", () => {
     // 行数をそのまま増やすと、長い帯で団体名だけが縦に伸びてしまう
     expect(blockContent(600, 1).nameLines).toBe(3);
+  });
+});
+
+describe("isPastHour", () => {
+  it("始まりが過ぎた枠は過去として扱う", () => {
+    const now = new Date("2026-09-14T10:15:00+09:00");
+
+    // 申請フォームの `toPastSlots` と同じ見方。10:15 の時点で 10 時の枠はもう過去
+    expect(isPastHour(day, 10, now)).toBe(true);
+    expect(isPastHour(day, 11, now)).toBe(false);
+  });
+
+  it("過ぎた日は、すべての枠が過去になる", () => {
+    const now = new Date("2026-09-15T09:00:00+09:00");
+
+    expect(slotHours.every((hour) => isPastHour(day, hour, now))).toBe(true);
+  });
+
+  it("これからの日は、どの枠も過去にならない", () => {
+    const now = new Date("2026-09-13T23:59:00+09:00");
+
+    expect(slotHours.some((hour) => isPastHour(day, hour, now))).toBe(false);
+  });
+});
+
+describe("isPastDay", () => {
+  it("最後の枠が始まるまでは、その日から申請できる", () => {
+    // 最後の枠はフォームの刻み（30 分）で決まるので 20:30 始まり
+    expect(isPastDay(day, new Date("2026-09-14T20:30:00+09:00"))).toBe(false);
+  });
+
+  it("最後の枠が始まったあとは、その日から申請できない", () => {
+    expect(isPastDay(day, new Date("2026-09-14T20:31:00+09:00"))).toBe(true);
+  });
+
+  it("過ぎた日からは申請できない", () => {
+    expect(isPastDay(day, new Date("2026-09-15T00:00:00+09:00"))).toBe(true);
   });
 });

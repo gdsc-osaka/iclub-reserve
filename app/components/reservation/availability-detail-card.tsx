@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 
-import { formatMonthDay, formatTimeRange } from "~/lib/date";
+import { formatMonthDay, formatTimeRange, toTokyoTimeKey } from "~/lib/date";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 
 import type { ReservationDraft } from "./availability-week";
 import { ReservationStatusBadge } from "./reservation-status-badge";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
+import { Link } from "react-router";
 
 /**
  * 空き状況カレンダー（SCR-001）で、押したものの中身を出す吹き出しの中身。
@@ -18,6 +19,22 @@ import { Badge } from "../ui/badge";
  * デスクトップの帯・空き枠と、スマホの一覧の「＋」から同じものを開くので、
  * 中身はここに置いて両方から使う。
  */
+
+/**
+ * 予約申請フォーム（SCR-002）の URL を組み立てる。
+ *
+ * 押した場所で分かっていることだけをクエリに載せる。
+ * 日付や時刻が決まっていないのに埋めてしまうと、
+ * フォームを開いた人が「自分が選んだ値なのか」を確かめ直すことになる。
+ */
+const toApplicationPath = (draft: ReservationDraft): string => {
+  const params = new URLSearchParams({ facility: draft.facility.id });
+
+  if (draft.day !== null) params.set("date", draft.day.dateKey);
+  if (draft.startHour !== null) params.set("start", toTokyoTimeKey(draft.startHour * 60));
+
+  return `/reservations/new?${params.toString()}`;
+};
 
 /**
  * 押した予約の内容。
@@ -75,16 +92,8 @@ export function AvailabilityReservationCard({
  * 押した場所によって、申請フォームへ持っていける情報が変わる。
  * 何が決まっていて何がまだ決まっていないかを先に見せておかないと、
  * フォームを開いてから「日付が入っていない」と戸惑うことになる。
- *
- * NOTE: 予約申請フォーム（SCR-002）はまだ送信先のルートが無く動かないため、
- * 申請のボタンは押せない状態にしている。
- * フォームができたら、このボタンを `Link` に置き換えて
- * 施設・日付・開始時刻をクエリで渡すこと。
  */
-export function AvailabilityDraftCard({
-  draft,
-  isStaff,
-}: Readonly<{ draft: ReservationDraft; isStaff: boolean }>) {
+export function AvailabilityDraftCard({ draft }: Readonly<{ draft: ReservationDraft }>) {
   return (
     <div className="flex flex-col gap-2">
       <dl className="flex flex-col gap-1 text-sm">
@@ -97,13 +106,17 @@ export function AvailabilityDraftCard({
         </CardItem>
       </dl>
 
-      {/* 送信先の画面がまだ動かないので、押せない状態で置いている */}
-      <Button type="button" size="sm" className="w-full" disabled>
-        {isStaff ? "予約を作成" : "仮予約を申請"}（準備中）
+      {/*
+       * `asChild` で中身の `Link` に見た目だけを着せている。
+       * `disabled` や `type` を渡さないこと。どちらも `<a>` には効かず、
+       * 押せないように見えて実際には押せる、という食い違いになる。
+       */}
+      <Button asChild size="sm" className="w-full">
+        <Link to={toApplicationPath(draft)}>仮予約を申請</Link>
       </Button>
 
       <p className="text-xs text-muted-foreground">
-        予約申請フォームはまだ準備中です。ここで選んだ内容は、フォームができ次第そのまま引き継げるようにします。
+        ここで選んだ内容は申請フォームに引き継がれます。まだ決まっていない項目はフォームで選べます。
       </p>
     </div>
   );

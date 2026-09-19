@@ -3,15 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   atTokyoTime,
+  formatDateInput,
   formatMonthDayParts,
   formatTime,
   formatTimeRange,
+  fromCalendarDate,
   isSameTokyoDay,
+  parseDateInput,
   parseTokyoDateKey,
   startOfTokyoDay,
   startOfTokyoWeek,
-  tokyoMinutesOfDay,
+  toCalendarDate,
   toTokyoDateKey,
+  tokyoMinutesOfDay,
 } from "./date";
 
 describe("startOfTokyoDay", () => {
@@ -174,5 +178,88 @@ describe("formatTimeRange", () => {
     );
 
     expect(result).toBe("23:00〜翌01:00");
+  });
+});
+
+describe("toCalendarDate / fromCalendarDate", () => {
+  it("カレンダー部品には、ブラウザの時間帯のその日の 0 時を渡す", () => {
+    const date = toCalendarDate("2026-09-19");
+
+    // 日本時間に読み替えず、その場の時間帯で 9/19 の 0 時として組み立てる
+    expect(date?.getFullYear()).toBe(2026);
+    expect(date?.getMonth()).toBe(8);
+    expect(date?.getDate()).toBe(19);
+    expect(date?.getHours()).toBe(0);
+  });
+
+  it("形式が違えば undefined を返す", () => {
+    expect(toCalendarDate("2026/09/19")).toBeUndefined();
+    expect(toCalendarDate("")).toBeUndefined();
+  });
+
+  it("カレンダー部品が返した日付を、そのまま文字列に戻せる", () => {
+    const dateKey = "2026-09-19";
+
+    expect(fromCalendarDate(toCalendarDate(dateKey) as Date)).toBe(dateKey);
+  });
+
+  it("1 桁の月日も 2 桁に揃える", () => {
+    expect(fromCalendarDate(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+
+  it("日付の変わり目でも、その場の時間帯の日付をそのまま返す", () => {
+    /*
+     * 日本時間では 9/20 の 0 時でも、UTC のブラウザでは 9/19 の 15 時。
+     * `toTokyoDateKey` を使うとここが 1 日ずれる。
+     */
+    const localMidnight = new Date(2026, 8, 20, 0, 0, 0);
+
+    expect(fromCalendarDate(localMidnight)).toBe("2026-09-20");
+  });
+});
+
+describe("parseDateInput", () => {
+  it("区切りが違っても読み取る", () => {
+    expect(parseDateInput("2026-09-25")).toBe("2026-09-25");
+    expect(parseDateInput("2026/09/25")).toBe("2026-09-25");
+    expect(parseDateInput("2026年9月25日")).toBe("2026-09-25");
+  });
+
+  it("1 桁の月日を 2 桁に揃える", () => {
+    expect(parseDateInput("2026/9/5")).toBe("2026-09-05");
+  });
+
+  it("前後の空白は無視する", () => {
+    expect(parseDateInput("  2026/9/25  ")).toBe("2026-09-25");
+  });
+
+  it("打ちかけの文字は読み取らない", () => {
+    // 打っている途中で勝手に日付が決まらないこと
+    expect(parseDateInput("")).toBeNull();
+    expect(parseDateInput("2026")).toBeNull();
+    expect(parseDateInput("2026/")).toBeNull();
+    expect(parseDateInput("2026/9")).toBeNull();
+  });
+
+  it("存在しない日付は読み取らない", () => {
+    expect(parseDateInput("2026/2/31")).toBeNull();
+    expect(parseDateInput("2026/13/1")).toBeNull();
+  });
+
+  it("2 桁の年や、余計な文字が付いたものは読み取らない", () => {
+    expect(parseDateInput("26/9/25")).toBeNull();
+    expect(parseDateInput("2026/9/25 10:00")).toBeNull();
+  });
+});
+
+describe("formatDateInput", () => {
+  it("入力欄に出す形にする", () => {
+    expect(formatDateInput("2026-09-25")).toBe("2026/09/25");
+  });
+
+  it("出した形を、そのまま読み取り直せる", () => {
+    const dateKey = "2026-01-05";
+
+    expect(parseDateInput(formatDateInput(dateKey))).toBe(dateKey);
   });
 });

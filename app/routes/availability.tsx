@@ -87,7 +87,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw data({ message: "Internal server error" }, { status: 500 });
   }
 
-  return { calendar: result.value, weekStart, now, isStaff: user.is_staff };
+  return { calendar: result.value, weekStart, now };
 }
 
 /**
@@ -101,7 +101,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
  * 申請が重なっていることに気づけないまま同じ時間帯を申請してしまう。
  */
 export default function Availability({ loaderData }: Route.ComponentProps) {
-  const { calendar, weekStart, now, isStaff } = loaderData;
+  const { calendar, weekStart, now } = loaderData;
   const { facility, facilities, reservations, canApplyReservation } = calendar;
 
   const days = buildWeekDays(weekStart, now);
@@ -126,7 +126,7 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
      * あふれる部分は中の `overflow` に任せる。
      */
     <main className="mx-auto flex h-(--app-content-height) w-full max-w-6xl flex-col gap-4 overflow-hidden p-4 md:p-6">
-      {!canApplyReservation && <CannotApplyNotice isStaff={isStaff} />}
+      {!canApplyReservation && <CannotApplyNotice />}
 
       <FacilityTabs facilities={facilities} current={facility} weekStart={weekStart} />
 
@@ -142,15 +142,12 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
               <PopoverTrigger asChild>
                 <Button type="button" size="sm">
                   <Plus aria-hidden />
-                  {isStaff ? "予約を作成" : "仮予約を申請"}
+                  仮予約を申請
                 </Button>
               </PopoverTrigger>
 
               <PopoverContent align="start" className="w-72">
-                <AvailabilityDraftCard
-                  draft={{ facility, day: null, startHour: null }}
-                  isStaff={isStaff}
-                />
+                <AvailabilityDraftCard draft={{ facility, day: null, startHour: null }} />
               </PopoverContent>
             </Popover>
           )}
@@ -173,7 +170,6 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
               facility={facility}
               now={now}
               canApply={canApplyReservation}
-              isStaff={isStaff}
             />
           </div>
 
@@ -183,8 +179,8 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
               days={days}
               reservations={reservations}
               facility={facility}
+              now={now}
               canApply={canApplyReservation}
-              isStaff={isStaff}
             />
           </div>
         </CardContent>
@@ -312,16 +308,18 @@ function Legend() {
  *
  * 申請の導線を消さずに、押せない理由を書いている。
  * 導線ごと消すと、なぜ申請できないのかが分からないまま画面を探し回ることになる。
+ *
+ * 事務局かどうかで文言を分けていないのは、事務局がここに来ないため。
+ * 事務局は所属に関わらず任意の団体として申請できるので（COND-009）、
+ * `canApplyReservation` が false になることがない。
  */
-function CannotApplyNotice({ isStaff }: Readonly<{ isStaff: boolean }>) {
+function CannotApplyNotice() {
   return (
     <Alert className="shrink-0 border-amber-500/30 bg-amber-500/5">
       <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
       <AlertTitle>まだ予約を申請できません</AlertTitle>
       <AlertDescription>
-        {isStaff
-          ? "予約を申請できる団体に所属していません。"
-          : "予約を申請できるのは、事務局が有効にした団体だけです。所属している団体が承認待ちの場合は、承認されるまでお待ちください。"}
+        予約を申請できるのは、事務局が有効にした団体だけです。所属している団体が承認待ちの場合は、承認されるまでお待ちください。
         空き状況の確認はこのままご利用いただけます。
       </AlertDescription>
     </Alert>
