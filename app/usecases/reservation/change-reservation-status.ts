@@ -1,16 +1,18 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import {
-  canTransition,
   ReservationErrorCode,
   ReservationStatus,
-  ReservationTransition,
-  transitionTargetStatus,
-  type ReservationActor,
   type ReservationError,
   type ReservationRepository,
 } from "~/domain/reservation";
-import { validateTransitionReason } from "~/domain/reservation/validation";
+import {
+  canTransition,
+  ReservationTransition,
+  transitionTargetStatus,
+  validateTransitionReason,
+  type ReservationActor,
+} from "~/domain/reservation/transition";
 import type { UserGroupListQuery } from "~/query/user/user-group-list";
 
 /** 予約ステータス変更ユースケースの依存 */

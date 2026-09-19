@@ -3,7 +3,7 @@ import { data, isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { ReservationTransition } from "~/domain/reservation";
+import { ReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";

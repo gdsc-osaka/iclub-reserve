@@ -6,10 +6,10 @@ import { MembershipRole } from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationStatus,
-  ReservationTransition,
   type Reservation,
   type ReservationRepository,
 } from "~/domain/reservation";
+import { ReservationTransition } from "~/domain/reservation/transition";
 import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
 import {
   changeReservationStatusUseCase,

@@ -14,7 +14,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
-import { ReservationTransition } from "~/domain/reservation";
+import { ReservationTransition } from "~/domain/reservation/transition";
 import { formatMonthDayParts, formatTime, toTokyoDateKey } from "~/lib/date";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
 

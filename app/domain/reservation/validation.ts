@@ -12,7 +12,6 @@ import {
   RESERVATION_NOTE_MAX_LENGTH,
   RESERVATION_STEP_MINUTES,
   ReservationErrorCode,
-  ReservationTransition,
   type ReservationDraft,
   type ReservationError,
   type ReservationPeriod,
@@ -113,44 +112,3 @@ export const validateReservationDraft = (
 
     return ok(draft);
   });
-
-/**
- * 操作理由の妥当性を検証する（COND-002）。
- *
- * 事務局による却下（reject）およびキャンセル（staffCancel）は理由入力が必須（空文字・空白のみも拒否）。
- * 団体による取り消し（withdraw）およびキャンセル（cancel）は任意。
- * 承認（approve）は理由不要（null を返す）。
- */
-export const validateTransitionReason = (
-  transition: ReservationTransition,
-  reason?: string | null,
-): Result<string | null, ReservationError> => {
-  const trimmed = reason?.trim() ?? "";
-
-  switch (transition) {
-    case ReservationTransition.Reject:
-      if (trimmed === "") {
-        return err({
-          code: ReservationErrorCode.ReservationInvalidInput,
-          message: "却下理由を入力してください。",
-        });
-      }
-      return ok(trimmed);
-
-    case ReservationTransition.StaffCancel:
-      if (trimmed === "") {
-        return err({
-          code: ReservationErrorCode.ReservationInvalidInput,
-          message: "キャンセル理由を入力してください。",
-        });
-      }
-      return ok(trimmed);
-
-    case ReservationTransition.Withdraw:
-    case ReservationTransition.Cancel:
-      return ok(trimmed !== "" ? trimmed : null);
-
-    case ReservationTransition.Approve:
-      return ok(null);
-  }
-};

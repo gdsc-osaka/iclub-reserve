@@ -1,7 +1,7 @@
 import { CircleAlert } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import type { ReservationActor } from "~/domain/reservation";
+import type { ReservationActor } from "~/domain/reservation/transition";
 import type { ParsedReservationListParams } from "~/routes/reservations/list/query-params";
 import type { ReservationListResult } from "~/usecases/reservation/get-reservation-list";
 import { ReservationListEmpty } from "./reservation-list-empty";

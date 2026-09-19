@@ -3,12 +3,12 @@ import { Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { ReservationStatus } from "~/domain/reservation";
 import {
   canTransition,
-  ReservationStatus,
   ReservationTransition,
   type ReservationActor,
-} from "~/domain/reservation";
+} from "~/domain/reservation/transition";
 import {
   formatMonthDay,
   formatMonthDayParts,
