@@ -144,11 +144,9 @@ export const createReservationFormQuery = (db: Database): ReservationFormQuery =
         selectReservations(db, args.from, args.to),
         toDatabaseError("予約の取得に失敗しました。"),
       ),
-    ]).map(
-      ([groups, facilities, reservations]): ReservationFormData => ({
-        groups,
-        facilities,
-        reservations,
-      }),
-    ),
+    ]).map(([groups, facilities, reservations]): ReservationFormData => ({
+      groups,
+      facilities,
+      reservations,
+    })),
 });
