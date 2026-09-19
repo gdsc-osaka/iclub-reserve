@@ -1,7 +1,8 @@
 import { FACILITY_CLOSE_HOUR, FACILITY_OPEN_HOUR } from "~/domain/facility";
-import { ReservationStatus } from "~/domain/reservation";
+import { RESERVATION_STEP_MINUTES, ReservationStatus } from "~/domain/reservation";
 import {
   addDays,
+  atTokyoMinutes,
   atTokyoTime,
   isSameTokyoDay,
   startOfTokyoDay,
@@ -195,6 +196,32 @@ export const toOccupiedHours = (blocks: readonly AvailabilityBlock[]): ReadonlyS
 
   return occupied;
 };
+
+/**
+ * その枠の開始時刻が過ぎているか。
+ *
+ * 過ぎた時刻からは申請できない。送信すればドメイン（`validateReservationPeriod`）が
+ * 過去日時として弾くが、押せるまま残しておくと、申請フォームまで進んで初めて
+ * 選べないと分かることになる。
+ *
+ * 見方は申請フォーム（SCR-002）の `toPastSlots` とそろえて、
+ * 「始まりが過ぎていれば過去」とする。10:15 の時点で 10 時の枠はもう過去になる。
+ */
+export const isPastHour = (day: AvailabilityDay, hour: number, now: Date): boolean =>
+  atTokyoTime(day.date, hour) < now;
+
+/**
+ * その日に申請できる枠がもう残っていないか。
+ *
+ * 一覧（`AvailabilityWeekAgenda`）の「＋」は日付だけを渡して時刻はフォームで
+ * 選ばせるので、その日の最後の枠が過ぎていれば渡す先が無い。
+ *
+ * 最後の枠はフォームの刻み（`RESERVATION_STEP_MINUTES`）で決まるので、
+ * 閉館時刻そのものではなく、そこから 1 枠戻した時刻で見る。
+ * この画面の枠は 1 時間単位だが、フォームでは 30 分単位で選べる。
+ */
+export const isPastDay = (day: AvailabilityDay, now: Date): boolean =>
+  atTokyoMinutes(day.date, CLOSE_MINUTES - RESERVATION_STEP_MINUTES) < now;
 
 /** 位置（分）を時間軸の中の百分率にする。`top` と `height` の両方に使う */
 export const toAxisPercent = (minutes: number): number => (minutes / AXIS_MINUTES) * 100;

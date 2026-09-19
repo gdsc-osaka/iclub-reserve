@@ -179,6 +179,7 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
               days={days}
               reservations={reservations}
               facility={facility}
+              now={now}
               canApply={canApplyReservation}
             />
           </div>

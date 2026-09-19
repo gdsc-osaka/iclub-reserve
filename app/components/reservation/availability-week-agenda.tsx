@@ -8,7 +8,13 @@ import type {
 } from "~/query/facility/facility-availability-calendar";
 
 import { AvailabilityDraftCard } from "./availability-detail-card";
-import { blockStyle, toDayBlocks, weekdayStyle, type AvailabilityDay } from "./availability-week";
+import {
+  blockStyle,
+  isPastDay,
+  toDayBlocks,
+  weekdayStyle,
+  type AvailabilityDay,
+} from "./availability-week";
 import { ReservationStatusBadge } from "./reservation-status-badge";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
@@ -29,12 +35,15 @@ export function AvailabilityWeekAgenda({
   days,
   reservations,
   facility,
+  now,
   canApply,
 }: Readonly<{
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
   /** いま見ている施設・設備。「＋」から申請へ持っていく初期値に使う */
   facility: AvailabilityFacility;
+  /** ローダーが読んだ現在時刻。申請できる枠が残っている日かの判定に使う */
+  now: Date;
   /** 申請へ進めるかどうか（COND-006） */
   canApply: boolean;
 }>) {
@@ -58,7 +67,12 @@ export function AvailabilityWeekAgenda({
                 {day.isToday && <span className="ml-2 text-xs">今日</span>}
               </h3>
 
-              {canApply && (
+              {/*
+               * 申請できる枠が残っていない日には「＋」を出さない。
+               * 時刻を選ばずに日付だけを渡す導線なので、その日の枠がすべて
+               * 過ぎていると、フォームへ進んでも選べるものが 1 つも無い。
+               */}
+              {canApply && !isPastDay(day, now) && (
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
