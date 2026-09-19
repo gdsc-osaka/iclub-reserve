@@ -38,8 +38,17 @@ export function ReservationList({
   const actor: ReservationActor = { isStaff: scope === "all", membership: viewerMembership };
 
   const noGroups = scope === "own" && groups.length === 0;
+  /*
+   * 「承認待ちはすべて処理されています」と言えるのは、既定の絞り込み（今後の予約・
+   * 全施設）で 0 件のときだけ。施設や期間で絞った結果が 0 件なのに同じ文を出すと、
+   * 別の施設に承認待ちが残っていても片付いたように読めてしまう。
+   */
   const isStaffProvisionalEmpty =
-    scope === "all" && params.status === "provisional" && items.length === 0;
+    scope === "all" &&
+    params.status === "provisional" &&
+    params.period === "upcoming" &&
+    params.facility === null &&
+    items.length === 0;
   const isEmpty = items.length === 0;
 
   return (
