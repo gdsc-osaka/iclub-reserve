@@ -9,6 +9,7 @@ import {
   type Reservation,
   type ReservationRepository,
 } from "~/domain/reservation";
+import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationFormArgs,
   ReservationFormQuery,
@@ -65,7 +66,14 @@ const createdReservation: Reservation = {
   updatedAt: new Date("2026-09-14T09:00:00+09:00"),
 };
 
-const createDeps = (overrides: { groups?: UserGroupList; created?: Reservation | null } = {}) => {
+const createDeps = (
+  overrides: {
+    groups?: UserGroupList;
+    created?: Reservation | null;
+    /** `created` が無いときに `findById` が返す失敗。省略時は「見つからない」 */
+    createdError?: ReservationErrorCode;
+  } = {},
+) => {
   const calls: ReservationFormArgs[] = [];
 
   const reservationFormQuery: ReservationFormQuery = {
@@ -87,7 +95,10 @@ const createDeps = (overrides: { groups?: UserGroupList; created?: Reservation |
   const reservationRepository: ReservationRepository = {
     findById: () =>
       overrides.created == null
-        ? errAsync({ code: ReservationErrorCode.ReservationNotFound, message: "not found" })
+        ? errAsync({
+            code: overrides.createdError ?? ReservationErrorCode.ReservationNotFound,
+            message: "予約を読めませんでした",
+          })
         : okAsync(overrides.created),
     create: () => okAsync(null),
     existsApprovedOverlap: () => okAsync(false),
@@ -181,7 +192,8 @@ describe("getReservationFormUseCase", () => {
     expect(result._unsafeUnwrap().created).toBeNull();
   });
 
-  it("控えが読めなくてもフォームはエラーにしない", async () => {
+  it("控えが見つからなくてもフォームはエラーにしない", async () => {
+    // ID は利用者が書き換えられるので、無い ID を渡されただけで画面を潰さない
     const { deps } = createDeps({ created: null });
 
     const result = await getReservationFormUseCase(deps, {
@@ -191,5 +203,23 @@ describe("getReservationFormUseCase", () => {
 
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap().created).toBeNull();
+  });
+
+  it("控えの読み取りに失敗したら、控え無しで済ませずに失敗を返す", async () => {
+    /*
+     * ここで握りつぶすと、申請が済んでいるのに空のフォームが出てしまう。
+     * 申請できなかったと思った人がもう一度送ると、仮予約が二重に作られる。
+     */
+    const { deps } = createDeps({
+      created: null,
+      createdError: ReservationErrorCode.DatabaseError,
+    });
+
+    const result = await getReservationFormUseCase(deps, {
+      ...args,
+      createdReservationId: "res_created",
+    });
+
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.DatabaseError);
   });
 });

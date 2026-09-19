@@ -1,7 +1,11 @@
-import { okAsync, ResultAsync } from "neverthrow";
+import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
-import type { Reservation, ReservationRepository } from "~/domain/reservation";
-import type { QueryError } from "~/query/error";
+import {
+  ReservationErrorCode,
+  type Reservation,
+  type ReservationRepository,
+} from "~/domain/reservation";
+import { type QueryError, QueryErrorCode } from "~/query/error";
 import type {
   CreatedReservation,
   ReservationForm,
@@ -72,8 +76,13 @@ const toVisibleReservation = (
  * ID は利用者が書き換えられるので、自分が作った予約でなければ渡さない。
  * 渡してしまうと、他人の予約の使用人数・備考を読み取られてしまう（COND-008）。
  *
- * 読めなかった場合もエラーにはしない。控えが出ないだけで予約そのものは作られており、
+ * 見つからないときだけ控え無しで済ませる。ID を書き換えられただけなので、
  * フォームをエラー画面に変える理由が無い。
+ *
+ * 読み取りそのものが失敗したときは、そのまま失敗として返す。
+ * ここで握りつぶすと、申請が済んでいるのに空のフォームが出てしまい、
+ * 申請できなかったと思った人がもう一度送って、仮予約が二重に作られる
+ * （仮予約どうしは重なってよいので、重複の確認では止まらない）。
  */
 const findCreated = (
   deps: GetReservationFormDeps,
@@ -84,7 +93,16 @@ const findCreated = (
   return deps.reservationRepository
     .findById(args.createdReservationId)
     .map((reservation) => (reservation.createdBy === args.actorUserId ? reservation : null))
-    .orElse((): ResultAsync<Reservation | null, QueryError> => okAsync(null));
+    .orElse(
+      (error): ResultAsync<Reservation | null, QueryError> =>
+        error.code === ReservationErrorCode.ReservationNotFound
+          ? okAsync(null)
+          : errAsync({
+              code: QueryErrorCode.DatabaseError,
+              message: error.message,
+              cause: error.cause,
+            }),
+    );
 };
 
 /**
