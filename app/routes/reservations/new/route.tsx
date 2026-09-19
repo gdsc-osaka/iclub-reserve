@@ -30,7 +30,7 @@ import { CreatedPanel } from "./created-panel";
 import { parseReservation, readValues, toFormErrors } from "./form-values";
 import { toCalendarPath } from "./paths";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "仮予約の申請 | iclub-reserve" }];
 }
 

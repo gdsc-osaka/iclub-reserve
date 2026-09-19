@@ -399,13 +399,11 @@ export const getGroupMemberListUseCase = (
 
   return deps.membershipRepository
     .findByGroupAndUser(groupId, args.userId)
-    .mapErr(
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "所属情報の取得に失敗しました。",
-        cause: error,
-      }),
-    )
+    .mapErr((error): QueryError => ({
+      code: QueryErrorCode.DatabaseError,
+      message: "所属情報の取得に失敗しました。",
+      cause: error,
+    }))
     .andThen((membership) =>
       // 所属していない場合 membership は null で、canPerform は必ず false を返す
       canPerform(groupPermissions, membership, GroupAction.View)

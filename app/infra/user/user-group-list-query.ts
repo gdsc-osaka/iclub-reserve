@@ -42,13 +42,12 @@ export const createUserGroupListQuery = (db: Database): UserGroupListQuery => ({
         message: "所属している団体の取得に失敗しました。",
         cause: error,
       }),
-    ).map(
-      (rows): UserGroupList =>
-        rows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          status: row.status,
-          roles: toMembershipRoles(row.role),
-        })),
+    ).map((rows): UserGroupList =>
+      rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        roles: toMembershipRoles(row.role),
+      })),
     ),
 });
