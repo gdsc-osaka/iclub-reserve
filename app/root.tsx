@@ -74,7 +74,7 @@ export default function App() {
  * ここが出るときは共通の外枠（サイドバー）も一緒に落ちているので、
  * 戻る先としてトップページへのリンクだけは必ず置いておく。
  * 画面ごとの案内を出したい場合は、そのルートに ErrorBoundary を書くこと
- * （例: app/routes/groups.tsx）。
+ * （例: app/routes/groups/$groupId/route.tsx）。
  */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = "エラーが発生しました";

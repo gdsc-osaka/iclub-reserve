@@ -653,7 +653,7 @@ function SidebarMenuSubButton({
 }
 
 export {
-  // サーバー側でも同じクッキー名を読めるように公開している（app/routes/app-layout.tsx）
+  // サーバー側でも同じクッキー名を読めるように公開している（app/routes/app-layout/route.tsx）
   SIDEBAR_COOKIE_NAME,
   Sidebar,
   SidebarContent,

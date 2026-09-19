@@ -11,7 +11,7 @@ import { readRedirectTo } from "~/lib/auth/auth-redirect";
 import { getAuth } from "~/lib/auth/auth.server";
 import { usePasskeySupport } from "~/lib/auth/passkey-support";
 
-import type { Route } from "./+types/passkey.suggest";
+import type { Route } from "./+types/route";
 
 export function meta(_: Route.MetaArgs) {
   return [{ title: "パスキーの登録 | iclub-reserve" }];

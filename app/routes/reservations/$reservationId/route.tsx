@@ -1,14 +1,16 @@
+import { env } from "cloudflare:workers";
+import { data } from "react-router";
+
+import { ReservationErrorCode } from "~/domain/reservation";
+import { createDb } from "~/infra/db";
+import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import {
   getReservationUseCase,
   type GetReservationArgs,
   type GetReservationDeps,
 } from "~/usecases/reservation/get-reservation";
-import type { Route } from "./+types/reservation";
-import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { createDb } from "~/infra/db";
-import { env } from "cloudflare:workers";
-import { ReservationErrorCode } from "~/domain/reservation";
-import { data } from "react-router";
+
+import type { Route } from "./+types/route";
 
 export async function loader({ params }: Route.LoaderArgs) {
   const reservationId = params.reservationId;
