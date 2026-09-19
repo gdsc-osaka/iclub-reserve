@@ -4,31 +4,13 @@ import { DesktopHeader, MobileHeader } from "~/components/layout/app-header";
 import { AppSidebar } from "~/components/layout/app-sidebar";
 import { BottomNav } from "~/components/layout/bottom-nav";
 import type { ShellUser } from "~/components/layout/shell-user";
-import { SIDEBAR_COOKIE_NAME, SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { cn } from "~/lib/utils";
 
-import type { Route } from "./+types/app-layout";
-
-/**
- * サイドバーを開いた状態にするかどうかを、クッキーから読む。
- *
- * ブラウザ側で判定すると、最初の描画では必ず「開いている」になり、
- * 畳んでいた人の画面でサイドバーが一瞬開いてから閉じる。
- * それを避けるため、サーバー側で最初から正しい状態にしておく。
- *
- * クッキーが無い（＝一度も畳んでいない）ときは開いた状態にする。
- */
-const readSidebarDefaultOpen = (request: Request): boolean => {
-  const cookieHeader = request.headers.get("Cookie") ?? "";
-  const sidebarState = cookieHeader
-    .split(";")
-    .map((cookie) => cookie.trim().split("="))
-    .find(([name]) => name === SIDEBAR_COOKIE_NAME)?.[1];
-
-  return sidebarState !== "false";
-};
+import type { Route } from "./+types/route";
+import { readSidebarDefaultOpen } from "./sidebar-cookie";
 
 /**
  * 画面の共通部分に必要なものだけを渡す。

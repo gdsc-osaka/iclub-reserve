@@ -9,9 +9,9 @@ import {
   RESERVATION_MIN_HEAD_COUNT,
   RESERVATION_NOTE_MAX_LENGTH,
   ReservationErrorCode,
-  validateReservationPeriod,
   type ReservationError,
 } from "~/domain/reservation";
+import { validateReservationPeriod } from "~/domain/reservation/validation";
 import { atTokyoMinutes, parseTokyoDateKey, parseTokyoTimeKey } from "~/lib/date";
 
 /** フォームが送ってくる値。入力し直してもらうためにそのまま持ち帰る */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MembershipRole } from "./membership";
+import { MembershipRole } from "../membership";
 import {
   canTransition,
   ReservationAction,
@@ -8,10 +8,12 @@ import {
   reservationPermissions,
   ReservationStatus,
   ReservationTransition,
+} from "../reservation";
+import {
   validateReservationDraft,
   validateReservationPeriod,
   validateTransitionReason,
-} from "./reservation";
+} from "./validation";
 
 /** 判定の基準になる「いま」。2026 年 9 月 14 日（月）の 9 時 */
 const now = new Date("2026-09-14T09:00:00+09:00");

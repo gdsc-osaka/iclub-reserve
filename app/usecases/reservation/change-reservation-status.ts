@@ -6,11 +6,11 @@ import {
   ReservationStatus,
   ReservationTransition,
   transitionTargetStatus,
-  validateTransitionReason,
   type ReservationActor,
   type ReservationError,
   type ReservationRepository,
 } from "~/domain/reservation";
+import { validateTransitionReason } from "~/domain/reservation/validation";
 import type { UserGroupListQuery } from "~/query/user/user-group-list";
 
 /** 予約ステータス変更ユースケースの依存 */

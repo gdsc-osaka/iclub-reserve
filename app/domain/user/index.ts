@@ -1,5 +1,5 @@
 import type { ResultAsync } from "neverthrow";
-import type { BaseError } from "./error";
+import type { BaseError } from "../error";
 
 /**
  * ユーザーを表すドメインモデル。
