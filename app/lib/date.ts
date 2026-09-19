@@ -69,6 +69,19 @@ const fullDateFormatter = new Intl.DateTimeFormat("ja-JP", {
   timeZone: "Asia/Tokyo",
 });
 
+/** 「9月12日」の形式。曜日だけ色を変えたい画面で、曜日と切り離して使う。 */
+const monthDayFormatter = new Intl.DateTimeFormat("ja-JP", {
+  month: "long",
+  day: "numeric",
+  timeZone: "Asia/Tokyo",
+});
+
+/** 「土」の形式。曜日だけ色を変えたい画面で使う。 */
+const weekdayLabelFormatter = new Intl.DateTimeFormat("ja-JP", {
+  weekday: "short",
+  timeZone: "Asia/Tokyo",
+});
+
 /** Date を日本時間の「14:00」形式にする */
 export const formatTime = (date: Date) => timeFormatter.format(date);
 
@@ -77,6 +90,22 @@ export const formatMonthDay = (date: Date) => monthDayWeekdayFormatter.format(da
 
 /** Date を日本時間の「2026年9月12日(土)」形式にする */
 export const formatFullDate = (date: Date) => fullDateFormatter.format(date);
+
+/**
+ * 日付と曜日を分けて返す。
+ *
+ * 曜日だけ色を変えたい画面のために、`formatMonthDay` を 2 つに割ったもの。
+ * 「9月13日(日)」をまるごと赤くすると、日付そのものが誤っているように見えてしまう。
+ *
+ * @example formatMonthDayParts(new Date("2026-09-12T10:00:00+09:00"))
+ * // → { monthDay: "9月12日", weekday: "土" }
+ */
+export const formatMonthDayParts = (
+  date: Date,
+): { readonly monthDay: string; readonly weekday: string } => ({
+  monthDay: monthDayFormatter.format(date),
+  weekday: weekdayLabelFormatter.format(date),
+});
 
 /**
  * 日本時間での「その日の 0 時ちょうど」を返す。
@@ -97,22 +126,21 @@ export const addDays = (date: Date, days: number): Date => new Date(date.getTime
  * 日本時間にずらしてから `getUTCDay()` を読むことで、
  * 実行環境のタイムゾーンに左右されないようにしている。
  */
-const tokyoDayOfWeek = (date: Date): number =>
+export const tokyoDayOfWeek = (date: Date): number =>
   new Date(date.getTime() + TOKYO_OFFSET_MS).getUTCDay();
 
 /**
- * その日を含む週の月曜日の 0 時（日本時間）を返す。
+ * その日を含む週の日曜日の 0 時（日本時間）を返す。
  *
- * 週の始まりを月曜にしているのは、施設の利用が平日中心で、
- * 土日を週の両端に離してしまうと週末の予定が見比べにくくなるため。
+ * 週の始まりを日曜にしているのは、紙のカレンダーや携帯のカレンダーと
+ * 並びを揃えるため。見慣れた並びと 1 日ずれていると、
+ * 画面が「今週」として出している範囲を読み違える。
+ *
+ * 土曜と日曜が週の両端に分かれてしまうが、そちらは曜日ごとの色分け
+ * （`weekdayStyle`）で、離れていても週末だと分かるようにしている。
  */
-export const startOfTokyoWeek = (date: Date): Date => {
-  const dayOfWeek = tokyoDayOfWeek(date);
-  // 日曜 (0) は 6 日前が月曜。それ以外は (曜日 - 1) 日前が月曜
-  const daysFromMonday = (dayOfWeek + 6) % 7;
-
-  return addDays(startOfTokyoDay(date), -daysFromMonday);
-};
+export const startOfTokyoWeek = (date: Date): Date =>
+  addDays(startOfTokyoDay(date), -tokyoDayOfWeek(date));
 
 /**
  * 日本時間での「その日の 0 時から何分経ったか」を返す。

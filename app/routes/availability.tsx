@@ -1,20 +1,15 @@
 import { env } from "cloudflare:workers";
-import { CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Plus, X } from "lucide-react";
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, CircleAlert, Plus } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 
-import {
-  buildWeekDays,
-  DAYS_IN_WEEK,
-  type ReservationDraft,
-} from "~/components/reservation/availability-week";
+import { AvailabilityDraftCard } from "~/components/reservation/availability-detail-card";
+import { buildWeekDays, DAYS_IN_WEEK } from "~/components/reservation/availability-week";
 import { AvailabilityWeekAgenda } from "~/components/reservation/availability-week-agenda";
 import { AvailabilityWeekGrid } from "~/components/reservation/availability-week-grid";
-import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 import { FACILITY_CLOSE_HOUR, FACILITY_OPEN_HOUR } from "~/domain/facility";
 import { createDb } from "~/infra/db";
 import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facility-availability-calendar-query";
@@ -24,18 +19,13 @@ import {
   addDays,
   formatFullDate,
   formatMonthDay,
-  formatTimeRange,
   parseTokyoDateKey,
   startOfTokyoWeek,
   toTokyoDateKey,
-  toTokyoTimeKey,
 } from "~/lib/date";
 import { cn } from "~/lib/utils";
 import { QueryErrorCode } from "~/query/error";
-import type {
-  AvailabilityFacility,
-  AvailabilityReservation,
-} from "~/query/facility/facility-availability-calendar";
+import type { AvailabilityFacility } from "~/query/facility/facility-availability-calendar";
 import { getAvailabilityCalendarUseCase } from "~/usecases/facility/get-availability-calendar";
 
 import type { Route } from "./+types/availability";
@@ -44,41 +34,9 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "空き状況 | iclub-reserve" }];
 }
 
-/**
- * カレンダーで選んでいるもの。
- *
- * 「空き枠を選んで申請に進む」と「入っている予約の中身を見る」を
- * 1 つの状態にまとめているのは、出す場所が同じ（カレンダーの上）ため。
- * 別々に持つと、両方が同時に開いて表の位置が 2 段ぶんずれる。
- *
- * 予約は中身ではなく ID だけを覚えておき、表示のたびにローダーの結果から引き直す。
- * 中身をそのまま持つと、同じ施設・同じ週のままローダーが読み直されたときに
- * 古い中身が残ってしまう。団体から外れた直後などに、
- * もう渡されていないはずの使用人数・備考を出し続けることになる（COND-008）。
- */
-type CalendarSelection =
-  | { readonly kind: "slot"; readonly draft: ReservationDraft }
-  | { readonly kind: "reservation"; readonly reservationId: string };
-
 /** この画面の URL を組み立てる。施設と週を両方持ち回るので、リンクは必ずここを通す */
 const toCalendarPath = (facilityId: string, date: Date): string =>
   `/availability?facility=${encodeURIComponent(facilityId)}&date=${toTokyoDateKey(date)}`;
-
-/**
- * 予約申請フォーム（SCR-002）の URL を組み立てる。
- *
- * 押した場所で分かっていることだけをクエリに載せる。
- * 日付や時刻が決まっていないのに埋めてしまうと、
- * フォームを開いた人が「自分が選んだ値なのか」を確かめ直すことになる。
- */
-const toApplicationPath = (draft: ReservationDraft): string => {
-  const params = new URLSearchParams({ facility: draft.facility.id });
-
-  if (draft.day !== null) params.set("date", draft.day.dateKey);
-  if (draft.startHour !== null) params.set("start", toTokyoTimeKey(draft.startHour * 60));
-
-  return `/reservations/new?${params.toString()}`;
-};
 
 /**
  * 空き状況カレンダー（SCR-001）に出すデータを取る。
@@ -116,7 +74,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       isStaff: user.is_staff,
       facilityId: url.searchParams.get("facility"),
       from: weekStart,
-      // 週の終わりは「次の週の月曜 0 時」。この時刻は含まない
+      // 週の終わりは「次の週の日曜 0 時」。この時刻は含まない
       to: addDays(weekStart, DAYS_IN_WEEK),
     },
   );
@@ -149,27 +107,15 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
   const days = buildWeekDays(weekStart, now);
 
   /*
-   * 選んだものは、いま見ている施設・週とセットで覚えておく。
-   * 施設や週を切り替えたときに前の選択が残っていると、
-   * 別の施設・別の日の予約を申請したり、
-   * いま表に出ていない予約の詳細が残ったままになったりする。
+   * 押したものの中身は、押した場所に重なる吹き出し（Popover）で出す。
+   * どれを開いているかは吹き出しが自分で覚えるので、この画面では持たない。
+   *
+   * 以前はカレンダーの上に欄を差し込んでいたが、押すたびに表が上下に動いて、
+   * 次に狙っていた枠が逃げてしまっていた。
+   *
+   * 施設や週を切り替えると、帯も空き枠も作り直されるので吹き出しは閉じる。
+   * 別の施設・別の日の内容が残ったままになることはない（COND-008）。
    */
-  const viewKey = `${facility.id}:${toTokyoDateKey(weekStart)}`;
-  const [selected, setSelected] = useState<{ key: string; value: CalendarSelection } | null>(null);
-  const selection = selected !== null && selected.key === viewKey ? selected.value : null;
-
-  const select = (value: CalendarSelection) => setSelected({ key: viewKey, value });
-  const selectDraft = (draft: ReservationDraft) => select({ kind: "slot", draft });
-
-  /*
-   * 選んだ予約は、いま届いている一覧から引き直す。
-   * 取り消されるなどして一覧から消えていれば、詳細も出さない。
-   */
-  const selectedReservation =
-    selection?.kind === "reservation"
-      ? (reservations.find((reservation) => reservation.id === selection.reservationId) ?? null)
-      : null;
-
   return (
     /*
      * この画面だけは、ページ全体ではなくカレンダーの中身をスクロールさせる。
@@ -192,29 +138,22 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
           </CardTitle>
 
           {canApplyReservation && (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => selectDraft({ facility, day: null, startHour: null })}
-            >
-              <Plus aria-hidden />
-              仮予約を申請
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" size="sm">
+                  <Plus aria-hidden />
+                  仮予約を申請
+                </Button>
+              </PopoverTrigger>
+
+              <PopoverContent align="start" className="w-72">
+                <AvailabilityDraftCard draft={{ facility, day: null, startHour: null }} />
+              </PopoverContent>
+            </Popover>
           )}
 
           <WeekNavigation facilityId={facility.id} weekStart={weekStart} today={now} />
         </CardHeader>
-
-        {selection?.kind === "slot" && (
-          <DraftPanel draft={selection.draft} onClear={() => setSelected(null)} />
-        )}
-
-        {selectedReservation !== null && (
-          <ReservationDetailPanel
-            reservation={selectedReservation}
-            onClear={() => setSelected(null)}
-          />
-        )}
 
         <CardContent className="flex min-h-0 flex-1 flex-col px-0">
           <Legend />
@@ -228,13 +167,9 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
             <AvailabilityWeekGrid
               days={days}
               reservations={reservations}
+              facility={facility}
               now={now}
               canApply={canApplyReservation}
-              selectedReservationId={selectedReservation?.id ?? null}
-              onSelectSlot={(day, hour) => selectDraft({ facility, day, startHour: hour })}
-              onSelectReservation={(reservation) =>
-                select({ kind: "reservation", reservationId: reservation.id })
-              }
             />
           </div>
 
@@ -243,8 +178,8 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
             <AvailabilityWeekAgenda
               days={days}
               reservations={reservations}
+              facility={facility}
               canApply={canApplyReservation}
-              onSelectDay={(day) => selectDraft({ facility, day, startHour: null })}
             />
           </div>
         </CardContent>
@@ -321,7 +256,7 @@ function WeekNavigation({
           </Link>
         </Button>
 
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline">
           <Link to={toCalendarPath(facilityId, today)}>今週</Link>
         </Button>
 
@@ -336,10 +271,10 @@ function WeekNavigation({
 }
 
 /**
- * 色の意味を説明する凡例。
+ * 色と印の意味を説明する凡例。
  *
- * 色みでステータス、濃さで自団体かどうかを表しているので、
- * 説明が無いと「濃い薄いに意味があるのか」が分からない。
+ * 色みでステータス、左端の線の太さで自団体かどうかを表しているので、
+ * 説明が無いと「太い細いに意味があるのか」が分からない。
  */
 function Legend() {
   return (
@@ -357,7 +292,7 @@ function Legend() {
       </li>
       <li className="flex items-center gap-1.5">
         <span aria-hidden className="h-3 w-1 rounded-sm bg-primary" />
-        濃い色が自団体の予約
+        左端の線が太いものが自団体の予約
       </li>
       <li className="ml-auto hidden md:block">
         予約を押すと内容、空いている時間を押すとその日時で申請に進めます（{FACILITY_OPEN_HOUR}
@@ -365,119 +300,6 @@ function Legend() {
       </li>
     </ul>
   );
-}
-
-/**
- * 選んだ枠を確かめる欄。
- *
- * 押した場所によって、申請フォームへ持っていける情報が変わる。
- * 何が決まっていて何がまだ決まっていないかを先に見せておかないと、
- * フォームを開いてから「日付が入っていない」と戸惑うことになる。
- */
-function DraftPanel({
-  draft,
-  onClear,
-}: Readonly<{ draft: ReservationDraft; onClear: () => void }>) {
-  return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b bg-accent/40 px-4 py-3">
-      <dl className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1 text-sm">
-        <PanelItem label="施設・設備">{draft.facility.name}</PanelItem>
-        <PanelItem label="日付">
-          {draft.day === null ? <Undecided /> : formatMonthDay(draft.day.date)}
-        </PanelItem>
-        <PanelItem label="開始時刻">
-          {draft.startHour === null ? <Undecided /> : `${draft.startHour}:00`}
-        </PanelItem>
-      </dl>
-
-      <div className="flex shrink-0 items-center gap-2">
-        <Button asChild size="sm">
-          <Link to={toApplicationPath(draft)}>仮予約を申請</Link>
-        </Button>
-
-        <Button type="button" size="sm" variant="ghost" onClick={onClear}>
-          <X aria-hidden />
-          選択を解除
-        </Button>
-      </div>
-
-      <p className="w-full text-xs text-muted-foreground">
-        ここで選んだ内容は申請フォームに引き継がれます。まだ決まっていない項目はフォームで選べます。
-      </p>
-    </div>
-  );
-}
-
-/**
- * 押した予約の内容。
- *
- * タイムラインの帯には時刻と団体名しか入らないので、残りをここに出す。
- * 使用人数と備考は、申請した団体のメンバーと事務局にしか渡していない（COND-008）。
- * 渡していない相手には `detail` が `null` で届くため、
- * ここで隠しているのではなく、そもそも手元に無い。
- *
- * NOTE: 予約詳細（SCR-005）と事務局の承認・却下（UC-008）はまだ無いので、
- * この欄は読むだけにしている。画面ができたら、ここに導線を足すこと。
- */
-function ReservationDetailPanel({
-  reservation,
-  onClear,
-}: Readonly<{ reservation: AvailabilityReservation; onClear: () => void }>) {
-  return (
-    <div className="flex shrink-0 flex-wrap items-start gap-x-4 gap-y-3 border-b bg-accent/40 px-4 py-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <ReservationStatusBadge status={reservation.status} />
-          <span className="min-w-0 truncate text-sm font-medium">{reservation.groupName}</span>
-          {reservation.isOwnGroup && <span className="text-xs text-muted-foreground">自団体</span>}
-        </div>
-
-        <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-          <PanelItem label="日時">
-            {formatMonthDay(reservation.startAt)}{" "}
-            {formatTimeRange(reservation.startAt, reservation.endAt)}
-          </PanelItem>
-
-          {reservation.detail !== null && (
-            <>
-              <PanelItem label="使用人数">{reservation.detail.headCount} 名</PanelItem>
-              <PanelItem label="備考">
-                {reservation.detail.note ?? (
-                  <span className="font-normal text-muted-foreground">なし</span>
-                )}
-              </PanelItem>
-            </>
-          )}
-        </dl>
-
-        {reservation.detail === null && (
-          <p className="text-xs text-muted-foreground">
-            使用人数と備考は、申請した団体のメンバーと事務局だけが見られます。
-          </p>
-        )}
-      </div>
-
-      <Button type="button" size="sm" variant="ghost" onClick={onClear}>
-        <X aria-hidden />
-        閉じる
-      </Button>
-    </div>
-  );
-}
-
-/** 選んだものの「項目名 + 値」を 1 組だけ表示する */
-function PanelItem({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
-  return (
-    <div className="flex min-w-0 items-baseline gap-1.5">
-      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 font-medium break-words">{children}</dd>
-    </div>
-  );
-}
-
-/** まだ決まっていない項目。申請フォームで選ぶことになる */
-function Undecided() {
-  return <span className="font-normal text-muted-foreground">フォームで選ぶ</span>;
 }
 
 /**

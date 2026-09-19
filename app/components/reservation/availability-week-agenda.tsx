@@ -1,11 +1,18 @@
 import { Plus } from "lucide-react";
 
-import { formatMonthDay, formatTimeRange } from "~/lib/date";
+import { formatMonthDay, formatMonthDayParts, formatTimeRange } from "~/lib/date";
 import { cn } from "~/lib/utils";
-import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
+import type {
+  AvailabilityFacility,
+  AvailabilityReservation,
+} from "~/query/facility/facility-availability-calendar";
 
-import { blockStyle, toDayBlocks, type AvailabilityDay } from "./availability-week";
+import { AvailabilityDraftCard } from "./availability-detail-card";
+import { blockStyle, toDayBlocks, weekdayStyle, type AvailabilityDay } from "./availability-week";
 import { ReservationStatusBadge } from "./reservation-status-badge";
+import { Button } from "../ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Badge } from "../ui/badge";
 
 /**
  * 1 週間分の予約を日ごとに縦に並べたもの（スマホ向け）。
@@ -21,40 +28,60 @@ import { ReservationStatusBadge } from "./reservation-status-badge";
 export function AvailabilityWeekAgenda({
   days,
   reservations,
+  facility,
   canApply,
-  onSelectDay,
 }: Readonly<{
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
+  /** いま見ている施設・設備。「＋」から申請へ持っていく初期値に使う */
+  facility: AvailabilityFacility;
   /** 申請へ進めるかどうか（COND-006） */
   canApply: boolean;
-  onSelectDay: (day: AvailabilityDay) => void;
 }>) {
   return (
     <ul className="divide-y">
-      {days.map((day) => (
-        <li key={day.dateKey} className="py-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className={cn("text-sm font-medium", day.isToday && "text-primary")}>
-              {formatMonthDay(day.date)}
-              {day.isToday && <span className="ml-2 text-xs">今日</span>}
-            </h3>
+      {days.map((day) => {
+        const weekday = weekdayStyle(day.weekday);
+        const { monthDay, weekday: weekdayLabel } = formatMonthDayParts(day.date);
 
-            {canApply && (
-              <button
-                type="button"
-                onClick={() => onSelectDay(day)}
-                aria-label={`${formatMonthDay(day.date)} の仮予約を申請`}
-                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Plus aria-hidden className="size-4" />
-              </button>
-            )}
-          </div>
+        return (
+          <li key={day.dateKey} className="py-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className={cn("text-sm font-medium", day.isToday && "text-primary")}>
+                {monthDay}
+                {/*
+                 * 色を付けるのは曜日だけ。日付の数字まで赤や青にすると、
+                 * その日付が誤っているように見えてしまう。
+                 * 今日は見出しごと色を変えているので、ここでは足さない。
+                 */}
+                <span className={cn(!day.isToday && weekday.label)}>({weekdayLabel})</span>
+                {day.isToday && <span className="ml-2 text-xs">今日</span>}
+              </h3>
 
-          <DayReservations day={day} reservations={reservations} />
-        </li>
-      ))}
+              {canApply && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      aria-label={`${formatMonthDay(day.date)} の仮予約を申請`}
+                      size="icon"
+                      variant="secondary"
+                    >
+                      <Plus />
+                    </Button>
+                  </PopoverTrigger>
+
+                  <PopoverContent align="end" className="w-72">
+                    <AvailabilityDraftCard draft={{ facility, day, startHour: null }} />
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+
+            <DayReservations day={day} reservations={reservations} />
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -92,12 +119,13 @@ function DayReservations({
                 {formatTimeRange(reservation.startAt, reservation.endAt)}
               </span>
               <ReservationStatusBadge status={reservation.status} />
-              {reservation.isOwnGroup && (
-                <span className="text-xs text-muted-foreground">自団体</span>
-              )}
+              {reservation.isOwnGroup && <Badge>自団体</Badge>}
             </div>
 
-            <p className="mt-1 truncate text-sm">{reservation.groupName}</p>
+            {/* 自団体の団体名は太字にする。色の濃さだけでは自分たちの予約を見つけにくい */}
+            <p className={cn("mt-1 text-sm", reservation.isOwnGroup && "font-medium")}>
+              {reservation.groupName}
+            </p>
 
             {/*
              * 使用人数と備考は自団体のメンバーと事務局にしか渡していない（COND-008）。
