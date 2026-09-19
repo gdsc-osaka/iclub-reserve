@@ -1,12 +1,15 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, Link } from "react-router";
+import { data, isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { ReservationTransition } from "~/domain/reservation";
 import { createDb } from "~/infra/db";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
+import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
 import type { Route } from "./+types/route";
 import { parseReservationListParams } from "./query-params";
@@ -55,10 +58,65 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   };
 }
 
-export default function ReservationListRoute({ loaderData }: Route.ComponentProps) {
+/**
+ * 予約一覧画面からの状態変更アクション（取り消し・キャンセル）。
+ */
+export async function action({ request, context }: Route.ActionArgs) {
+  const user = requireRequestUser(context);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const reservationId = formData.get("reservationId");
+  const reason = formData.get("reason");
+
+  if (typeof reservationId !== "string" || !reservationId) {
+    return { error: "予約が指定されていません。" };
+  }
+
+  const isAllowedTransition = (
+    val: unknown,
+  ): val is typeof ReservationTransition.Withdraw | typeof ReservationTransition.Cancel =>
+    val === ReservationTransition.Withdraw || val === ReservationTransition.Cancel;
+
+  if (!isAllowedTransition(intent)) {
+    return { error: "不正な操作です。" };
+  }
+
+  const db = createDb(env.DB);
+  const result = await changeReservationStatusUseCase(
+    {
+      reservationRepository: createReservationRepository(db),
+      userGroupListQuery: createUserGroupListQuery(db),
+    },
+    {
+      reservationId,
+      actorUserId: user.id,
+      isStaff: user.is_staff,
+      transition: intent as ReservationTransition,
+      reason: typeof reason === "string" ? reason : null,
+      now: new Date(),
+    },
+  );
+
+  if (result.isErr()) {
+    return { error: result.error.message };
+  }
+
+  const url = new URL(request.url);
+  return redirect(url.pathname + url.search);
+}
+
+export default function ReservationListRoute({ loaderData, actionData }: Route.ComponentProps) {
   const { result, params, now } = loaderData;
 
-  return <ReservationList result={result} params={params} scope="own" now={new Date(now)} />;
+  return (
+    <ReservationList
+      result={result}
+      params={params}
+      scope="own"
+      now={new Date(now)}
+      actionError={actionData?.error}
+    />
+  );
 }
 
 /**

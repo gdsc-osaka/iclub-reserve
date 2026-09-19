@@ -33,6 +33,15 @@ export interface ReservationListRow {
   readonly note: string | null;
   readonly createdByName: string | null;
   readonly createdAt: Date;
+  /** 同一施設・同一時間帯に承認済みの予約が存在するかどうか（COND-001） */
+  readonly hasApprovedOverlap?: boolean;
+  /**
+   * 同一施設・同一時間帯に他の仮予約が存在するかどうか。
+   *
+   * 承認を止める条件ではない（COND-001 が見るのは承認済みだけ）。
+   * 申請が競合していることを、承認する人と申請した団体の両方に知らせるために使う。
+   */
+  readonly hasProvisionalOverlap?: boolean;
 }
 
 /**
@@ -55,6 +64,15 @@ export interface ReservationListItem {
   readonly note: string | null;
   readonly createdByName: string | null;
   readonly createdAt: Date;
+  /** 同一施設・同一時間帯に承認済みの予約が存在するかどうか（COND-001） */
+  readonly hasApprovedOverlap?: boolean;
+  /**
+   * 同一施設・同一時間帯に他の仮予約が存在するかどうか。
+   *
+   * 承認を止める条件ではない（COND-001 が見るのは承認済みだけ）。
+   * 申請が競合していることを、承認する人と申請した団体の両方に知らせるために使う。
+   */
+  readonly hasProvisionalOverlap?: boolean;
 }
 
 /** ステータス別の件数。ピル型タブの横に添える数字として使う。 */

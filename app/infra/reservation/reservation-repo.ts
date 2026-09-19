@@ -9,6 +9,7 @@ import {
   type ReservationError,
   type ReservationOverlapArgs,
   type ReservationRepository,
+  type UpdateReservationStatusArgs,
 } from "~/domain/reservation";
 import type { Database } from "../db";
 
@@ -76,5 +77,22 @@ export const createReservationRepository = (db: Database): ReservationRepository
       }),
     ).map((rows) => rows.length > 0);
 
-  return { findById, create, existsApprovedOverlap };
+  const updateStatus = (args: UpdateReservationStatusArgs): ResultAsync<null, ReservationError> =>
+    ResultAsync.fromPromise(
+      db
+        .update(reservationTable)
+        .set({
+          status: args.status,
+          statusReason: args.statusReason,
+          updatedAt: args.updatedAt,
+        })
+        .where(eq(reservationTable.id, args.id)),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "予約ステータスの更新に失敗しました。",
+        cause: error,
+      }),
+    ).map(() => null);
+
+  return { findById, create, existsApprovedOverlap, updateStatus };
 };

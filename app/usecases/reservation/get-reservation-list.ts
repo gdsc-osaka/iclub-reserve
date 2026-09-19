@@ -1,5 +1,6 @@
 import { errAsync, ResultAsync } from "neverthrow";
 
+import type { Membership } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
@@ -65,6 +66,16 @@ export interface ReservationListResult {
   readonly counts: ReservationStatusCounts;
   /** 施設・設備一覧（絞り込み Select ドロップダウン用） */
   readonly facilities: readonly ReservationListFacility[];
+  /**
+   * いま見ている人の、表示中の団体での所属。所属していない場合は null。
+   *
+   * 画面に出す操作ボタンを、ドメインの権限表（reservationPermissions）で
+   * 判定するために渡す。判定の中身を画面側に書き写すと、
+   * サーバーが許す操作と画面に出る操作がすぐにずれる。
+   *
+   * 事務局の画面（scope="all"）では、団体での所属ではなく事務局の権限で操作するため null。
+   */
+  readonly viewerMembership: Membership | null;
 }
 
 /** すべての予約ステータス */
@@ -121,6 +132,8 @@ const toReservationListItem = (row: ReservationListRow): ReservationListItem => 
   note: row.note,
   createdByName: row.createdByName,
   createdAt: row.createdAt,
+  hasApprovedOverlap: row.hasApprovedOverlap ?? false,
+  hasProvisionalOverlap: row.hasProvisionalOverlap ?? false,
 });
 
 /**
@@ -197,6 +210,8 @@ export const getReservationListUseCase = (
         items: rows.map(toReservationListItem),
         counts,
         facilities,
+        // 事務局の画面では、団体での所属ではなく事務局の権限で操作する（COND-009）
+        viewerMembership: null,
       }),
     );
   }
@@ -212,6 +227,7 @@ export const getReservationListUseCase = (
           items: [],
           counts: { all: 0, provisional: 0, approved: 0, ended: 0 },
           facilities,
+          viewerMembership: null,
         }),
       );
     }
@@ -245,6 +261,11 @@ export const getReservationListUseCase = (
         items: rows.map(toReservationListItem),
         counts,
         facilities,
+        viewerMembership: {
+          groupId: selectedGroup.id,
+          userId: args.actorUserId,
+          roles: selectedGroup.roles,
+        },
       }),
     );
   });

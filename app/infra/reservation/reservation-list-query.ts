@@ -91,6 +91,28 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
         note: reservationTable.note,
         createdByName: user.name,
         createdAt: reservationTable.createdAt,
+        /*
+         * 重なりの判定は 2 種類ある。
+         * - 承認済みとの重なり: 承認できない（COND-001）
+         * - 他の仮予約との重なり: 承認は止めないが、申請が競合していることを知らせる
+         * 終了時刻はその予約に含まれないので、10:00 に終わる予約と 10:00 に始まる予約は重ならない。
+         */
+        hasApprovedOverlap: sql<boolean>`exists (
+          select 1 from ${reservationTable} as r_overlap
+          where r_overlap.facility_id = ${reservationTable.facilityId}
+            and r_overlap.status = ${ReservationStatus.Approved}
+            and r_overlap.id != ${reservationTable.id}
+            and r_overlap.start_at < ${reservationTable.endAt}
+            and r_overlap.end_at > ${reservationTable.startAt}
+        )`,
+        hasProvisionalOverlap: sql<boolean>`exists (
+          select 1 from ${reservationTable} as r_overlap
+          where r_overlap.facility_id = ${reservationTable.facilityId}
+            and r_overlap.status = ${ReservationStatus.Provisional}
+            and r_overlap.id != ${reservationTable.id}
+            and r_overlap.start_at < ${reservationTable.endAt}
+            and r_overlap.end_at > ${reservationTable.startAt}
+        )`,
       })
       .from(reservationTable)
       .innerJoin(facilityTable, eq(reservationTable.facilityId, facilityTable.id))
@@ -105,7 +127,13 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
     }
 
     return ResultAsync.fromPromise(query, toDatabaseError("予約一覧の取得に失敗しました。")).map(
-      (rows): readonly ReservationListRow[] => rows,
+      (rows): readonly ReservationListRow[] =>
+        rows.map((row) => ({
+          ...row,
+          // SQLite の exists は 0 / 1 を返すので、画面へ渡す前に真偽値にそろえる
+          hasApprovedOverlap: Boolean(row.hasApprovedOverlap),
+          hasProvisionalOverlap: Boolean(row.hasProvisionalOverlap),
+        })),
     );
   },
 
