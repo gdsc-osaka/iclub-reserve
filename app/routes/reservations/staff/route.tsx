@@ -19,7 +19,7 @@ import { changeReservationStatusUseCase } from "~/usecases/reservation/change-re
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
 import type { Route } from "./+types/route";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "予約の承認 | iclub-reserve" }];
 }
 

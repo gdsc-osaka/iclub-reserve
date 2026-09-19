@@ -18,7 +18,7 @@ import type { Route } from "./+types/route";
 import { toActionErrorMessage } from "./action-error";
 import { parseReservationListParams } from "./query-params";
 
-export function meta(_: Route.MetaArgs) {
+export function meta() {
   return [{ title: "予約 | iclub-reserve" }];
 }
 
