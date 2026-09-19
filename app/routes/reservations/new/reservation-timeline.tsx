@@ -1,5 +1,14 @@
 import { useRef } from "react";
 
+import {
+  axisHours,
+  blockStyle,
+  CLOSE_MINUTES,
+  OPEN_MINUTES,
+  toAxisPercent,
+} from "~/components/reservation/availability-week";
+import { reservationStatusLabel } from "~/components/reservation/reservation-status-badge";
+import { layoutTimelineItems } from "~/components/reservation/timeline-layout";
 import { RESERVATION_STEP_MINUTES } from "~/domain/reservation";
 import {
   formatMonthDay,
@@ -11,20 +20,11 @@ import {
 import { cn } from "~/lib/utils";
 
 import {
-  axisHours,
-  blockStyle,
-  CLOSE_MINUTES,
-  OPEN_MINUTES,
-  toAxisPercent,
-} from "./availability-week";
-import { reservationStatusLabel } from "./reservation-status-badge";
-import {
   dragRange,
   startSlotMinutes,
   type SlotRange,
   type TimelineReservation,
 } from "./reservation-slots";
-import { layoutTimelineItems } from "./timeline-layout";
 
 /**
  * 30 分枠 1 つ分の高さ（rem）。

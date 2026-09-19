@@ -13,21 +13,7 @@ import {
   useNavigation,
 } from "react-router";
 
-import {
-  endSlotMinutes,
-  findOverlapping,
-  selectSlot,
-  startSlotMinutes,
-  toBlockedSlots,
-  toPastSlots,
-  toTimelineReservations,
-  type SlotRange,
-} from "~/components/reservation/reservation-slots";
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
-import {
-  ReservationTimeline,
-  ReservationTimelineLegend,
-} from "~/components/reservation/reservation-timeline";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Calendar } from "~/components/ui/calendar";
@@ -86,7 +72,18 @@ import type {
 import { createProvisionalReservationUseCase } from "~/usecases/reservation/create-reservation";
 import { getReservationFormUseCase } from "~/usecases/reservation/get-reservation-form";
 
-import type { Route } from "./+types/reservations.new";
+import type { Route } from "./+types/route";
+import {
+  endSlotMinutes,
+  findOverlapping,
+  selectSlot,
+  startSlotMinutes,
+  toBlockedSlots,
+  toPastSlots,
+  toTimelineReservations,
+  type SlotRange,
+} from "./reservation-slots";
+import { ReservationTimeline, ReservationTimelineLegend } from "./reservation-timeline";
 
 export function meta(_: Route.MetaArgs) {
   return [{ title: "仮予約の申請 | iclub-reserve" }];

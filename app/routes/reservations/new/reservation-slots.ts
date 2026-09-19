@@ -1,8 +1,7 @@
+import { CLOSE_MINUTES, OPEN_MINUTES } from "~/components/reservation/availability-week";
 import { RESERVATION_STEP_MINUTES, ReservationStatus } from "~/domain/reservation";
 import { atTokyoMinutes, startOfTokyoDay } from "~/lib/date";
 import type { ReservationFormReservation } from "~/query/reservation/reservation-form";
-
-import { CLOSE_MINUTES, OPEN_MINUTES } from "./availability-week";
 
 /**
  * 予約申請フォーム（SCR-002）のタイムラインで使う計算。
