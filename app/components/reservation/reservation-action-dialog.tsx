@@ -179,9 +179,28 @@ export function ReservationActionDialog({
 
       {/* JavaScript が無効な環境向けのフォールバック（通常のフォーム送信で成立させる） */}
       <noscript>
-        <Form method="post" className="inline">
+        <Form method="post" className="flex flex-col gap-1.5">
           <input type="hidden" name="intent" value={transition} />
           <input type="hidden" name="reservationId" value={item.id} />
+          {/*
+            理由の欄はダイアログと同じくここにも置く。却下・事務局キャンセルは理由が必須
+            （COND-002）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
+          */}
+          {config.hasReason && (
+            <>
+              <Label htmlFor={`reason-noscript-${item.id}-${transition}`} className="text-xs">
+                {config.reasonLabel}
+              </Label>
+              <Textarea
+                id={`reason-noscript-${item.id}-${transition}`}
+                name="reason"
+                rows={2}
+                placeholder={config.reasonPlaceholder}
+                required={config.isReasonRequired}
+                className="text-sm"
+              />
+            </>
+          )}
           <Button
             type="submit"
             variant={config.actionVariant}
