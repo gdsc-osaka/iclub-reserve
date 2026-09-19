@@ -11,7 +11,13 @@ import type { CreatedReservation } from "~/query/reservation/reservation-form";
 import { toCalendarPath, toFormPath } from "./paths";
 import { SummaryItem } from "./summary-panel";
 
-/** 申請が終わったあとの控え。 */
+/**
+ * 申請が終わったあとの控え。
+ *
+ * NOTE: 申請・承認の通知メール（EVT-001）はまだ無いので、結果の確かめ方として
+ * 空き状況カレンダーを案内している。届かないメールを待たせないため。
+ * 通知を実装したら、ここをメールの案内に差し替えること。
+ */
 export function CreatedPanel({
   created,
   facilityId,
@@ -25,7 +31,7 @@ export function CreatedPanel({
           仮予約を申請しました
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          事務局が承認するまでは、まだ利用できません。結果はメールでお知らせします。
+          事務局が承認するまでは、まだ利用できません。承認されたかどうかは、空き状況カレンダーで確認できます。
         </p>
       </CardHeader>
 
