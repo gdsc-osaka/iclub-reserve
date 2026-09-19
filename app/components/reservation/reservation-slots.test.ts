@@ -4,6 +4,7 @@ import { ReservationStatus } from "~/domain/reservation";
 import type { ReservationFormReservation } from "~/query/reservation/reservation-form";
 
 import {
+  dragRange,
   findOverlapping,
   selectSlot,
   toBlockedSlots,
@@ -158,5 +159,35 @@ describe("selectSlot", () => {
     const current = { startMinutes: 540, endMinutes: 570 };
 
     expect(selectSlot(current, 600, blocked)).toEqual({ startMinutes: 540, endMinutes: 630 });
+  });
+});
+
+describe("dragRange", () => {
+  const noBlocked: ReadonlySet<number> = new Set();
+
+  it("押した枠から動かさなければ、その枠だけを選ぶ", () => {
+    expect(dragRange(600, 600, noBlocked)).toEqual({ startMinutes: 600, endMinutes: 630 });
+  });
+
+  it("下へなぞると、なぞった先まで伸びる", () => {
+    expect(dragRange(600, 690, noBlocked)).toEqual({ startMinutes: 600, endMinutes: 720 });
+  });
+
+  it("上へなぞっても、同じ範囲を選べる", () => {
+    // 押し始めた枠が後ろでも、選ばれるのは「なぞった先〜押し始めた枠の終わり」
+    expect(dragRange(690, 600, noBlocked)).toEqual({ startMinutes: 600, endMinutes: 720 });
+  });
+
+  it("なぞった先に承認済みの予約があれば、その手前で止まる", () => {
+    /*
+     * 11:00（660）が埋まっているとき、11:30（690）まで指を運んでも 11:00 は越えない。
+     * `selectSlot` は押した枠から選び直すが、なぞる操作では帯が指に追従しているので、
+     * 止まった位置がそのまま「ここまでしか取れない」と読める。
+     */
+    expect(dragRange(600, 690, new Set([660]))).toEqual({ startMinutes: 600, endMinutes: 660 });
+  });
+
+  it("上へなぞるときも、承認済みの予約の手前で止まる", () => {
+    expect(dragRange(690, 600, new Set([630]))).toEqual({ startMinutes: 660, endMinutes: 720 });
   });
 });

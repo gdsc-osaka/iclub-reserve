@@ -1,14 +1,18 @@
 import { env } from "cloudflare:workers";
-import { CalendarCheck, ChevronLeft, ChevronRight, CircleAlert, CircleCheck } from "lucide-react";
+import { ja } from "date-fns/locale/ja";
+import { CalendarCheck, CalendarDays, CircleAlert, CircleCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { data, Form, isRouteErrorResponse, Link, redirect, useNavigation } from "react-router";
-
 import {
-  buildWeekDays,
-  DAYS_IN_WEEK,
-  type AvailabilityDay,
-} from "~/components/reservation/availability-week";
+  data,
+  Form,
+  isRouteErrorResponse,
+  Link,
+  redirect,
+  useNavigate,
+  useNavigation,
+} from "react-router";
+
 import {
   endSlotMinutes,
   findOverlapping,
@@ -26,9 +30,20 @@ import {
 } from "~/components/reservation/reservation-timeline";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Calendar } from "~/components/ui/calendar";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { Separator } from "~/components/ui/separator";
 import { Textarea } from "~/components/ui/textarea";
 import { FACILITY_CLOSE_HOUR, FACILITY_OPEN_HOUR } from "~/domain/facility";
 import {
@@ -54,13 +69,14 @@ import {
   formatFullDate,
   formatMonthDay,
   formatTimeRange,
+  fromCalendarDate,
   parseTokyoDateKey,
   parseTokyoTimeKey,
-  startOfTokyoWeek,
+  startOfTokyoDay,
+  toCalendarDate,
   toTokyoDateKey,
   toTokyoTimeKey,
 } from "~/lib/date";
-import { cn } from "~/lib/utils";
 import type {
   CreatedReservation,
   ReservationFormFacility,
@@ -101,13 +117,14 @@ const pickFacilityId = (
 /**
  * 予約申請フォーム（SCR-002）に出すデータを取る。
  *
- * 施設と週は URL のクエリで受け取る。空き状況カレンダーから
+ * 施設と日付は URL のクエリで受け取る。空き状況カレンダーから
  * 「この施設のこの日時で申請する」と渡ってくるのがこの画面の主な入り口なので、
  * 受け取った内容をそのまま初期値にする。
  * クエリは利用者が自由に書き換えられるので、値はすべて確かめてから使う。
  *
- * 予約は 1 週間ぶんまとめて取る。施設や日付を切り替えるたびにサーバーへ取り直すと、
- * 入力し終えた使用人数・備考が消えてしまうため。
+ * 読むのは選んでいる 1 日ぶんだけ。日付を変える操作はこの URL への移動なので、
+ * 変えたぶんはその都度ここが読み直す。施設は絞らずに取るため、
+ * 施設を切り替えるだけならサーバーへの往復は起きない。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
@@ -122,9 +139,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
    */
   const now = new Date();
 
-  // 日付の指定が無い・壊れているときは今週を出す。エラーにはしない
-  const anchorDate = parseTokyoDateKey(url.searchParams.get("date")) ?? now;
-  const weekStart = startOfTokyoWeek(anchorDate);
+  // 日付の指定が無い・壊れているときは今日を出す。エラーにはしない
+  const day = startOfTokyoDay(parseTokyoDateKey(url.searchParams.get("date")) ?? now);
 
   const db = createDb(env.DB);
 
@@ -137,9 +153,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     {
       actorUserId: user.id,
       isStaff: user.is_staff,
-      from: weekStart,
-      // 週の終わりは「次の週の月曜 0 時」。この時刻は含まない
-      to: addDays(weekStart, DAYS_IN_WEEK),
+      from: day,
+      // 終わりは「翌日の 0 時」。この時刻は含まない
+      to: addDays(day, 1),
       createdReservationId: url.searchParams.get("created"),
     },
   );
@@ -152,13 +168,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   return {
     form,
-    weekStart,
     now,
     isStaff: user.is_staff,
+    /** 日付の入力欄の下限。過ぎた日はブラウザの時点で選べなくする */
+    todayKey: toTokyoDateKey(now),
     /** 空き状況カレンダーから引き継いだ初期値 */
     initial: {
       facilityId: pickFacilityId(form.facilities, url.searchParams.get("facility")),
-      dateKey: toTokyoDateKey(anchorDate),
+      dateKey: toTokyoDateKey(day),
       startMinutes: parseTokyoTimeKey(url.searchParams.get("start")),
     },
   };
@@ -375,7 +392,7 @@ export async function action({ request, context }: Route.ActionArgs) {
  * この画面は渡された候補を並べるだけにしている。
  */
 export default function NewReservation({ loaderData, actionData }: Route.ComponentProps) {
-  const { form, weekStart, now, isStaff, initial } = loaderData;
+  const { form, now, isStaff, todayKey, initial } = loaderData;
 
   if (form.created !== null) {
     return (
@@ -407,8 +424,8 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
         groups={form.groups}
         facilities={form.facilities}
         reservations={form.reservations}
-        weekStart={weekStart}
         now={now}
+        todayKey={todayKey}
         initial={initial}
         actionData={actionData ?? null}
       />
@@ -476,44 +493,41 @@ function FieldError({ id, message }: Readonly<{ id: string; message: string | un
 }
 
 /**
- * ネイティブの `<select>` に付ける見た目。
- *
- * shadcn/ui の Select（Radix）を使っていないのは、あちらが開くのに JavaScript を要するため。
- * この画面はタイムラインだけを JavaScript の上乗せにして、
- * 動かない環境でも申請できるようにしてあるので、選択欄は素の `<select>` にしている。
- */
-const selectClassName =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30";
-
-/**
  * 申請フォームの本体。
  *
  * 入力の値はすべて React の状態で持ち、右側の確認欄に同じ値を映している。
  * 申請してから「思っていた内容と違う」と気づく余地を減らすため。
  *
- * ただし送信されるのは、あくまで `<select>` や `<input>` そのものの値。
- * タイムラインは選択肢を絵で選べるようにした上乗せで、
- * JavaScript が動かない環境ではプルダウンだけで申請できる。
+ * 日付だけは状態に持たず、URL（＝ローダー）が持つものを唯一の正とする。
+ * タイムラインに描けるのはローダーが読んだ日の予約だけなので、
+ * 画面が指している日を別に持つと、日付の表示と予約の中身がずれる余地ができる。
  */
 function ApplicationForm({
   groups,
   facilities,
   reservations,
-  weekStart,
   now,
+  todayKey,
   initial,
   actionData,
 }: Readonly<{
   groups: readonly ReservationFormGroup[];
   facilities: readonly ReservationFormFacility[];
   reservations: readonly ReservationFormReservation[];
-  weekStart: Date;
   now: Date;
+  todayKey: string;
   initial: { facilityId: string; dateKey: string; startMinutes: number | null };
   actionData: { values: FormValues; fieldErrors: FieldErrors; formError: string | null } | null;
 }>) {
+  const navigate = useNavigate();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  /*
+   * 日付を変えたあと、その日の予約を読み終えるまでの間。
+   * ここで申請を止めておかないと、入力欄が新しい日付、確認欄とタイムラインが
+   * 古い日付、という一瞬の食い違いのまま送信できてしまう。
+   */
+  const isBusy = navigation.state !== "idle";
 
   const fieldErrors = actionData?.fieldErrors ?? {};
   const submitted = actionData?.values ?? null;
@@ -523,26 +537,15 @@ function ApplicationForm({
     submitted?.facilityId ??
       (initial.facilityId === "" ? (facilities.at(0)?.id ?? "") : initial.facilityId),
   );
-  const [dateKey, setDateKey] = useState(submitted?.dateKey ?? initial.dateKey);
+  /** 日付を選ぶカレンダーを開いているか。選んだら閉じる */
+  const [isDateOpen, setIsDateOpen] = useState(false);
   const [headCount, setHeadCount] = useState(submitted?.headCount ?? "");
   const [note, setNote] = useState(submitted?.note ?? "");
   const [range, setRange] = useState<SlotRange | null>(() =>
     toInitialRange(submitted, initial.startMinutes),
   );
 
-  const days = buildWeekDays(weekStart, now);
-  /*
-   * 選んでいる日は、必ずいま出している週の中から選ぶ。
-   *
-   * 前後の週へ移ってもこの画面は同じまま（クエリだけが変わる）なので、
-   * React の状態はそこで消えない。前の週の日付を持ったままにすると、
-   * 日付のラジオはどれも選ばれていないのに、タイムラインと確認欄だけが
-   * 前の週を指すことになる。そのタイムラインには前の週の予約が無い
-   * （ローダーは出している週のぶんしか読んでいない）ので、
-   * 実際には埋まっている時間帯が空いているように見えてしまう。
-   */
-  const selectedDateKey = days.some((item) => item.dateKey === dateKey) ? dateKey : initial.dateKey;
-  const day = parseTokyoDateKey(selectedDateKey) ?? weekStart;
+  const day = parseTokyoDateKey(initial.dateKey) ?? startOfTokyoDay(now);
   const facility = facilities.find((item) => item.id === facilityId) ?? facilities[0];
   const group = groups.find((item) => item.id === groupId) ?? null;
 
@@ -559,15 +562,13 @@ function ApplicationForm({
   );
 
   /*
-   * 送信を止めるのは、承認済みの予約と重なっているとき（COND-001）と送信中だけ。
+   * 送信を止めるのは、時間帯が未選択のとき、承認済みの予約と重なっているとき
+   * （COND-001）、そして画面が次の状態へ移っている最中だけ。
    *
-   * 「まだ時間帯を選んでいない」を理由に止めてはいけない。`range` は
-   * タイムラインと `<select>` の `onChange` でしか動かない React の状態なので、
-   * JavaScript が動かない環境では最後まで null のままになり、
-   * プルダウンで時刻を選んでもボタンが押せないままになる。
-   * 未選択のまま送ることは、開始・終了の `<select>` に付けた `required` が止める。
+   * 未選択でも止めるのは、そのすぐ上の確認欄に「時間 未入力」と出しているため。
+   * 理由の見えない場所で止めているわけではない。
    */
-  const canSubmit = approvedConflicts.length === 0 && !isSubmitting;
+  const canSubmit = range !== null && approvedConflicts.length === 0 && !isBusy;
 
   return (
     /*
@@ -588,7 +589,7 @@ function ApplicationForm({
           </Alert>
         )}
 
-        <FormSection title="誰が、どこを使うか">
+        <FormSection title="利用者・施設">
           <div className="flex flex-col gap-2">
             <Label htmlFor="group_id">申請元の団体</Label>
 
@@ -599,22 +600,38 @@ function ApplicationForm({
                 <input type="hidden" name="group_id" value={groups[0].id} />
               </>
             ) : (
-              <select
-                id="group_id"
-                name="group_id"
-                required
-                value={groupId}
-                onChange={(event) => setGroupId(event.target.value)}
-                aria-invalid={fieldErrors.groupId !== undefined}
-                aria-describedby={fieldErrors.groupId !== undefined ? "group_id-error" : undefined}
-                className={selectClassName}
-              >
-                {groups.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+              <Select name="group_id" required value={groupId} onValueChange={setGroupId}>
+                <SelectTrigger
+                  id="group_id"
+                  className="w-full"
+                  aria-invalid={fieldErrors.groupId !== undefined}
+                  aria-describedby={
+                    fieldErrors.groupId !== undefined ? "group_id-error" : undefined
+                  }
+                >
+                  <SelectValue placeholder="選んでください" />
+                </SelectTrigger>
+
+                {/*
+                 * 見出しを付けないときも、項目は `SelectGroup` で包むこと。
+                 *
+                 * この Select は「選んでいる項目の文字を、トリガーの値の文字に重ねる」
+                 * 置き方（radix-nova の既定 `item-aligned`）で、一覧の幅はそこから
+                 * 逆算される（トリガーの幅 + トリガーとの左端のずれ）。
+                 * つまり端をそろえているのは幅の指定ではなく、項目の左余白。
+                 * 包まないと `SelectGroup` の `p-1` が抜けて 4px 足りず、
+                 * 一覧の左端だけが内側へずれる。
+                 */}
+                <SelectContent>
+                  <SelectGroup>
+                    {groups.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             )}
 
             <FieldError id="group_id-error" message={fieldErrors.groupId} />
@@ -623,24 +640,32 @@ function ApplicationForm({
           <div className="flex flex-col gap-2">
             <Label htmlFor="facility_id">施設・設備</Label>
 
-            <select
-              id="facility_id"
-              name="facility_id"
-              required
-              value={facilityId}
-              onChange={(event) => setFacilityId(event.target.value)}
-              aria-invalid={fieldErrors.facilityId !== undefined}
-              aria-describedby={
-                fieldErrors.facilityId !== undefined ? "facility_id-error" : undefined
-              }
-              className={selectClassName}
-            >
-              {facilities.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            {/*
+             * 施設を変えてもサーバーへは取りに行かない。ローダーはその日の予約を
+             * 施設で絞らずに読んでいるので、必要なぶんはもう手元にある。
+             */}
+            <Select name="facility_id" required value={facilityId} onValueChange={setFacilityId}>
+              <SelectTrigger
+                id="facility_id"
+                className="w-full"
+                aria-invalid={fieldErrors.facilityId !== undefined}
+                aria-describedby={
+                  fieldErrors.facilityId !== undefined ? "facility_id-error" : undefined
+                }
+              >
+                <SelectValue placeholder="選んでください" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectGroup>
+                  {facilities.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
 
             {facility?.description != null && (
               <p className="text-sm text-muted-foreground">{facility.description}</p>
@@ -651,17 +676,71 @@ function ApplicationForm({
         </FormSection>
 
         <FormSection
-          title="いつ使うか"
+          title="利用日時"
           description={`利用できるのは ${FACILITY_OPEN_HOUR}:00〜${FACILITY_CLOSE_HOUR}:00 です。日をまたぐ予約はできません。`}
         >
-          <WeekPicker
-            days={days}
-            dateKey={selectedDateKey}
-            weekStart={weekStart}
-            now={now}
-            facilityId={facilityId}
-            onSelectDate={setDateKey}
-          />
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="date">日付</Label>
+
+            {/*
+             * 送るのはここ。カレンダーは入力欄ではないので、値はこの隠し欄が持つ。
+             * URL の日付（＝ローダーが予約を読んだ日）をそのまま送るので、
+             * 画面に出ている日と送られる日が食い違うことはない。
+             */}
+            <input type="hidden" name="date" value={initial.dateKey} />
+
+            <Popover open={isDateOpen} onOpenChange={setIsDateOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="date"
+                  variant="outline"
+                  className="w-full justify-between font-normal sm:max-w-64"
+                  /*
+                   * 読み上げ名をここで組み立てている。`<label for>` を付けた要素は
+                   * 読み上げ名がラベルの文字だけになり、ボタンに出している日付が
+                   * 声では伝わらなくなる（「日付、ボタン」としか読まれない）。
+                   */
+                  aria-label={`日付 ${formatFullDate(day)}`}
+                  aria-invalid={fieldErrors.period !== undefined}
+                  aria-describedby={fieldErrors.period !== undefined ? "period-error" : undefined}
+                >
+                  {formatFullDate(day)}
+                  <CalendarDays aria-hidden className="text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+
+              <PopoverContent align="start" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  locale={ja}
+                  autoFocus
+                  selected={toCalendarDate(initial.dateKey)}
+                  defaultMonth={toCalendarDate(initial.dateKey)}
+                  // 過ぎた日は選べない。送られてきた場合はドメインが弾く
+                  startMonth={toCalendarDate(todayKey)}
+                  disabled={{ before: toCalendarDate(todayKey) ?? new Date() }}
+                  onSelect={(selected) => {
+                    if (selected === undefined) return;
+
+                    setIsDateOpen(false);
+
+                    /*
+                     * 日付を変えることと、その日の予約を読み直すことは必ず一緒に起きる。
+                     * タイムラインに描けるのはローダーが読んだ日のぶんだけなので、
+                     * 画面の状態にだけ持たせると、空いていない時間帯が空いて見える。
+                     *
+                     * 履歴に積まないのは、1 日ずつ動かすたびに「戻る」が
+                     * その回数ぶん必要になってしまうため。
+                     */
+                    void navigate(toFormPath(facilityId, fromCalendarDate(selected)), {
+                      replace: true,
+                      preventScrollReset: true,
+                    });
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
 
           <ReservationTimeline
             day={day}
@@ -670,8 +749,9 @@ function ApplicationForm({
             blockedSlots={blockedSlots}
             pastSlots={pastSlots}
             range={range}
-            disabled={isSubmitting}
+            disabled={isBusy}
             onSelectSlot={(slot) => setRange((current) => selectSlot(current, slot, blockedSlots))}
+            onSelectRange={setRange}
           />
 
           <ReservationTimelineLegend />
@@ -680,13 +760,13 @@ function ApplicationForm({
             <div className="flex flex-col gap-2">
               <Label htmlFor="start_time">開始時刻</Label>
 
-              <select
-                id="start_time"
+              {/* 未選択は空文字で表す。Radix はこれを「値が無い」として扱い、placeholder を出す */}
+              <Select
                 name="start_time"
                 required
                 value={range === null ? "" : toTokyoTimeKey(range.startMinutes)}
-                onChange={(event) => {
-                  const startMinutes = parseTokyoTimeKey(event.target.value);
+                onValueChange={(value) => {
+                  const startMinutes = parseTokyoTimeKey(value);
                   if (startMinutes === null) return;
 
                   setRange((current) => ({
@@ -697,35 +777,41 @@ function ApplicationForm({
                         : startMinutes + RESERVATION_STEP_MINUTES,
                   }));
                 }}
-                aria-invalid={fieldErrors.period !== undefined}
-                aria-describedby={fieldErrors.period !== undefined ? "period-error" : undefined}
-                className={selectClassName}
               >
-                <option value="" disabled>
-                  選んでください
-                </option>
-                {startSlotMinutes.map((minutes) => (
-                  <option
-                    key={minutes}
-                    value={toTokyoTimeKey(minutes)}
-                    disabled={blockedSlots.has(minutes) || pastSlots.has(minutes)}
-                  >
-                    {toTokyoTimeKey(minutes)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  id="start_time"
+                  className="w-full"
+                  aria-invalid={fieldErrors.period !== undefined}
+                  aria-describedby={fieldErrors.period !== undefined ? "period-error" : undefined}
+                >
+                  <SelectValue placeholder="選んでください" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectGroup>
+                    {startSlotMinutes.map((minutes) => (
+                      <SelectItem
+                        key={minutes}
+                        value={toTokyoTimeKey(minutes)}
+                        disabled={blockedSlots.has(minutes) || pastSlots.has(minutes)}
+                      >
+                        {toTokyoTimeKey(minutes)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="end_time">終了時刻</Label>
 
-              <select
-                id="end_time"
+              <Select
                 name="end_time"
                 required
                 value={range === null ? "" : toTokyoTimeKey(range.endMinutes)}
-                onChange={(event) => {
-                  const endMinutes = parseTokyoTimeKey(event.target.value);
+                onValueChange={(value) => {
+                  const endMinutes = parseTokyoTimeKey(value);
                   if (endMinutes === null) return;
 
                   setRange((current) =>
@@ -734,20 +820,28 @@ function ApplicationForm({
                       : { startMinutes: current.startMinutes, endMinutes },
                   );
                 }}
-                aria-invalid={fieldErrors.period !== undefined}
-                className={selectClassName}
               >
-                <option value="" disabled>
-                  選んでください
-                </option>
-                {endSlotMinutes
-                  .filter((minutes) => range === null || minutes > range.startMinutes)
-                  .map((minutes) => (
-                    <option key={minutes} value={toTokyoTimeKey(minutes)}>
-                      {toTokyoTimeKey(minutes)}
-                    </option>
-                  ))}
-              </select>
+                <SelectTrigger
+                  id="end_time"
+                  className="w-full"
+                  aria-invalid={fieldErrors.period !== undefined}
+                  aria-describedby={fieldErrors.period !== undefined ? "period-error" : undefined}
+                >
+                  <SelectValue placeholder="選んでください" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectGroup>
+                    {endSlotMinutes
+                      .filter((minutes) => range === null || minutes > range.startMinutes)
+                      .map((minutes) => (
+                        <SelectItem key={minutes} value={toTokyoTimeKey(minutes)}>
+                          {toTokyoTimeKey(minutes)}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -780,7 +874,7 @@ function ApplicationForm({
           )}
         </FormSection>
 
-        <FormSection title="使い方を伝える">
+        <FormSection title="利用情報">
           <div className="flex flex-col gap-2">
             <Label htmlFor="head_count">使用人数</Label>
 
@@ -835,6 +929,13 @@ function ApplicationForm({
         </FormSection>
       </div>
 
+      {/*
+       * 縦に積む幅でだけ引く区切り。入力の枠と確認の枠は同じ見た目の Card なので、
+       * 続けて並べると、どこまでが入力でどこからが確認なのかが分からない。
+       * 横に並ぶ幅（lg 以上）では左右に離れていて、線を引く理由がない。
+       */}
+      <Separator className="lg:hidden" />
+
       <SummaryPanel
         groupName={group?.name ?? null}
         facilityName={facility?.name ?? null}
@@ -873,97 +974,6 @@ const toInitialRange = (
 };
 
 /**
- * 日付の選択。1 週間ぶんを並べ、前後の週へはリンクで移る。
- *
- * ラジオボタンにしているのは、JavaScript が動かなくても日付を選べるようにするため。
- * 見た目はボタンだが、実体は選択肢なので、キーボードでも矢印キーで移れる。
- */
-function WeekPicker({
-  days,
-  dateKey,
-  weekStart,
-  now,
-  facilityId,
-  onSelectDate,
-}: Readonly<{
-  days: readonly AvailabilityDay[];
-  dateKey: string;
-  weekStart: Date;
-  now: Date;
-  facilityId: string;
-  onSelectDate: (dateKey: string) => void;
-}>) {
-  const weekEnd = addDays(weekStart, DAYS_IN_WEEK - 1);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="flex-1 text-sm text-muted-foreground">
-          {formatFullDate(weekStart)} 〜 {formatMonthDay(weekEnd)}
-        </p>
-
-        <div className="flex items-center gap-1">
-          <Button asChild variant="outline" size="icon" aria-label="前の週">
-            <Link to={toFormPath(facilityId, toTokyoDateKey(addDays(weekStart, -DAYS_IN_WEEK)))}>
-              <ChevronLeft aria-hidden />
-            </Link>
-          </Button>
-
-          <Button asChild variant="outline" size="icon" aria-label="次の週">
-            <Link to={toFormPath(facilityId, toTokyoDateKey(addDays(weekStart, DAYS_IN_WEEK)))}>
-              <ChevronRight aria-hidden />
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/*
-       * `min-w-0` は fieldset のため。ブラウザの既定が `min-inline-size: min-content` で、
-       * 外さないと中の日付の並びの幅まで広がり、横スクロールが効かない。
-       */}
-      <fieldset className="-mx-1 w-full min-w-0 overflow-x-auto px-1">
-        <legend className="sr-only">利用する日</legend>
-
-        <div className="flex w-max gap-2 py-1">
-          {days.map((day) => {
-            // その日の利用可能時間がすべて過ぎていれば、もう申請できない
-            const isOver = atTokyoMinutes(day.date, FACILITY_CLOSE_HOUR * 60) <= now;
-
-            return (
-              <label
-                key={day.dateKey}
-                className={cn(
-                  "cursor-pointer rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-                  "has-[:checked]:border-primary has-[:checked]:bg-primary has-[:checked]:text-primary-foreground",
-                  "has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
-                  isOver
-                    ? "cursor-not-allowed text-muted-foreground opacity-50"
-                    : "hover:bg-accent has-[:checked]:hover:bg-primary",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="date"
-                  value={day.dateKey}
-                  checked={dateKey === day.dateKey}
-                  disabled={isOver}
-                  onChange={() => onSelectDate(day.dateKey)}
-                  className="sr-only"
-                />
-                {formatMonthDay(day.date)}
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
-
-      {/* 日付だけが選び直しになることを書いておかないと、確認欄の日付が変わったことに気づけない */}
-      <p className="text-xs text-muted-foreground">別の週へ移ると、日付は選び直しになります。</p>
-    </div>
-  );
-}
-
-/**
  * 申請内容の確認欄。
  *
  * ステータスを選ぶ欄は置いていない。申請は必ず仮予約として作られるので（STATE-001）、
@@ -987,7 +997,12 @@ function SummaryPanel({
   isSubmitting: boolean;
 }>) {
   return (
-    <Card className="lg:sticky lg:top-4">
+    /*
+     * 貼り付ける位置は、上の帯（DesktopHeader = 3rem）の下から 1rem 空けたところ。
+     * `top-4` のままだと帯の裏に潜り込み、見出しが隠れてしまう。
+     * 帯は `sticky top-0 z-20` で、こちらより手前に出る。
+     */
+    <Card className="lg:sticky lg:top-16">
       <CardHeader>
         <CardTitle className="text-base">この内容で申請します</CardTitle>
       </CardHeader>
@@ -1017,14 +1032,15 @@ function SummaryPanel({
         </dl>
 
         <p className="text-xs text-muted-foreground">
-          状態は必ず仮予約になります（STATE-001）。申請者が選ぶことはできません。
+          申請を事務局が承認すると、利用予約が確定します。
         </p>
-
-        <Button type="submit" size="lg" disabled={!canSubmit}>
+      </CardContent>
+      <CardFooter>
+        <Button type="submit" size="lg" disabled={!canSubmit} className="w-full">
           <CalendarCheck aria-hidden />
           {isSubmitting ? "申請中…" : "この内容で申請する"}
         </Button>
-      </CardContent>
+      </CardFooter>
     </Card>
   );
 }
@@ -1050,7 +1066,7 @@ function SummaryItem({ label, children }: Readonly<{ label: string; children: Re
     <div className="flex items-baseline gap-2">
       <dt className="w-20 shrink-0 text-xs text-muted-foreground">{label}</dt>
       <dd className="min-w-0 font-medium break-words">
-        {children ?? <span className="font-normal text-muted-foreground">未選択</span>}
+        {children ?? <span className="font-normal text-muted-foreground">未入力</span>}
       </dd>
     </div>
   );

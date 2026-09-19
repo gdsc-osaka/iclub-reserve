@@ -173,3 +173,42 @@ export const selectSlot = (
     endMinutes: slotStartMinutes + RESERVATION_STEP_MINUTES,
   };
 };
+
+/**
+ * タイムラインをなぞって選んだときの、いまの時間帯を返す。
+ *
+ * `anchorSlot` は押し始めた枠、`slotStartMinutes` はいま指している枠。
+ * 上へなぞっても下へなぞっても選べるように、どちらが前かはここで決める。
+ *
+ * なぞった先に選べない枠（承認済みの予約と重なる枠・過ぎた枠）があるときは、
+ * その**手前で止める**。{@link selectSlot} が押した枠から選び直すのとは逆の扱いにしている。
+ * あちらは離れた枠を 1 回押す操作なので、途中に予約があると
+ * 何度押しても選択が動かない画面に見えてしまうが、
+ * なぞる操作では指の動きに合わせて帯が伸び続けるので、
+ * 止まった位置がそのまま「ここまでしか取れない」と読める。
+ */
+export const dragRange = (
+  anchorSlot: number,
+  slotStartMinutes: number,
+  unselectableSlots: ReadonlySet<number>,
+): SlotRange => {
+  const step =
+    slotStartMinutes >= anchorSlot ? RESERVATION_STEP_MINUTES : -RESERVATION_STEP_MINUTES;
+
+  // 押し始めた枠から 1 枠ずつ進み、選べない枠に当たったところで止める
+  let reached = anchorSlot;
+
+  for (
+    let minutes = anchorSlot + step;
+    step > 0 ? minutes <= slotStartMinutes : minutes >= slotStartMinutes;
+    minutes += step
+  ) {
+    if (unselectableSlots.has(minutes)) break;
+    reached = minutes;
+  }
+
+  return {
+    startMinutes: Math.min(anchorSlot, reached),
+    endMinutes: Math.max(anchorSlot, reached) + RESERVATION_STEP_MINUTES,
+  };
+};

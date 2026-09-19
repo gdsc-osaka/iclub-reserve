@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 import { RESERVATION_STEP_MINUTES } from "~/domain/reservation";
 import {
   formatMonthDay,
@@ -16,7 +18,12 @@ import {
   toAxisPercent,
 } from "./availability-week";
 import { reservationStatusLabel } from "./reservation-status-badge";
-import { startSlotMinutes, type SlotRange, type TimelineReservation } from "./reservation-slots";
+import {
+  dragRange,
+  startSlotMinutes,
+  type SlotRange,
+  type TimelineReservation,
+} from "./reservation-slots";
 import { layoutTimelineItems } from "./timeline-layout";
 
 /**
@@ -39,9 +46,8 @@ const TIMELINE_HEIGHT_REM = startSlotMinutes.length * SLOT_HEIGHT_REM;
  * フォームで見た空き具合が同じものだと気づけない。
  *
  * 枠を押して時間帯を選ぶが、フォームが実際に送るのは
- * 呼び出し側が持っている開始・終了の `<select>` の値。
+ * 呼び出し側が持っている開始・終了の選択欄の値。
  * この図は「選択肢を絵で選べるようにしたもの」であって、入力そのものではない。
- * こうしておくと、JavaScript が動かない環境でも申請できる。
  */
 export function ReservationTimeline({
   day,
@@ -52,6 +58,7 @@ export function ReservationTimeline({
   range,
   disabled,
   onSelectSlot,
+  onSelectRange,
 }: Readonly<{
   /** 描く日（日本時間のその日のどこかを指す Date） */
   day: Date;
@@ -67,11 +74,53 @@ export function ReservationTimeline({
   range: SlotRange | null;
   /** 申請できない状態のときに、枠を押せなくする */
   disabled: boolean;
+  /** 枠を 1 つ押したとき。押した位置から、呼び出し側が時間帯を決め直す */
   onSelectSlot: (slotStartMinutes: number) => void;
+  /** 枠をなぞって選んだとき。なぞっている間ずっと呼ばれる */
+  onSelectRange: (range: SlotRange) => void;
 }>) {
   const placements = layoutTimelineItems(items);
   const isToday = isSameTokyoDay(day, now);
   const nowMinutes = tokyoMinutesOfDay(now);
+
+  /** なぞって伸ばすときに越えられない枠。埋まっている枠と、過ぎた枠 */
+  const unselectableSlots = new Set([...blockedSlots, ...pastSlots]);
+
+  /*
+   * なぞっている最中の状態。`useState` にしないのは、指を動かすたびに
+   * この図を描き直させないため。画面に出るのは呼び出し側が持つ `range` だけで、
+   * ここが持つのは「どこから押し始めたか」という操作の途中経過にすぎない。
+   */
+  const gridRef = useRef<HTMLDivElement>(null);
+  /** 押し始めた枠。なぞっていなければ null */
+  const anchorRef = useRef<number | null>(null);
+  /** 押し始めてから、別の枠まで動いたか */
+  const movedRef = useRef(false);
+  /** 直前の操作がなぞる操作だったか。なぞり終わりの click を捨てるために使う */
+  const draggedRef = useRef(false);
+
+  /**
+   * 画面の縦位置から、そこにある枠を割り出す。
+   *
+   * どの要素の上にいるかを調べず、枠の並び全体の高さから計算しているのは、
+   * なぞっている間ポインタを押し始めた枠に固定している（`setPointerCapture`）ため。
+   * 固定しないと、埋まっている枠（`disabled`）の上を通った瞬間に
+   * 指を追うのをやめてしまう。
+   */
+  const slotAt = (clientY: number): number | null => {
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (rect === undefined || rect.height === 0) return null;
+
+    const index = Math.floor(((clientY - rect.top) / rect.height) * startSlotMinutes.length);
+
+    return startSlotMinutes[Math.min(startSlotMinutes.length - 1, Math.max(0, index))] ?? null;
+  };
+
+  const endDrag = () => {
+    draggedRef.current = movedRef.current;
+    anchorRef.current = null;
+    movedRef.current = false;
+  };
 
   return (
     <div className="grid grid-cols-[3rem_minmax(0,1fr)]">
@@ -101,7 +150,8 @@ export function ReservationTimeline({
         style={{ height: `${TIMELINE_HEIGHT_REM}rem` }}
       >
         <div
-          className="grid h-full"
+          ref={gridRef}
+          className="grid h-full select-none"
           style={{ gridTemplateRows: `repeat(${startSlotMinutes.length}, minmax(0, 1fr))` }}
         >
           {startSlotMinutes.map((slot, index) => {
@@ -114,7 +164,44 @@ export function ReservationTimeline({
                 key={slot}
                 type="button"
                 disabled={disabled || isBlocked || isPast}
-                onClick={() => onSelectSlot(slot)}
+                /*
+                 * なぞるのはマウス・ペンだけにしている。指でも取れるようにするには
+                 * この図の `touch-action` を切る必要があり、そうすると
+                 * スマホでこの図の上から始めた縦スクロールが効かなくなる。
+                 * 指では、枠を押す・後ろの枠をもう一度押す、で同じことができる。
+                 */
+                onPointerDown={(event) => {
+                  if (event.pointerType === "touch" || event.button !== 0) return;
+
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  anchorRef.current = slot;
+                  movedRef.current = false;
+                  // 前の操作の取りこぼしを持ち越さない（click が来ずに終わった場合）
+                  draggedRef.current = false;
+                }}
+                onPointerMove={(event) => {
+                  const anchor = anchorRef.current;
+                  if (anchor === null) return;
+
+                  const hovered = slotAt(event.clientY);
+                  if (hovered === null) return;
+                  // 押しただけ（1 枠も動いていない）なら、click の扱いに任せる
+                  if (!movedRef.current && hovered === anchor) return;
+
+                  movedRef.current = true;
+                  onSelectRange(dragRange(anchor, hovered, unselectableSlots));
+                }}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onClick={() => {
+                  // なぞり終わりにも click は来る。ここで選び直すと、なぞった結果が消える
+                  if (draggedRef.current) {
+                    draggedRef.current = false;
+                    return;
+                  }
+
+                  onSelectSlot(slot);
+                }}
                 aria-label={
                   isBlocked
                     ? `${formatMonthDay(day)} ${label} は承認済みの予約で埋まっています`
@@ -230,7 +317,8 @@ export function ReservationTimelineLegend() {
         仮予約（重ねて申請できます）
       </li>
       <li className="w-full sm:w-auto">
-        枠を押すと {RESERVATION_STEP_MINUTES} 分選べます。後ろの枠をもう一度押すと伸びます。
+        枠を押すと {RESERVATION_STEP_MINUTES}{" "}
+        分選べます。そのままなぞるか、後ろの枠をもう一度押すと伸びます。
       </li>
     </ul>
   );
