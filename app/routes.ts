@@ -17,6 +17,8 @@ export default [
      * 新規作成と詳細もその下にぶら下げる。
      * `new` は `:reservationId` より具体的なので、先に書いていなくても先に選ばれる。
      */
+    route("reservations", "routes/reservations/list/route.tsx"),
+    route("staff/reservations", "routes/reservations/staff/route.tsx"),
     route("reservations/new", "routes/reservations/new/route.tsx"),
     route("reservations/:reservationId", "routes/reservation.tsx"),
   ]),
