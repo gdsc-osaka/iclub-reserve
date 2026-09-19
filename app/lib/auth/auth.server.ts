@@ -22,6 +22,7 @@ import { MembershipRole } from "~/domain/membership";
 import { assertAllowedOrganizationRequest } from "./organization-guard";
 import { buildPreviewTrustedOrigins } from "./preview-trusted-origins";
 import { ac, admin, member } from "./permission";
+import { createId } from "@paralleldrive/cuid2";
 
 /** 許可外のドメインを拒否するときに返す説明文。 */
 const NOT_ALLOWED_MESSAGE = `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`;
@@ -82,6 +83,13 @@ const createAuth = () => {
     database: drizzleAdapter(createDb(env.DB), {
       provider: "sqlite",
     }),
+
+    advanced: {
+      database: {
+        // ID を CUID2 で生成
+        generateId: () => createId(),
+      },
+    },
 
     user: {
       /**
