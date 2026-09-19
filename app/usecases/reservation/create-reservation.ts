@@ -9,11 +9,11 @@ import {
   ReservationErrorCode,
   reservationPermissions,
   ReservationStatus,
-  validateReservationDraft,
   type Reservation,
   type ReservationError,
   type ReservationRepository,
 } from "~/domain/reservation";
+import { validateReservationDraft } from "~/domain/reservation/validation";
 
 export interface CreateProvisionalReservationDeps {
   readonly reservationRepository: ReservationRepository;
