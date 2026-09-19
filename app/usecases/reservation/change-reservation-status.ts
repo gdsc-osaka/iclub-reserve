@@ -67,13 +67,11 @@ export const changeReservationStatusUseCase = (
   return deps.reservationRepository.findById(args.reservationId).andThen((reservation) =>
     deps.userGroupListQuery
       .findByUserId(args.actorUserId)
-      .mapErr(
-        (error): ReservationError => ({
-          code: ReservationErrorCode.DatabaseError,
-          message: "所属団体の確認に失敗しました。",
-          cause: error,
-        }),
-      )
+      .mapErr((error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "所属団体の確認に失敗しました。",
+        cause: error,
+      }))
       .andThen((userGroups) => {
         /*
          * 予約の団体での所属を組み立てる。所属していなければ null。

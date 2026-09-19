@@ -203,33 +203,31 @@ export const getReservationListUseCase = (
         to,
       }),
       deps.reservationListQuery.findFacilities(),
-    ]).map(
-      ([groups, rows, counts, facilities]): ReservationListResult => ({
-        groups,
-        selectedGroup: null,
-        items: rows.map(toReservationListItem),
-        counts,
-        facilities,
-        // 事務局の画面では、団体での所属ではなく事務局の権限で操作する（COND-009）
-        viewerMembership: null,
-      }),
-    );
+    ]).map(([groups, rows, counts, facilities]): ReservationListResult => ({
+      groups,
+      selectedGroup: null,
+      items: rows.map(toReservationListItem),
+      counts,
+      facilities,
+      // 事務局の画面では、団体での所属ではなく事務局の権限で操作する（COND-009）
+      viewerMembership: null,
+    }));
   }
 
   // 一般利用者の自団体閲覧時（scope="own"）
   return deps.userGroupListQuery.findByUserId(args.actorUserId).andThen((groups) => {
     // どの団体にも所属していない場合
     if (groups.length === 0) {
-      return deps.reservationListQuery.findFacilities().map(
-        (facilities): ReservationListResult => ({
+      return deps.reservationListQuery
+        .findFacilities()
+        .map((facilities): ReservationListResult => ({
           groups,
           selectedGroup: null,
           items: [],
           counts: { all: 0, provisional: 0, approved: 0, ended: 0 },
           facilities,
           viewerMembership: null,
-        }),
-      );
+        }));
     }
 
     // URL で指定された団体 ID が実際に本人の所属団体に含まれているか検証
@@ -254,19 +252,17 @@ export const getReservationListUseCase = (
         to,
       }),
       deps.reservationListQuery.findFacilities(),
-    ]).map(
-      ([rows, counts, facilities]): ReservationListResult => ({
-        groups,
-        selectedGroup,
-        items: rows.map(toReservationListItem),
-        counts,
-        facilities,
-        viewerMembership: {
-          groupId: selectedGroup.id,
-          userId: args.actorUserId,
-          roles: selectedGroup.roles,
-        },
-      }),
-    );
+    ]).map(([rows, counts, facilities]): ReservationListResult => ({
+      groups,
+      selectedGroup,
+      items: rows.map(toReservationListItem),
+      counts,
+      facilities,
+      viewerMembership: {
+        groupId: selectedGroup.id,
+        userId: args.actorUserId,
+        roles: selectedGroup.roles,
+      },
+    }));
   });
 };
