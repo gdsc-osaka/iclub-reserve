@@ -3,6 +3,7 @@ import { data, isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { ReservationErrorCode } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
@@ -10,6 +11,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { toSamePagePath } from "~/lib/form-redirect";
+import { logServerError } from "~/lib/log.server";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
 import type { Route } from "./+types/route";
@@ -52,8 +54,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (result.isErr()) {
     /*
      * 失敗の中身は画面へ出さない。利用者にできることは増えず、
-     * こちらの内部の事情だけが伝わってしまう。詳しい原因はサーバー側のログに残る。
+     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
      */
+    logServerError("reservations.loader", result.error);
     throw data({ message: "Internal server error" }, { status: 500 });
   }
 
@@ -104,6 +107,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
 
   if (result.isErr()) {
+    /*
+     * 差し戻し（理由の未入力・重なり・権限）は想定内なのでログに残さない。
+     * DB の失敗だけは、画面に出さない代わりに原因をサーバー側へ残す。
+     */
+    if (result.error.code === ReservationErrorCode.DatabaseError) {
+      logServerError("reservations.action", result.error);
+    }
+
     return { error: toActionErrorMessage(result.error) };
   }
 
