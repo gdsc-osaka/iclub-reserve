@@ -1,4 +1,4 @@
-import { type LoginMethod, parseLoginMethod } from "~/domain/auth/login-method";
+import { type LoginMethod, parseLoginMethod } from "~/domain/authn/login-method";
 
 /**
  * 前回使ったログイン方法を覚えておくための cookie の名前。

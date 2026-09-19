@@ -1,7 +1,7 @@
 import {
   ALLOWED_EMAIL_DOMAINS_LABEL,
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
-} from "~/domain/auth/allowed-email-domain";
+} from "~/domain/authn/allowed-email-domain";
 
 /**
  * Better Auth のクライアントが返すエラー。

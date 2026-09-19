@@ -121,9 +121,9 @@ export const organization = sqliteTable("organization", {
   logo: text("logo"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   metadata: text("metadata"),
-  status: text("status", {
-    enum: ["enabled", "pending", "disabled"],
-  }).notNull(),
+  status: text("status", { enum: ["enabled", "pending", "disabled"] })
+    .default("pending")
+    .notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 

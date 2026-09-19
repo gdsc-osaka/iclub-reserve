@@ -8,17 +8,15 @@ import {
   PasskeyRegistrationStep,
 } from "~/components/auth/passkey-registration-step";
 import { Alert, AlertDescription } from "~/components/ui/alert";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { isProfileCompleted } from "~/domain/auth/user-profile";
+import { isProfileCompleted } from "~/domain/authn/user-profile";
 import { authClient } from "~/lib/auth/auth-client";
 import { toAuthErrorMessage } from "~/lib/auth/auth-error-message";
 import { LOGIN_PATH, readRedirectTo, withRedirectTo } from "~/lib/auth/auth-redirect";
 import { getRequestUser } from "~/lib/auth/auth-session.server";
 import { detectPasskeySupport } from "~/lib/auth/passkey-support";
 
-import type { Route } from "./+types/onboarding";
+import type { Route } from "./+types/route";
+import { NAME_STEP_DESCRIPTION, NAME_STEP_TITLE, NameStep } from "./name-step";
 
 export function meta(_: Route.MetaArgs) {
   return [{ title: "お名前の登録 | iclub-reserve" }];
@@ -48,6 +46,12 @@ export function loader({ request, context }: Route.LoaderArgs) {
  * - passkey: パスキーの登録のお誘い
  */
 type Step = "name" | "passkey";
+
+/** 段階ごとのカードの見出し。段階を足したらここにも足す */
+const stepHeadings: Record<Step, { readonly title: string; readonly description: string }> = {
+  name: { title: NAME_STEP_TITLE, description: NAME_STEP_DESCRIPTION },
+  passkey: { title: PASSKEY_STEP_TITLE, description: PASSKEY_STEP_DESCRIPTION },
+};
 
 /**
  * 初回セットアップ画面。
@@ -114,13 +118,7 @@ export default function Onboarding({ loaderData }: Route.ComponentProps) {
   };
 
   // 段階によってカードの見出しごと差し替える。
-  const { title, description } = {
-    name: {
-      title: "お名前の登録",
-      description: "ようこそ。予約画面などで表示されるお名前を登録してください。",
-    },
-    passkey: { title: PASSKEY_STEP_TITLE, description: PASSKEY_STEP_DESCRIPTION },
-  }[step];
+  const { title, description } = stepHeadings[step];
 
   return (
     <AuthCard title={title} description={description}>
@@ -132,37 +130,12 @@ export default function Onboarding({ loaderData }: Route.ComponentProps) {
         )}
 
         {step === "name" && (
-          <form
-            className="space-y-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void registerName();
-            }}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="name">お名前</Label>
-              <Input
-                id="name"
-                type="text"
-                autoComplete="name"
-                placeholder="大阪 太郎"
-                required
-                autoFocus
-                disabled={pending}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </div>
-
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full"
-              disabled={pending || name.trim() === ""}
-            >
-              {pending ? "登録中…" : "登録して次へ"}
-            </Button>
-          </form>
+          <NameStep
+            name={name}
+            onNameChange={setName}
+            pending={pending}
+            onSubmit={() => void registerName()}
+          />
         )}
 
         {step === "passkey" && <PasskeyRegistrationStep onDone={() => void finish()} />}

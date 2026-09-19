@@ -11,7 +11,7 @@ import {
   ALLOWED_EMAIL_DOMAINS_LABEL,
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
   isAllowedEmailAddress,
-} from "~/domain/auth/allowed-email-domain";
+} from "~/domain/authn/allowed-email-domain";
 import {
   createSendVerificationOtpUseCase,
   OTP_EXPIRES_IN_SECONDS,

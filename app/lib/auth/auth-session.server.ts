@@ -1,7 +1,7 @@
 import { createContext, redirect } from "react-router";
 import type { MiddlewareFunction, RouterContextProvider } from "react-router";
 
-import { isProfileCompleted } from "~/domain/auth/user-profile";
+import { isProfileCompleted } from "~/domain/authn/user-profile";
 import {
   isPublicPath,
   LOGIN_PATH,

@@ -1,59 +1,29 @@
-import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
-import { redirect, useNavigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 
-import { AuthCard } from "~/components/auth/auth-card";
-import { OtpCodeForm } from "~/components/auth/otp-code-form";
-import { Alert, AlertDescription } from "~/components/ui/alert";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { ALLOWED_EMAIL_DOMAINS_LABEL } from "~/domain/auth/allowed-email-domain";
-import { type LoginMethod, toLoginMethodOrder } from "~/domain/auth/login-method";
-import { isProfileCompleted } from "~/domain/auth/user-profile";
+import { type LoginMethod, toLoginMethodOrder } from "~/domain/authn/login-method";
+import { isProfileCompleted } from "~/domain/authn/user-profile";
 import { authClient } from "~/lib/auth/auth-client";
 import { isPasskeyCancelledError, toAuthErrorMessage } from "~/lib/auth/auth-error-message";
-import {
-  PASSKEY_SUGGEST_PATH,
-  readRedirectTo,
-  WELCOME_PATH,
-  withRedirectTo,
-} from "~/lib/auth/auth-redirect";
-import { getRequestUser } from "~/lib/auth/auth-session.server";
-import { readLastLoginMethod, rememberLastLoginMethod } from "~/lib/auth/last-login-method-cookie";
+import { PASSKEY_SUGGEST_PATH, WELCOME_PATH, withRedirectTo } from "~/lib/auth/auth-redirect";
+import { rememberLastLoginMethod } from "~/lib/auth/last-login-method-cookie";
 import { shouldSuggestPasskeyOnThisDevice } from "~/lib/auth/passkey-prompt-storage";
 import { detectPasskeySupport, usePasskeySupport } from "~/lib/auth/passkey-support";
 
-import type { Route } from "./+types/login";
-
-export function meta(_: Route.MetaArgs) {
-  return [{ title: "ログイン・新規登録 | iclub-reserve" }];
-}
-
 /**
- * すでにログインしている人をログイン画面に留めない。
+ * ログイン画面（SCR-010）の段取りをまとめたもの。
  *
- * お名前がまだ空の人（アカウントを作った直後に離脱した人）は
- * セットアップ画面へ、それ以外の人は元いたページへ送る。
+ * 描くこと以外をここへ寄せている。認証はどの段階でも
+ * 「押す → 待つ → 進むか、理由を出す」の繰り返しで、
+ * その待ち方の作法（下のパスキーの通し番号など）が画面の組み立てに混ざると、
+ * どちらも追いにくくなるため。
  *
- * 併せて、前回このブラウザで使ったログイン方法も読んでおく。
- * ログイン方法の並び順は、最初の描画の時点で確定していないと
- * 画面が表示されたあとに入れ替わってしまうため。
+ * 画面から呼ぶものは待たずに済む形（戻り値なし）にそろえてある。
+ * 結果はすべてこの中の状態に出るので、呼び出し側で待つ理由がない。
  */
-export function loader({ request, context }: Route.LoaderArgs) {
-  const redirectTo = readRedirectTo(request);
-  const user = getRequestUser(context);
-
-  if (user) {
-    throw redirect(
-      isProfileCompleted(user) ? redirectTo : withRedirectTo(WELCOME_PATH, redirectTo),
-    );
-  }
-
-  return { redirectTo, lastLoginMethod: readLastLoginMethod(request) };
-}
 
 /** 画面に出すお知らせ。エラーは赤色、それ以外は通常色で表示する。 */
-type Message = { readonly kind: "error" | "info"; readonly text: string };
+export type Message = { readonly kind: "error" | "info"; readonly text: string };
 
 /**
  * 今どの入力段階にいるか。
@@ -61,43 +31,42 @@ type Message = { readonly kind: "error" | "info"; readonly text: string };
  * - email: メールアドレスの入力（パスキーでのログインもこの段階から行う）
  * - otp: メールに届いた認証コードの入力
  */
-type Step = "email" | "otp";
+export type Step = "email" | "otp";
 
-/**
- * ログイン方法の間に挟む「または」の区切り。
- *
- * shadcn/ui のログイン画面の作例と同じく、横線の上に文字を重ねている。
- */
-function MethodDivider() {
-  return (
-    <div className="relative text-center text-xs text-muted-foreground after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
-      <span className="relative z-10 bg-card px-2">または</span>
-    </div>
-  );
+/** ログイン画面が持つ状態と、そこへの操作 */
+export interface LoginForm {
+  readonly step: Step;
+  readonly email: string;
+  readonly message: Message | null;
+  /** 何かの返事を待っているか。待っている間はどの操作も受け付けない */
+  readonly pending: boolean;
+  /** どのログイン方法の返事を待っているか。ボタンの文言に使う */
+  readonly pendingMethod: LoginMethod | null;
+  /** 出せるログイン方法を、前回使った順に並べたもの */
+  readonly methods: readonly LoginMethod[];
+  readonly setEmail: (email: string) => void;
+  /** 認証コードをメールで送る。`isResend` は再送信ボタンから呼ばれたかどうか */
+  readonly sendOtp: (isResend: boolean) => void;
+  readonly verifyOtp: (otp: string) => void;
+  readonly signInWithPasskey: () => void;
+  /** 認証コードの入力をやめて、メールアドレスの入力へ戻る */
+  readonly backToEmail: () => void;
 }
 
 /**
- * ログイン・新規登録画面。
+ * ログインの段取り。
  *
- * ログイン方法は 2 つある。
- *
- * - **メールの認証コード（OTP）** — 誰でも使える主導線。パスワードは使わない。
- *   この方式では「ログイン」と「新規登録」はサーバー側で同じ処理になる
- *   （未登録のメールアドレスならその場でアカウントが作られる）ため、
- *   画面もあえて分けずに 1 つにまとめている。
- * - **パスキー** — 登録済みの人だけが使える近道。
- *   ボタンからのほか、メールアドレスの入力欄のオートフィルからも選べる。
- *
- * この画面が担うのは本人確認までで、初めての人のお名前の登録は
- * ログイン後の `/welcome`（`routes/onboarding.tsx`）が担当する。
- * 認証が済んだ時点でセッションはできているため、そこで離脱されても
- * ログインが必要な画面から改めてセットアップへ案内できる。
+ * @param redirectTo ログインが必要なページから飛ばされてきた場合の、ログイン後の戻り先
+ * @param lastLoginMethod 前回このブラウザで使ったログイン方法（ログイン方法の並び順に使う）
  */
-export default function Login({ loaderData }: Route.ComponentProps) {
+export const useLoginForm = ({
+  redirectTo,
+  lastLoginMethod,
+}: Readonly<{
+  redirectTo: string;
+  lastLoginMethod: LoginMethod | null;
+}>): LoginForm => {
   const navigate = useNavigate();
-  // redirectTo: ログインが必要なページから飛ばされてきた場合の、ログイン後の戻り先。
-  // lastLoginMethod: 前回このブラウザで使ったログイン方法（ログイン方法の並び順に使う）。
-  const { redirectTo, lastLoginMethod } = loaderData;
 
   const passkeySupport = usePasskeySupport();
 
@@ -337,72 +306,6 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     // ここに挙げた 3 つが変わったときだけなので、あえて依存に入れていない。
   }, [passkeySupport.canAutofill, step, autofillAttempt]);
 
-  /** メールアドレスを入力して、認証コードを送ってもらうフォーム。 */
-  const emailOtpForm = (
-    <form
-      className="space-y-5"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void sendOtp(false);
-      }}
-    >
-      <div className="space-y-2">
-        <Label htmlFor="email">メールアドレス</Label>
-        <Input
-          id="email"
-          type="email"
-          // 末尾の webauthn が、オートフィルにパスキーを出すための目印。
-          // ブラウザはこの目印が付いた入力欄を探して候補を出すので、
-          // 外すとオートフィルからのログインができなくなる。
-          autoComplete="email webauthn"
-          placeholder="example@osaka-u.ac.jp"
-          required
-          disabled={pending}
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          aria-describedby="email-hint"
-        />
-        <p id="email-hint" className="text-xs text-muted-foreground">
-          {ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスのみご利用いただけます。
-        </p>
-      </div>
-
-      <Button type="submit" size="lg" className="w-full" disabled={pending}>
-        {pendingMethod === "email-otp" ? "送信中…" : "メールアドレスで続ける"}
-      </Button>
-    </form>
-  );
-
-  /**
-   * パスキーでログインするボタン。
-   *
-   * 先頭に来ても見た目は変えない。塗りつぶしのボタンは
-   * 「メールアドレスで続ける」に譲り、こちらは枠線だけにしておく。
-   * 並び順で色まで入れ替わると、開くたびに画面の印象が変わってしまうため。
-   */
-  const passkeyButton = (
-    <div className="space-y-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="lg"
-        className="w-full"
-        onClick={() => void signInWithPasskey(false)}
-        disabled={pending}
-      >
-        {pendingMethod === "passkey" ? "確認中…" : "パスキーでログイン"}
-      </Button>
-      <p className="text-xs text-muted-foreground">
-        登録済みの端末なら、顔認証・指紋・画面ロックだけでログインできます。
-      </p>
-    </div>
-  );
-
-  const methodContents: Record<LoginMethod, ReactNode> = {
-    "email-otp": emailOtpForm,
-    passkey: passkeyButton,
-  };
-
   // 前回使った方法を先頭にして並べる。
   //
   // パスキーは「使える」前提で描いておき、対応していないと分かったときだけ取り下げる。
@@ -413,46 +316,20 @@ export default function Login({ loaderData }: Route.ComponentProps) {
     (method) => method !== "passkey" || passkeySupport.status !== "unsupported",
   );
 
-  const description = {
-    email:
-      "メールアドレス宛に認証コードをお送りします。初めての方はそのままアカウントが作成されます。",
-    otp: "メールに届いた認証コードを入力してください。",
-  }[step];
-
-  return (
-    <AuthCard title="ログイン・新規登録" description={description}>
-      <div className="space-y-4">
-        {message && (
-          <Alert variant={message.kind === "error" ? "destructive" : "default"}>
-            <AlertDescription>{message.text}</AlertDescription>
-          </Alert>
-        )}
-
-        {step === "email" && (
-          <div className="space-y-4">
-            {methods.map((method, index) => (
-              <Fragment key={method}>
-                {index > 0 && <MethodDivider />}
-                {methodContents[method]}
-              </Fragment>
-            ))}
-          </div>
-        )}
-
-        {step === "otp" && (
-          <OtpCodeForm
-            email={email}
-            pending={pending}
-            submitLabel={pending ? "確認中…" : "認証する"}
-            onSubmit={(otp) => void verifyOtp(otp)}
-            onResend={() => void sendOtp(true)}
-            onBack={() => {
-              setStep("email");
-              setMessage(null);
-            }}
-          />
-        )}
-      </div>
-    </AuthCard>
-  );
-}
+  return {
+    step,
+    email,
+    message,
+    pending,
+    pendingMethod,
+    methods,
+    setEmail,
+    sendOtp: (isResend) => void sendOtp(isResend),
+    verifyOtp: (otp) => void verifyOtp(otp),
+    signInWithPasskey: () => void signInWithPasskey(false),
+    backToEmail: () => {
+      setStep("email");
+      setMessage(null);
+    },
+  };
+};

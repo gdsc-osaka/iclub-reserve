@@ -5,7 +5,7 @@ import { isMembershipRole } from "~/domain/membership";
 /**
  * 組織エンドポイントへのリクエストを入口で選り分ける。
  *
- * `app/routes/api.auth.$.ts` は catch-all なので、組織プラグインが生やす
+ * `app/routes/api/auth/route.ts` は catch-all なので、組織プラグインが生やす
  * エンドポイントはすべて外から叩ける。ここはその唯一の関門になる。
  *
  * Better Auth の設定 (app/lib/auth/auth.server.ts) から切り離してあるのは、
