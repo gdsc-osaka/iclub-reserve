@@ -65,7 +65,10 @@ export const ReservationErrorCode = {
   ReservationInvalidInput: "RESERVATION_INVALID_INPUT",
   /** 不正なステータス遷移（許可されていない状態からの操作） */
   ReservationInvalidTransition: "RESERVATION_INVALID_TRANSITION",
-  /** 同一施設・同一時間帯に承認済みの予約がある（COND-001） */
+  /**
+   * 同一施設・同一時間帯に承認済みの予約がある（COND-001）、
+   * または同じ予約に対する別の操作が先に反映された
+   */
   ReservationConflict: "RESERVATION_CONFLICT",
   /** 申請元に選んだ団体が有効でない（COND-006） */
   ReservationGroupNotEligible: "RESERVATION_GROUP_NOT_ELIGIBLE",
@@ -88,12 +91,27 @@ export interface ReservationOverlapArgs {
   readonly endAt: Date;
 }
 
-/** 予約ステータスの更新引数 */
-export interface UpdateReservationStatusArgs {
+/** 予約ステータスを条件付きで更新するときの引数 */
+export interface ApplyStatusTransitionArgs {
   readonly id: string;
+  /**
+   * 操作前の予約ステータス（読んだときの状態）。
+   *
+   * DB がこの状態のままでなければ 1 件も更新しない。同じ予約を 2 人が同時に
+   * 操作したとき、あとから届いた方が相手の結果を上書きしてしまうのを防ぐ。
+   */
+  readonly expectedStatus: ReservationStatus;
+  /** 更新後の予約ステータス */
   readonly status: ReservationStatus;
   readonly statusReason: string | null;
   readonly updatedAt: Date;
+  /**
+   * 承認（approve）のときだけ true。
+   *
+   * 同一施設・同一時間帯に承認済みの予約が無いこと（COND-001）を、
+   * ステータスの更新と同じ 1 文の中で確かめる。
+   */
+  readonly requireNoApprovedOverlap: boolean;
 }
 
 export interface ReservationRepository {
@@ -110,9 +128,15 @@ export interface ReservationRepository {
    */
   existsApprovedOverlap(args: ReservationOverlapArgs): ResultAsync<boolean, ReservationError>;
   /**
-   * 予約のステータスと更新日時、およびステータス理由を更新する。
+   * 予約のステータス・理由・更新日時を、条件付きで更新する。
+   *
+   * 「条件付き」なのは、確かめてから書くまでの間に別の操作が割り込めるため。
+   * D1 は対話的なトランザクションを張れないので、確認と更新を 1 つの UPDATE 文に
+   * まとめる（`expectedStatus` と `requireNoApprovedOverlap`）ことで割り込みを防ぐ。
+   *
+   * @returns 更新できたら true。条件に合わず 0 件だったら false（競合）。
    */
-  updateStatus(args: UpdateReservationStatusArgs): ResultAsync<null, ReservationError>;
+  applyStatusTransition(args: ApplyStatusTransitionArgs): ResultAsync<boolean, ReservationError>;
 }
 
 /**

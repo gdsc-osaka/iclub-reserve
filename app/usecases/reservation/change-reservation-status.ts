@@ -9,6 +9,7 @@ import {
 import {
   canTransition,
   ReservationTransition,
+  transitionSourceStatus,
   transitionTargetStatus,
   validateTransitionReason,
   type ReservationActor,
@@ -53,7 +54,9 @@ export interface ChangeReservationStatusResult {
  * 2. 操作ユーザーの所属団体を取得し、予約の団体（groupId）に所属しているかを検証する（自団体の突き合わせ）。
  * 3. ドメイン層の純粋関数 `canTransition` / `validateTransitionReason` により、現在のステータス・権限・理由の妥当性を検証する（COND-002）。
  * 4. 承認（approve）の場合は、同一施設・同一時間帯に別の承認済み予約が存在しないか重複確認を行う（COND-001）。
- * 5. リポジトリを通じてステータス・理由・更新日時を永続化する。
+ * 5. リポジトリを通じてステータス・理由・更新日時を永続化する。このとき「読んだときの
+ *    状態から変わっていないこと」（承認では重なりが無いことも）を更新の条件に入れ、
+ *    同時に実行された別の操作を上書きしないようにする。
  */
 export const changeReservationStatusUseCase = (
   deps: ChangeReservationStatusDeps,
@@ -120,20 +123,38 @@ export const changeReservationStatusUseCase = (
 
         const targetStatus = transitionTargetStatus[args.transition];
 
+        /*
+         * 最後の更新は、ここまでの確認結果に頼らず条件付きで行う。
+         * findById から更新までの間に別の操作が割り込むことがあり（例: 重なった
+         * 仮予約を 2 人の事務局が同時に承認する）、D1 では確認と更新を 1 つの
+         * トランザクションで囲めないため、条件を UPDATE 文の中に持ち込む。
+         *
+         * 上の重なり確認（COND-001）を残しているのは、ふつうに起きる重なりには
+         * 「先にそちらをキャンセルしてください」と具体的に案内したいため。
+         * 正しさは下の条件付き更新が担保し、こちらは文言のためにある。
+         */
         return overlapCheck.andThen(() =>
           deps.reservationRepository
-            .updateStatus({
+            .applyStatusTransition({
               id: reservation.id,
+              expectedStatus: transitionSourceStatus[args.transition],
               status: targetStatus,
               statusReason,
               updatedAt: now,
+              requireNoApprovedOverlap: args.transition === ReservationTransition.Approve,
             })
-            .map(
-              (): ChangeReservationStatusResult => ({
-                reservationId: reservation.id,
-                status: targetStatus,
-                statusReason,
-              }),
+            .andThen((applied) =>
+              applied
+                ? okAsync<ChangeReservationStatusResult, ReservationError>({
+                    reservationId: reservation.id,
+                    status: targetStatus,
+                    statusReason,
+                  })
+                : errAsync<ChangeReservationStatusResult, ReservationError>({
+                    code: ReservationErrorCode.ReservationConflict,
+                    message:
+                      "この予約には別の操作が先に反映されました。画面を読み込み直して、状態を確認してください。",
+                  }),
             ),
         );
       }),

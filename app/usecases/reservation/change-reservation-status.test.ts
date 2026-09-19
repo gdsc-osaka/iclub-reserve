@@ -62,10 +62,13 @@ const createMockDeps = (options?: {
   reservation?: Reservation | null;
   userGroups?: UserGroupList;
   hasOverlap?: boolean;
+  /** 条件付き更新が 1 件更新できたか。false は同時操作との競合を表す */
+  applied?: boolean;
 }) => {
   const res = options?.reservation !== undefined ? options.reservation : baseProvisionalReservation;
   const groups = options?.userGroups ?? memberGroups;
   const hasOverlap = options?.hasOverlap ?? false;
+  const applied = options?.applied ?? true;
 
   const findById = vi.fn((_id: string) =>
     res
@@ -77,14 +80,14 @@ const createMockDeps = (options?: {
   );
 
   const existsApprovedOverlap = vi.fn((_args: unknown) => okAsync(hasOverlap));
-  const updateStatus = vi.fn((_args: unknown) => okAsync(null));
+  const applyStatusTransition = vi.fn((_args: unknown) => okAsync(applied));
   const create = vi.fn((_res: unknown) => okAsync(null));
 
   const reservationRepository: ReservationRepository = {
     findById,
     create,
     existsApprovedOverlap,
-    updateStatus,
+    applyStatusTransition,
   };
 
   const findByUserId = vi.fn((_userId: string) => okAsync(groups));
@@ -97,7 +100,7 @@ const createMockDeps = (options?: {
 
   return {
     deps,
-    spies: { findById, existsApprovedOverlap, updateStatus, findByUserId },
+    spies: { findById, existsApprovedOverlap, applyStatusTransition, findByUserId },
   };
 };
 
@@ -122,11 +125,13 @@ describe("changeReservationStatusUseCase", () => {
       expect(value.status).toBe(ReservationStatus.Withdrawn);
       expect(value.statusReason).toBe("都合がつかなくなったため");
 
-      expect(spies.updateStatus).toHaveBeenCalledWith({
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith({
         id: "res_provisional_01",
+        expectedStatus: ReservationStatus.Provisional,
         status: ReservationStatus.Withdrawn,
         statusReason: "都合がつかなくなったため",
         updatedAt: testNow,
+        requireNoApprovedOverlap: false,
       });
     });
 
@@ -166,11 +171,13 @@ describe("changeReservationStatusUseCase", () => {
       expect(value.status).toBe(ReservationStatus.Cancelled);
       expect(value.statusReason).toBe("イベント延期のため");
 
-      expect(spies.updateStatus).toHaveBeenCalledWith({
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith({
         id: "res_approved_01",
+        expectedStatus: ReservationStatus.Approved,
         status: ReservationStatus.Cancelled,
         statusReason: "イベント延期のため",
         updatedAt: testNow,
+        requireNoApprovedOverlap: false,
       });
     });
 
@@ -200,11 +207,14 @@ describe("changeReservationStatusUseCase", () => {
         startAt: baseProvisionalReservation.startAt,
         endAt: baseProvisionalReservation.endAt,
       });
-      expect(spies.updateStatus).toHaveBeenCalledWith({
+      // 承認は重なりの確認（COND-001）も更新の条件に入れる
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith({
         id: "res_provisional_01",
+        expectedStatus: ReservationStatus.Provisional,
         status: ReservationStatus.Approved,
         statusReason: null,
         updatedAt: testNow,
+        requireNoApprovedOverlap: true,
       });
     });
 
@@ -227,11 +237,13 @@ describe("changeReservationStatusUseCase", () => {
       expect(value.status).toBe(ReservationStatus.Rejected);
       expect(value.statusReason).toBe("設備点検のため利用できません");
 
-      expect(spies.updateStatus).toHaveBeenCalledWith({
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith({
         id: "res_provisional_01",
+        expectedStatus: ReservationStatus.Provisional,
         status: ReservationStatus.Rejected,
         statusReason: "設備点検のため利用できません",
         updatedAt: testNow,
+        requireNoApprovedOverlap: false,
       });
     });
 
@@ -254,11 +266,13 @@ describe("changeReservationStatusUseCase", () => {
       expect(value.status).toBe(ReservationStatus.CancelledByStaff);
       expect(value.statusReason).toBe("大学の公式行事のため");
 
-      expect(spies.updateStatus).toHaveBeenCalledWith({
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith({
         id: "res_approved_01",
+        expectedStatus: ReservationStatus.Approved,
         status: ReservationStatus.CancelledByStaff,
         statusReason: "大学の公式行事のため",
         updatedAt: testNow,
+        requireNoApprovedOverlap: false,
       });
     });
   });
@@ -349,7 +363,7 @@ describe("changeReservationStatusUseCase", () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
       expect(result._unsafeUnwrapErr().message).toContain("先にそちらをキャンセルしてください");
-      expect(spies.updateStatus).not.toHaveBeenCalled();
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
 
     it("不正な遷移（例: 承認済み予約の取り消し）は拒否される", async () => {
@@ -367,7 +381,27 @@ describe("changeReservationStatusUseCase", () => {
       expect(result._unsafeUnwrapErr().code).toBe(
         ReservationErrorCode.ReservationInvalidTransition,
       );
-      expect(spies.updateStatus).not.toHaveBeenCalled();
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
+    it("条件付き更新が 0 件だった場合は競合として扱う（同時に別の操作が反映された）", async () => {
+      const { deps } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        applied: false, // 読んでから書くまでの間に、別の操作が先に反映された
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
+      expect(result._unsafeUnwrapErr().message).toContain("読み込み直して");
     });
 
     it("存在しない予約 ID を指定した場合は NOT_FOUND エラーとなる", async () => {

@@ -56,6 +56,24 @@ export const transitionTargetStatus: Record<ReservationTransition, ReservationSt
 };
 
 /**
+ * その操作を実行できる、操作前の予約ステータス（STATE-001）。
+ *
+ * 仮予約からは取り消し・承認・却下へ、承認済みからはキャンセル（団体・事務局）へ進む。
+ * 終了した状態（取り消し済み・却下済み・キャンセル済み）からは動かせない。
+ *
+ * {@link canTransition} の判定と、DB を更新するときの条件（「読んだときの状態から
+ * 変わっていないこと」）で同じ表を使う。2 か所に書くと、片方だけ直したときに
+ * 「画面では弾かれるのに DB では通る」食い違いが生まれる。
+ */
+export const transitionSourceStatus: Record<ReservationTransition, ReservationStatus> = {
+  [ReservationTransition.Withdraw]: ReservationStatus.Provisional,
+  [ReservationTransition.Cancel]: ReservationStatus.Approved,
+  [ReservationTransition.Approve]: ReservationStatus.Provisional,
+  [ReservationTransition.Reject]: ReservationStatus.Provisional,
+  [ReservationTransition.StaffCancel]: ReservationStatus.Approved,
+};
+
+/**
  * 状態変更操作の実行者。
  *
  * 団体の中での権限（取り消し・キャンセル）と、事務局の権限（承認・却下・事務局キャンセル）は
@@ -116,6 +134,23 @@ export const validateTransitionReason = (
 };
 
 /**
+ * 今の状態では操作できないことを伝える文言。
+ *
+ * 「この操作はできません」だけでは、利用者は自分の画面が古いのか
+ * そもそも許されない操作なのか分からない。今どの状態なのかを添える。
+ */
+const statusMismatchMessage = (current: ReservationStatus): string => {
+  switch (current) {
+    case ReservationStatus.Provisional:
+      return "仮予約に対してはこの操作を実行できません。";
+    case ReservationStatus.Approved:
+      return "承認済みの予約に対してはこの操作を実行できません。";
+    default:
+      return "終了した予約に対してはこの操作を実行できません。";
+  }
+};
+
+/**
  * 予約に対する状態変更操作が可能かを判定する純粋関数（STATE-001 / COND-002 / COND-009）。
  *
  * 画面でのボタン表示可否判定にも使えるよう、reason が渡された場合のみ COND-002（理由の検証）も行う。
@@ -169,33 +204,11 @@ export const canTransition = (
   }
 
   // 2. 現在のステータスからの遷移可否（STATE-001）
-  switch (transition) {
-    case ReservationTransition.Withdraw:
-    case ReservationTransition.Approve:
-    case ReservationTransition.Reject:
-      if (reservation.status !== ReservationStatus.Provisional) {
-        return err({
-          code: ReservationErrorCode.ReservationInvalidTransition,
-          message:
-            reservation.status === ReservationStatus.Approved
-              ? "承認済みの予約に対してはこの操作を実行できません。"
-              : "終了した予約に対してはこの操作を実行できません。",
-        });
-      }
-      break;
-
-    case ReservationTransition.Cancel:
-    case ReservationTransition.StaffCancel:
-      if (reservation.status !== ReservationStatus.Approved) {
-        return err({
-          code: ReservationErrorCode.ReservationInvalidTransition,
-          message:
-            reservation.status === ReservationStatus.Provisional
-              ? "仮予約に対してはこの操作を実行できません。"
-              : "終了した予約に対してはこの操作を実行できません。",
-        });
-      }
-      break;
+  if (reservation.status !== transitionSourceStatus[transition]) {
+    return err({
+      code: ReservationErrorCode.ReservationInvalidTransition,
+      message: statusMismatchMessage(reservation.status),
+    });
   }
 
   // 3. 理由の入力検証（理由が引数として与えられている場合のみ検証）
