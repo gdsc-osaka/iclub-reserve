@@ -4,7 +4,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { err, ok, ResultAsync } from "neverthrow";
 
 import { mailOutboxTable, reservationTable } from "~/db/schema";
-import type { MailDraft } from "~/domain/mail/mail-outbox";
+import { MailOutboxStatus, type MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationErrorCode,
   ReservationStatus,
@@ -153,15 +153,45 @@ export const createReservationRepository = (db: Database): ReservationRepository
      *
      * また、ON CONFLICT (idempotency_key) DO NOTHING を付けることで、重複操作時にも
      * batch 全体がロールバックされて承認まで巻き戻るのを防ぐ。
+     *
+     * SELECT は SQL 文字列ではなく Drizzle のクエリビルダで組み立てる。列を
+     * mailOutboxTable のキーで書けるので綴りの誤りは型エラーになり、並びが表の定義と
+     * ずれていれば Drizzle が実行前に例外で止める（生の SQL 文字列では誰も検査しない）。
+     * そのため、列は既定値のあるものも省略せず、schema の定義順どおりに並べること。
      */
-    const nowMs = Date.now();
-    const updatedAtMs = args.updatedAt.getTime();
+    const now = new Date();
 
     const insertQueries = mails.map((mail) =>
       db
         .insert(mailOutboxTable)
         .select(
-          sql`SELECT ${createId()}, ${mail.idempotencyKey}, ${mail.to.address}, ${mail.to.name ?? null}, ${mail.subject}, ${mail.text}, ${mail.html ?? null}, 'pending', 0, ${nowMs}, null, ${nowMs}, ${nowMs} FROM reservation WHERE id = ${args.id} AND status = ${args.status} AND updated_at = ${updatedAtMs}`,
+          db
+            .select({
+              id: sql<string>`${createId()}`.as("id"),
+              idempotencyKey: sql<string>`${mail.idempotencyKey}`.as("idempotency_key"),
+              toAddress: sql<string>`${mail.to.address}`.as("to_address"),
+              toName: sql<string | null>`${mail.to.name ?? null}`.as("to_name"),
+              subject: sql<string>`${mail.subject}`.as("subject"),
+              bodyText: sql<string>`${mail.text}`.as("body_text"),
+              bodyHtml: sql<string | null>`${mail.html ?? null}`.as("body_html"),
+              status: sql<MailOutboxStatus>`${MailOutboxStatus.Pending}`.as("status"),
+              attemptCount: sql<number>`0`.as("attempt_count"),
+              // 日時は列のマッパーを通して Date をミリ秒へ変換させる（手計算した値を入れない）
+              nextAttemptAt: sql`${sql.param(now, mailOutboxTable.nextAttemptAt)}`.as(
+                "next_attempt_at",
+              ),
+              lastError: sql<string | null>`${null}`.as("last_error"),
+              createdAt: sql`${sql.param(now, mailOutboxTable.createdAt)}`.as("created_at"),
+              updatedAt: sql`${sql.param(now, mailOutboxTable.updatedAt)}`.as("updated_at"),
+            })
+            .from(reservationTable)
+            .where(
+              and(
+                eq(reservationTable.id, args.id),
+                eq(reservationTable.status, args.status),
+                eq(reservationTable.updatedAt, args.updatedAt),
+              ),
+            ),
         )
         .onConflictDoNothing({ target: mailOutboxTable.idempotencyKey }),
     );

@@ -214,6 +214,14 @@ ON CONFLICT (idempotency_key) DO NOTHING
 `ON CONFLICT DO NOTHING` は必須。`idempotency_key` は UNIQUE なので、
 これが無いと重複時に**batch 全体がロールバックされて承認まで巻き戻る**。
 
+上は生成される SQL であって、コードに文字列として書くものではない。
+`db.insert(mailOutboxTable).select(db.select({ ... }).from(reservationTable).where(...))` と
+**Drizzle のクエリビルダで組む**。列を `mailOutboxTable` のキーで書けるので綴りの誤りは型エラーになり、
+並びが表の定義とずれていれば Drizzle が実行前に例外で止める。
+`INSERT ... SELECT` は列が位置で対応するため、生の SQL 文字列で書くと
+**列の並びが暗黙の前提になり、誰も検査しない**。
+その代わり、既定値のある列も省略せず schema の定義順どおりに並べる必要がある。
+
 更新できたかの判定は、今までどおり UPDATE の `RETURNING` の行数
 (`db.batch()` の結果の 0 番目) で行う。
 `mails` が空のときは `db.batch()` を使わず UPDATE 単体で実行する
