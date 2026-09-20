@@ -10,7 +10,6 @@ import { createReservationListQuery } from "~/infra/reservation/reservation-list
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { toSamePagePath } from "~/lib/form-redirect";
 import { logServerError } from "~/lib/log.server";
 import { QueryErrorCode } from "~/query/error";
 import { toActionErrorMessage } from "~/routes/reservations/list/action-error";
@@ -136,7 +135,15 @@ export async function action({ request, context }: Route.ActionArgs) {
     return { error: toActionErrorMessage(result.error) };
   }
 
-  return redirect(toSamePagePath(request));
+  /*
+   * 操作のあとは、いま見ていた一覧へ戻す（同じ内容の再送信を防ぐ PRG）。
+   * `.` は「いま表示しているルート」を指し、React Router が Location を
+   * ルートのパスから解決する。そのため Single Fetch のデータ用 URL
+   * （/reservations.data）を自分で元に戻す必要はない。
+   *
+   * 絞り込みのクエリは残す。操作のたびに外れると、一覧を見ていた場所を毎回探し直すことになる。
+   */
+  return redirect(`.${new URL(request.url).search}`);
 }
 
 export default function StaffReservationListRoute({
