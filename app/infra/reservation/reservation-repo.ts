@@ -1,4 +1,5 @@
-import { and, eq, gt, lt, sql } from "drizzle-orm";
+import { and, eq, gt, lt, ne, notExists } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { err, ok, ResultAsync } from "neverthrow";
 
 import { reservationTable } from "~/db/schema";
@@ -13,23 +14,37 @@ import {
 } from "~/domain/reservation";
 import type { Database } from "../db";
 
-/**
- * 承認済みの予約と重なっていないこと（COND-001）を、更新する行自身と突き合わせる条件。
- *
- * `existsApprovedOverlap` と違い、時間帯を引数で受けずに更新対象の行の列を参照する。
- * こうすることで「重なりの確認」と「ステータスの更新」が 1 つの UPDATE 文になり、
- * 2 人の事務局が重なった仮予約を同時に承認しても、あとの 1 件が 0 件更新で弾かれる。
- */
-const noApprovedOverlap = sql`not exists (
-  select 1 from ${reservationTable} as overlapping
-  where overlapping.facility_id = ${reservationTable.facilityId}
-    and overlapping.status = ${ReservationStatus.Approved}
-    and overlapping.id != ${reservationTable.id}
-    and overlapping.start_at < ${reservationTable.endAt}
-    and overlapping.end_at > ${reservationTable.startAt}
-)`;
+/** 重なりを探すとき、同じ予約テーブルをもう一度読むための別名 */
+const overlapping = alias(reservationTable, "overlapping");
 
 export const createReservationRepository = (db: Database): ReservationRepository => {
+  /**
+   * 承認済みの予約と重なっていないこと（COND-001）を、更新する行自身と突き合わせる条件。
+   *
+   * `existsApprovedOverlap` と違い、時間帯を引数で受けずに更新対象の行の列を参照する。
+   * こうすることで「重なりの確認」と「ステータスの更新」が 1 つの UPDATE 文になり、
+   * 2 人の事務局が重なった仮予約を同時に承認しても、あとの 1 件が 0 件更新で弾かれる。
+   *
+   * 外側（更新される行）は reservationTable、内側（重なりを探す側）は overlapping と、
+   * 同じ表を 2 つの名前で参照する。列はどちらも Drizzle の定義から辿るので、
+   * 列名を変えたときは SQL ではなく型エラーとして分かる。
+   */
+  const noApprovedOverlap = notExists(
+    db
+      .select({ id: overlapping.id })
+      .from(overlapping)
+      .where(
+        and(
+          eq(overlapping.facilityId, reservationTable.facilityId),
+          eq(overlapping.status, ReservationStatus.Approved),
+          ne(overlapping.id, reservationTable.id),
+          // 終了時刻は予約に含まれないので、境界がぴったり接する予約は重なりに含めない
+          lt(overlapping.startAt, reservationTable.endAt),
+          gt(overlapping.endAt, reservationTable.startAt),
+        ),
+      ),
+  );
+
   const findById = (id: string): ResultAsync<Reservation, ReservationError> => {
     return ResultAsync.fromPromise(
       db.select().from(reservationTable).where(eq(reservationTable.id, id)).limit(1),

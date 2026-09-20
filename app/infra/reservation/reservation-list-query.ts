@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, gte, inArray, lt, ne, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { okAsync, ResultAsync } from "neverthrow";
 
 import { facilityTable, organization, reservationTable, user } from "~/db/schema";
@@ -20,6 +21,9 @@ const toDatabaseError =
     message,
     cause: error,
   });
+
+/** 重なりを探すとき、同じ予約テーブルをもう一度読むための別名 */
+const overlapping = alias(reservationTable, "overlapping");
 
 /**
  * 終了した予約のステータス一覧。
@@ -76,6 +80,35 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
           ? [desc(reservationTable.startAt), asc(reservationTable.id)]
           : [asc(reservationTable.startAt), asc(reservationTable.id)];
 
+    /*
+     * その予約と時間帯が重なる、指定したステータスの予約があるか。
+     *
+     * 重なりの判定は 2 種類ある。
+     * - 承認済みとの重なり: 承認できない（COND-001）
+     * - 他の仮予約との重なり: 承認は止めないが、申請が競合していることを知らせる
+     * 終了時刻はその予約に含まれないので、10:00 に終わる予約と 10:00 に始まる予約は重ならない。
+     *
+     * 外側（一覧に出る行）は reservationTable、内側（重なりを探す側）は overlapping と、
+     * 同じ表を 2 つの名前で参照する。列はどちらも Drizzle の定義から辿るので、
+     * 列名を変えたときは SQL ではなく型エラーとして分かる。
+     */
+    const hasOverlapWith = (status: ReservationStatus) =>
+      exists(
+        db
+          .select({ id: overlapping.id })
+          .from(overlapping)
+          .where(
+            and(
+              eq(overlapping.facilityId, reservationTable.facilityId),
+              eq(overlapping.status, status),
+              ne(overlapping.id, reservationTable.id),
+              lt(overlapping.startAt, reservationTable.endAt),
+              gt(overlapping.endAt, reservationTable.startAt),
+            ),
+          ),
+        // SQLite の exists は 0 / 1 を返すので、画面へ渡す前に真偽値にそろえる
+      ).mapWith(Boolean);
+
     let query = db
       .select({
         id: reservationTable.id,
@@ -91,28 +124,8 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
         note: reservationTable.note,
         createdByName: user.name,
         createdAt: reservationTable.createdAt,
-        /*
-         * 重なりの判定は 2 種類ある。
-         * - 承認済みとの重なり: 承認できない（COND-001）
-         * - 他の仮予約との重なり: 承認は止めないが、申請が競合していることを知らせる
-         * 終了時刻はその予約に含まれないので、10:00 に終わる予約と 10:00 に始まる予約は重ならない。
-         */
-        hasApprovedOverlap: sql<boolean>`exists (
-          select 1 from ${reservationTable} as r_overlap
-          where r_overlap.facility_id = ${reservationTable.facilityId}
-            and r_overlap.status = ${ReservationStatus.Approved}
-            and r_overlap.id != ${reservationTable.id}
-            and r_overlap.start_at < ${reservationTable.endAt}
-            and r_overlap.end_at > ${reservationTable.startAt}
-        )`,
-        hasProvisionalOverlap: sql<boolean>`exists (
-          select 1 from ${reservationTable} as r_overlap
-          where r_overlap.facility_id = ${reservationTable.facilityId}
-            and r_overlap.status = ${ReservationStatus.Provisional}
-            and r_overlap.id != ${reservationTable.id}
-            and r_overlap.start_at < ${reservationTable.endAt}
-            and r_overlap.end_at > ${reservationTable.startAt}
-        )`,
+        hasApprovedOverlap: hasOverlapWith(ReservationStatus.Approved),
+        hasProvisionalOverlap: hasOverlapWith(ReservationStatus.Provisional),
       })
       .from(reservationTable)
       .innerJoin(facilityTable, eq(reservationTable.facilityId, facilityTable.id))
@@ -127,13 +140,7 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
     }
 
     return ResultAsync.fromPromise(query, toDatabaseError("予約一覧の取得に失敗しました。")).map(
-      (rows): readonly ReservationListRow[] =>
-        rows.map((row) => ({
-          ...row,
-          // SQLite の exists は 0 / 1 を返すので、画面へ渡す前に真偽値にそろえる
-          hasApprovedOverlap: Boolean(row.hasApprovedOverlap),
-          hasProvisionalOverlap: Boolean(row.hasProvisionalOverlap),
-        })),
+      (rows): readonly ReservationListRow[] => rows,
     );
   },
 
