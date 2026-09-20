@@ -12,6 +12,7 @@ import {
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
   isAllowedEmailAddress,
 } from "~/domain/authn/allowed-email-domain";
+import { formatSendEmailError } from "~/usecases/mail/send-email.server";
 import {
   createSendVerificationOtpUseCase,
   OTP_EXPIRES_IN_SECONDS,
@@ -192,7 +193,9 @@ const createAuth = () => {
 
           if (result.isErr()) {
             // Better Auth 側にエラーを伝えるため、ここでは例外に変換する
-            throw new Error(`認証コードのメール送信に失敗しました: ${result.error.type}`);
+            throw new Error(
+              `認証コードのメール送信に失敗しました: ${formatSendEmailError(result.error)}`,
+            );
           }
         },
       }),

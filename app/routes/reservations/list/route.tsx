@@ -7,6 +7,7 @@ import { ReservationErrorCode } from "~/domain/reservation";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
+import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
@@ -96,6 +97,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     {
       reservationRepository: createReservationRepository(db),
       userGroupListQuery: createUserGroupListQuery(db),
+      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
     },
     {
       reservationId,

@@ -2,6 +2,7 @@ import { ResultAsync } from "neverthrow";
 import { WorkerMailer } from "worker-mailer";
 import type { MailAddressee } from "~/domain/mail/mail-message";
 import type { MailSender, MailSendError } from "~/domain/mail/mail-sender";
+import { classifySmtpError } from "./smtp-error";
 
 export type SmtpConfig = {
   readonly host: string;
@@ -18,16 +19,13 @@ const toUser = (addressee: MailAddressee) => ({
 
 /**
  * worker-mailer が投げた例外を MailSendError に正規化する。
- * ライブラリは種類ごとの例外クラスを持たないため、メッセージから判別している。
+ *
+ * 分類そのものは同じ infra 層の classifySmtpError に委譲し、
+ * サーバーの 3 桁の応答コード（254 / 421 / 455 / 535 等）を一次情報として扱う。
  */
 const toMailSendError = (cause: unknown): MailSendError => {
   const message = cause instanceof Error ? cause.message : String(cause);
-
-  if (/auth/i.test(message)) return { type: "auth_failed", cause };
-  if (/connect|socket|timeout|prohibited/i.test(message)) {
-    return { type: "connection_failed", cause };
-  }
-  return { type: "send_failed", cause };
+  return classifySmtpError(message, cause);
 };
 
 /**
@@ -63,6 +61,7 @@ export const createSmtpMailSender = (config: SmtpConfig): MailSender => ({
           subject: message.subject,
           text: message.text,
           ...(message.html ? { html: message.html } : {}),
+          ...(message.headers ? { headers: message.headers } : {}),
         },
       ),
       toMailSendError,
