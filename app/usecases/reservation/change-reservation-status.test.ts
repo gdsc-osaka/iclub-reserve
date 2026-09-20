@@ -2,6 +2,7 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { GroupStatus } from "~/domain/group";
+import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { MembershipRole } from "~/domain/membership";
 import {
   ReservationErrorCode,
@@ -116,10 +117,14 @@ const createMockDeps = (options?: {
     findByReservationId,
   };
 
+  const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);
+  const mailOutboxNotifier: MailOutboxNotifier = { notifyEnqueued };
+
   const deps: ChangeReservationStatusDeps = {
     reservationRepository,
     userGroupListQuery,
     reservationMailRecipientsQuery,
+    mailOutboxNotifier,
   };
 
   return {
@@ -130,6 +135,7 @@ const createMockDeps = (options?: {
       applyStatusTransition,
       findByUserId,
       findByReservationId,
+      notifyEnqueued,
     },
   };
 };
@@ -481,7 +487,7 @@ describe("changeReservationStatusUseCase", () => {
     });
 
     it("条件付き更新が 0 件だった場合は競合として扱う（同時に別の操作が反映された）", async () => {
-      const { deps } = createMockDeps({
+      const { deps, spies } = createMockDeps({
         reservation: baseProvisionalReservation,
         applied: false, // 読んでから書くまでの間に、別の操作が先に反映された
       });
@@ -498,6 +504,8 @@ describe("changeReservationStatusUseCase", () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
       expect(result._unsafeUnwrapErr().message).toContain("読み込み直して");
+      // 0 件更新なら outbox にも積まれていないので、配送を依頼してはいけない
+      expect(spies.notifyEnqueued).not.toHaveBeenCalled();
     });
 
     it("存在しない予約 ID を指定した場合は NOT_FOUND エラーとなる", async () => {
@@ -535,9 +543,9 @@ describe("changeReservationStatusUseCase", () => {
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
 
-    it("状態更新に成功したとき、積まれたメールの ID 一覧（enqueuedMailIds）が戻り値に含まれる（ADR-002 決定 2.1）", async () => {
+    it("状態更新に成功したとき、積まれたメールの ID で即時配送が依頼される（ADR-002 決定 1 / 決定 2.1）", async () => {
       const expectedIds = ["mail_outbox_01", "mail_outbox_02"];
-      const { deps } = createMockDeps({
+      const { deps, spies } = createMockDeps({
         reservation: baseProvisionalReservation,
         enqueuedMailIds: expectedIds,
       });
@@ -552,10 +560,32 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().status).toBe(ReservationStatus.Approved);
+      expect(spies.notifyEnqueued).toHaveBeenCalledWith(expectedIds);
+    });
 
-      const value = result._unsafeUnwrap();
-      expect(value.status).toBe(ReservationStatus.Approved);
-      expect(value.enqueuedMailIds).toEqual(expectedIds);
+    it("即時配送の依頼が例外を投げても、予約の更新は成功として返す（ADR-002 決定 1）", async () => {
+      const { deps } = createMockDeps({ reservation: baseProvisionalReservation });
+      /*
+       * ポートの取り決めでは notifyEnqueued は失敗を返さないが、実装が約束を破った場合に
+       * 「DB は更新済みなのに画面はエラー」になると利用者は操作をやり直すしかなくなる。
+       * 依頼の失敗が業務処理を巻き込まないことを、ここで固定しておく。
+       */
+      vi.mocked(deps.mailOutboxNotifier.notifyEnqueued).mockImplementation(() => {
+        throw new Error("queue is unavailable");
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().status).toBe(ReservationStatus.Approved);
     });
   });
 });

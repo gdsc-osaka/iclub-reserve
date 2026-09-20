@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { ReservationErrorCode } from "~/domain/reservation";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
-import { notifyMailQueue } from "~/infra/mail/mail-queue.server";
+import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
@@ -99,6 +99,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       reservationRepository: createReservationRepository(db),
       userGroupListQuery: createUserGroupListQuery(db),
       reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+      mailOutboxNotifier: createQueueMailOutboxNotifier(),
     },
     {
       reservationId,
@@ -121,9 +122,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     return { error: toActionErrorMessage(result.error) };
   }
-
-  // 予約の更新と outbox への追加が成功したあと、即時配送をキューに依頼する（ADR-002 決定 1）
-  notifyMailQueue(result.value.enqueuedMailIds);
 
   /*
    * 操作のあとは、いま見ていた一覧へ戻す（同じ内容の再送信を防ぐ PRG）。
