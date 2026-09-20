@@ -1,14 +1,12 @@
 import type { ResultAsync } from "neverthrow";
+import type {
+  ReservationMailAudience,
+  ReservationMailRecipient,
+  ReservationMailRecipients,
+} from "~/domain/mail/reservation-mail";
 import type { QueryError } from "../error";
 
-/** 通知メールの宛先となるユーザー情報 */
-export interface ReservationMailRecipient {
-  readonly userId?: string;
-  readonly address: string;
-  readonly name: string | null;
-}
-
-export type ReservationMailRecipients = readonly ReservationMailRecipient[];
+export type { ReservationMailAudience, ReservationMailRecipient, ReservationMailRecipients };
 
 /**
  * 予約通知の宛先を取得する読み取り専用の窓口（ポート）。
@@ -17,13 +15,15 @@ export type ReservationMailRecipients = readonly ReservationMailRecipient[];
  * この結果を使って更新してはいけない。
  */
 export interface ReservationMailRecipientsQuery {
+  /** 既存の予約についての通知先 (EVT-002/003/005/006/007) */
+  findByReservationId(reservationId: string): ResultAsync<ReservationMailAudience, QueryError>;
+
   /**
-   * 予約 ID を指定して、通知の宛先（申請者および該当団体の管理者全員）を取得する。
-   *
-   * - 申請者と団体管理者でメールアドレスが重複する場合は、1 件にまとめる（申請者が管理者を兼ねている場合に 2 通届かないようにする）。
-   * - reservation.createdBy が null の場合は、申請者を宛先に含めない。
-   * - 該当の予約が存在しない場合は NOT_FOUND エラーを返す。
-   * - 並び順はメールアドレスの昇順で固定する。
+   * これから作る予約についての通知先 (EVT-001)。
+   * 予約の行がまだ無いので、申請者と団体を直接指定して引く。
    */
-  findByReservationId(reservationId: string): ResultAsync<ReservationMailRecipients, QueryError>;
+  findForNewReservation(args: {
+    readonly groupId: string;
+    readonly applicantUserId: string;
+  }): ResultAsync<ReservationMailAudience, QueryError>;
 }

@@ -10,6 +10,7 @@ import {
   ReservationStatus,
   type ApplyStatusTransitionArgs,
   type ApplyStatusTransitionOutcome,
+  type CreateReservationOutcome,
   type Reservation,
   type ReservationError,
   type ReservationOverlapArgs,
@@ -70,15 +71,58 @@ export const createReservationRepository = (db: Database): ReservationRepository
     });
   };
 
-  const create = (reservation: Reservation): ResultAsync<null, ReservationError> => {
+  const create = (
+    reservation: Reservation,
+    mails: readonly MailDraft[],
+  ): ResultAsync<CreateReservationOutcome, ReservationError> => {
+    const insertReservationQuery = db.insert(reservationTable).values(reservation);
+
+    // メールが無い場合は batch を使わず INSERT 単体で実行する（Drizzle の batch は空配列を受け付けないため）
+    if (mails.length === 0) {
+      return ResultAsync.fromPromise(insertReservationQuery, (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "予約の作成に失敗しました。",
+        cause: error,
+      })).map(() => ({ enqueuedMailIds: [] }));
+    }
+
+    const now = new Date();
+    const mailIds: string[] = [];
+
+    const insertMailQueries = mails.map((mail) => {
+      const mailId = createId();
+      mailIds.push(mailId);
+
+      return db
+        .insert(mailOutboxTable)
+        .values({
+          id: mailId,
+          idempotencyKey: mail.idempotencyKey,
+          toAddress: mail.to.address,
+          toName: mail.to.name ?? null,
+          subject: mail.subject,
+          bodyText: mail.text,
+          bodyHtml: mail.html ?? null,
+          status: MailOutboxStatus.Pending,
+          attemptCount: 0,
+          nextAttemptAt: now,
+          lastError: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: mailOutboxTable.idempotencyKey });
+    });
+
     return ResultAsync.fromPromise(
-      db.insert(reservationTable).values(reservation),
+      db.batch([insertReservationQuery, ...insertMailQueries]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "Failed to insert reservation",
+        message: "予約の作成および通知 outbox の作成に失敗しました。",
         cause: error,
       }),
-    ).map(() => null);
+    ).map(() => ({
+      enqueuedMailIds: mailIds,
+    }));
   };
 
   /**

@@ -12,7 +12,7 @@ import {
 } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import type {
-  ReservationMailRecipient,
+  ReservationMailAudience,
   ReservationMailRecipientsQuery,
 } from "~/query/reservation/reservation-mail-recipients";
 import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
@@ -63,13 +63,22 @@ const otherGroups: UserGroupList = [
   },
 ];
 
-const defaultRecipients: readonly ReservationMailRecipient[] = [
-  {
-    userId: "usr_student_01",
-    address: "student@example.com",
-    name: "学生代表",
-  },
-];
+const defaultAudience: ReservationMailAudience = {
+  groupMembers: [
+    {
+      userId: "usr_student_01",
+      address: "student@example.com",
+      name: "学生代表",
+    },
+  ],
+  staff: [
+    {
+      userId: "usr_staff_01",
+      address: "staff@example.com",
+      name: "事務局スタッフ",
+    },
+  ],
+};
 
 const createMockDeps = (options?: {
   reservation?: Reservation | null;
@@ -78,14 +87,14 @@ const createMockDeps = (options?: {
   /** 条件付き更新が 1 件更新できたか。false は同時操作との競合を表す */
   applied?: boolean;
   enqueuedMailIds?: readonly string[];
-  recipients?: readonly ReservationMailRecipient[];
+  audience?: ReservationMailAudience;
 }) => {
   const res = options?.reservation !== undefined ? options.reservation : baseProvisionalReservation;
   const groups = options?.userGroups ?? memberGroups;
   const hasOverlap = options?.hasOverlap ?? false;
   const applied = options?.applied ?? true;
   const enqueuedMailIds = options?.enqueuedMailIds ?? (applied ? ["outbox_mock_01"] : []);
-  const recipients = options?.recipients ?? defaultRecipients;
+  const audience = options?.audience ?? defaultAudience;
 
   const findById = vi.fn((_id: string) =>
     res
@@ -100,7 +109,7 @@ const createMockDeps = (options?: {
   const applyStatusTransition = vi.fn((_args: unknown, _mails: unknown) =>
     okAsync({ applied, enqueuedMailIds }),
   );
-  const create = vi.fn((_res: unknown) => okAsync(null));
+  const create = vi.fn((_res: unknown, _mails: unknown) => okAsync({ enqueuedMailIds: [] }));
 
   const reservationRepository: ReservationRepository = {
     findById,
@@ -112,9 +121,11 @@ const createMockDeps = (options?: {
   const findByUserId = vi.fn((_userId: string) => okAsync(groups));
   const userGroupListQuery: UserGroupListQuery = { findByUserId };
 
-  const findByReservationId = vi.fn((_reservationId: string) => okAsync(recipients));
+  const findByReservationId = vi.fn((_reservationId: string) => okAsync(audience));
   const reservationMailRecipientsQuery: ReservationMailRecipientsQuery = {
     findByReservationId,
+    findForNewReservation: () =>
+      errAsync({ code: "NOT_FOUND" as any, message: "not implemented in this mock" }),
   };
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);
@@ -170,12 +181,19 @@ describe("changeReservationStatusUseCase", () => {
           updatedAt: testNow,
           requireNoApprovedOverlap: false,
         },
-        [],
+        [
+          expect.objectContaining({
+            idempotencyKey: "reservation:withdrawn:res_provisional_01:usr_student_01",
+            to: { address: "student@example.com", name: "学生代表" },
+            subject: "【i-Club予約システム】施設・設備の仮予約が取り消されました",
+            text: expect.stringContaining("都合がつかなくなったため"),
+          }),
+        ],
       );
     });
 
     it("1b. 団体メンバーが理由なしで仮予約を取り消す（理由は任意）", async () => {
-      const { deps } = createMockDeps({ reservation: baseProvisionalReservation });
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
 
       const args: ChangeReservationStatusArgs = {
         reservationId: "res_provisional_01",
@@ -189,6 +207,10 @@ describe("changeReservationStatusUseCase", () => {
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap().statusReason).toBeNull();
+
+      const passedMails = (spies.applyStatusTransition.mock.calls[0] as unknown[])[1] as any[];
+      expect(passedMails).toHaveLength(1);
+      expect(passedMails[0]?.text).not.toContain("理由:");
     });
 
     it("2. 団体メンバーが承認済み予約をキャンセルする（approved → cancelled）", async () => {
@@ -219,7 +241,20 @@ describe("changeReservationStatusUseCase", () => {
           updatedAt: testNow,
           requireNoApprovedOverlap: false,
         },
-        [],
+        [
+          expect.objectContaining({
+            idempotencyKey: "reservation:cancelled:res_approved_01:usr_student_01",
+            to: { address: "student@example.com", name: "学生代表" },
+            subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
+            text: expect.stringContaining("イベント延期のため"),
+          }),
+          expect.objectContaining({
+            idempotencyKey: "reservation:cancelled:res_approved_01:usr_staff_01",
+            to: { address: "staff@example.com", name: "事務局スタッフ" },
+            subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
+            text: expect.stringContaining("イベント延期のため"),
+          }),
+        ],
       );
     });
 
@@ -272,14 +307,17 @@ describe("changeReservationStatusUseCase", () => {
     });
 
     it("3b. 承認時に宛先が複数ある場合は全宛先分の MailDraft が渡される（EVT-005）", async () => {
-      const recipients = [
-        { userId: "usr_student_01", address: "student@example.com", name: "申請者" },
-        { userId: "usr_admin_01", address: "admin1@example.com", name: "管理者1" },
-        { userId: "usr_admin_02", address: "admin2@example.com", name: "管理者2" },
-      ];
+      const audience: ReservationMailAudience = {
+        groupMembers: [
+          { userId: "usr_student_01", address: "student@example.com", name: "申請者" },
+          { userId: "usr_admin_01", address: "admin1@example.com", name: "管理者1" },
+          { userId: "usr_admin_02", address: "admin2@example.com", name: "管理者2" },
+        ],
+        staff: [{ userId: "usr_staff_01", address: "staff@example.com", name: "事務局スタッフ" }],
+      };
       const { deps, spies } = createMockDeps({
         reservation: baseProvisionalReservation,
-        recipients,
+        audience,
       });
 
       const args: ChangeReservationStatusArgs = {
@@ -314,7 +352,7 @@ describe("changeReservationStatusUseCase", () => {
       expect(passedMails).toHaveLength(3);
     });
 
-    it("4. 事務局が理由を入力して仮予約を却下する（provisional → rejected, メールなし）", async () => {
+    it("4. 事務局が理由を入力して仮予約を却下する（provisional → rejected, 却下通知メール積立）", async () => {
       const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
 
       const args: ChangeReservationStatusArgs = {
@@ -342,11 +380,18 @@ describe("changeReservationStatusUseCase", () => {
           updatedAt: testNow,
           requireNoApprovedOverlap: false,
         },
-        [],
+        [
+          expect.objectContaining({
+            idempotencyKey: "reservation:rejected:res_provisional_01:usr_student_01",
+            to: { address: "student@example.com", name: "学生代表" },
+            subject: "【i-Club予約システム】施設・設備の利用予約が却下されました",
+            text: expect.stringContaining("理由: 設備点検のため利用できません"),
+          }),
+        ],
       );
     });
 
-    it("5. 事務局が理由を入力して承認済み予約をキャンセルする（approved → cancelled_by_staff, メールなし）", async () => {
+    it("5. 事務局が理由を入力して承認済み予約をキャンセルする（approved → cancelled_by_staff, 事務局キャンセル通知メール積立）", async () => {
       const { deps, spies } = createMockDeps({ reservation: baseApprovedReservation });
 
       const args: ChangeReservationStatusArgs = {
@@ -374,7 +419,14 @@ describe("changeReservationStatusUseCase", () => {
           updatedAt: testNow,
           requireNoApprovedOverlap: false,
         },
-        [],
+        [
+          expect.objectContaining({
+            idempotencyKey: "reservation:cancelledByStaff:res_approved_01:usr_student_01",
+            to: { address: "student@example.com", name: "学生代表" },
+            subject: "【i-Club予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
+            text: expect.stringContaining("理由: 大学の公式行事のため"),
+          }),
+        ],
       );
     });
   });

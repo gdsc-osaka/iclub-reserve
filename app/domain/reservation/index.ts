@@ -115,6 +115,12 @@ export interface ApplyStatusTransitionArgs {
   readonly requireNoApprovedOverlap: boolean;
 }
 
+/** 予約作成の結果。予約の INSERT は条件付きではないので applied は持たない */
+export interface CreateReservationOutcome {
+  /** この操作で outbox に積んだメールの ID。Queues への投入に使う */
+  readonly enqueuedMailIds: readonly string[];
+}
+
 /** 条件付き更新の結果。更新できなかった (競合した) ときは ID の配列は空になる（ADR-002 決定 2.1） */
 export interface ApplyStatusTransitionOutcome {
   readonly applied: boolean;
@@ -124,7 +130,10 @@ export interface ApplyStatusTransitionOutcome {
 
 export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
-  create(reservation: Reservation): ResultAsync<null, ReservationError>;
+  create(
+    reservation: Reservation,
+    mails: readonly MailDraft[],
+  ): ResultAsync<CreateReservationOutcome, ReservationError>;
   /**
    * 同一施設・同一時間帯に**承認済み**の予約があるかを調べる（COND-001）。
    *
