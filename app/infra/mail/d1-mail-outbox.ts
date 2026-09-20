@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
-import { ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync } from "neverthrow";
 import { mailOutboxTable } from "~/db/schema";
 import {
   MailOutboxErrorCode,
@@ -39,6 +39,26 @@ const toMailOutboxEntry = (row: typeof mailOutboxTable.$inferSelect): MailOutbox
 });
 
 /**
+ * 送信可能な状態（pending かつ時刻到来、または sending かつ放置）を判定する述語（ADR-002 決定 2.3）。
+ *
+ * 取り出しの規則を claimDue と claimByIds で共有することで、
+ * 判定条件の食い違いを防ぎ、バックオフ待ちの行がキュー経由で予定より早く再送されるのを防ぐ。
+ */
+const buildDuePredicate = (now: Date) =>
+  or(
+    // 送信時刻が到来したもの
+    and(
+      eq(mailOutboxTable.status, MailOutboxStatus.Pending),
+      lte(mailOutboxTable.nextAttemptAt, now),
+    ),
+    // 送信中のまま放置されたもの（Worker の異常終了などで回収が必要な行）
+    and(
+      eq(mailOutboxTable.status, MailOutboxStatus.Sending),
+      lte(mailOutboxTable.updatedAt, new Date(now.getTime() - STUCK_AFTER_MS)),
+    ),
+  );
+
+/**
  * Cloudflare D1 (Drizzle) を使った MailOutbox の実装。
  *
  * 送信待ちの取り出しは 1 文の UPDATE ... RETURNING で不可分に行い、
@@ -60,20 +80,7 @@ export const createD1MailOutbox = (db: Database): MailOutbox => ({
             db
               .select({ id: mailOutboxTable.id })
               .from(mailOutboxTable)
-              .where(
-                or(
-                  // 送信時刻が到来したもの
-                  and(
-                    eq(mailOutboxTable.status, MailOutboxStatus.Pending),
-                    lte(mailOutboxTable.nextAttemptAt, now),
-                  ),
-                  // 送信中のまま放置されたもの（Worker の異常終了などで回収が必要な行）
-                  and(
-                    eq(mailOutboxTable.status, MailOutboxStatus.Sending),
-                    lte(mailOutboxTable.updatedAt, new Date(now.getTime() - STUCK_AFTER_MS)),
-                  ),
-                ),
-              )
+              .where(buildDuePredicate(now))
               .orderBy(asc(mailOutboxTable.nextAttemptAt))
               .limit(limit),
           ),
@@ -81,6 +88,26 @@ export const createD1MailOutbox = (db: Database): MailOutbox => ({
         .returning(),
       toMailOutboxError,
     ).map((rows) => rows.map(toMailOutboxEntry)),
+
+  claimByIds: ({ ids, now }) => {
+    // Drizzle の inArray は空配列を受け付けないため、即座に空配列を返す
+    if (ids.length === 0) {
+      return okAsync([]);
+    }
+
+    return ResultAsync.fromPromise(
+      db
+        .update(mailOutboxTable)
+        .set({
+          status: MailOutboxStatus.Sending,
+          attemptCount: sql`${mailOutboxTable.attemptCount} + 1`,
+          updatedAt: now,
+        })
+        .where(and(inArray(mailOutboxTable.id, [...ids]), buildDuePredicate(now)))
+        .returning(),
+      toMailOutboxError,
+    ).map((rows) => rows.map(toMailOutboxEntry));
+  },
 
   markSent: (id) =>
     ResultAsync.fromPromise(

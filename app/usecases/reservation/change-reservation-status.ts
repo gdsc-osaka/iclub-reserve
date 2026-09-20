@@ -1,6 +1,7 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import type { MailDraft } from "~/domain/mail/mail-outbox";
+import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createReservationApprovedMailDrafts } from "~/domain/mail/reservation-mail";
 import {
   ReservationErrorCode,
@@ -26,6 +27,8 @@ export interface ChangeReservationStatusDeps {
   readonly userGroupListQuery: UserGroupListQuery;
   /** 予約の承認時に通知先メールアドレス（申請者＋団体管理者）を取得するためのクエリ */
   readonly reservationMailRecipientsQuery: ReservationMailRecipientsQuery;
+  /** outbox に積んだメールの即時配送を依頼する先（ADR-002 決定 1） */
+  readonly mailOutboxNotifier: MailOutboxNotifier;
 }
 
 /** 予約ステータス変更ユースケースの引数 */
@@ -63,6 +66,8 @@ export interface ChangeReservationStatusResult {
  * 5. リポジトリを通じてステータス・理由・更新日時、およびメール送信 outbox を永続化する。このとき「読んだときの
  *    状態から変わっていないこと」（承認では重なりが無いことも）を更新の条件に入れ、
  *    同時に実行された別の操作を上書きしないようにする。
+ * 6. 更新に成功したら、積んだメールの即時配送を依頼する（ADR-002 決定 1）。依頼はあくまで近道で、
+ *    届かなくても cron が拾うため、依頼の成否はこのユースケースの戻り値に影響しない。
  */
 export const changeReservationStatusUseCase = (
   deps: ChangeReservationStatusDeps,
@@ -162,19 +167,38 @@ export const changeReservationStatusUseCase = (
               },
               mailDrafts,
             )
-            .andThen((applied) =>
-              applied
-                ? okAsync<ChangeReservationStatusResult, ReservationError>({
-                    reservationId: reservation.id,
-                    status: targetStatus,
-                    statusReason,
-                  })
-                : errAsync<ChangeReservationStatusResult, ReservationError>({
-                    code: ReservationErrorCode.ReservationConflict,
-                    message:
-                      "この予約には別の操作が先に反映されました。画面を読み込み直して、状態を確認してください。",
-                  }),
-            ),
+            .andThen((outcome) => {
+              if (!outcome.applied) {
+                return errAsync<ChangeReservationStatusResult, ReservationError>({
+                  code: ReservationErrorCode.ReservationConflict,
+                  message:
+                    "この予約には別の操作が先に反映されました。画面を読み込み直して、状態を確認してください。",
+                });
+              }
+
+              /*
+               * 更新と outbox への追加が不可分に成功したあとにだけ、即時配送を依頼する（ADR-002 決定 1）。
+               * 競合で 0 件更新だったときは outbox にも積まれていないため、ここへは来ない。
+               *
+               * 依頼の結果は受け取らない（notifyEnqueued は void）。キューへ届かなくても
+               * outbox の行は残り、遅くとも 1 分後に cron が拾うので、業務処理としては成功のまま返す。
+               *
+               * ポートの取り決めでは notifyEnqueued は例外を投げないが、ここで捕まえておく。
+               * 予約の更新はすでに確定しているので、通知の都合で画面にエラーを出すと
+               * 利用者は「失敗した」と思って同じ操作をやり直し、今度は競合で弾かれる。
+               */
+              try {
+                deps.mailOutboxNotifier.notifyEnqueued(outcome.enqueuedMailIds);
+              } catch (error) {
+                console.error("Failed to request immediate mail delivery:", error);
+              }
+
+              return okAsync<ChangeReservationStatusResult, ReservationError>({
+                reservationId: reservation.id,
+                status: targetStatus,
+                statusReason,
+              });
+            }),
         );
       }),
   );

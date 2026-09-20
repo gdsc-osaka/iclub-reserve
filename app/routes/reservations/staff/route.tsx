@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { ReservationErrorCode } from "~/domain/reservation";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
+import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
@@ -114,6 +115,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       reservationRepository: createReservationRepository(db),
       userGroupListQuery: createUserGroupListQuery(db),
       reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+      mailOutboxNotifier: createQueueMailOutboxNotifier(),
     },
     {
       reservationId,

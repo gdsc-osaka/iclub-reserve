@@ -115,6 +115,13 @@ export interface ApplyStatusTransitionArgs {
   readonly requireNoApprovedOverlap: boolean;
 }
 
+/** 条件付き更新の結果。更新できなかった (競合した) ときは ID の配列は空になる（ADR-002 決定 2.1） */
+export interface ApplyStatusTransitionOutcome {
+  readonly applied: boolean;
+  /** この操作で outbox に積んだメールの ID。Queues への投入に使う */
+  readonly enqueuedMailIds: readonly string[];
+}
+
 export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
   create(reservation: Reservation): ResultAsync<null, ReservationError>;
@@ -133,12 +140,12 @@ export interface ReservationRepository {
    *
    * @param args ステータス更新の条件と値
    * @param mails 同時に outbox に積むメール（承認時の通知など）。不可分に書く手段として同じメソッドで受け取る。
-   * @returns 更新できたら true。条件に合わず 0 件だったら false（競合）。
+   * @returns 更新結果と積まれたメール ID の配列。条件に合わず 0 件だったら applied: false（競合）。
    */
   applyStatusTransition(
     args: ApplyStatusTransitionArgs,
     mails: readonly MailDraft[],
-  ): ResultAsync<boolean, ReservationError>;
+  ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError>;
 }
 
 /**

@@ -89,6 +89,29 @@
     },
   ],
 
+  /**
+   * Cloudflare Queues の設定（ADR-002 決定 1 / 決定 4 / 第 4 節）。
+   *
+   * queues は vars や d1_databases と同様に環境に継承されないため、
+   * トップレベル、env.production、env.preview の 3 か所すべてに記述する必要がある。
+   * また、wrangler types はトップレベルを基準に走るため、トップレベルに書かないと
+   * Env に MAIL_QUEUE の型が現れない。
+   */
+  "queues": {
+    "producers": [{ "queue": "iclub-reserve-mail-preview", "binding": "MAIL_QUEUE" }],
+    "consumers": [
+      {
+        "queue": "iclub-reserve-mail-preview",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        // SMTP の失敗はここでは再試行しない (ADR 決定 4)。consumer が落ちた場合の保険
+        "max_retries": 3,
+        // OCI の 421 Too many connections を避けるため、同時に開く接続を絞る
+        "max_concurrency": 2,
+      },
+    ],
+  },
+
   "env": {
     /** 本番環境。`main` ブランチから Workers Builds でデプロイされる。 */
     "production": {
@@ -116,6 +139,21 @@
           "migrations_dir": "drizzle/migrations",
         },
       ],
+      // queues は継承されないため環境ごとに記述。詳細はトップレベルのコメントを参照
+      "queues": {
+        "producers": [{ "queue": "iclub-reserve-mail", "binding": "MAIL_QUEUE" }],
+        "consumers": [
+          {
+            "queue": "iclub-reserve-mail",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            // SMTP の失敗はここでは再試行しない (ADR 決定 4)。consumer が落ちた場合の保険
+            "max_retries": 3,
+            // OCI の 421 Too many connections を避けるため、同時に開く接続を絞る
+            "max_concurrency": 2,
+          },
+        ],
+      },
     },
 
     /**
@@ -148,6 +186,21 @@
           "migrations_dir": "drizzle/migrations",
         },
       ],
+      // queues は継承されないため環境ごとに記述。詳細はトップレベルのコメントを参照
+      "queues": {
+        "producers": [{ "queue": "iclub-reserve-mail-preview", "binding": "MAIL_QUEUE" }],
+        "consumers": [
+          {
+            "queue": "iclub-reserve-mail-preview",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            // SMTP の失敗はここでは再試行しない (ADR 決定 4)。consumer が落ちた場合の保険
+            "max_retries": 3,
+            // OCI の 421 Too many connections を避けるため、同時に開く接続を絞る
+            "max_concurrency": 2,
+          },
+        ],
+      },
     },
   },
 }

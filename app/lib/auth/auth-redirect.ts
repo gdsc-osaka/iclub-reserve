@@ -7,6 +7,9 @@ export const LOGIN_PATH = "/login";
 /** 初回セットアップ（お名前の登録）の画面。 */
 export const WELCOME_PATH = "/welcome";
 
+/** 開発専用の、メール outbox を手で送信するエンドポイント（`app/routes/dev/flush-mail`）。 */
+export const DEV_FLUSH_MAIL_PATH = "/dev/flush-mail";
+
 /**
  * パスキーの登録を勧める画面。
  *
@@ -19,22 +22,29 @@ export const PASSKEY_SUGGEST_PATH = "/passkey/suggest";
 const DEFAULT_REDIRECT_TO = "/";
 
 /**
- * ログインしていなくても開ける画面（完全一致で判定する）。
+ * ログインしていなくても開けるパス（完全一致で判定する）。
  *
- * このアプリは「ここに挙げた画面以外はすべてログインが必要」という方針で、
+ * このアプリは「ここに挙げたパス以外はすべてログインが必要」という方針で、
  * `app/root.tsx` のミドルウェアがまとめて入口を守っている。
  * 新しくログイン不要の画面を作るときだけ、ここに追記すること。
  *
  * `WELCOME_PATH`（お名前の登録）はログインの途中に通る画面なので、
  * ミドルウェアでは素通しし、その画面自身のローダーでログイン状態を確かめている。
+ *
+ * `DEV_FLUSH_MAIL_PATH` はローカルで outbox の送信を手で起動するための開発専用ルート。
+ * curl から叩けるようログインを免除するが、ローカル以外ではルート自身が
+ * `APP_ENV` を見て 404 を返す（ADR-002 実装ガイド 5）。
  */
-const PUBLIC_PATHS: ReadonlySet<string> = new Set([LOGIN_PATH, WELCOME_PATH]);
+const PUBLIC_PATHS: ReadonlySet<string> = new Set([LOGIN_PATH, WELCOME_PATH, DEV_FLUSH_MAIL_PATH]);
 
 /**
  * ログインしていなくても開けるパスの接頭辞（前方一致で判定する）。
  *
  * Better Auth の API は「ログインするための API」なので、ログイン必須にはできない。
  * 個々のエンドポイントの保護は Better Auth 側が行う。
+ *
+ * ここに挙げた接頭辞の下は**まだ存在しないパスも含めて**ログイン不要になる。
+ * 1 本だけ通したいパスは `PUBLIC_PATHS` に書くこと。
  */
 const PUBLIC_PATH_PREFIXES: readonly string[] = ["/api/auth/"];
 

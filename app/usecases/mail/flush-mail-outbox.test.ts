@@ -8,6 +8,7 @@ import {
 import { MailSendErrorCode, type MailSender } from "~/domain/mail/mail-sender";
 import {
   FLUSH_BATCH_SIZE,
+  flushMailOutboxByIdsUseCase,
   flushMailOutboxUseCase,
   MAX_ATTEMPTS,
   nextAttemptDelayMs,
@@ -35,26 +36,27 @@ describe("flush-mail-outbox", () => {
     });
   });
 
+  const baseEntry: MailOutboxEntry = {
+    id: "outbox_01",
+    idempotencyKey: "reservation:approved:res_1:usr_1",
+    to: { address: "user@example.com", name: "利用者" },
+    subject: "予約承認通知",
+    text: "予約が承認されました",
+    attemptCount: 1,
+  };
+
+  const from = { address: "noreply@gdgoc-osaka.jp", name: "i-Club 予約システム" };
+
   describe("flushMailOutboxUseCase", () => {
-    const baseEntry: MailOutboxEntry = {
-      id: "outbox_01",
-      idempotencyKey: "reservation:approved:res_1:usr_1",
-      to: { address: "user@example.com", name: "利用者" },
-      subject: "予約承認通知",
-      text: "予約が承認されました",
-      attemptCount: 1,
-    };
-
-    const from = { address: "noreply@gdgoc-osaka.jp", name: "i-Club 予約システム" };
-
     it("送信成功時は markSent が呼ばれ、Message-ID ヘッダが付与される", async () => {
       const claimDue = vi.fn(() => okAsync([baseEntry]));
+      const claimByIds = vi.fn();
       const markSent = vi.fn((_id: string) => okAsync(undefined));
       const markRetryable = vi.fn();
       const markDead = vi.fn();
       const send = vi.fn((_msg: unknown) => okAsync(undefined));
 
-      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
       const mailSender: MailSender = { send };
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
@@ -73,6 +75,7 @@ describe("flush-mail-outbox", () => {
       const entry: MailOutboxEntry = { ...baseEntry, attemptCount: 1 };
 
       const claimDue = vi.fn(() => okAsync([entry]));
+      const claimByIds = vi.fn();
       const markSent = vi.fn();
       const markRetryable = vi.fn(() => okAsync(undefined));
       const markDead = vi.fn();
@@ -84,7 +87,7 @@ describe("flush-mail-outbox", () => {
         }),
       );
 
-      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
       const mailSender: MailSender = { send };
 
       const result = await flushMailOutboxUseCase(
@@ -104,6 +107,7 @@ describe("flush-mail-outbox", () => {
       const entry: MailOutboxEntry = { ...baseEntry, attemptCount: 5 };
 
       const claimDue = vi.fn(() => okAsync([entry]));
+      const claimByIds = vi.fn();
       const markSent = vi.fn();
       const markRetryable = vi.fn();
       const markDead = vi.fn(() => okAsync(undefined));
@@ -115,7 +119,7 @@ describe("flush-mail-outbox", () => {
         }),
       );
 
-      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
       const mailSender: MailSender = { send };
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
@@ -132,6 +136,7 @@ describe("flush-mail-outbox", () => {
       const entry: MailOutboxEntry = { ...baseEntry, attemptCount: 1 };
 
       const claimDue = vi.fn(() => okAsync([entry]));
+      const claimByIds = vi.fn();
       const markSent = vi.fn();
       const markRetryable = vi.fn();
       const markDead = vi.fn(() => okAsync(undefined));
@@ -143,7 +148,7 @@ describe("flush-mail-outbox", () => {
         }),
       );
 
-      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
       const mailSender: MailSender = { send };
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
@@ -162,12 +167,13 @@ describe("flush-mail-outbox", () => {
       };
 
       const claimDue = vi.fn(() => okAsync([invalidEntry]));
+      const claimByIds = vi.fn();
       const markSent = vi.fn();
       const markRetryable = vi.fn();
       const markDead = vi.fn(() => okAsync(undefined));
       const send = vi.fn();
 
-      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
       const mailSender: MailSender = { send };
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
@@ -180,11 +186,34 @@ describe("flush-mail-outbox", () => {
       });
     });
 
+    it("claimDue が失敗した場合は送信を行わず件数 0 を返す", async () => {
+      const claimDue = vi.fn(() =>
+        errAsync({
+          code: MailOutboxErrorCode.DatabaseError,
+          message: "outbox 操作に失敗しました。",
+        }),
+      );
+      const claimByIds = vi.fn();
+      const markSent = vi.fn();
+      const markRetryable = vi.fn();
+      const markDead = vi.fn();
+      const send = vi.fn();
+
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
+      const mailSender: MailSender = { send };
+
+      const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
+
+      expect(result).toEqual({ claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 });
+      expect(send).not.toHaveBeenCalled();
+    });
+
     it("1通の送信失敗で全体の処理が中断せず、残りのメールが送信される", async () => {
       const entry1: MailOutboxEntry = { ...baseEntry, id: "outbox_01" };
       const entry2: MailOutboxEntry = { ...baseEntry, id: "outbox_02" };
 
       const claimDue = vi.fn(() => okAsync([entry1, entry2]));
+      const claimByIds = vi.fn();
       const markSent = vi.fn(() => okAsync(undefined));
       const markRetryable = vi.fn(() => okAsync(undefined));
       const markDead = vi.fn();
@@ -201,7 +230,7 @@ describe("flush-mail-outbox", () => {
         )
         .mockReturnValueOnce(okAsync(undefined));
 
-      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
       const mailSender: MailSender = { send };
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
@@ -216,6 +245,7 @@ describe("flush-mail-outbox", () => {
       const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const claimDue = vi.fn(() => okAsync([baseEntry]));
+      const claimByIds = vi.fn();
       const markSent = vi.fn(() =>
         errAsync({
           code: MailOutboxErrorCode.DatabaseError,
@@ -226,7 +256,7 @@ describe("flush-mail-outbox", () => {
       const markDead = vi.fn();
       const send = vi.fn((_msg: unknown) => okAsync(undefined));
 
-      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
       const mailSender: MailSender = { send };
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
@@ -235,6 +265,85 @@ describe("flush-mail-outbox", () => {
       expect(send).toHaveBeenCalledTimes(1);
 
       consoleError.mockRestore();
+    });
+  });
+
+  describe("flushMailOutboxByIdsUseCase", () => {
+    it("指定された ID のメールが claimByIds で取り出され、送信成功時は markSent が呼ばれる", async () => {
+      const claimDue = vi.fn();
+      const claimByIds = vi.fn((_args: { ids: readonly string[]; now: Date }) =>
+        okAsync([baseEntry]),
+      );
+      const markSent = vi.fn((_id: string) => okAsync(undefined));
+      const markRetryable = vi.fn();
+      const markDead = vi.fn();
+      const send = vi.fn((_msg: unknown) => okAsync(undefined));
+
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
+      const mailSender: MailSender = { send };
+
+      const result = await flushMailOutboxByIdsUseCase(
+        { mailOutbox, mailSender, from },
+        { ids: ["outbox_01"] },
+      );
+
+      expect(result).toEqual({ claimed: 1, sent: 1, retried: 0, dead: 0, stateUpdateFailed: 0 });
+      expect(claimByIds).toHaveBeenCalledWith({
+        ids: ["outbox_01"],
+        now: expect.any(Date),
+      });
+      expect(markSent).toHaveBeenCalledWith("outbox_01");
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: { "Message-ID": "<outbox_01@gdgoc-osaka.jp>" },
+        }),
+      );
+    });
+
+    it("ids が空配列のときは claimByIds を呼ばず件数 0 を返す", async () => {
+      const claimDue = vi.fn();
+      const claimByIds = vi.fn();
+      const markSent = vi.fn();
+      const markRetryable = vi.fn();
+      const markDead = vi.fn();
+      const send = vi.fn();
+
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
+      const mailSender: MailSender = { send };
+
+      const result = await flushMailOutboxByIdsUseCase(
+        { mailOutbox, mailSender, from },
+        { ids: [] },
+      );
+
+      expect(result).toEqual({ claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 });
+      expect(claimByIds).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("claimByIds が失敗した場合は送信を行わず件数 0 を返す", async () => {
+      const claimDue = vi.fn();
+      const claimByIds = vi.fn(() =>
+        errAsync({
+          code: MailOutboxErrorCode.DatabaseError,
+          message: "outbox 操作に失敗しました。",
+        }),
+      );
+      const markSent = vi.fn();
+      const markRetryable = vi.fn();
+      const markDead = vi.fn();
+      const send = vi.fn();
+
+      const mailOutbox: MailOutbox = { claimDue, claimByIds, markSent, markRetryable, markDead };
+      const mailSender: MailSender = { send };
+
+      const result = await flushMailOutboxByIdsUseCase(
+        { mailOutbox, mailSender, from },
+        { ids: ["outbox_01"] },
+      );
+
+      expect(result).toEqual({ claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 });
+      expect(send).not.toHaveBeenCalled();
     });
   });
 });

@@ -9,6 +9,7 @@ import {
   ReservationErrorCode,
   ReservationStatus,
   type ApplyStatusTransitionArgs,
+  type ApplyStatusTransitionOutcome,
   type Reservation,
   type ReservationError,
   type ReservationOverlapArgs,
@@ -113,7 +114,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
   const applyStatusTransition = (
     args: ApplyStatusTransitionArgs,
     mails: readonly MailDraft[],
-  ): ResultAsync<boolean, ReservationError> => {
+  ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
     const updateQuery = db
       .update(reservationTable)
       .set({
@@ -138,7 +139,10 @@ export const createReservationRepository = (db: Database): ReservationRepository
         code: ReservationErrorCode.DatabaseError,
         message: "予約ステータスの更新に失敗しました。",
         cause: error,
-      })).map((rows) => rows.length > 0);
+      })).map((rows) => ({
+        applied: rows.length > 0,
+        enqueuedMailIds: [],
+      }));
     }
 
     /*
@@ -160,14 +164,18 @@ export const createReservationRepository = (db: Database): ReservationRepository
      * そのため、列は既定値のあるものも省略せず、schema の定義順どおりに並べること。
      */
     const now = new Date();
+    const mailIds: string[] = [];
 
-    const insertQueries = mails.map((mail) =>
-      db
+    const insertQueries = mails.map((mail) => {
+      const mailId = createId();
+      mailIds.push(mailId);
+
+      return db
         .insert(mailOutboxTable)
         .select(
           db
             .select({
-              id: sql<string>`${createId()}`.as("id"),
+              id: sql<string>`${mailId}`.as("id"),
               idempotencyKey: sql<string>`${mail.idempotencyKey}`.as("idempotency_key"),
               toAddress: sql<string>`${mail.to.address}`.as("to_address"),
               toName: sql<string | null>`${mail.to.name ?? null}`.as("to_name"),
@@ -193,8 +201,8 @@ export const createReservationRepository = (db: Database): ReservationRepository
               ),
             ),
         )
-        .onConflictDoNothing({ target: mailOutboxTable.idempotencyKey }),
-    );
+        .onConflictDoNothing({ target: mailOutboxTable.idempotencyKey });
+    });
 
     return ResultAsync.fromPromise(
       db.batch([updateQuery, ...insertQueries]),
@@ -205,7 +213,11 @@ export const createReservationRepository = (db: Database): ReservationRepository
       }),
     ).map((results) => {
       const updateRows = results[0] as { id: string }[];
-      return updateRows.length > 0;
+      const applied = updateRows.length > 0;
+      return {
+        applied,
+        enqueuedMailIds: applied ? mailIds : [],
+      };
     });
   };
 

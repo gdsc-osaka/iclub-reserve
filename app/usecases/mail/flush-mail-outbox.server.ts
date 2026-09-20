@@ -1,6 +1,6 @@
 import type { ResultAsync } from "neverthrow";
 import { createMailMessage } from "~/domain/mail/mail-message";
-import type { MailOutbox, MailOutboxError } from "~/domain/mail/mail-outbox";
+import type { MailOutbox, MailOutboxEntry, MailOutboxError } from "~/domain/mail/mail-outbox";
 import { isRetryable, MailSendErrorCode, type MailSender } from "~/domain/mail/mail-sender";
 
 export interface FlushMailOutboxDeps {
@@ -38,25 +38,16 @@ export interface FlushMailOutboxResult {
 }
 
 /**
- * 送信待ちのメールを outbox から取り出して送信するユースケース。
+ * 取り出し済みのメール一覧に対して送信ループを実行する内部関数（ADR-002 決定 2.4）。
  *
- * 1 通ごとのエラーはログに残しつつ握りつぶし、残りのメールの送信を継続する。
- * （1 通の SMTP 失敗で全体の cron を止めないため）
+ * cron 経由（flushMailOutboxUseCase）とキュー経由（flushMailOutboxByIdsUseCase）で
+ * 同じ送信・リトライ・集計ロジックを共有し、処理の食い違いを防ぐ。
  */
-export const flushMailOutboxUseCase = async (
+const executeSendLoop = async (
+  entries: readonly MailOutboxEntry[],
   deps: FlushMailOutboxDeps,
-  options?: { readonly limit?: number; readonly now?: Date },
+  now: Date,
 ): Promise<FlushMailOutboxResult> => {
-  const now = options?.now ?? new Date();
-  const limit = options?.limit ?? FLUSH_BATCH_SIZE;
-
-  const claimResult = await deps.mailOutbox.claimDue({ limit, now });
-  if (claimResult.isErr()) {
-    console.error("Failed to claim due mail outbox entries:", claimResult.error);
-    return { claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 };
-  }
-
-  const entries = claimResult.value;
   let sent = 0;
   let retried = 0;
   let dead = 0;
@@ -158,4 +149,50 @@ export const flushMailOutboxUseCase = async (
   }
 
   return { claimed: entries.length, sent, retried, dead, stateUpdateFailed };
+};
+
+/**
+ * 送信待ちのメールを outbox から取り出して送信するユースケース（Cron 用 / ADR-002 実装ガイド 3）。
+ *
+ * 1 通ごとのエラーはログに残しつつ握りつぶし、残りのメールの送信を継続する。
+ * （1 通の SMTP 失敗で全体の cron を止めないため）
+ */
+export const flushMailOutboxUseCase = async (
+  deps: FlushMailOutboxDeps,
+  options?: { readonly limit?: number; readonly now?: Date },
+): Promise<FlushMailOutboxResult> => {
+  const now = options?.now ?? new Date();
+  const limit = options?.limit ?? FLUSH_BATCH_SIZE;
+
+  const claimResult = await deps.mailOutbox.claimDue({ limit, now });
+  if (claimResult.isErr()) {
+    console.error("Failed to claim due mail outbox entries:", claimResult.error);
+    return { claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 };
+  }
+
+  return executeSendLoop(claimResult.value, deps, now);
+};
+
+/**
+ * 指定された ID のメールを outbox から取り出して送信するユースケース（Queue Consumer 用 / ADR-002 決定 2.4）。
+ *
+ * 既定の backoff や再試行条件を満たすもののみ送信対象となり、送信済みやまだ時刻が来ていないものはスキップされる。
+ */
+export const flushMailOutboxByIdsUseCase = async (
+  deps: FlushMailOutboxDeps,
+  args: { readonly ids: readonly string[]; readonly now?: Date },
+): Promise<FlushMailOutboxResult> => {
+  const now = args.now ?? new Date();
+
+  if (args.ids.length === 0) {
+    return { claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 };
+  }
+
+  const claimResult = await deps.mailOutbox.claimByIds({ ids: args.ids, now });
+  if (claimResult.isErr()) {
+    console.error("Failed to claim mail outbox entries by IDs:", claimResult.error);
+    return { claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 };
+  }
+
+  return executeSendLoop(claimResult.value, deps, now);
 };

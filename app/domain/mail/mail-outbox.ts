@@ -71,6 +71,14 @@ export interface MailOutbox {
     readonly now: Date;
   }): ResultAsync<readonly MailOutboxEntry[], MailOutboxError>;
 
+  /**
+   * ID を指定して取り出す。Queues 経由の即時配送で使う。送信済み・再試行待ちの行は返らない。
+   */
+  claimByIds(args: {
+    readonly ids: readonly string[];
+    readonly now: Date;
+  }): ResultAsync<readonly MailOutboxEntry[], MailOutboxError>;
+
   /** 送信成功。status を 'sent' にして完了とする */
   markSent(id: string): ResultAsync<void, MailOutboxError>;
 
