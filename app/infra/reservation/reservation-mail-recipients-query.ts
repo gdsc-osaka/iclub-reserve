@@ -11,6 +11,51 @@ import type {
 import type { Database } from "../db";
 import { toMembershipRoles } from "../membership/membership-converter";
 
+/** 申請者を引く SELECT が返す行。2 つのメソッドで起点の表は違うが、取る列はそろえてある */
+type ApplicantRow = { id: string; email: string; name: string };
+
+/** 団体メンバーを引く SELECT が返す行。管理者かどうかはここでは絞らず、取り出してから判定する */
+type GroupMemberRow = { userId: string; email: string; name: string; role: string };
+
+/**
+ * 申請者と団体管理者を、メールアドレスをキーにした 1 つのマップにまとめる。
+ *
+ * 申請者が管理者を兼ねていても 1 通にまとめるため、先に申請者を入れてから管理者を足す。
+ * 2 つのメソッドで同じ規則を使うので、ここに 1 つだけ置く
+ * （片方だけ直す事故を防ぐ）。
+ */
+const buildGroupRecipients = (
+  applicantRows: readonly ApplicantRow[],
+  memberRows: readonly GroupMemberRow[],
+): Map<string, ReservationMailRecipient> => {
+  const recipients = new Map<string, ReservationMailRecipient>();
+
+  // 1. 申請者を追加（見つからない場合はエラーにせず管理者のみで進める）
+  const applicant = applicantRows.at(0);
+  if (applicant?.email) {
+    recipients.set(applicant.email, {
+      userId: applicant.id,
+      address: applicant.email,
+      name: applicant.name,
+    });
+  }
+
+  // 2. 団体の管理者メンバーを追加
+  for (const row of memberRows) {
+    if (!row.email) continue;
+    if (!toMembershipRoles(row.role).includes(MembershipRole.Admin)) continue;
+    if (recipients.has(row.email)) continue;
+
+    recipients.set(row.email, {
+      userId: row.userId,
+      address: row.email,
+      name: row.name,
+    });
+  }
+
+  return recipients;
+};
+
 /**
  * 団体メンバーと事務局の生データから、重複を除去・昇順ソートした ReservationMailAudience を組み立てる。
  *
@@ -52,36 +97,10 @@ const buildAudience = (
  */
 export const createReservationMailRecipientsQuery = (
   db: Database,
-): ReservationMailRecipientsQuery => ({
-  findByReservationId: (reservationId: string) => {
-    const reservationCheckQuery = db
-      .select({ id: reservationTable.id })
-      .from(reservationTable)
-      .where(eq(reservationTable.id, reservationId));
-
-    const applicantQuery = db
-      .select({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      })
-      .from(reservationTable)
-      .innerJoin(user, eq(user.id, reservationTable.createdBy))
-      .where(eq(reservationTable.id, reservationId));
-
-    const groupAdminsQuery = db
-      .select({
-        userId: user.id,
-        email: user.email,
-        name: user.name,
-        role: member.role,
-      })
-      .from(reservationTable)
-      .innerJoin(member, eq(member.organizationId, reservationTable.groupId))
-      .innerJoin(user, eq(user.id, member.userId))
-      .where(eq(reservationTable.id, reservationId));
-
-    const staffQuery = db
+): ReservationMailRecipientsQuery => {
+  /** 事務局（user.is_staff）。予約にも団体にも依存しないので、どちらのメソッドでも同じ 1 文 */
+  const staffQuery = () =>
+    db
       .select({
         id: user.id,
         email: user.email,
@@ -90,121 +109,88 @@ export const createReservationMailRecipientsQuery = (
       .from(user)
       .where(eq(user.is_staff, true));
 
-    return ResultAsync.fromPromise(
-      db.batch([reservationCheckQuery, applicantQuery, groupAdminsQuery, staffQuery]),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "予約通知先アドレスの取得に失敗しました。",
-        cause: error,
-      }),
-    ).andThen(([reservationRows, applicantRows, adminRows, staffRows]) => {
-      if (reservationRows.length === 0) {
-        return err<ReservationMailAudience, QueryError>({
-          code: QueryErrorCode.NotFound,
-          message: `ID が ${reservationId} の予約は見つかりませんでした。`,
-        });
-      }
+  return {
+    findByReservationId: (reservationId: string) => {
+      const reservationCheckQuery = db
+        .select({ id: reservationTable.id })
+        .from(reservationTable)
+        .where(eq(reservationTable.id, reservationId));
 
-      const recipientsMap = new Map<string, ReservationMailRecipient>();
+      const applicantQuery = db
+        .select({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        })
+        .from(reservationTable)
+        .innerJoin(user, eq(user.id, reservationTable.createdBy))
+        .where(eq(reservationTable.id, reservationId));
 
-      // 1. 申請者を追加（createdBy が null の場合やユーザーが見つからない場合は applicantRows が空になる）
-      const applicant = applicantRows[0];
-      if (applicant?.email) {
-        recipientsMap.set(applicant.email, {
-          userId: applicant.id,
-          address: applicant.email,
-          name: applicant.name,
-        });
-      }
+      const groupMembersQuery = db
+        .select({
+          userId: user.id,
+          email: user.email,
+          name: user.name,
+          role: member.role,
+        })
+        .from(reservationTable)
+        .innerJoin(member, eq(member.organizationId, reservationTable.groupId))
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(eq(reservationTable.id, reservationId));
 
-      // 2. 団体の管理者メンバーを追加
-      for (const row of adminRows) {
-        if (!row.email || !row.role) continue;
-
-        const roles = toMembershipRoles(row.role);
-        if (roles.includes(MembershipRole.Admin)) {
-          if (!recipientsMap.has(row.email)) {
-            recipientsMap.set(row.email, {
-              userId: row.userId ?? undefined,
-              address: row.email,
-              name: row.name,
-            });
-          }
+      return ResultAsync.fromPromise(
+        db.batch([reservationCheckQuery, applicantQuery, groupMembersQuery, staffQuery()]),
+        (error): QueryError => ({
+          code: QueryErrorCode.DatabaseError,
+          message: "予約通知先アドレスの取得に失敗しました。",
+          cause: error,
+        }),
+      ).andThen(([reservationRows, applicantRows, memberRows, staffRows]) => {
+        if (reservationRows.length === 0) {
+          return err<ReservationMailAudience, QueryError>({
+            code: QueryErrorCode.NotFound,
+            message: `ID が ${reservationId} の予約は見つかりませんでした。`,
+          });
         }
-      }
 
-      return ok<ReservationMailAudience, QueryError>(buildAudience(recipientsMap, staffRows));
-    });
-  },
+        return ok<ReservationMailAudience, QueryError>(
+          buildAudience(buildGroupRecipients(applicantRows, memberRows), staffRows),
+        );
+      });
+    },
 
-  findForNewReservation: (args) => {
-    // 申請者は所属に関わらず取得する（事務局による他団体予約作成 COND-009 に対応）
-    const applicantQuery = db
-      .select({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      })
-      .from(user)
-      .where(eq(user.id, args.applicantUserId));
+    findForNewReservation: (args) => {
+      // 申請者は所属に関わらず取得する（事務局による他団体予約作成 COND-009 に対応）
+      const applicantQuery = db
+        .select({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        })
+        .from(user)
+        .where(eq(user.id, args.applicantUserId));
 
-    const groupAdminsQuery = db
-      .select({
-        userId: user.id,
-        email: user.email,
-        name: user.name,
-        role: member.role,
-      })
-      .from(member)
-      .leftJoin(user, eq(user.id, member.userId))
-      .where(eq(member.organizationId, args.groupId));
+      const groupMembersQuery = db
+        .select({
+          userId: user.id,
+          email: user.email,
+          name: user.name,
+          role: member.role,
+        })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(eq(member.organizationId, args.groupId));
 
-    const staffQuery = db
-      .select({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      })
-      .from(user)
-      .where(eq(user.is_staff, true));
-
-    return ResultAsync.fromPromise(
-      db.batch([applicantQuery, groupAdminsQuery, staffQuery]),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "予約通知先アドレスの取得に失敗しました。",
-        cause: error,
-      }),
-    ).map(([applicantRows, adminRows, staffRows]) => {
-      const recipientsMap = new Map<string, ReservationMailRecipient>();
-
-      // 1. 申請者を追加（見つからない場合でもエラーにせず管理者のみで進める）
-      const applicant = applicantRows[0];
-      if (applicant?.email) {
-        recipientsMap.set(applicant.email, {
-          userId: applicant.id,
-          address: applicant.email,
-          name: applicant.name,
-        });
-      }
-
-      // 2. 団体の管理者メンバーを追加
-      for (const row of adminRows) {
-        if (!row.email || !row.role) continue;
-
-        const roles = toMembershipRoles(row.role);
-        if (roles.includes(MembershipRole.Admin)) {
-          if (!recipientsMap.has(row.email)) {
-            recipientsMap.set(row.email, {
-              userId: row.userId ?? undefined,
-              address: row.email,
-              name: row.name,
-            });
-          }
-        }
-      }
-
-      return buildAudience(recipientsMap, staffRows);
-    });
-  },
-});
+      return ResultAsync.fromPromise(
+        db.batch([applicantQuery, groupMembersQuery, staffQuery()]),
+        (error): QueryError => ({
+          code: QueryErrorCode.DatabaseError,
+          message: "予約通知先アドレスの取得に失敗しました。",
+          cause: error,
+        }),
+      ).map(([applicantRows, memberRows, staffRows]) =>
+        buildAudience(buildGroupRecipients(applicantRows, memberRows), staffRows),
+      );
+    },
+  };
+};
