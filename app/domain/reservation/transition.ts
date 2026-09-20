@@ -74,6 +74,49 @@ export const transitionSourceStatus: Record<ReservationTransition, ReservationSt
 };
 
 /**
+ * その操作を誰に許すか（COND-009）。
+ *
+ * 団体の操作は権限表（{@link reservationPermissions}）の操作名を、
+ * 事務局だけの操作は "staff" を持つ。事務局の権限は団体での役割とは別の軸にあり、
+ * 団体に所属していない事務局の人にも成り立つため、役割の表では表せない。
+ *
+ * この表は 2 か所から読む。{@link canTransition} の権限判定と、画面（ルート）が
+ * 受け付ける操作の絞り込み（{@link isStaffTransition}）である。どちらかが
+ * 操作の一覧を自前で書き写すと、操作を増やしたときに片方だけ直して食い違う。
+ */
+export const transitionAuthority = {
+  [ReservationTransition.Withdraw]: ReservationAction.Withdraw,
+  [ReservationTransition.Cancel]: ReservationAction.Cancel,
+  [ReservationTransition.Approve]: "staff",
+  [ReservationTransition.Reject]: "staff",
+  [ReservationTransition.StaffCancel]: "staff",
+} as const satisfies Record<ReservationTransition, ReservationAction | "staff">;
+
+/**
+ * 事務局だけが実行できる操作かどうか（COND-009）。
+ *
+ * 事務局の画面（/staff/reservations）と団体の画面（/reservations）で、
+ * 受け付ける操作を分けるために使う。
+ */
+export const isStaffTransition = (transition: ReservationTransition): boolean =>
+  transitionAuthority[transition] === "staff";
+
+/**
+ * フォームから届いた値を操作として読み取る。知らない値は null。
+ *
+ * 画面から送られてくる値は文字列でしかないので、ドメインの言葉に直す入口をここに置く。
+ * ルート側で「この 2 つのどちらか」と書き並べると、操作が増えるたびに
+ * ルートの方も直すことになり、直し忘れるとその操作だけ動かない。
+ */
+export const parseReservationTransition = (value: unknown): ReservationTransition | null => {
+  const transitions: readonly string[] = Object.values(ReservationTransition);
+
+  return typeof value === "string" && transitions.includes(value)
+    ? (value as ReservationTransition)
+    : null;
+};
+
+/**
  * 状態変更操作の実行者。
  *
  * 団体の中での権限（取り消し・キャンセル）と、事務局の権限（承認・却下・事務局キャンセル）は
@@ -166,41 +209,31 @@ export const canTransition = (
   actor: ReservationActor,
   reason?: string | null,
 ): Result<void, ReservationError> => {
-  // 1. 操作権限の確認
-  switch (transition) {
+  /*
+   * 1. 操作権限の確認（COND-009）
+   *
+   * 「どの操作を誰に許すか」は transitionAuthority が持つ。ここで操作ごとに
+   * 分岐を書き並べないのは、操作が増えたときに表とこの判定がずれないようにするため。
+   */
+  const authority = transitionAuthority[transition];
+
+  if (authority === "staff") {
+    if (!actor.isStaff) {
+      return err({
+        code: ReservationErrorCode.ReservationForbidden,
+        message: "この操作は事務局スタッフのみ実行できます。",
+      });
+    }
     /*
      * 団体側の操作は、役割ごとの権限表（reservationPermissions）で判定する。
      * ここで `membership !== null` を自前で書かないのは、書き忘れを防ぐため
      * （app/domain/membership の canPerform を参照）。
      */
-    case ReservationTransition.Withdraw:
-      if (!canPerform(reservationPermissions, actor.membership, ReservationAction.Withdraw)) {
-        return err({
-          code: ReservationErrorCode.ReservationForbidden,
-          message: "所属している団体の予約のみ操作できます。",
-        });
-      }
-      break;
-
-    case ReservationTransition.Cancel:
-      if (!canPerform(reservationPermissions, actor.membership, ReservationAction.Cancel)) {
-        return err({
-          code: ReservationErrorCode.ReservationForbidden,
-          message: "所属している団体の予約のみ操作できます。",
-        });
-      }
-      break;
-
-    case ReservationTransition.Approve:
-    case ReservationTransition.Reject:
-    case ReservationTransition.StaffCancel:
-      if (!actor.isStaff) {
-        return err({
-          code: ReservationErrorCode.ReservationForbidden,
-          message: "この操作は事務局スタッフのみ実行できます。",
-        });
-      }
-      break;
+  } else if (!canPerform(reservationPermissions, actor.membership, authority)) {
+    return err({
+      code: ReservationErrorCode.ReservationForbidden,
+      message: "所属している団体の予約のみ操作できます。",
+    });
   }
 
   // 2. 現在のステータスからの遷移可否（STATE-001）

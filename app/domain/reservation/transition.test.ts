@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { MembershipRole } from "../membership";
 import { ReservationErrorCode, ReservationStatus } from ".";
-import { canTransition, ReservationTransition, validateTransitionReason } from "./transition";
+import {
+  canTransition,
+  isStaffTransition,
+  parseReservationTransition,
+  ReservationTransition,
+  validateTransitionReason,
+} from "./transition";
 
 describe("canTransition", () => {
   /** 指定した役割でその予約の団体に所属している人 */
@@ -312,5 +318,50 @@ describe("validateTransitionReason (COND-002)", () => {
         validateTransitionReason(ReservationTransition.Approve, "任意文字列")._unsafeUnwrap(),
       ).toBeNull();
     });
+  });
+});
+
+describe("parseReservationTransition", () => {
+  it("知っている操作は、そのまま操作として読み取る", () => {
+    expect(parseReservationTransition("withdraw")).toBe(ReservationTransition.Withdraw);
+    expect(parseReservationTransition("staffCancel")).toBe(ReservationTransition.StaffCancel);
+  });
+
+  it("知らない値・値でないものは null にする", () => {
+    /*
+     * フォームから届く値は何でもありうる。ここで弾けないと、
+     * 知らない文字列がそのまま操作としてユースケースへ流れる。
+     */
+    expect(parseReservationTransition("approve_all")).toBeNull();
+    expect(parseReservationTransition("")).toBeNull();
+    expect(parseReservationTransition(null)).toBeNull();
+    expect(parseReservationTransition(new File([], "a.txt"))).toBeNull();
+  });
+});
+
+describe("isStaffTransition", () => {
+  it("承認・却下・事務局キャンセルは事務局の操作", () => {
+    expect(isStaffTransition(ReservationTransition.Approve)).toBe(true);
+    expect(isStaffTransition(ReservationTransition.Reject)).toBe(true);
+    expect(isStaffTransition(ReservationTransition.StaffCancel)).toBe(true);
+  });
+
+  it("取り消し・キャンセルは団体の操作", () => {
+    expect(isStaffTransition(ReservationTransition.Withdraw)).toBe(false);
+    expect(isStaffTransition(ReservationTransition.Cancel)).toBe(false);
+  });
+
+  it("すべての操作が、どちらかに振り分けられている", () => {
+    /*
+     * 画面（ルート）が受け付ける操作は、この判定だけで分けている。
+     * 操作を増やしたときに振り分けが抜けると、その操作はどちらの画面でも動かない。
+     */
+    const transitions = Object.values(ReservationTransition);
+    const staffOnly = transitions.filter((transition) => isStaffTransition(transition));
+    const groupOnly = transitions.filter((transition) => !isStaffTransition(transition));
+
+    expect(staffOnly.length + groupOnly.length).toBe(transitions.length);
+    expect(staffOnly.length).toBeGreaterThan(0);
+    expect(groupOnly.length).toBeGreaterThan(0);
   });
 });

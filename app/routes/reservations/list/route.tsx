@@ -4,7 +4,7 @@ import { data, isRouteErrorResponse, Link, redirect } from "react-router";
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { ReservationErrorCode } from "~/domain/reservation";
-import { ReservationTransition } from "~/domain/reservation/transition";
+import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
@@ -81,12 +81,14 @@ export async function action({ request, context }: Route.ActionArgs) {
     return { error: "予約が指定されていません。" };
   }
 
-  const isAllowedTransition = (
-    val: unknown,
-  ): val is typeof ReservationTransition.Withdraw | typeof ReservationTransition.Cancel =>
-    val === ReservationTransition.Withdraw || val === ReservationTransition.Cancel;
+  /*
+   * この画面が出している操作だけを受け付ける。どれが事務局の操作かはドメインの表
+   * （transitionAuthority）が決めるので、ここに操作名を書き並べない。
+   * 操作そのものの可否（所属・役割・今の状態）はユースケースの canTransition が見る。
+   */
+  const transition = parseReservationTransition(intent);
 
-  if (!isAllowedTransition(intent)) {
+  if (transition === null || isStaffTransition(transition)) {
     return { error: "不正な操作です。" };
   }
 
@@ -100,7 +102,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       reservationId,
       actorUserId: user.id,
       isStaff: user.is_staff,
-      transition: intent as ReservationTransition,
+      transition,
       reason: typeof reason === "string" ? reason : null,
       now: new Date(),
     },
