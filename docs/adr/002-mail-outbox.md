@@ -273,14 +273,21 @@ worker-mailer は種類ごとの例外クラスを持たず、
 **語**で判定しているが、これは件名や宛先に同じ語が混ざると誤判定する。
 応答コードを一次情報にし、コードが取れなかったときだけ語による判定に落とす。
 
-判定そのものは `app/domain/mail/smtp-error.ts` に `classifySmtpError` という純粋関数として置く。
-`smtp-mail-sender.server.ts` に直接書くと、このファイルが `cloudflare:sockets` を読むため
+判定そのものは `app/infra/mail/smtp-error.ts` に `classifySmtpError` という純粋関数として置く。
+**3 桁の応答コードは SMTP という送信手段そのものの都合**であり、ドメインの語彙ではないため infra に置く。
+`smtp-mail-sender.server.ts` に直接書かず別ファイルに切り出すのは、
+このファイルが `cloudflare:sockets` を読むため
 **vitest から import できず、分類の表をテストで固定できない**ためである。
 
-`MailSendError` には `rate_limited` (再試行すべき) と `rejected` (恒久的な拒否) を足し、
-再試行の可否を判定する `isRetryable` を `domain/mail/mail-sender.ts` に置く。
+`MailSendError` には `RateLimited` (再試行すべき) と `Rejected` (恒久的な拒否) を足す。
+型は他のドメインと同じく `MailSendErrorCode` を `as const` で定義し、
+`BaseError` を継承した `{ code, message, cause? }` の形にそろえる。
+
+再試行の可否を判定する `isRetryable` は `domain/mail/mail-sender.ts` に置く。
 **どの層でも同じ基準で判定できるようにする**のが目的で、
 ここを infra に置くと consumer が SMTP の都合を知ることになる。
+逆に言えば、送信側は SMTP の応答コードを `MailSendErrorCode` へ正規化するところまでが責務で、
+**その先の「再送するか」の判断はドメインの側にある**。
 
 ### 6. 重複は許容し、同じメールだと分かるようにする
 
@@ -322,9 +329,8 @@ worker-mailer は `Message-ID` が指定されていなければ `crypto.randomU
 ```text
 app/domain/mail/
   mail-outbox.ts                  ★ MailDraft / MailOutboxEntry / MailOutbox ポート / 状態
-  smtp-error.ts                   ★ classifySmtpError。応答コードによる分類 (決定 5)
   reservation-mail.ts             ★ 承認通知の MailDraft を組み立てる純粋関数
-  mail-sender.ts                    既存。MailSendError に rate_limited と rejected、isRetryable を足す
+  mail-sender.ts                    既存。MailSendErrorCode に RateLimited と Rejected、isRetryable を足す
   mail-message.ts                   既存。Message-ID を渡すため headers を足す (決定 6)
 app/db/schema/
   mail.ts                         ★ mailOutboxTable (index.ts から再 export する)
@@ -332,6 +338,7 @@ app/query/reservation/
   reservation-mail-recipients.ts  ★ 申請者 + 団体管理者のメールアドレスを引く
 app/infra/mail/
   d1-mail-outbox.ts               ★ MailOutbox の実装。この機能の SQL はここにだけ書く
+  smtp-error.ts                   ★ classifySmtpError。応答コードによる分類 (決定 5)
   smtp-mail-sender.server.ts        既存。classifySmtpError を呼び、Message-ID を付ける
 app/infra/reservation/
   reservation-mail-recipients-query.ts ★ 上の query の実装

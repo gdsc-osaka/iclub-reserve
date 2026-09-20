@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRetryable, MailSendErrorCode } from "./mail-sender";
+import { isRetryable, MailSendErrorCode } from "~/domain/mail/mail-sender";
 import { classifySmtpError } from "./smtp-error";
 
 describe("classifySmtpError", () => {

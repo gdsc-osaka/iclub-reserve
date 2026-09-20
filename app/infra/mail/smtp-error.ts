@@ -1,8 +1,12 @@
-import { MailSendErrorCode, type MailSendError } from "./mail-sender";
+import { MailSendErrorCode, type MailSendError } from "~/domain/mail/mail-sender";
 
 /**
  * worker-mailer の例外メッセージから 3 桁の SMTP 応答コードを抽出して
  * ドメイン層の MailSendError に分類する純粋関数。
+ *
+ * SMTP の応答コードは送信手段そのものの都合なので infra 層に置く。
+ * ただし smtp-mail-sender.server.ts は `cloudflare:sockets` を読むため vitest から import できない。
+ * 分類だけを別ファイルに切り出すことで、応答コードごとの判定をテストできるようにしている。
  *
  * 【判定の優先順位】
  * 1. 3 桁の応答コード（254 / 4xx / 535 / 5xx）を最優先で判定する。

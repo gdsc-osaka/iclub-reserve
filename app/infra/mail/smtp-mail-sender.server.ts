@@ -2,7 +2,7 @@ import { ResultAsync } from "neverthrow";
 import { WorkerMailer } from "worker-mailer";
 import type { MailAddressee } from "~/domain/mail/mail-message";
 import type { MailSender, MailSendError } from "~/domain/mail/mail-sender";
-import { classifySmtpError } from "~/domain/mail/smtp-error";
+import { classifySmtpError } from "./smtp-error";
 
 export type SmtpConfig = {
   readonly host: string;
@@ -20,8 +20,8 @@ const toUser = (addressee: MailAddressee) => ({
 /**
  * worker-mailer が投げた例外を MailSendError に正規化する。
  *
- * 以前は語による判定を行っていたが、ドメイン層の classifySmtpError に処理を委譲し、
- * サーバーの 3 桁の応答コード（254 / 421 / 455 / 535 等）を一次情報として分類する。
+ * 分類そのものは同じ infra 層の classifySmtpError に委譲し、
+ * サーバーの 3 桁の応答コード（254 / 421 / 455 / 535 等）を一次情報として扱う。
  */
 const toMailSendError = (cause: unknown): MailSendError => {
   const message = cause instanceof Error ? cause.message : String(cause);
