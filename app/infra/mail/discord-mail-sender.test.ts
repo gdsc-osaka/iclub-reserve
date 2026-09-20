@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDiscordMailSender } from "./discord-mail-sender.server";
 import { createMailMessage } from "~/domain/mail/mail-message";
+import { MailSendErrorCode } from "~/domain/mail/mail-sender";
 
 const config = {
   webhookUrl: "https://discord.com/api/webhooks/123/token",
@@ -87,7 +88,7 @@ describe("createDiscordMailSender", () => {
 
     const result = await createDiscordMailSender(config).send(message);
 
-    expect(result._unsafeUnwrapErr().type).toBe("auth_failed");
+    expect(result._unsafeUnwrapErr().code).toBe(MailSendErrorCode.AuthFailed);
   });
 
   it("その他の失敗応答は send_failed を返し、応答の内容を原因に残す", async () => {
@@ -95,7 +96,7 @@ describe("createDiscordMailSender", () => {
 
     const error = (await createDiscordMailSender(config).send(message))._unsafeUnwrapErr();
 
-    expect(error.type).toBe("send_failed");
+    expect(error.code).toBe(MailSendErrorCode.SendFailed);
     expect(String(error.cause)).toContain("Unknown Channel");
   });
 
@@ -114,7 +115,7 @@ describe("createDiscordMailSender", () => {
 
     const result = await createDiscordMailSender(config).send(message);
 
-    expect(result._unsafeUnwrapErr().type).toBe("connection_failed");
+    expect(result._unsafeUnwrapErr().code).toBe(MailSendErrorCode.ConnectionFailed);
   });
 
   it("接続できなければ connection_failed を返す", async () => {
@@ -122,6 +123,6 @@ describe("createDiscordMailSender", () => {
 
     const result = await createDiscordMailSender(config).send(message);
 
-    expect(result._unsafeUnwrapErr().type).toBe("connection_failed");
+    expect(result._unsafeUnwrapErr().code).toBe(MailSendErrorCode.ConnectionFailed);
   });
 });

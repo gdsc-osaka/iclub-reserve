@@ -1,6 +1,6 @@
 import { createMailMessage } from "~/domain/mail/mail-message";
 import type { MailOutbox } from "~/domain/mail/mail-outbox";
-import { isRetryable, type MailSender } from "~/domain/mail/mail-sender";
+import { isRetryable, MailSendErrorCode, type MailSender } from "~/domain/mail/mail-sender";
 
 export interface FlushMailOutboxDeps {
   readonly mailOutbox: MailOutbox;
@@ -72,7 +72,11 @@ export const flushMailOutboxUseCase = async (
         console.warn(`Invalid mail message for outbox entry ${entry.id}:`, messageResult.error);
         await deps.mailOutbox.markDead({
           id: entry.id,
-          error: { type: "send_failed", cause: messageResult.error },
+          error: {
+            code: MailSendErrorCode.SendFailed,
+            message: "メールの組み立てに失敗しました。",
+            cause: messageResult.error,
+          },
         });
         dead++;
         continue;

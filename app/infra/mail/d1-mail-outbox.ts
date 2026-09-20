@@ -21,8 +21,8 @@ const toMailOutboxError = (cause: unknown): MailOutboxError => ({
 });
 
 const formatMailSendError = (error: MailSendError): string => {
-  const cause = "cause" in error && error.cause ? String(error.cause) : "";
-  return cause ? `${error.type}: ${cause}` : error.type;
+  const cause = error.cause ? String(error.cause) : "";
+  return cause ? `${error.code}: ${cause}` : error.code;
 };
 
 const toMailOutboxEntry = (row: typeof mailOutboxTable.$inferSelect): MailOutboxEntry => ({

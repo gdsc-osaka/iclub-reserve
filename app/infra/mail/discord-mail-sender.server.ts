@@ -1,6 +1,6 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 import type { MailAddressee, MailMessage } from "~/domain/mail/mail-message";
-import type { MailSender, MailSendError } from "~/domain/mail/mail-sender";
+import { MailSendErrorCode, type MailSender, type MailSendError } from "~/domain/mail/mail-sender";
 
 export type DiscordWebhookConfig = {
   /** Discord の「チャンネルの編集 > 連携サービス > ウェブフック」で発行した URL */
@@ -78,9 +78,19 @@ const toMailSendError = (status: number, body: string): MailSendError => {
   const cause = `HTTP ${status}: ${body}`;
 
   // 401/403 は Webhook URL が誤っているか、Webhook が削除されているとき。
-  if (status === 401 || status === 403) return { type: "auth_failed", cause };
+  if (status === 401 || status === 403) {
+    return {
+      code: MailSendErrorCode.AuthFailed,
+      message: "Discord Webhook の認証に失敗しました。",
+      cause,
+    };
+  }
 
-  return { type: "send_failed", cause };
+  return {
+    code: MailSendErrorCode.SendFailed,
+    message: "Discord への投稿に失敗しました。",
+    cause,
+  };
 };
 
 /**
@@ -118,7 +128,11 @@ export const createDiscordMailSender = (config: DiscordWebhookConfig): MailSende
       }),
       // fetch が例外を投げるのは、接続そのものに失敗したときと時間切れのとき。
       // HTTP のエラー応答は例外にならないので、そちらは下の toResult で扱う。
-      (cause): MailSendError => ({ type: "connection_failed", cause }),
+      (cause): MailSendError => ({
+        code: MailSendErrorCode.ConnectionFailed,
+        message: "Discord へ接続できませんでした。",
+        cause,
+      }),
     ).andThen(toResult);
   },
 });

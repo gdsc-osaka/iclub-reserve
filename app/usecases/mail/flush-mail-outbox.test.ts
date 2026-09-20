@@ -1,7 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 import type { MailOutbox, MailOutboxEntry } from "~/domain/mail/mail-outbox";
-import type { MailSender } from "~/domain/mail/mail-sender";
+import { MailSendErrorCode, type MailSender } from "~/domain/mail/mail-sender";
 import {
   FLUSH_BATCH_SIZE,
   flushMailOutboxUseCase,
@@ -73,7 +73,11 @@ describe("flush-mail-outbox", () => {
       const markRetryable = vi.fn(() => okAsync(undefined));
       const markDead = vi.fn();
       const send = vi.fn((_msg: unknown) =>
-        errAsync({ type: "rate_limited" as const, cause: "455 rate limit" }),
+        errAsync({
+          code: MailSendErrorCode.RateLimited,
+          message: "SMTP サーバーが一時的に受け付けられない状態です。",
+          cause: "455 rate limit",
+        }),
       );
 
       const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
@@ -88,7 +92,7 @@ describe("flush-mail-outbox", () => {
       expect(markRetryable).toHaveBeenCalledWith({
         id: "outbox_01",
         nextAttemptAt: new Date("2026-09-20T12:00:30Z"), // 30秒後
-        error: { type: "rate_limited", cause: "455 rate limit" },
+        error: expect.objectContaining({ code: MailSendErrorCode.RateLimited }),
       });
     });
 
@@ -100,7 +104,11 @@ describe("flush-mail-outbox", () => {
       const markRetryable = vi.fn();
       const markDead = vi.fn(() => okAsync(undefined));
       const send = vi.fn((_msg: unknown) =>
-        errAsync({ type: "rate_limited" as const, cause: "455 rate limit" }),
+        errAsync({
+          code: MailSendErrorCode.RateLimited,
+          message: "SMTP サーバーが一時的に受け付けられない状態です。",
+          cause: "455 rate limit",
+        }),
       );
 
       const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
@@ -111,7 +119,7 @@ describe("flush-mail-outbox", () => {
       expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1 });
       expect(markDead).toHaveBeenCalledWith({
         id: "outbox_01",
-        error: { type: "rate_limited", cause: "455 rate limit" },
+        error: expect.objectContaining({ code: MailSendErrorCode.RateLimited }),
       });
       expect(markRetryable).not.toHaveBeenCalled();
     });
@@ -124,7 +132,11 @@ describe("flush-mail-outbox", () => {
       const markRetryable = vi.fn();
       const markDead = vi.fn(() => okAsync(undefined));
       const send = vi.fn((_msg: unknown) =>
-        errAsync({ type: "rejected" as const, cause: "254 suppression" }),
+        errAsync({
+          code: MailSendErrorCode.Rejected,
+          message: "宛先が抑制リストに登録されているため送信できません。",
+          cause: "254 suppression",
+        }),
       );
 
       const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
@@ -135,7 +147,7 @@ describe("flush-mail-outbox", () => {
       expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1 });
       expect(markDead).toHaveBeenCalledWith({
         id: "outbox_01",
-        error: { type: "rejected", cause: "254 suppression" },
+        error: expect.objectContaining({ code: MailSendErrorCode.Rejected }),
       });
     });
 
@@ -160,7 +172,7 @@ describe("flush-mail-outbox", () => {
       expect(send).not.toHaveBeenCalled();
       expect(markDead).toHaveBeenCalledWith({
         id: "outbox_01",
-        error: expect.objectContaining({ type: "send_failed" }),
+        error: expect.objectContaining({ code: MailSendErrorCode.SendFailed }),
       });
     });
 
@@ -176,7 +188,13 @@ describe("flush-mail-outbox", () => {
       // 1 通目は失敗、2 通目は成功
       const send = vi
         .fn()
-        .mockReturnValueOnce(errAsync({ type: "connection_failed" as const, cause: "timeout" }))
+        .mockReturnValueOnce(
+          errAsync({
+            code: MailSendErrorCode.ConnectionFailed,
+            message: "SMTP サーバーに接続できませんでした。",
+            cause: "timeout",
+          }),
+        )
         .mockReturnValueOnce(okAsync(undefined));
 
       const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };

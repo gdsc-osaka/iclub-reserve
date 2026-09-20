@@ -4,7 +4,9 @@ import {
   OTP_EXPIRES_IN_SECONDS,
   type VerificationOtpType,
 } from "./send-verification-otp.server";
+import { MailSendErrorCode } from "~/domain/mail/mail-sender";
 import { createFakeMailSender } from "~/infra/mail/fake-mail-sender";
+import { formatSendEmailError } from "./send-email.server";
 
 const from = { address: "noreply@osaka-u.ac.jp", name: "i-Club 予約システム" };
 
@@ -64,12 +66,16 @@ describe("createSendVerificationOtpUseCase", () => {
     });
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) expect(result.error.type).toBe("invalid_email_address");
+    if (result.isErr()) expect(formatSendEmailError(result.error)).toBe("invalid_email_address");
     expect(mailSender.sent).toHaveLength(0);
   });
 
   it("送信に失敗した場合はその失敗をそのまま返す", async () => {
-    const mailSender = createFakeMailSender({ type: "auth_failed", cause: new Error("535") });
+    const mailSender = createFakeMailSender({
+      code: MailSendErrorCode.AuthFailed,
+      message: "SMTP の認証に失敗しました。",
+      cause: new Error("535"),
+    });
     const sendVerificationOtp = createSendVerificationOtpUseCase({ mailSender, from });
 
     const result = await sendVerificationOtp({
@@ -79,6 +85,7 @@ describe("createSendVerificationOtpUseCase", () => {
     });
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) expect(result.error.type).toBe("auth_failed");
+    if (result.isErr())
+      expect(formatSendEmailError(result.error)).toBe(MailSendErrorCode.AuthFailed);
   });
 });

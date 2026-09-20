@@ -1,4 +1,4 @@
-import type { MailSendError } from "./mail-sender";
+import { MailSendErrorCode, type MailSendError } from "./mail-sender";
 
 /**
  * worker-mailer の例外メッセージから 3 桁の SMTP 応答コードを抽出して
@@ -23,33 +23,61 @@ export const classifySmtpError = (message: string, cause: unknown = message): Ma
 
     // 254: 宛先が抑制リスト（Suppression list）に登録されているため恒久的に届かない
     if (code === "254") {
-      return { type: "rejected", cause };
+      return {
+        code: MailSendErrorCode.Rejected,
+        message: "宛先が抑制リストに登録されているため送信できません。",
+        cause,
+      };
     }
 
     // 421 / 455 など 4xx: 接続過多・レート制限・一時的なサーバー都合。再試行すべき
     if (code.startsWith("4")) {
-      return { type: "rate_limited", cause };
+      return {
+        code: MailSendErrorCode.RateLimited,
+        message: "SMTP サーバーが一時的に受け付けられない状態です。",
+        cause,
+      };
     }
 
     // 535: SMTP 認証の失敗（ユーザー名・パスワード誤り）。再試行しても無駄
     if (code === "535") {
-      return { type: "auth_failed", cause };
+      return {
+        code: MailSendErrorCode.AuthFailed,
+        message: "SMTP の認証に失敗しました。",
+        cause,
+      };
     }
 
     // その他の 5xx: 宛先不明・不正なアドレスなど恒久的な拒否
     if (code.startsWith("5")) {
-      return { type: "rejected", cause };
+      return {
+        code: MailSendErrorCode.Rejected,
+        message: "SMTP サーバーに恒久的に拒否されました。",
+        cause,
+      };
     }
   }
 
   // 応答コードが無い場合（接続失敗・タイムアウト等）はキーワードで判定
   if (/connect|socket|timeout|prohibited|network|econn/i.test(message)) {
-    return { type: "connection_failed", cause };
+    return {
+      code: MailSendErrorCode.ConnectionFailed,
+      message: "SMTP サーバーに接続できませんでした。",
+      cause,
+    };
   }
 
   if (/auth/i.test(message)) {
-    return { type: "auth_failed", cause };
+    return {
+      code: MailSendErrorCode.AuthFailed,
+      message: "SMTP の認証に失敗しました。",
+      cause,
+    };
   }
 
-  return { type: "send_failed", cause };
+  return {
+    code: MailSendErrorCode.SendFailed,
+    message: "メールの送信に失敗しました。",
+    cause,
+  };
 };

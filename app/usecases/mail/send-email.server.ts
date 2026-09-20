@@ -5,6 +5,15 @@ import type { ResultAsync } from "neverthrow";
 /** メール送信で起こりうる失敗をまとめた型 */
 export type SendEmailError = InvalidMailMessageError | MailSendError;
 
+/**
+ * ログや例外メッセージ用に、失敗の理由を 1 つの識別子へ落とす。
+ *
+ * 組み立ての失敗（値オブジェクトの検証）は `type`、送信の失敗は `code` と
+ * 識別子の名前が違うため、呼び出し側でその違いを意識せずに済むようここで吸収する。
+ */
+export const formatSendEmailError = (error: SendEmailError): string =>
+  "code" in error ? error.code : error.type;
+
 export type SendEmailInput = {
   readonly to: string;
   readonly toName?: string;
