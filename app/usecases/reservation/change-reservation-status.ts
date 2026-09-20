@@ -49,6 +49,8 @@ export interface ChangeReservationStatusResult {
   readonly reservationId: string;
   readonly status: ReservationStatus;
   readonly statusReason: string | null;
+  /** この操作で outbox に積まれたメールの ID 一覧（ADR-002 決定 2.1） */
+  readonly enqueuedMailIds: readonly string[];
 }
 
 /**
@@ -162,12 +164,13 @@ export const changeReservationStatusUseCase = (
               },
               mailDrafts,
             )
-            .andThen((applied) =>
-              applied
+            .andThen((outcome) =>
+              outcome.applied
                 ? okAsync<ChangeReservationStatusResult, ReservationError>({
                     reservationId: reservation.id,
                     status: targetStatus,
                     statusReason,
+                    enqueuedMailIds: outcome.enqueuedMailIds,
                   })
                 : errAsync<ChangeReservationStatusResult, ReservationError>({
                     code: ReservationErrorCode.ReservationConflict,

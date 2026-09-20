@@ -102,7 +102,7 @@ const createDeps = (
         : okAsync(overrides.created),
     create: () => okAsync(null),
     existsApprovedOverlap: () => okAsync(false),
-    applyStatusTransition: () => okAsync(true),
+    applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
   };
 
   return { deps: { reservationFormQuery, userGroupListQuery, reservationRepository }, calls };

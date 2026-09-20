@@ -76,12 +76,14 @@ const createMockDeps = (options?: {
   hasOverlap?: boolean;
   /** 条件付き更新が 1 件更新できたか。false は同時操作との競合を表す */
   applied?: boolean;
+  enqueuedMailIds?: readonly string[];
   recipients?: readonly ReservationMailRecipient[];
 }) => {
   const res = options?.reservation !== undefined ? options.reservation : baseProvisionalReservation;
   const groups = options?.userGroups ?? memberGroups;
   const hasOverlap = options?.hasOverlap ?? false;
   const applied = options?.applied ?? true;
+  const enqueuedMailIds = options?.enqueuedMailIds ?? (applied ? ["outbox_mock_01"] : []);
   const recipients = options?.recipients ?? defaultRecipients;
 
   const findById = vi.fn((_id: string) =>
@@ -94,7 +96,9 @@ const createMockDeps = (options?: {
   );
 
   const existsApprovedOverlap = vi.fn((_args: unknown) => okAsync(hasOverlap));
-  const applyStatusTransition = vi.fn((_args: unknown, _mails: unknown) => okAsync(applied));
+  const applyStatusTransition = vi.fn((_args: unknown, _mails: unknown) =>
+    okAsync({ applied, enqueuedMailIds }),
+  );
   const create = vi.fn((_res: unknown) => okAsync(null));
 
   const reservationRepository: ReservationRepository = {
@@ -529,6 +533,29 @@ describe("changeReservationStatusUseCase", () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.DatabaseError);
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
+    it("状態更新に成功したとき、積まれたメールの ID 一覧（enqueuedMailIds）が戻り値に含まれる（ADR-002 決定 2.1）", async () => {
+      const expectedIds = ["mail_outbox_01", "mail_outbox_02"];
+      const { deps } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        enqueuedMailIds: expectedIds,
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isOk()).toBe(true);
+
+      const value = result._unsafeUnwrap();
+      expect(value.status).toBe(ReservationStatus.Approved);
+      expect(value.enqueuedMailIds).toEqual(expectedIds);
     });
   });
 });

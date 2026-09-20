@@ -69,7 +69,7 @@ const createDeps = (
       errAsync({ code: ReservationErrorCode.ReservationNotFound, message: "not found" }),
     create,
     existsApprovedOverlap: () => okAsync(overrides.hasApprovedOverlap ?? false),
-    applyStatusTransition: () => okAsync(true),
+    applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
   };
 
   const membershipRepository: MembershipRepository = {
