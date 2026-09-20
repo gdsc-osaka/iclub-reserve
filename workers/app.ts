@@ -24,10 +24,16 @@ export default {
     const mailSender = createMailSender();
     const from = getMailFrom();
 
-    await flushMailOutboxUseCase({
+    const result = await flushMailOutboxUseCase({
       mailOutbox,
       mailSender,
       from,
     });
+
+    // 毎分動くので、送るものが無かった回は何も残さない。
+    // stateUpdateFailed が 0 でない回は、同じメールが再送される可能性がある。
+    if (result.claimed > 0) {
+      console.info("mail outbox flushed:", result);
+    }
   },
 } satisfies ExportedHandler<Env>;

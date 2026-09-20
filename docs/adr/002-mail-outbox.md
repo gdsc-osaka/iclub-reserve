@@ -654,6 +654,11 @@ export const nextAttemptDelayMs = (attemptCount: number): number =>
 
 **1 通の失敗で残りを止めない。** 1 件ずつ独立に結果を書き、最後にまとめて件数をログに出す。
 
+`markSent` などは `ResultAsync` を返すので、**失敗しても例外にならない**。
+`await` した `Result` を捨てると「送ったのに `sending` のまま」の行に気づけない。
+その行は `STUCK_AFTER_MS` 経過後に `claimDue` が回収する、つまり**同じメールがもう一度送られる**ので、
+件数は書き戻しに成功したときだけ数え、失敗は `stateUpdateFailed` として別に数えて返す。
+
 ### 4. ハンドラ — `workers/app.ts`
 
 下は Phase 2 まで入れた最終形。**Phase 1 で足すのは `scheduled` だけ**で、

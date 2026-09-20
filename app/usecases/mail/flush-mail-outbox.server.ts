@@ -1,5 +1,6 @@
+import type { ResultAsync } from "neverthrow";
 import { createMailMessage } from "~/domain/mail/mail-message";
-import type { MailOutbox } from "~/domain/mail/mail-outbox";
+import type { MailOutbox, MailOutboxError } from "~/domain/mail/mail-outbox";
 import { isRetryable, MailSendErrorCode, type MailSender } from "~/domain/mail/mail-sender";
 
 export interface FlushMailOutboxDeps {
@@ -27,6 +28,13 @@ export interface FlushMailOutboxResult {
   readonly sent: number;
   readonly retried: number;
   readonly dead: number;
+  /**
+   * 送信後の状態を書き戻せなかった件数。
+   *
+   * その行は 'sending' のまま残り、STUCK_AFTER_MS を過ぎると claimDue が回収する。
+   * つまり **同じメールがもう一度送られる**ので、0 でないことに気づけるよう数えて返す。
+   */
+  readonly stateUpdateFailed: number;
 }
 
 /**
@@ -45,13 +53,37 @@ export const flushMailOutboxUseCase = async (
   const claimResult = await deps.mailOutbox.claimDue({ limit, now });
   if (claimResult.isErr()) {
     console.error("Failed to claim due mail outbox entries:", claimResult.error);
-    return { claimed: 0, sent: 0, retried: 0, dead: 0 };
+    return { claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 };
   }
 
   const entries = claimResult.value;
   let sent = 0;
   let retried = 0;
   let dead = 0;
+  let stateUpdateFailed = 0;
+
+  /**
+   * 状態の書き戻しを実行し、成功したときだけ件数を数える。
+   *
+   * mark* は ResultAsync を返すので、失敗しても例外にならない。await した Result を
+   * 捨ててしまうと「送信済みなのに 'sending' のまま」の行を見逃し、戻り値の件数も実際と食い違う。
+   * ここで失敗した行は stuck 回収に任せるしかないため、記録だけして次のメールへ進む。
+   */
+  const applyStateUpdate = async (
+    entryId: string,
+    update: ResultAsync<void, MailOutboxError>,
+    onSuccess: () => void,
+  ): Promise<void> => {
+    const result = await update;
+
+    if (result.isErr()) {
+      console.error(`Failed to update mail outbox entry ${entryId}:`, result.error);
+      stateUpdateFailed++;
+      return;
+    }
+
+    onSuccess();
+  };
 
   for (const entry of entries) {
     try {
@@ -70,15 +102,20 @@ export const flushMailOutboxUseCase = async (
       // メールアドレス不正などプログラム・入力の誤りは再試行しても直らないため dead にする
       if (messageResult.isErr()) {
         console.warn(`Invalid mail message for outbox entry ${entry.id}:`, messageResult.error);
-        await deps.mailOutbox.markDead({
-          id: entry.id,
-          error: {
-            code: MailSendErrorCode.SendFailed,
-            message: "メールの組み立てに失敗しました。",
-            cause: messageResult.error,
+        await applyStateUpdate(
+          entry.id,
+          deps.mailOutbox.markDead({
+            id: entry.id,
+            error: {
+              code: MailSendErrorCode.SendFailed,
+              message: "メールの組み立てに失敗しました。",
+              cause: messageResult.error,
+            },
+          }),
+          () => {
+            dead++;
           },
-        });
-        dead++;
+        );
         continue;
       }
 
@@ -86,34 +123,39 @@ export const flushMailOutboxUseCase = async (
       const sendResult = await deps.mailSender.send(messageResult.value);
 
       if (sendResult.isOk()) {
-        await deps.mailOutbox.markSent(entry.id);
-        sent++;
+        await applyStateUpdate(entry.id, deps.mailOutbox.markSent(entry.id), () => {
+          sent++;
+        });
       } else {
         const error = sendResult.error;
 
         // 3. 一過性の失敗かつ試行回数が上限未満であれば次回へ先送り（backoff）
         if (isRetryable(error) && entry.attemptCount < MAX_ATTEMPTS) {
           const nextAttemptAt = new Date(now.getTime() + nextAttemptDelayMs(entry.attemptCount));
-          await deps.mailOutbox.markRetryable({
-            id: entry.id,
-            nextAttemptAt,
-            error,
-          });
-          retried++;
+          await applyStateUpdate(
+            entry.id,
+            deps.mailOutbox.markRetryable({ id: entry.id, nextAttemptAt, error }),
+            () => {
+              retried++;
+            },
+          );
         } else {
           // 4. 恒久的な失敗（5xx / 254 / 認証不正）または最大試行回数超過
-          await deps.mailOutbox.markDead({
-            id: entry.id,
-            error,
-          });
-          dead++;
+          await applyStateUpdate(
+            entry.id,
+            deps.mailOutbox.markDead({ id: entry.id, error }),
+            () => {
+              dead++;
+            },
+          );
         }
       }
     } catch (unexpectedError) {
+      // ここへ来た行も状態を書き戻せていない。dead ではなく 'sending' のまま残る
       console.error(`Unexpected error processing outbox entry ${entry.id}:`, unexpectedError);
-      dead++;
+      stateUpdateFailed++;
     }
   }
 
-  return { claimed: entries.length, sent, retried, dead };
+  return { claimed: entries.length, sent, retried, dead, stateUpdateFailed };
 };

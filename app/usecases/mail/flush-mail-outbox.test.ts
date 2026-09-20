@@ -1,6 +1,10 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
-import type { MailOutbox, MailOutboxEntry } from "~/domain/mail/mail-outbox";
+import {
+  MailOutboxErrorCode,
+  type MailOutbox,
+  type MailOutboxEntry,
+} from "~/domain/mail/mail-outbox";
 import { MailSendErrorCode, type MailSender } from "~/domain/mail/mail-sender";
 import {
   FLUSH_BATCH_SIZE,
@@ -55,7 +59,7 @@ describe("flush-mail-outbox", () => {
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
 
-      expect(result).toEqual({ claimed: 1, sent: 1, retried: 0, dead: 0 });
+      expect(result).toEqual({ claimed: 1, sent: 1, retried: 0, dead: 0, stateUpdateFailed: 0 });
       expect(markSent).toHaveBeenCalledWith("outbox_01");
       expect(send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -88,7 +92,7 @@ describe("flush-mail-outbox", () => {
         { now: testNow },
       );
 
-      expect(result).toEqual({ claimed: 1, sent: 0, retried: 1, dead: 0 });
+      expect(result).toEqual({ claimed: 1, sent: 0, retried: 1, dead: 0, stateUpdateFailed: 0 });
       expect(markRetryable).toHaveBeenCalledWith({
         id: "outbox_01",
         nextAttemptAt: new Date("2026-09-20T12:00:30Z"), // 30秒後
@@ -116,7 +120,7 @@ describe("flush-mail-outbox", () => {
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
 
-      expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1 });
+      expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1, stateUpdateFailed: 0 });
       expect(markDead).toHaveBeenCalledWith({
         id: "outbox_01",
         error: expect.objectContaining({ code: MailSendErrorCode.RateLimited }),
@@ -144,7 +148,7 @@ describe("flush-mail-outbox", () => {
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
 
-      expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1 });
+      expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1, stateUpdateFailed: 0 });
       expect(markDead).toHaveBeenCalledWith({
         id: "outbox_01",
         error: expect.objectContaining({ code: MailSendErrorCode.Rejected }),
@@ -168,7 +172,7 @@ describe("flush-mail-outbox", () => {
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
 
-      expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1 });
+      expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 1, stateUpdateFailed: 0 });
       expect(send).not.toHaveBeenCalled();
       expect(markDead).toHaveBeenCalledWith({
         id: "outbox_01",
@@ -202,9 +206,35 @@ describe("flush-mail-outbox", () => {
 
       const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
 
-      expect(result).toEqual({ claimed: 2, sent: 1, retried: 1, dead: 0 });
+      expect(result).toEqual({ claimed: 2, sent: 1, retried: 1, dead: 0, stateUpdateFailed: 0 });
       expect(markRetryable).toHaveBeenCalledWith(expect.objectContaining({ id: "outbox_01" }));
       expect(markSent).toHaveBeenCalledWith("outbox_02");
+    });
+
+    it("送信できても markSent が失敗した行は sent ではなく stateUpdateFailed に数える", async () => {
+      // 'sending' のまま残る行なので、送信済みとして数えてしまうと戻り値が実態と食い違う
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const claimDue = vi.fn(() => okAsync([baseEntry]));
+      const markSent = vi.fn(() =>
+        errAsync({
+          code: MailOutboxErrorCode.DatabaseError,
+          message: "outbox 操作に失敗しました。",
+        }),
+      );
+      const markRetryable = vi.fn();
+      const markDead = vi.fn();
+      const send = vi.fn((_msg: unknown) => okAsync(undefined));
+
+      const mailOutbox: MailOutbox = { claimDue, markSent, markRetryable, markDead };
+      const mailSender: MailSender = { send };
+
+      const result = await flushMailOutboxUseCase({ mailOutbox, mailSender, from });
+
+      expect(result).toEqual({ claimed: 1, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 1 });
+      expect(send).toHaveBeenCalledTimes(1);
+
+      consoleError.mockRestore();
     });
   });
 });
