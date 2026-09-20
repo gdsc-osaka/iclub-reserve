@@ -1,10 +1,9 @@
-import { and, eq, gt, lt, ne, notExists, sql } from "drizzle-orm";
+import { and, eq, gt, lt, ne, notExists } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { createId } from "@paralleldrive/cuid2";
 import { err, ok, ResultAsync } from "neverthrow";
 
-import { mailOutboxTable, reservationTable } from "~/db/schema";
-import { MailOutboxStatus, type MailDraft } from "~/domain/mail/mail-outbox";
+import { reservationTable } from "~/db/schema";
+import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationErrorCode,
   ReservationStatus,
@@ -17,6 +16,7 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 import type { Database } from "../db";
+import { guardedMailOutboxInserts, mailOutboxInserts } from "../mail/mail-outbox-writes";
 
 /** 重なりを探すとき、同じ予約テーブルをもう一度読むための別名 */
 const overlapping = alias(reservationTable, "overlapping");
@@ -86,42 +86,24 @@ export const createReservationRepository = (db: Database): ReservationRepository
       })).map(() => ({ enqueuedMailIds: [] }));
     }
 
-    const now = new Date();
-    const mailIds: string[] = [];
-
-    const insertMailQueries = mails.map((mail) => {
-      const mailId = createId();
-      mailIds.push(mailId);
-
-      return db
-        .insert(mailOutboxTable)
-        .values({
-          id: mailId,
-          idempotencyKey: mail.idempotencyKey,
-          toAddress: mail.to.address,
-          toName: mail.to.name ?? null,
-          subject: mail.subject,
-          bodyText: mail.text,
-          bodyHtml: mail.html ?? null,
-          status: MailOutboxStatus.Pending,
-          attemptCount: 0,
-          nextAttemptAt: now,
-          lastError: null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing({ target: mailOutboxTable.idempotencyKey });
-    });
+    /*
+     * 予約の INSERT と outbox への INSERT を原子的に行う（ADR-002 決定 3）。
+     *
+     * `applyStatusTransition` と違って条件付きの書き込みが無いので、
+     * 「業務データが実際に書かれたか」を確かめる必要はない。予約の INSERT が失敗すれば
+     * batch ごと巻き戻り、メールも積まれない。
+     */
+    const outbox = mailOutboxInserts(db, mails);
 
     return ResultAsync.fromPromise(
-      db.batch([insertReservationQuery, ...insertMailQueries]),
+      db.batch([insertReservationQuery, ...outbox.statements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
         message: "予約の作成および通知 outbox の作成に失敗しました。",
         cause: error,
       }),
     ).map(() => ({
-      enqueuedMailIds: mailIds,
+      enqueuedMailIds: outbox.ids,
     }));
   };
 
@@ -192,64 +174,21 @@ export const createReservationRepository = (db: Database): ReservationRepository
     /*
      * 条件付き UPDATE と outbox への INSERT を原子的に行う（ADR-002 決定 3 / 課題 2.2）。
      *
-     * db.batch() は中の文を無条件に全部実行するため、単純に batch([update, insert]) と書くと、
-     * UPDATE が 0 件（競合で承認失敗）でも「承認されました」メールが outbox に積まれてしまう。
-     *
-     * これを防ぐため、INSERT ... SELECT ... FROM reservation WHERE ... の形にし、
-     * 「直前の UPDATE で書き換えた行（id・更新後 status・更新後 updatedAt が一致する行）」が
-     * 実際に存在するときだけ 1 行入るようにする。
-     *
-     * また、ON CONFLICT (idempotency_key) DO NOTHING を付けることで、重複操作時にも
-     * batch 全体がロールバックされて承認まで巻き戻るのを防ぐ。
-     *
-     * SELECT は SQL 文字列ではなく Drizzle のクエリビルダで組み立てる。列を
-     * mailOutboxTable のキーで書けるので綴りの誤りは型エラーになり、並びが表の定義と
-     * ずれていれば Drizzle が実行前に例外で止める（生の SQL 文字列では誰も検査しない）。
-     * そのため、列は既定値のあるものも省略せず、schema の定義順どおりに並べること。
+     * UPDATE は競合したとき 0 件しか更新しないので、メールは「直前の UPDATE が書いた行」が
+     * 実際にあるときだけ積ませる。同じ batch の中なので、条件には**更新後**の
+     * status と updatedAt を渡す。仕組みは guardedMailOutboxInserts の JSDoc を参照。
      */
-    const now = new Date();
-    const mailIds: string[] = [];
-
-    const insertQueries = mails.map((mail) => {
-      const mailId = createId();
-      mailIds.push(mailId);
-
-      return db
-        .insert(mailOutboxTable)
-        .select(
-          db
-            .select({
-              id: sql<string>`${mailId}`.as("id"),
-              idempotencyKey: sql<string>`${mail.idempotencyKey}`.as("idempotency_key"),
-              toAddress: sql<string>`${mail.to.address}`.as("to_address"),
-              toName: sql<string | null>`${mail.to.name ?? null}`.as("to_name"),
-              subject: sql<string>`${mail.subject}`.as("subject"),
-              bodyText: sql<string>`${mail.text}`.as("body_text"),
-              bodyHtml: sql<string | null>`${mail.html ?? null}`.as("body_html"),
-              status: sql<MailOutboxStatus>`${MailOutboxStatus.Pending}`.as("status"),
-              attemptCount: sql<number>`0`.as("attempt_count"),
-              // 日時は列のマッパーを通して Date をミリ秒へ変換させる（手計算した値を入れない）
-              nextAttemptAt: sql`${sql.param(now, mailOutboxTable.nextAttemptAt)}`.as(
-                "next_attempt_at",
-              ),
-              lastError: sql<string | null>`${null}`.as("last_error"),
-              createdAt: sql`${sql.param(now, mailOutboxTable.createdAt)}`.as("created_at"),
-              updatedAt: sql`${sql.param(now, mailOutboxTable.updatedAt)}`.as("updated_at"),
-            })
-            .from(reservationTable)
-            .where(
-              and(
-                eq(reservationTable.id, args.id),
-                eq(reservationTable.status, args.status),
-                eq(reservationTable.updatedAt, args.updatedAt),
-              ),
-            ),
-        )
-        .onConflictDoNothing({ target: mailOutboxTable.idempotencyKey });
+    const outbox = guardedMailOutboxInserts(db, mails, {
+      from: reservationTable,
+      where: and(
+        eq(reservationTable.id, args.id),
+        eq(reservationTable.status, args.status),
+        eq(reservationTable.updatedAt, args.updatedAt),
+      ),
     });
 
     return ResultAsync.fromPromise(
-      db.batch([updateQuery, ...insertQueries]),
+      db.batch([updateQuery, ...outbox.statements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
         message: "予約ステータスの更新および通知 outbox の作成に失敗しました。",
@@ -260,7 +199,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
       const applied = updateRows.length > 0;
       return {
         applied,
-        enqueuedMailIds: applied ? mailIds : [],
+        enqueuedMailIds: applied ? outbox.ids : [],
       };
     });
   };

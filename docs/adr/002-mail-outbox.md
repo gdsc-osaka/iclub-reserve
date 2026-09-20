@@ -227,6 +227,45 @@ ON CONFLICT (idempotency_key) DO NOTHING
 `mails` が空のときは `db.batch()` を使わず UPDATE 単体で実行する
 (Drizzle の `batch` は空配列を受け付けない)。
 
+#### INSERT を組み立てるのは業務データ側の Repository ではない
+
+上の `INSERT ... SELECT` をそのまま予約の Repository に書くと、
+`mail_outbox` の全列の並びと `ON CONFLICT` の書き方がその Repository に住み着く。
+通知を足すたびに (メッセージ・団体など) 同じものが写され、
+列を 1 つ足しただけで直す場所が増えていく。
+
+そこで**文の組み立ては `app/infra/mail/mail-outbox-writes.ts` に置く**。
+業務データ側の Repository は「どの表のどの状態を確かめるか」だけを渡して
+`db.batch()` に並べる。`MailDraft` のどの項目がどの列に入るかは、
+このファイルの `toMailOutboxValues` だけが知っている。
+
+```ts
+// 予約の状態遷移: 更新が 0 件なら積ませない
+const outbox = guardedMailOutboxInserts(db, mails, {
+  from: reservationTable,
+  where: and(
+    eq(reservationTable.id, args.id),
+    eq(reservationTable.status, args.status), // 更新後の値
+    eq(reservationTable.updatedAt, args.updatedAt),
+  ),
+});
+db.batch([updateQuery, ...outbox.statements]);
+
+// 予約の新規作成: 条件付きの書き込みが無いので確認は要らない
+const outbox = mailOutboxInserts(db, mails);
+db.batch([insertReservationQuery, ...outbox.statements]);
+```
+
+`toMailOutboxValues` の戻り値の型は `$inferSelect` (既定値のある列も省略できない形) にしてある。
+`mail_outbox` に列を足したときに、**ここがコンパイルエラーになる**ようにするため。
+`INSERT ... SELECT` 側の列の並びは、生成される SQL を見るテストで固定している
+(`mail-outbox-writes.test.ts`)。並びは Drizzle も実行前に検査するが、
+列が位置で対応する以上、壊れたことを CI で知れる形にしておく。
+
+原子性を Repository が引き受けるという決定は変わらない。
+変わるのは**メールの列を誰が知っているか**だけで、
+Repository が知るのは「業務データの書き込みと同じ batch にこの文を並べる」ことだけになる。
+
 usecase の責務は変わらない。認可を確かめ、宛先を集め、`MailDraft[]` を組み立てて Repository に渡す。
 **宛先の展開は積む時点で行う** (送信時ではない)。
 「イベントが起きた時点の団体管理者」に送るのが正しい意味論であり、
