@@ -64,6 +64,7 @@ describe("isPublicPath", () => {
     ["ログイン画面", "/login"],
     ["お名前の登録画面", "/welcome"],
     ["Better Auth の API", "/api/auth/email-otp/send-verification-otp"],
+    ["開発専用ルート", "/dev/flush-mail"],
   ])("%s はログインなしで開ける", (_, pathname) => {
     expect(isPublicPath(pathname)).toBe(true);
   });
@@ -76,6 +77,8 @@ describe("isPublicPath", () => {
     ["ログイン画面に似ているだけのパス", "/login-guide"],
     ["ログイン画面の下の階層", "/login/extra"],
     ["Better Auth 以外の API", "/api/reservations"],
+    // 開発専用ルートは 1 本ずつ許可する。/dev/ の下をまとめて開けてしまわないことを固定する
+    ["許可していない開発専用ルート", "/dev/other"],
   ])("%s はログインが必要", (_, pathname) => {
     expect(isPublicPath(pathname)).toBe(false);
   });
