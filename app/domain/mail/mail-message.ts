@@ -29,6 +29,7 @@ export type MailMessage = {
   readonly subject: string;
   readonly text: string;
   readonly html?: string;
+  readonly headers?: Record<string, string>;
 };
 
 export type CreateMailMessageInput = {
@@ -37,6 +38,7 @@ export type CreateMailMessageInput = {
   readonly subject: string;
   readonly text: string;
   readonly html?: string;
+  readonly headers?: Record<string, string>;
 };
 
 /** 生の文字列を検証して MailMessage を生成する */
@@ -61,5 +63,6 @@ export const createMailMessage = (
     subject,
     text,
     ...(input.html ? { html: input.html } : {}),
+    ...(input.headers ? { headers: input.headers } : {}),
   });
 };

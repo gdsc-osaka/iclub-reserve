@@ -1,8 +1,10 @@
-import { and, eq, gt, lt, ne, notExists } from "drizzle-orm";
+import { and, eq, gt, lt, ne, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+import { createId } from "@paralleldrive/cuid2";
 import { err, ok, ResultAsync } from "neverthrow";
 
-import { reservationTable } from "~/db/schema";
+import { mailOutboxTable, reservationTable } from "~/db/schema";
+import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationErrorCode,
   ReservationStatus,
@@ -110,31 +112,72 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
   const applyStatusTransition = (
     args: ApplyStatusTransitionArgs,
-  ): ResultAsync<boolean, ReservationError> =>
-    ResultAsync.fromPromise(
-      db
-        .update(reservationTable)
-        .set({
-          status: args.status,
-          statusReason: args.statusReason,
-          updatedAt: args.updatedAt,
-        })
-        .where(
-          and(
-            eq(reservationTable.id, args.id),
-            // 読んだときの状態から変わっていないことを、更新の条件に入れる
-            eq(reservationTable.status, args.expectedStatus),
-            args.requireNoApprovedOverlap ? noApprovedOverlap : undefined,
-          ),
-        )
-        // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
-        .returning({ id: reservationTable.id }),
-      (error): ReservationError => ({
+    mails: readonly MailDraft[],
+  ): ResultAsync<boolean, ReservationError> => {
+    const updateQuery = db
+      .update(reservationTable)
+      .set({
+        status: args.status,
+        statusReason: args.statusReason,
+        updatedAt: args.updatedAt,
+      })
+      .where(
+        and(
+          eq(reservationTable.id, args.id),
+          // 読んだときの状態から変わっていないことを、更新の条件に入れる
+          eq(reservationTable.status, args.expectedStatus),
+          args.requireNoApprovedOverlap ? noApprovedOverlap : undefined,
+        ),
+      )
+      // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
+      .returning({ id: reservationTable.id });
+
+    // メールが無い場合は batch を使わず UPDATE 単体で実行する（Drizzle の batch は空配列を受け付けないため）
+    if (mails.length === 0) {
+      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
         message: "予約ステータスの更新に失敗しました。",
         cause: error,
+      })).map((rows) => rows.length > 0);
+    }
+
+    /*
+     * 条件付き UPDATE と outbox への INSERT を原子的に行う（ADR-002 決定 3 / 課題 2.2）。
+     *
+     * db.batch() は中の文を無条件に全部実行するため、単純に batch([update, insert]) と書くと、
+     * UPDATE が 0 件（競合で承認失敗）でも「承認されました」メールが outbox に積まれてしまう。
+     *
+     * これを防ぐため、INSERT ... SELECT ... FROM reservation WHERE ... の形にし、
+     * 「直前の UPDATE で書き換えた行（id・更新後 status・更新後 updatedAt が一致する行）」が
+     * 実際に存在するときだけ 1 行入るようにする。
+     *
+     * また、ON CONFLICT (idempotency_key) DO NOTHING を付けることで、重複操作時にも
+     * batch 全体がロールバックされて承認まで巻き戻るのを防ぐ。
+     */
+    const nowMs = Date.now();
+    const updatedAtMs = args.updatedAt.getTime();
+
+    const insertQueries = mails.map((mail) =>
+      db
+        .insert(mailOutboxTable)
+        .select(
+          sql`SELECT ${createId()}, ${mail.idempotencyKey}, ${mail.to.address}, ${mail.to.name ?? null}, ${mail.subject}, ${mail.text}, ${mail.html ?? null}, 'pending', 0, ${nowMs}, null, ${nowMs}, ${nowMs} FROM reservation WHERE id = ${args.id} AND status = ${args.status} AND updated_at = ${updatedAtMs}`,
+        )
+        .onConflictDoNothing({ target: mailOutboxTable.idempotencyKey }),
+    );
+
+    return ResultAsync.fromPromise(
+      db.batch([updateQuery, ...insertQueries]),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "予約ステータスの更新および通知 outbox の作成に失敗しました。",
+        cause: error,
       }),
-    ).map((rows) => rows.length > 0);
+    ).map((results) => {
+      const updateRows = results[0] as { id: string }[];
+      return updateRows.length > 0;
+    });
+  };
 
   return { findById, create, existsApprovedOverlap, applyStatusTransition };
 };

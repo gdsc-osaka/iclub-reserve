@@ -48,6 +48,14 @@
   },
   "upload_source_maps": true,
 
+  /**
+   * Cron Triggers の設定。
+   * triggers は各環境に継承されるため、トップレベルに 1 度だけ定義する（ADR-002 決定 9）。
+   */
+  "triggers": {
+    "crons": ["* * * * *"],
+  },
+
   "vars": {
     /**
      * 実行環境の名前。認証コード（OTP）の届け先の切り替えに使う。

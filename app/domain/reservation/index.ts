@@ -1,6 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 
 import type { PermissionTable } from "../authz";
+import type { MailDraft } from "../mail/mail-outbox";
 import { MembershipRole } from "../membership";
 
 export const ReservationStatus = {
@@ -128,15 +129,16 @@ export interface ReservationRepository {
    */
   existsApprovedOverlap(args: ReservationOverlapArgs): ResultAsync<boolean, ReservationError>;
   /**
-   * 予約のステータス・理由・更新日時を、条件付きで更新する。
+   * 予約のステータス・理由・更新日時を条件付きで更新し、通知メールがあれば同じトランザクション（db.batch）で outbox に積む。
    *
-   * 「条件付き」なのは、確かめてから書くまでの間に別の操作が割り込めるため。
-   * D1 は対話的なトランザクションを張れないので、確認と更新を 1 つの UPDATE 文に
-   * まとめる（`expectedStatus` と `requireNoApprovedOverlap`）ことで割り込みを防ぐ。
-   *
+   * @param args ステータス更新の条件と値
+   * @param mails 同時に outbox に積むメール（承認時の通知など）。不可分に書く手段として同じメソッドで受け取る。
    * @returns 更新できたら true。条件に合わず 0 件だったら false（競合）。
    */
-  applyStatusTransition(args: ApplyStatusTransitionArgs): ResultAsync<boolean, ReservationError>;
+  applyStatusTransition(
+    args: ApplyStatusTransitionArgs,
+    mails: readonly MailDraft[],
+  ): ResultAsync<boolean, ReservationError>;
 }
 
 /**

@@ -6,12 +6,25 @@ import type { MailMessage } from "./mail-message";
  * 送信手段（SMTP / HTTP API）に依存しない粒度に正規化しておく。
  */
 export type MailSendError =
-  /** SMTP サーバーに接続できなかった（ホスト名・ポート・タイムアウトなど） */
+  /** SMTP サーバーに接続できなかった（ホスト名・ポート・タイムアウトなど。再試行対象） */
   | { readonly type: "connection_failed"; readonly cause: unknown }
-  /** SMTP 認証に失敗した（ユーザー名・パスワードの誤り） */
+  /** SMTP 認証に失敗した（ユーザー名・パスワードの誤り。恒久失敗） */
   | { readonly type: "auth_failed"; readonly cause: unknown }
-  /** 接続・認証はできたが送信に失敗した（宛先拒否・本文エラーなど） */
-  | { readonly type: "send_failed"; readonly cause: unknown };
+  /** 接続・認証はできたが送信に失敗した（本文エラーなど） */
+  | { readonly type: "send_failed"; readonly cause: unknown }
+  /** レート制限または一時的な過負荷（421, 455, 4xx など。再試行対象） */
+  | { readonly type: "rate_limited"; readonly cause: unknown }
+  /** 宛先の恒久的な拒否（254 抑制リスト、5xx 宛先不在など。恒久失敗） */
+  | { readonly type: "rejected"; readonly cause: unknown };
+
+/**
+ * エラーが一過性のものであり、時間を置いて再送すべきかを判定する。
+ *
+ * どの層でも同じ基準で再試行可否を判断できるようにドメイン層に置く。
+ * infra 層に置くと consumer やユースケースが SMTP の詳細を知る必要が生じてしまうため。
+ */
+export const isRetryable = (error: MailSendError): boolean =>
+  error.type === "connection_failed" || error.type === "rate_limited";
 
 /**
  * メール送信のポート（インターフェース）。
