@@ -8,17 +8,22 @@ import { createDb } from "~/infra/db";
 import { createGroupInvitationListQuery } from "~/infra/group/group-invitation-list-query";
 import { createGroupMemberListQuery } from "~/infra/group/group-member-list-query";
 import { createGroupRepository } from "~/infra/group/group-repo";
+import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
+import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
+import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { logServerError } from "~/lib/log.server";
+import { cancelInvitationUseCase } from "~/usecases/group/cancel-invitation";
 import { getGroupManagementUseCase } from "~/usecases/group/get-group-management";
+import { inviteMemberUseCase } from "~/usecases/group/invite-member";
 import { removeMemberUseCase } from "~/usecases/group/remove-member";
 import { updateGroupNameUseCase } from "~/usecases/group/update-group-name";
 import { updateMemberRoleUseCase } from "~/usecases/group/update-member-role";
 
 import type { Route } from "./+types/route";
 import type { GroupActionData } from "./action-data";
-import { toActionErrors, toGroupErrorMessage } from "./action-error";
+import { toActionErrors, toGroupErrorMessage, toInviteFormErrors } from "./action-error";
 import { GroupInfoCard } from "./group-info-card";
 import { GroupInvitationCard } from "./group-invitation-card";
 import { GroupMemberCard } from "./group-member-card";
@@ -87,7 +92,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 /**
  * 団体管理画面のアクション。
  *
- * 団体名の編集、メンバーの役割変更（昇格・降格）、メンバーの削除などの更新操作を処理する。
+ * 団体名の編集、メンバーの役割変更（昇格・降格）、メンバーの削除、
+ * およびメンバーの招待送信・招待取り消しなどの更新操作を処理する。
  */
 export async function action({ request, params, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
@@ -232,6 +238,91 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return redirect(".");
   }
 
+  // 4. 招待の送信
+  if (intent === "invite-member") {
+    const rawEmail = formData.get("email");
+    const submittedEmail = typeof rawEmail === "string" ? rawEmail : "";
+    const rawRole = formData.get("role");
+    const submittedRole = typeof rawRole === "string" ? rawRole : "";
+
+    const result = await inviteMemberUseCase(
+      {
+        groupRepository: createGroupRepository(db),
+        membershipRepository: createMembershipRepository(db),
+        invitationRepository: createInvitationRepository(db),
+        mailOutboxNotifier: createQueueMailOutboxNotifier(),
+      },
+      {
+        groupId: params.groupId,
+        actorUserId: user.id,
+        isStaff: user.is_staff,
+        email: submittedEmail,
+        role: submittedRole,
+        now: new Date(),
+        appBaseUrl: resolveAppBaseUrl(request),
+      },
+    );
+
+    if (result.isErr()) {
+      const error = result.error;
+
+      if (error.code === GroupErrorCode.GroupNotFound) {
+        throw data({ message: "Group not found" }, { status: 404 });
+      }
+
+      if (error.code === GroupErrorCode.DatabaseError) {
+        logServerError("groups.detail.action", error);
+      }
+
+      return {
+        section: "invite",
+        submittedEmail,
+        submittedRole,
+        ...toInviteFormErrors(error),
+      } satisfies GroupActionData;
+    }
+
+    return redirect(".");
+  }
+
+  // 5. 招待の取り消し
+  if (intent === "cancel-invitation") {
+    const rawInvitationId = formData.get("invitation_id");
+    const invitationId = typeof rawInvitationId === "string" ? rawInvitationId : "";
+
+    const result = await cancelInvitationUseCase(
+      {
+        membershipRepository: createMembershipRepository(db),
+        invitationRepository: createInvitationRepository(db),
+      },
+      {
+        groupId: params.groupId,
+        actorUserId: user.id,
+        isStaff: user.is_staff,
+        invitationId,
+      },
+    );
+
+    if (result.isErr()) {
+      const error = result.error;
+
+      if (error.code === GroupErrorCode.GroupNotFound) {
+        throw data({ message: "Group not found" }, { status: 404 });
+      }
+
+      if (error.code === GroupErrorCode.DatabaseError) {
+        logServerError("groups.detail.action", error);
+      }
+
+      return {
+        section: "invitations",
+        error: toGroupErrorMessage(error),
+      } satisfies GroupActionData;
+    }
+
+    return redirect(".");
+  }
+
   // この画面が出している操作以外は受け付けない
   return {
     section: "name",
@@ -280,7 +371,14 @@ export default function GroupManagementRoute({ loaderData, actionData }: Route.C
       />
 
       {/* 承諾待ちの招待カード（管理者・事務局にだけ表示） */}
-      {view.canManage && <GroupInvitationCard invitations={view.invitations} now={nowDate} />}
+      {view.canManage && (
+        <GroupInvitationCard
+          invitations={view.invitations}
+          now={nowDate}
+          inviteForm={actionData?.section === "invite" ? actionData : null}
+          error={actionData?.section === "invitations" ? actionData.error : null}
+        />
+      )}
     </main>
   );
 }

@@ -1,16 +1,5 @@
-import { MembershipRole } from "~/domain/membership";
+import { MembershipRole, membershipRoleLabel } from "~/domain/membership";
 import { cn } from "~/lib/utils";
-
-/**
- * メンバーの役割を利用者向けの日本語にする。
- *
- * 表示名は必ずここを通すこと。画面ごとに文字列を書くと、
- * 同じ役割が「管理者」「管理者ユーザー」のように場所によって違う名前で出てしまう。
- */
-export const membershipRoleLabel: Record<MembershipRole, string> = {
-  [MembershipRole.Admin]: "管理者",
-  [MembershipRole.Member]: "メンバー",
-};
 
 /** 役割ごとの配色。管理者は primary 系で強調し、一般メンバーは muted 系で控えめにする。 */
 const membershipRoleStyle: Record<

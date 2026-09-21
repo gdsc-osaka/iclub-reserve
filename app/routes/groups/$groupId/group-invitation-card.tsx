@@ -1,22 +1,34 @@
-import { Clock, Mail } from "lucide-react";
+import { CircleAlert, Clock, Mail, Trash2 } from "lucide-react";
 
 import { MembershipRoleBadge } from "~/components/group/membership-role-badge";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Separator } from "~/components/ui/separator";
 import type { GroupInvitationList } from "~/query/group/group-invitation-list";
+import { InvitationCancelDialog } from "./invitation-cancel-dialog";
 import { formatRemainingTime } from "./invitation-expiry";
+import { InvitationForm, type GroupInviteFormState } from "./invitation-form";
 
 /**
  * 承諾待ちの招待一覧を表示するカード。
  *
  * 管理者および事務局スタッフのみに表示される。
- * 期限切れの招待はユースケース層で除外されており、ここでは有効な未承認の招待のみが並ぶ。
+ * 新規メンバーの招待フォームと、承諾待ちの招待一覧（取り消し操作を含む）を提供する。
+ *
+ * inviteForm と error は表示有無を明示するため省略可能（?）にせず、
+ * 非表示時は null を渡すよう型で強制している。
  */
 export function GroupInvitationCard({
   invitations,
   now,
+  inviteForm,
+  error,
 }: Readonly<{
   invitations: GroupInvitationList;
   now: Date;
+  inviteForm: GroupInviteFormState | null;
+  error: string | null;
 }>) {
   return (
     <Card className="[--card-spacing:--spacing(6)]">
@@ -24,7 +36,22 @@ export function GroupInvitationCard({
         <CardTitle>承諾待ちの招待（{invitations.length} 件）</CardTitle>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="space-y-4">
+        {/* 操作失敗時の全体エラー表示（取り消し失敗など） */}
+        {error !== null && (
+          <Alert variant="destructive">
+            <CircleAlert className="size-4" />
+            <AlertTitle>操作できませんでした</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* 招待作成フォーム */}
+        <InvitationForm state={inviteForm} />
+
+        <Separator />
+
+        {/* 招待一覧 */}
         {invitations.length === 0 ? (
           /* 空状態の案内 */
           <div className="flex flex-col items-center justify-center py-6 text-center">
@@ -53,6 +80,20 @@ export function GroupInvitationCard({
                     <Clock className="size-3.5 shrink-0" aria-hidden />
                     {formatRemainingTime(invitation.expiresAt, now)}
                   </span>
+                  <InvitationCancelDialog
+                    invitationId={invitation.id}
+                    email={invitation.email}
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-11 text-muted-foreground hover:text-destructive"
+                        aria-label={`${invitation.email} への招待を取り消す`}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    }
+                  />
                 </div>
               </li>
             ))}

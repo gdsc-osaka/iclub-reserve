@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { GroupErrorCode, type GroupError } from "~/domain/group";
-import { toActionErrors, toGroupErrorMessage } from "./action-error";
+import { toActionErrors, toGroupErrorMessage, toInviteFormErrors } from "./action-error";
 
 const errorOf = (code: GroupErrorCode, message: string): GroupError => ({
   code,
@@ -43,6 +43,16 @@ describe("toGroupErrorMessage", () => {
       errorOf(GroupErrorCode.MemberNotFound, "対象のメンバーはこの団体に所属していません。"),
     );
     expect(msg).toBe("対象のメンバーが見つかりませんでした。画面を読み込み直してください。");
+  });
+
+  it("招待が見つからない（InvitationNotFound）は汎用案内文言を返す", () => {
+    const msg = toGroupErrorMessage(
+      errorOf(
+        GroupErrorCode.InvitationNotFound,
+        "対象の招待が見つかりません。すでに取り消されたか、承諾された可能性があります。",
+      ),
+    );
+    expect(msg).toBe("対象の招待が見つかりませんでした。画面を読み込み直してください。");
   });
 
   it("団体が見つからない（GroupNotFound）は汎用案内文言を返す", () => {
@@ -91,6 +101,41 @@ describe("toActionErrors", () => {
     );
 
     expect(errors.nameError).toBeNull();
+    expect(errors.formError).not.toContain("database");
+    expect(errors.formError).toBe("保存できませんでした。時間をおいて、もう一度お試しください。");
+  });
+});
+
+describe("toInviteFormErrors", () => {
+  it("入力不正（GroupInvalidInput）は、ドメインの文言を emailError に入れ、formError は null になる", () => {
+    const errors = toInviteFormErrors(
+      errorOf(
+        GroupErrorCode.GroupInvalidInput,
+        "このメールアドレスには、すでに招待を送っています。取り消してから送り直してください。",
+      ),
+    );
+
+    expect(errors.emailError).toBe(
+      "このメールアドレスには、すでに招待を送っています。取り消してから送り直してください。",
+    );
+    expect(errors.formError).toBeNull();
+  });
+
+  it("権限不足（GroupForbidden）は、ドメインの文言を formError に入れ、emailError は null になる", () => {
+    const errors = toInviteFormErrors(
+      errorOf(GroupErrorCode.GroupForbidden, "メンバーを招待できるのは管理者と事務局だけです。"),
+    );
+
+    expect(errors.emailError).toBeNull();
+    expect(errors.formError).toBe("メンバーを招待できるのは管理者と事務局だけです。");
+  });
+
+  it("DB エラー（DatabaseError）は、内部事情を伏せた汎用文言を formError に入れ、emailError は null になる", () => {
+    const errors = toInviteFormErrors(
+      errorOf(GroupErrorCode.DatabaseError, "Failed to connect to database"),
+    );
+
+    expect(errors.emailError).toBeNull();
     expect(errors.formError).not.toContain("database");
     expect(errors.formError).toBe("保存できませんでした。時間をおいて、もう一度お試しください。");
   });
