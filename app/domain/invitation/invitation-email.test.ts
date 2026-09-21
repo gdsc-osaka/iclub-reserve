@@ -106,7 +106,21 @@ describe("validateInvitationEmail", () => {
     },
   );
 
-  // 8. サブドメインは通る
+  // 8. 形式が壊れているアドレスはエラー（ドメイン部だけを見る isAllowedEmailAddress をすり抜けさせない）
+  it.each(["taro@@osaka-u.ac.jp", "a@b@osaka-u.ac.jp", "@osaka-u.ac.jp", "taro@osaka-u.ac.jp."])(
+    "%s のように形式が壊れている場合はエラーになる",
+    (input) => {
+      const result = validateInvitationEmail(input);
+
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.code).toBe(GroupErrorCode.GroupInvalidInput);
+        expect(result.error.message).toBe("メールアドレスの形式が正しくありません。");
+      }
+    },
+  );
+
+  // 9. サブドメインは通る
   it("許可ドメインのサブドメイン（例: taro@ecs.osaka-u.ac.jp）は通る", () => {
     const email = "taro@ecs.osaka-u.ac.jp";
     const result = validateInvitationEmail(email);
@@ -117,7 +131,7 @@ describe("validateInvitationEmail", () => {
     }
   });
 
-  // 9. エラーの code はすべて GroupErrorCode.GroupInvalidInput
+  // 10. エラーの code はすべて GroupErrorCode.GroupInvalidInput
   it("すべてのエラーケースで code が GroupErrorCode.GroupInvalidInput である", () => {
     const cases = [
       null,
