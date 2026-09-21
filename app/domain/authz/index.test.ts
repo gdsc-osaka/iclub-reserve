@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { roleCan, rolesCan, type PermissionTable } from ".";
+import { roleCan, type PermissionTable } from ".";
 
 /**
  * 仕組みだけを検証したいので、実在する役割や操作は使わない。
@@ -46,26 +46,5 @@ const combinations = Object.values(Role).flatMap((role) =>
 describe("roleCan", () => {
   it.each(combinations)("%s は %s を許可されているか判定できる", (role, action) => {
     expect(roleCan(table, role, action)).toBe(expected[role][action]);
-  });
-});
-
-describe("rolesCan", () => {
-  it.each(combinations)("役割が %s 1 つだけなら %s の判定は roleCan と一致する", (role, action) => {
-    expect(rolesCan(table, [role], action)).toBe(expected[role][action]);
-  });
-
-  it("いずれか 1 つの役割が許可していれば許可する", () => {
-    // Better Auth の hasPermissionFn と同じ判定方法。片方だけ見て判定すると、
-    // 自前の判定では拒否なのに Better Auth の API では通る、という逆転が起きる
-    expect(rolesCan(table, [Role.Reader, Role.Writer], Action.Write)).toBe(true);
-    expect(rolesCan(table, [Role.Writer, Role.Reader], Action.Write)).toBe(true);
-  });
-
-  it("役割を 1 つも持たなければ何も許可しない", () => {
-    expect(rolesCan(table, [], Action.Read)).toBe(false);
-  });
-
-  it.each(Object.values(Role))("どの役割にも許可していない操作は %s でも拒否する", (role) => {
-    expect(rolesCan(table, [role], Action.Publish)).toBe(false);
   });
 });

@@ -18,13 +18,13 @@ const testGroup: Group = {
 const adminMembership: Membership = {
   groupId: testGroup.id,
   userId: "usr_admin",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 const memberMembership: Membership = {
   groupId: testGroup.id,
   userId: "usr_member",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 interface FakeGroupRepositoryOptions {

@@ -99,6 +99,13 @@
       "when": 1789960382419,
       "tag": "0013_flashy_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1789984723780,
+      "tag": "0014_drop_better_auth_organization",
+      "breakpoints": true
     }
   ]
 }

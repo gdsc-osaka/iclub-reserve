@@ -1,6 +1,6 @@
 import type { ResultAsync } from "neverthrow";
 import type { PermissionTable } from "../authz";
-import { rolesCan } from "../authz";
+import { roleCan } from "../authz";
 import type { BaseError } from "../error";
 
 /**
@@ -28,15 +28,7 @@ export const membershipRoleLabel: Record<MembershipRole, string> = {
 /**
  * 文字列がこのアプリの役割かどうかを判定する。
  *
- * Better Auth は自前で `owner` を含む既定の役割一覧を持っており、
- * 役割名の検証にはそれと設定側をマージした一覧を使う
- * (better-auth の crud-members.ts の `validStaticRoles`)。
- * そのため `roles` に admin と member しか渡していなくても、
- * API からは `owner` を設定できてしまう。
- *
- * その `owner` は Better Auth の判定 (hasPermission) では何の権限も持たず、
- * こちらの `toMembershipRoles` では未知として捨てられる。
- * どちらから見ても意味を成さない役割なので、入口で弾くために使う。
+ * DB やフォームから来た文字列が、このアプリの役割かどうかを確かめるために使う。
  */
 export const isMembershipRole = (value: string): value is MembershipRole =>
   (Object.values(MembershipRole) as readonly string[]).includes(value);
@@ -47,7 +39,7 @@ export const isMembershipRole = (value: string): value is MembershipRole =>
 export interface Membership {
   readonly groupId: string;
   readonly userId: string;
-  readonly roles: readonly MembershipRole[];
+  readonly role: MembershipRole;
 }
 
 /**
@@ -66,7 +58,7 @@ export const canPerform = <A extends string>(
   table: PermissionTable<MembershipRole, A>,
   membership: Membership | null,
   action: A,
-): boolean => membership !== null && rolesCan(table, membership.roles, action);
+): boolean => membership !== null && roleCan(table, membership.role, action);
 
 /** メンバーシップに関するエラーの種類 */
 export const MembershipErrorCode = {
@@ -123,9 +115,8 @@ export interface MembershipRepository {
   /**
    * その団体の管理者の人数を数える（最後の管理者の保護に使う）。
    *
-   * 数えるのは行数ではなく「人数」。member テーブルに (団体, ユーザー) の一意制約が無い一方で、
-   * updateRole と remove はその組に一致する行をまとめて変更するため、
-   * 同じ人の行が重複していると行数では保護をすり抜けてしまう。
+   * group_member テーブルには (group_id, user_id) の一意制約があるので、
+   * 行数＝人数である。
    */
   countAdmins(groupId: string): ResultAsync<number, MembershipError>;
 

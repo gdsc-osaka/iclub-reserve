@@ -1,5 +1,5 @@
 import { err, ok, ResultAsync } from "neverthrow";
-import { organization } from "~/db/schema";
+import { groupTable } from "~/db/schema";
 import {
   GroupErrorCode,
   type Group,
@@ -21,7 +21,7 @@ const databaseError = (error: unknown): GroupError => ({
 export const createGroupRepository = (db: Database): GroupRepository => {
   const findById = (id: string): ResultAsync<Group, GroupError> =>
     ResultAsync.fromPromise(
-      db.select().from(organization).where(eq(organization.id, id)).limit(1),
+      db.select().from(groupTable).where(eq(groupTable.id, id)).limit(1),
       databaseError,
     ).andThen((rows) => {
       const row = rows.at(0);
@@ -42,7 +42,7 @@ export const createGroupRepository = (db: Database): GroupRepository => {
     updatedAt,
   }: UpdateGroupNameInput): ResultAsync<Group, GroupError> =>
     ResultAsync.fromPromise(
-      db.update(organization).set({ name, updatedAt }).where(eq(organization.id, id)).returning(),
+      db.update(groupTable).set({ name, updatedAt }).where(eq(groupTable.id, id)).returning(),
       databaseError,
     ).andThen((rows) => {
       const row = rows.at(0);

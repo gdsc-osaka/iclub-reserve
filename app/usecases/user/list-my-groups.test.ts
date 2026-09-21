@@ -16,7 +16,7 @@ const roboticsGroup: UserGroupListItem = {
   id: "grp_robotics",
   name: "ロボティクス開発プロジェクト",
   status: GroupStatus.Enabled,
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 /**

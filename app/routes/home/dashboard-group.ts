@@ -28,5 +28,5 @@ export const toDashboardGroup = (group: UserGroupListItem): DashboardGroup => ({
   id: group.id,
   name: group.name,
   status: group.status,
-  isAdmin: group.roles.includes(MembershipRole.Admin),
+  isAdmin: group.role === MembershipRole.Admin,
 });

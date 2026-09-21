@@ -16,7 +16,7 @@ export interface UserGroupListItem {
   readonly name: string;
   readonly status: GroupStatus;
   /** その団体でのこのユーザーの役割。管理者かどうかの判定に使う */
-  readonly roles: readonly MembershipRole[];
+  readonly role: MembershipRole;
 }
 
 /**

@@ -7,7 +7,7 @@ import type { QueryError } from "../error";
 export interface GroupInvitationListItem {
   readonly id: string;
   readonly email: string;
-  readonly roles: readonly MembershipRole[];
+  readonly role: MembershipRole;
   readonly expiresAt: Date;
 }
 
@@ -24,7 +24,7 @@ export type GroupInvitationList = readonly GroupInvitationListItem[];
  * - 期限切れの除外はここでは行わない。ADR-001 により findByGroupId(groupId) という
  *   「ID のみを引数に取る」形が決められており、now などの基準時刻を引数に足すと
  *   ポートの責務が崩れてしまうため。期限切れの判定はユースケース側で行う。
- * - 並び順は有効期限（expiresAt）の昇順で固定し、同じ期限の場合は invitation.id の昇順とする。
+ * - 並び順は有効期限（expiresAt）の昇順で固定し、同じ期限の場合は group_invitation.id の昇順とする。
  */
 export interface GroupInvitationListQuery {
   findByGroupId(groupId: string): ResultAsync<GroupInvitationList, QueryError>;

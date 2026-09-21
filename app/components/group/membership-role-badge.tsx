@@ -19,21 +19,16 @@ const membershipRoleStyle: Record<
 /**
  * メンバーの役割をひと目で分かるようにする小さなラベル。
  *
- * COND-007（メンバーロールの単一性）により本来は 1 人 1 役割だが、
- * Better Auth の仕様上 "admin,member" のように複数入ることがあるため、
- * 管理者（admin）が含まれている場合は管理者を優先して 1 つだけ表示する。
+ * COND-007（メンバーロールの単一性）に基づき、各メンバーの役割（admin / member）を表示する。
  */
 export function MembershipRoleBadge({
-  roles,
+  role,
   className,
 }: Readonly<{
-  roles: readonly MembershipRole[];
+  role: MembershipRole;
   className?: string;
 }>) {
-  const effectiveRole = roles.includes(MembershipRole.Admin)
-    ? MembershipRole.Admin
-    : MembershipRole.Member;
-  const style = membershipRoleStyle[effectiveRole];
+  const style = membershipRoleStyle[role];
 
   return (
     <span
@@ -44,7 +39,7 @@ export function MembershipRoleBadge({
       )}
     >
       <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
-      {membershipRoleLabel[effectiveRole]}
+      {membershipRoleLabel[role]}
     </span>
   );
 }

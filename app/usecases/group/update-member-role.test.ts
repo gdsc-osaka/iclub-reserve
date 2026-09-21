@@ -16,19 +16,19 @@ const testGroupId = "grp_robotics";
 const adminMembership1: Membership = {
   groupId: testGroupId,
   userId: "usr_admin1",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 const adminMembership2: Membership = {
   groupId: testGroupId,
   userId: "usr_admin2",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 const regularMember: Membership = {
   groupId: testGroupId,
   userId: "usr_member1",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 interface FakeMembershipRepositoryOptions {
@@ -62,7 +62,7 @@ const createFakeMembershipRepository = (
       if (options.countAdminsResult) {
         return options.countAdminsResult();
       }
-      const count = memberships.filter((m) => m.roles.includes(MembershipRole.Admin)).length;
+      const count = memberships.filter((m) => m.role === MembershipRole.Admin).length;
       return okAsync(count);
     },
     updateRole: (input) => {

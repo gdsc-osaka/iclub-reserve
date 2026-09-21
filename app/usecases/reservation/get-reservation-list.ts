@@ -261,7 +261,7 @@ export const getReservationListUseCase = (
       viewerMembership: {
         groupId: selectedGroup.id,
         userId: args.actorUserId,
-        roles: selectedGroup.roles,
+        role: selectedGroup.role,
       },
     }));
   });

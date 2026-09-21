@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 
-import { facilityTable, organization, reservationTable } from "~/db/schema";
+import { facilityTable, groupTable, reservationTable } from "~/db/schema";
 import { calendarVisibleStatuses } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
@@ -58,7 +58,7 @@ const selectReservations = (db: Database, facilityId: string, from: Date, to: Da
     .select({
       id: reservationTable.id,
       groupId: reservationTable.groupId,
-      groupName: organization.name,
+      groupName: groupTable.name,
       startAt: reservationTable.startAt,
       endAt: reservationTable.endAt,
       status: reservationTable.status,
@@ -66,7 +66,7 @@ const selectReservations = (db: Database, facilityId: string, from: Date, to: Da
       note: reservationTable.note,
     })
     .from(reservationTable)
-    .innerJoin(organization, eq(reservationTable.groupId, organization.id))
+    .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))
     .where(
       and(
         eq(reservationTable.facilityId, facilityId),
