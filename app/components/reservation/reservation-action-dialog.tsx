@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { Form } from "react-router";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Form, useNavigation } from "react-router";
 
 import {
   AlertDialog,
@@ -108,9 +108,41 @@ export function ReservationActionDialog({
 }: Readonly<ReservationActionDialogProps>) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const navigation = useNavigation();
 
   const config = getDialogConfig(transition);
   const isSubmitDisabled = config.isReasonRequired && reason.trim() === "";
+
+  // この予約のこの操作が送信中か。同じ画面に他の予約のボタンが並ぶので、
+  // intent（操作）だけでなく reservationId まで見て、押したボタンだけを見分ける
+  const isSubmitting =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === transition &&
+    navigation.formData?.get("reservationId") === item.id;
+
+  /*
+   * 送信が終わったら、このダイアログを自分で閉じる。
+   *
+   * 開閉は open の state だけで決まるので、閉じる処理を書かないと送信後も開いたままになる。
+   * 成功したときは予約の状態が変わって出せる操作も変わり、このダイアログごと画面から
+   * 消えるので気付きにくい。問題になるのは失敗したときで、予約の状態は変わらないため
+   * 同じダイアログが開いたまま残り、一覧の上に出したエラーがその背後に隠れて読めない。
+   *
+   * 「送信中になった」ことを覚えておき、それが終わった瞬間に閉じる。
+   * 成功・失敗のどちらでも閉じてよい（結果は画面側に反映される）。
+   */
+  const hasSubmittedRef = useRef(false);
+  useEffect(() => {
+    if (isSubmitting) {
+      hasSubmittedRef.current = true;
+      return;
+    }
+
+    if (hasSubmittedRef.current) {
+      hasSubmittedRef.current = false;
+      setOpen(false);
+    }
+  }, [isSubmitting]);
 
   // 日本時間での月日と曜日
   const [_, month, day] = toTokyoDateKey(item.startAt).split("-");
