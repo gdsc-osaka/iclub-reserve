@@ -2,13 +2,17 @@
  * 承諾時に生成される SQL の形状を検査するテスト。
  *
  * 【なぜ SQL の形を検査するのか】
- * `db.batch()` による承諾処理は、条件付き UPDATE と `INSERT ... SELECT` の 2 文で構成されている。
- * この 2 文は、WHERE 句の条件が 1 つでも欠けると、期限切れや取り消し済み、宛先違いなど
- * 承諾できないはずの人が誤ってメンバーに追加されてしまう重大な不具合を引き起こす。
+ * `db.batch()` による承諾処理は、`INSERT ... SELECT` と条件付き UPDATE の 2 文でできている。
+ * `db.batch()` は中の文を無条件に全部実行するため、2 文が同じ条件を見ていないと
+ * 「招待は承諾できなかったのにメンバー行だけできる」という重大な不具合になる。
+ * 条件が 1 つでも欠けたり食い違ったりしていないことを、ここで押さえる。
+ *
  * また、`INSERT ... SELECT` の SELECT 側は、挿入先の列と 1 対 1 に対応していなければならない。
  * Drizzle は挿入先の列名を明示して出すため位置だけで対応が決まるわけではないが、
  * 並びが定義とずれていると読む人が対応を追えなくなるので、並び順もあわせて確かめる。
- * これらが保たれていることを、本番環境で実行する前にテストで担保する。
+ *
+ * なお、ここで見ているのは「文の形」だけである。実際にどの行が書かれるかは
+ * `invitation-accept-sqlite.test.ts` が本物の SQLite に対して確かめている。
  */
 import { drizzle } from "drizzle-orm/d1";
 import { describe, expect, it } from "vitest";
@@ -34,6 +38,21 @@ const db = drizzle(undefined as unknown as D1Database, { schema }) as unknown as
 /** `group_member` の列。SELECT 側がこの並びと一致していることを確かめる */
 const memberColumns = ["id", "group_id", "user_id", "role", "created_at", "updated_at"];
 
+/** 承諾できる招待かどうかを決める 4 つの条件 */
+const acceptableConditions = [
+  `"group_invitation"."id" = ?`,
+  `"group_invitation"."status" = ?`,
+  `"group_invitation"."email" = ?`,
+  `"group_invitation"."expires_at" > ?`,
+];
+
+/** `where` 以降の条件部分だけを取り出す（`returning` や `on conflict` は落とす） */
+const whereClauseOf = (sql: string): string => {
+  const matched = sql.match(/ where (.+?)(?: returning | on conflict |$)/);
+  expect(matched).not.toBeNull();
+  return matched![1];
+};
+
 describe("invitationAcceptStatements", () => {
   const sampleInput: AcceptInvitationInput = {
     invitationId: "inv_123456",
@@ -43,24 +62,44 @@ describe("invitationAcceptStatements", () => {
     now: new Date("2026-04-01T10:00:00.000Z"),
   };
 
-  it("1 文目は group_invitation の UPDATE で、WHERE に 4 つの条件が入り returning に group_id が含まれる", () => {
-    const [updateStmt] = invitationAcceptStatements(db, sampleInput);
+  it("1 文目は group_member への INSERT ... SELECT で、承諾できる条件を持ち on conflict do nothing が付く", () => {
+    const [insertStmt] = invitationAcceptStatements(db, sampleInput);
+    const { sql, params } = toSQL(insertStmt);
+
+    expect(sql).toContain(`insert into "group_member"`);
+    expect(sql).toContain(`from "group_invitation"`);
+
+    for (const condition of acceptableConditions) {
+      expect(sql).toContain(condition);
+    }
+
+    // 承諾待ちの招待だけを読む（過去に承諾された行を拾わない）
+    expect(params.slice(-4)).toEqual([
+      sampleInput.invitationId,
+      InvitationStatus.Pending,
+      sampleInput.email,
+      sampleInput.now.getTime(),
+    ]);
+
+    // すでにメンバーの人が承諾しても、既存の所属を書き換えない
+    expect(sql).toContain("on conflict");
+    expect(sql).toContain("do nothing");
+  });
+
+  it("2 文目は group_invitation の UPDATE で、同じ条件を持ち returning に group_id が含まれる", () => {
+    const [, updateStmt] = invitationAcceptStatements(db, sampleInput);
     const { sql, params } = toSQL(updateStmt);
 
-    // group_invitation の UPDATE であること
     expect(sql).toContain(`update "group_invitation"`);
     expect(sql).toContain(`set "status" = ?`);
 
-    // WHERE に 4 条件が含まれること (id, status, email, expires_at)
-    expect(sql).toContain(`"group_invitation"."id" = ?`);
-    expect(sql).toContain(`"group_invitation"."status" = ?`);
-    expect(sql).toContain(`"group_invitation"."email" = ?`);
-    expect(sql).toContain(`"group_invitation"."expires_at" > ?`);
+    for (const condition of acceptableConditions) {
+      expect(sql).toContain(condition);
+    }
 
-    // returning に group_id が含まれること
+    // 承諾後の遷移先を引き直さずに済ませるため、団体 ID を返す
     expect(sql).toContain(`returning "group_id"`);
 
-    // パラメータの検証: status = accepted, id, status = pending, email, expires_at (ミリ秒)
     expect(params).toEqual([
       InvitationStatus.Accepted,
       sampleInput.invitationId,
@@ -70,30 +109,21 @@ describe("invitationAcceptStatements", () => {
     ]);
   });
 
-  it("2 文目は group_member への INSERT ... SELECT で、from group_invitation と status = accepted を持ち、on conflict do nothing が付く", () => {
-    const [, insertStmt] = invitationAcceptStatements(db, sampleInput);
-    const { sql, params } = toSQL(insertStmt);
+  /*
+   * この処理でいちばん壊れてはいけない性質。
+   * 2 文の条件が少しでもずれると、承諾できない人がメンバーになる経路ができてしまう。
+   */
+  it("2 文の WHERE の条件と値が完全に一致する", () => {
+    const [insertStmt, updateStmt] = invitationAcceptStatements(db, sampleInput);
+    const insert = toSQL(insertStmt);
+    const update = toSQL(updateStmt);
 
-    // group_member への INSERT であること
-    expect(sql).toContain(`insert into "group_member"`);
-    // SELECT であること
-    expect(sql).toContain("select");
-    // from group_invitation であること
-    expect(sql).toContain(`from "group_invitation"`);
-    // 直前の UPDATE が accepted にした行を対象にすること
-    expect(sql).toContain(`"group_invitation"."id" = ?`);
-    expect(sql).toContain(`"group_invitation"."status" = ?`);
-
-    // on conflict do nothing が付いていること
-    expect(sql).toContain("on conflict");
-    expect(sql).toContain("do nothing");
-
-    // WHERE 句に渡る status パラメータが accepted であること
-    expect(params).toContain(InvitationStatus.Accepted);
+    expect(whereClauseOf(insert.sql)).toBe(whereClauseOf(update.sql));
+    expect(insert.params.slice(-4)).toEqual(update.params.slice(-4));
   });
 
-  it("2 文目の SELECT 側の列が group_member の定義順に並ぶ", () => {
-    const [, insertStmt] = invitationAcceptStatements(db, sampleInput);
+  it("1 文目の SELECT 側の列が group_member の定義順に並ぶ", () => {
+    const [insertStmt] = invitationAcceptStatements(db, sampleInput);
     const { sql } = toSQL(insertStmt);
 
     // select から from までの SELECT 句を取り出す

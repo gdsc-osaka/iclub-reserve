@@ -33,14 +33,30 @@ const memberParam = <K extends keyof GroupMemberValues>(key: K, value: GroupMemb
   );
 
 /**
- * 承諾のときに `db.batch()` へ渡す 2 文を組む。
+ * 承諾のときに `db.batch()` へ渡す 2 文を組む。返す並びが実行順になる。
  *
- * 【2 文目を INSERT ... SELECT にしている理由】
- * `db.batch()` は中の文を無条件に全部実行するので、1 文目の条件付き UPDATE が
- * 0 件（すでに取り消された・期限切れ・宛先違い）でも 2 文目は走ってしまう。
- * そのまま値を並べた INSERT にすると、承諾できなかった人がメンバーになってしまう。
- * そこで 2 文目を「1 文目が accepted にした行だけを読む SELECT」にして、
- * 同じ batch の中で直前の結果を条件にする（ADR-002 決定 3 / `guardedMailOutboxInserts` と同じ手）。
+ * 【2 文が同じ条件を見ることが安全性の要である】
+ * `db.batch()` は中の文を無条件に全部実行する。そのため「招待は承諾できなかったのに
+ * メンバー行だけできてしまう」ことを防ぐには、メンバーを作る文自身が
+ * 「承諾できる招待か」を確かめる必要がある。
+ * ここでは 2 文とも `acceptable`（同じ条件）を見るようにして、
+ * どちらか一方だけが適用されることを起こらなくしている。
+ * **片方にだけ条件を足したり落としたりしてはいけない。**
+ *
+ * 【メンバーの INSERT を先に実行する理由】
+ * INSERT が書くのは `group_member` だけで、`group_invitation` には触らない。
+ * そのため後から走る UPDATE から見た招待の状態は変わらず、2 文とも
+ * 「書き込み前の同じ行」を条件にできる。逆順にすると、UPDATE が先に
+ * `accepted` へ変えてしまい、INSERT 側が同じ条件を見られなくなる。
+ *
+ * 【「直前の UPDATE が accepted にした行」を条件にしてはいけない理由】
+ * ADR-002 の `guardedMailOutboxInserts` と同じ形で、INSERT 側の条件を
+ * `status = 'accepted'` にする書き方は**誤り**である。`status` だけでは
+ * 「この batch で承諾された行」と「以前に承諾された行」を区別できないため、
+ * 一度でも承諾された招待の ID を知っている人なら、宛先が違っても期限が切れていても
+ * メンバーになれてしまう（画面には 404 が出るので、権限が付いたことにも気付けない）。
+ * outbox がその形で成り立つのは、`reservation` に書き込みのたびに変わる `updated_at` があり、
+ * 「この処理が書いた行」まで絞り込めるためである。`group_invitation` にその列は無い。
  *
  * 【団体 ID と役割を招待の行から読む理由】
  * 引数で受け取って渡すこともできるが、それだと「どの招待を承諾したか」と
@@ -48,25 +64,23 @@ const memberParam = <K extends keyof GroupMemberValues>(key: K, value: GroupMemb
  * 承諾した招待の行から読めば、その 2 つは必ず一致する。
  *
  * 【一意制約に当たったら何もしない理由】
- * すでにその団体のメンバーである人が、古い招待を承諾することがある。
+ * すでにその団体のメンバーである人が、自分宛ての招待をもう一度開いて承諾することがある。
  * `(group_id, user_id)` の一意制約に当たるので、既存の所属をそのまま残す
  * （招待の役割で上書きすると、あとから役割を下げられてしまう）。
  */
 export const invitationAcceptStatements = (db: Database, input: AcceptInvitationInput) => {
-  const acceptInvitation = db
-    .update(groupInvitationTable)
-    .set({ status: InvitationStatus.Accepted })
-    .where(
-      and(
-        eq(groupInvitationTable.id, input.invitationId),
-        // 取り消し済み・承諾済み・辞退済みの招待を蒸し返さない
-        eq(groupInvitationTable.status, InvitationStatus.Pending),
-        // 招待メールを転送されただけの人が承諾できないよう、宛先本人に限る（COND-011）
-        eq(groupInvitationTable.email, input.email),
-        gt(groupInvitationTable.expiresAt, input.now),
-      ),
-    )
-    .returning({ groupId: groupInvitationTable.groupId });
+  /*
+   * 承諾できる招待かどうかを決める条件。2 文で必ず同じものを使う。
+   * 条件を 1 か所にまとめているのは、2 文に書き分けると食い違いに気付けないため。
+   */
+  const acceptable = and(
+    eq(groupInvitationTable.id, input.invitationId),
+    // 取り消し済み・承諾済み・辞退済みの招待を蒸し返さない
+    eq(groupInvitationTable.status, InvitationStatus.Pending),
+    // 招待メールを転送されただけの人が承諾できないよう、宛先本人に限る（COND-011）
+    eq(groupInvitationTable.email, input.email),
+    gt(groupInvitationTable.expiresAt, input.now),
+  );
 
   const insertMember = db
     .insert(groupMemberTable)
@@ -81,19 +95,19 @@ export const invitationAcceptStatements = (db: Database, input: AcceptInvitation
           updatedAt: memberParam("updatedAt", input.now),
         })
         .from(groupInvitationTable)
-        .where(
-          and(
-            eq(groupInvitationTable.id, input.invitationId),
-            // 直前の UPDATE が accepted にした行だけを読む
-            eq(groupInvitationTable.status, InvitationStatus.Accepted),
-          ),
-        ),
+        .where(acceptable),
     )
     .onConflictDoNothing({
       target: [groupMemberTable.groupId, groupMemberTable.userId],
     });
 
-  return [acceptInvitation, insertMember];
+  const acceptInvitation = db
+    .update(groupInvitationTable)
+    .set({ status: InvitationStatus.Accepted })
+    .where(acceptable)
+    .returning({ groupId: groupInvitationTable.groupId });
+
+  return [insertMember, acceptInvitation];
 };
 
 /** DB アクセスの失敗をこの層のエラーに包む。文言を 1 か所にまとめるためのもの */
@@ -222,8 +236,8 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
       db.batch([statements[0], statements[1]]),
       databaseError("承諾"),
     ).map((results) => {
-      // 1 文目（条件付き UPDATE）の RETURNING。0 行なら承諾できる招待が無かった
-      const acceptedRows = results[0] as { groupId: string }[];
+      // 2 文目（条件付き UPDATE）の RETURNING。0 行なら承諾できる招待が無かった
+      const acceptedRows = results[1] as { groupId: string }[];
       return acceptedRows.at(0)?.groupId ?? null;
     });
   };
