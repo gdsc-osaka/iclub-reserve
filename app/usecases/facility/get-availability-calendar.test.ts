@@ -44,7 +44,7 @@ const enabledMembership: UserGroupList = [
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
     status: GroupStatus.Enabled,
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
   },
 ];
 
@@ -54,7 +54,7 @@ const pendingMembership: UserGroupList = [
     id: "grp_ai_hackers",
     name: "AI ハッカソンチーム",
     status: GroupStatus.Pending,
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
   },
 ];
 

@@ -51,7 +51,7 @@ export function GroupMemberCard({
         <ul className="divide-y divide-border">
           {view.canManage
             ? view.members.map((member) => {
-                const isAdmin = member.roles.includes(MembershipRole.Admin);
+                const isAdmin = member.role === MembershipRole.Admin;
                 const isCurrentUser = member.userId === currentUserId;
 
                 return (
@@ -59,7 +59,7 @@ export function GroupMemberCard({
                     key={member.memberId}
                     name={member.name}
                     email={member.email}
-                    roles={member.roles}
+                    role={member.role}
                     isCurrentUser={isCurrentUser}
                     action={
                       <div className="flex items-center gap-1">
@@ -103,7 +103,7 @@ export function GroupMemberCard({
                   key={member.memberId}
                   name={member.name}
                   email={null}
-                  roles={member.roles}
+                  role={member.role}
                   isCurrentUser={member.userId === currentUserId}
                   action={null}
                 />
@@ -124,13 +124,13 @@ export function GroupMemberCard({
 function MemberRow({
   name,
   email,
-  roles,
+  role,
   isCurrentUser,
   action,
 }: Readonly<{
   name: string;
   email: string | null;
-  roles: readonly MembershipRole[];
+  role: MembershipRole;
   isCurrentUser: boolean;
   action: ReactNode | null;
 }>) {
@@ -156,7 +156,7 @@ function MemberRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <MembershipRoleBadge roles={roles} />
+        <MembershipRoleBadge role={role} />
         {action}
       </div>
     </li>

@@ -19,13 +19,13 @@ const testInvitationId = "inv_123456";
 const adminMembership: Membership = {
   groupId: testGroupId,
   userId: "usr_admin",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 const regularMember: Membership = {
   groupId: testGroupId,
   userId: "usr_member",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 interface FakeMembershipRepoOptions {

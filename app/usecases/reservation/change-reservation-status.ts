@@ -94,7 +94,7 @@ export const changeReservationStatusUseCase = (
           membership:
             group === undefined
               ? null
-              : { groupId: group.id, userId: args.actorUserId, roles: group.roles },
+              : { groupId: group.id, userId: args.actorUserId, role: group.role },
         };
 
         // 状態遷移と権限、および理由（COND-002）のドメイン検証

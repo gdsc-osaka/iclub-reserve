@@ -50,7 +50,7 @@ const memberGroups: UserGroupList = [
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
     status: GroupStatus.Enabled,
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
   },
 ];
 
@@ -59,7 +59,7 @@ const otherGroups: UserGroupList = [
     id: "grp_other",
     name: "他団体",
     status: GroupStatus.Enabled,
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
   },
 ];
 

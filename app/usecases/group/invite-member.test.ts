@@ -34,13 +34,13 @@ const testGroup: Group = {
 const adminMembership: Membership = {
   groupId: testGroupId,
   userId: "usr_admin",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 const regularMember: Membership = {
   groupId: testGroupId,
   userId: "usr_member",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 interface FakeGroupRepoOptions {
@@ -480,7 +480,7 @@ describe("inviteMemberUseCase", () => {
       id: "inv_existing",
       groupId: testGroupId,
       email: "taro.handai@osaka-u.ac.jp",
-      roles: [MembershipRole.Member],
+      role: MembershipRole.Member,
       status: "pending",
       expiresAt: new Date(baseNow.getTime() + 1000 * 60 * 60), // 1時間後（有効期限内）
       createdAt: new Date(baseNow.getTime() - 1000 * 60 * 60),
@@ -518,7 +518,7 @@ describe("inviteMemberUseCase", () => {
       id: "inv_expired",
       groupId: testGroupId,
       email: "taro.handai@osaka-u.ac.jp",
-      roles: [MembershipRole.Member],
+      role: MembershipRole.Member,
       status: "pending",
       expiresAt: new Date(baseNow.getTime() - 1000 * 60), // 1分前（期限切れ）
       createdAt: new Date(baseNow.getTime() - 1000 * 60 * 60 * 50),

@@ -88,17 +88,11 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
 
 /**
  * サンプル団体のシードデータ
- *
- * NOTE: slug に id をそのまま入れないこと。
- * slug は「所属していない人にも見える可能性がある値」として扱う必要がある一方、
- * id は所属している人にしか知られたくない値。
- * 同じにすると、片方が漏れたときにもう片方も分かってしまう。
  */
-export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
+export const seedGroups: (typeof schema.groupTable.$inferInsert)[] = [
   {
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
-    slug: "robotics-dev",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Enabled,
@@ -106,7 +100,6 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_ai_hackers",
     name: "AI ハッカソンチーム",
-    slug: "ai-hackers",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Pending,
@@ -114,7 +107,6 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_disabled_group",
     name: "無効化された団体",
-    slug: "disabled-group",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Disabled,
@@ -124,10 +116,10 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
 /**
  * 団体メンバーシップのシードデータ
  */
-export const seedMembers: (typeof schema.member.$inferInsert)[] = [
+export const seedGroupMembers: (typeof schema.groupMemberTable.$inferInsert)[] = [
   {
     id: "mem_taro_robotics",
-    organizationId: "grp_robotics",
+    groupId: "grp_robotics",
     userId: "usr_student_01",
     role: MembershipRole.Admin,
     createdAt: new Date(),
@@ -135,7 +127,7 @@ export const seedMembers: (typeof schema.member.$inferInsert)[] = [
   },
   {
     id: "mem_hanako_robotics",
-    organizationId: "grp_robotics",
+    groupId: "grp_robotics",
     userId: "usr_student_02",
     role: MembershipRole.Member,
     createdAt: new Date(),
@@ -143,7 +135,7 @@ export const seedMembers: (typeof schema.member.$inferInsert)[] = [
   },
   {
     id: "mem_taro_ai",
-    organizationId: "grp_ai_hackers",
+    groupId: "grp_ai_hackers",
     userId: "usr_student_01",
     role: MembershipRole.Member,
     createdAt: new Date(),

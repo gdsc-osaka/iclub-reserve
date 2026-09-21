@@ -75,7 +75,7 @@ export function GroupInvitationCard({
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2.5">
-                  <MembershipRoleBadge roles={invitation.roles} />
+                  <MembershipRoleBadge role={invitation.role} />
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="size-3.5 shrink-0" aria-hidden />
                     {formatRemainingTime(invitation.expiresAt, now)}

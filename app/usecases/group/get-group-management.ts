@@ -32,7 +32,7 @@ export interface GroupMemberSummary {
   readonly memberId: string;
   readonly userId: string;
   readonly name: string;
-  readonly roles: readonly MembershipRole[];
+  readonly role: MembershipRole;
 }
 
 /**
@@ -78,7 +78,7 @@ const toGroupDatabaseError = (error: QueryError | MembershipError): GroupError =
  * 【処理の流れと設計上の配慮】
  * 1. groupId が空文字または空白のみの場合、DB 問い合わせを行わず即座に NOT_FOUND を返す。
  * 2. 事務局（isStaff === true）の場合:
- *    事務局は団体に所属せず（member 行を持たない、COND-009）、全団体の管理権限を持つ。
+ *    事務局は団体に所属せず（group_member 行を持たない、COND-009）、全団体の管理権限を持つ。
  *    そのため membershipRepository を引かず、canManage: true として扱う。
  *    また事務局に対しては存在秘匿（COND-011）の必要がないため、存在しない場合は素直に GroupNotFound を返す。
  * 3. 事務局でない一般利用者の場合:
@@ -159,7 +159,7 @@ export const getGroupManagementUseCase = (
           memberId: m.memberId,
           userId: m.userId,
           name: m.name,
-          roles: m.roles,
+          role: m.role,
         })),
       }));
     });

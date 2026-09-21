@@ -24,13 +24,13 @@ const testGroup: Group = {
 const adminMembership: Membership = {
   groupId: testGroup.id,
   userId: "usr_admin",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 const memberMembership: Membership = {
   groupId: testGroup.id,
   userId: "usr_member",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 const testMembers: GroupMemberList = [
@@ -39,14 +39,14 @@ const testMembers: GroupMemberList = [
     userId: "usr_admin",
     name: "管理者 太郎",
     email: "admin@example.com",
-    roles: [MembershipRole.Admin],
+    role: MembershipRole.Admin,
   },
   {
     memberId: "mem_2",
     userId: "usr_member",
     name: "メンバー 次郎",
     email: "member@example.com",
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
   },
 ];
 
@@ -54,7 +54,7 @@ const testInvitations: GroupInvitationList = [
   {
     id: "inv_1",
     email: "invited@example.com",
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
     expiresAt: new Date("2026-09-22T12:00:00.000Z"),
   },
 ];
@@ -206,7 +206,7 @@ describe("getGroupManagementUseCase", () => {
         memberId: "mem_1",
         userId: "usr_admin",
         name: "管理者 太郎",
-        roles: [MembershipRole.Admin],
+        role: MembershipRole.Admin,
       });
     }
   });
@@ -407,21 +407,21 @@ describe("getGroupManagementUseCase", () => {
       {
         id: "inv_expired_before",
         email: "expired_before@example.com",
-        roles: [MembershipRole.Member],
+        role: MembershipRole.Member,
         // now より前 (1 ミリ秒前)
         expiresAt: new Date(baseNow.getTime() - 1),
       },
       {
         id: "inv_expired_exact",
         email: "expired_exact@example.com",
-        roles: [MembershipRole.Member],
+        role: MembershipRole.Member,
         // now と同時刻 (expiresAt > now を満たさない)
         expiresAt: new Date(baseNow.getTime()),
       },
       {
         id: "inv_active_after",
         email: "active_after@example.com",
-        roles: [MembershipRole.Member],
+        role: MembershipRole.Member,
         // now より後 (1 ミリ秒後)
         expiresAt: new Date(baseNow.getTime() + 1),
       },

@@ -19,14 +19,14 @@ const roboticsGroup: Group = {
 const adminMembership: Membership = {
   groupId: roboticsGroup.id,
   userId: "usr_admin",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 /** grp_robotics の一般メンバー */
 const memberMembership: Membership = {
   groupId: roboticsGroup.id,
   userId: "usr_member",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 /**

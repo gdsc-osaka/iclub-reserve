@@ -41,7 +41,7 @@ const activeFacility: Facility = {
 const membership: Membership = {
   groupId: "grp_robotics",
   userId: "usr_student_01",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 /** 判定の基準になる「いま」。2026 年 9 月 14 日（月）の 9 時 */

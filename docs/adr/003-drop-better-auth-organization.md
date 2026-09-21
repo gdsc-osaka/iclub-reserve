@@ -64,12 +64,12 @@ Better Auth の statement へ翻訳している。導出にしてあるので食
 
 ### 6. スキーマが要件と合っていない
 
-| 実態 | 要件 |
-| --- | --- |
-| `member.role` は `"admin,member"` のようにカンマ区切りで複数持てる | COND-007「メンバーの役割は 1 人 1 つ」 |
-| `organization.slug` が NOT NULL UNIQUE | slug を使う画面も URL も無い |
-| `session.active_organization_id` | 「現在の団体」を持つ設計を採っていない (複数所属が前提) |
-| `organization` / `member` / `invitation` | RDRA では団体・団体メンバー・招待 |
+| 実態                                                               | 要件                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------- |
+| `member.role` は `"admin,member"` のようにカンマ区切りで複数持てる | COND-007「メンバーの役割は 1 人 1 つ」                  |
+| `organization.slug` が NOT NULL UNIQUE                             | slug を使う画面も URL も無い                            |
+| `session.active_organization_id`                                   | 「現在の団体」を持つ設計を採っていない (複数所属が前提) |
+| `organization` / `member` / `invitation`                           | RDRA では団体・団体メンバー・招待                       |
 
 カンマ区切り仕様のせいで、`toMembershipRoles` での分解、
 管理者の人数を SQL で数えられず全行を引いて TS 側で数える実装 (`membership-repo.ts` の `countAdmins`)、
@@ -173,16 +173,16 @@ REQ-016 が未実装で、そもそも利用者が団体を作る経路が存在
 
 ## 影響範囲
 
-| 層 | 変更 |
-| --- | --- |
-| `app/db/schema/` | `group.ts` を新設。`auth.ts` から 3 テーブルと `active_organization_id` が消える |
-| `drizzle/migrations/` | 改名・列削除・UNIQUE 追加のマイグレーションを 1 本追加 |
-| `app/lib/auth/` | `permission.ts` と `organization-guard.ts` (+ 各テスト) を削除。`auth.server.ts` / `auth-client.ts` からプラグインの登録を削除 |
-| `app/infra/` `app/query/` | 参照するテーブルの変数名と列名を差し替え。役割が単一になる |
-| `app/domain/` | `Membership.roles` → `role`。`rolesCan` を削除 |
-| `app/usecases/` | 役割の扱い以外は変更しない |
-| `app/routes/` `app/components/` | 役割を配列で受け取っていた部品の型を直す |
-| `scripts/seed/` | `slug` を落とし、列名を合わせる |
+| 層                              | 変更                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `app/db/schema/`                | `group.ts` を新設。`auth.ts` から 3 テーブルと `active_organization_id` が消える                                               |
+| `drizzle/migrations/`           | 改名・列削除・UNIQUE 追加のマイグレーションを 1 本追加                                                                         |
+| `app/lib/auth/`                 | `permission.ts` と `organization-guard.ts` (+ 各テスト) を削除。`auth.server.ts` / `auth-client.ts` からプラグインの登録を削除 |
+| `app/infra/` `app/query/`       | 参照するテーブルの変数名と列名を差し替え。役割が単一になる                                                                     |
+| `app/domain/`                   | `Membership.roles` → `role`。`rolesCan` を削除                                                                                 |
+| `app/usecases/`                 | 役割の扱い以外は変更しない                                                                                                     |
+| `app/routes/` `app/components/` | 役割を配列で受け取っていた部品の型を直す                                                                                       |
+| `scripts/seed/`                 | `slug` を落とし、列名を合わせる                                                                                                |
 
 ## 適用範囲
 

@@ -41,9 +41,8 @@ export function MyGroupsSection({
 /**
  * どの団体にも所属していない人に出す案内。
  *
- * NOTE: 団体の登録は、今は事務局しかできない
- * （Better Auth の `allowUserToCreateOrganization` が false）。
- * 誰でも登録できるようになったら、ここに「団体を登録」の導線を足す。
+ * NOTE: 団体の登録（REQ-016）は現在未実装で、事務局が直接データを投入している運用。
+ * 団体登録機能が実装されたら、ここに「団体を登録」の導線を足す。
  */
 function NoGroupsCard() {
   return (

@@ -48,8 +48,7 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  * 1. groupId のトリム検証:
  *    空文字または空白のみの場合は DB 問い合わせを行わず、即座に groupNotFound() を返す。
  * 2. 役割（role）の検証（isMembershipRole）:
- *    COND-007（単一ロール原則）を満たす。Better Auth が持ちうる "admin,member" のような複数役割も、
- *    isMembershipRole は "admin" または "member" の完全一致のみを受け付けるため、この 1 行で確実に弾ける。
+ *    COND-007（単一ロール原則）を満たす。isMembershipRole は "admin" または "member" の完全一致のみを受け付けるため、不正な入力値をこの 1 行で確実に弾ける。
  * 3. targetUserId のトリム検証:
  *    空文字の場合は無効な入力として GroupInvalidInput を返す。
  * 4. 2・3 の検証を認可判定より先に置く理由:
@@ -57,7 +56,7 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  *    一方で、無効なリクエストに対して不要な DB 問い合わせ（D1 の往復レイテンシとクエリコスト）を
  *    確実に削減できる。
  * 5. 認可判定（COND-009 / COND-011）:
- *    - 事務局スタッフの場合: 事務局は団体に所属せず（member 行を持たない）、全団体の管理権限を持つため、
+ *    - 事務局スタッフの場合: 事務局は団体に所属せず（group_member 行を持たない）、全団体の管理権限を持つため、
  *      membershipRepository の所属確認をスキップして直接操作を許可する。
  *    - 一般利用者の場合: 操作者のメンバーシップを取得し、閲覧権限（GroupAction.View）がなければ
  *      存在秘匿のため groupNotFound() を返す。View 権限はあるが UpdateMemberRole 権限がない場合は、
@@ -149,7 +148,7 @@ export const updateMemberRoleUseCase = (
           });
         }
 
-        const targetIsAdmin = targetMembership.roles.includes(MembershipRole.Admin);
+        const targetIsAdmin = targetMembership.role === MembershipRole.Admin;
         const nextIsAdmin = nextRole === MembershipRole.Admin;
 
         // 6. 最後の管理者の保護
