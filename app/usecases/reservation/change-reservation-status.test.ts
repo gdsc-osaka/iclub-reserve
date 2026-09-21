@@ -110,12 +110,14 @@ const createMockDeps = (options?: {
     okAsync({ applied, enqueuedMailIds }),
   );
   const create = vi.fn((_res: unknown, _mails: unknown) => okAsync({ enqueuedMailIds: [] }));
+  const applyContentEdit = vi.fn();
 
   const reservationRepository: ReservationRepository = {
     findById,
     create,
     existsApprovedOverlap,
     applyStatusTransition,
+    applyContentEdit,
   };
 
   const findByUserId = vi.fn((_userId: string) => okAsync(groups));

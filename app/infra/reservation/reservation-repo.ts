@@ -81,14 +81,11 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
     // メールが無い場合は batch を使わず INSERT 単体で実行する（Drizzle の batch は空配列を受け付けないため）
     if (mails.length === 0) {
-      return ResultAsync.fromPromise(
-        insertReservationQuery,
-        (error): ReservationError => ({
-          code: ReservationErrorCode.DatabaseError,
-          message: "予約の作成に失敗しました。",
-          cause: error,
-        }),
-      ).map(() => ({ enqueuedMailIds: [] }));
+      return ResultAsync.fromPromise(insertReservationQuery, (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "予約の作成に失敗しました。",
+        cause: error,
+      })).map(() => ({ enqueuedMailIds: [] }));
     }
 
     /*
@@ -166,14 +163,11 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
     // メールが無い場合は batch を使わず UPDATE 単体で実行する（Drizzle の batch は空配列を受け付けないため）
     if (mails.length === 0) {
-      return ResultAsync.fromPromise(
-        updateQuery,
-        (error): ReservationError => ({
-          code: ReservationErrorCode.DatabaseError,
-          message: "予約ステータスの更新に失敗しました。",
-          cause: error,
-        }),
-      ).map((rows) => ({
+      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "予約ステータスの更新に失敗しました。",
+        cause: error,
+      })).map((rows) => ({
         applied: rows.length > 0,
         enqueuedMailIds: [],
       }));
@@ -231,14 +225,11 @@ export const createReservationRepository = (db: Database): ReservationRepository
       .returning({ id: reservationTable.id });
 
     if (mails.length === 0) {
-      return ResultAsync.fromPromise(
-        updateQuery,
-        (error): ReservationError => ({
-          code: ReservationErrorCode.DatabaseError,
-          message: "予約ステータスの更新に失敗しました。",
-          cause: error,
-        }),
-      ).map((rows) => ({
+      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "予約ステータスの更新に失敗しました。",
+        cause: error,
+      })).map((rows) => ({
         applied: rows.length > 0,
         enqueuedMailIds: [],
       }));
