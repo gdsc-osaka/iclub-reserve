@@ -162,7 +162,7 @@ export function InvitationForm({ state }: Readonly<{ state: GroupInviteFormState
           </div>
 
           {/* 送信ボタン */}
-          <div className="pt-0 sm:pt-5">
+          <div className="pt-0 sm:pt-4">
             <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
               {isSubmitting ? "送信中…" : "招待する"}
             </Button>
