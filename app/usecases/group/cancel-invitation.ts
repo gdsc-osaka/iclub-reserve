@@ -46,7 +46,7 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  * 2. invitationId のトリム検証:
  *    空文字または空白のみの場合は無効な入力として GroupInvalidInput を返す。
  * 3. 認可判定（COND-009 / COND-011）:
- *    - 事務局スタッフの場合: 事務局は団体に所属せず全団体の管理権限を持つため、所属確認をスキップ。
+ *    - 事務局スタッフの場合: 事務局は所属の有無に関わらず全団体の管理権限を持つため（COND-009）、所属確認をスキップ。
  *    - 一般利用者の場合: 操作者のメンバーシップを取得し、閲覧権限（GroupAction.View）がなければ
  *      存在秘匿のため groupNotFound() を返す。View 権限はあるが InviteMember 権限がない場合は、
  *      GroupForbidden「メンバーを招待できるのは管理者と事務局だけです。」を返す。
