@@ -7,6 +7,8 @@ import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationErrorCode,
   ReservationStatus,
+  type ApplyContentEditArgs,
+  type ApplyContentEditOutcome,
   type ApplyStatusTransitionArgs,
   type ApplyStatusTransitionOutcome,
   type CreateReservationOutcome,
@@ -79,11 +81,14 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
     // メールが無い場合は batch を使わず INSERT 単体で実行する（Drizzle の batch は空配列を受け付けないため）
     if (mails.length === 0) {
-      return ResultAsync.fromPromise(insertReservationQuery, (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約の作成に失敗しました。",
-        cause: error,
-      })).map(() => ({ enqueuedMailIds: [] }));
+      return ResultAsync.fromPromise(
+        insertReservationQuery,
+        (error): ReservationError => ({
+          code: ReservationErrorCode.DatabaseError,
+          message: "予約の作成に失敗しました。",
+          cause: error,
+        }),
+      ).map(() => ({ enqueuedMailIds: [] }));
     }
 
     /*
@@ -161,11 +166,14 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
     // メールが無い場合は batch を使わず UPDATE 単体で実行する（Drizzle の batch は空配列を受け付けないため）
     if (mails.length === 0) {
-      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約ステータスの更新に失敗しました。",
-        cause: error,
-      })).map((rows) => ({
+      return ResultAsync.fromPromise(
+        updateQuery,
+        (error): ReservationError => ({
+          code: ReservationErrorCode.DatabaseError,
+          message: "予約ステータスの更新に失敗しました。",
+          cause: error,
+        }),
+      ).map((rows) => ({
         applied: rows.length > 0,
         enqueuedMailIds: [],
       }));
@@ -204,5 +212,63 @@ export const createReservationRepository = (db: Database): ReservationRepository
     });
   };
 
-  return { findById, create, existsApprovedOverlap, applyStatusTransition };
+  const applyContentEdit = (
+    args: ApplyContentEditArgs,
+    mails: readonly MailDraft[],
+  ): ResultAsync<ApplyContentEditOutcome, ReservationError> => {
+    const updateQuery = db
+      .update(reservationTable)
+      .set({
+        facilityId: args.facilityId,
+        startAt: args.startAt,
+        endAt: args.endAt,
+        headCount: args.headCount,
+        note: args.note,
+        status: args.status,
+        updatedAt: args.updatedAt,
+      })
+      .where(and(eq(reservationTable.id, args.id), noApprovedOverlap))
+      .returning({ id: reservationTable.id });
+
+    if (mails.length === 0) {
+      return ResultAsync.fromPromise(
+        updateQuery,
+        (error): ReservationError => ({
+          code: ReservationErrorCode.DatabaseError,
+          message: "予約ステータスの更新に失敗しました。",
+          cause: error,
+        }),
+      ).map((rows) => ({
+        applied: rows.length > 0,
+        enqueuedMailIds: [],
+      }));
+    }
+
+    const outbox = guardedMailOutboxInserts(db, mails, {
+      from: reservationTable,
+      where: and(
+        eq(reservationTable.id, args.id),
+        eq(reservationTable.status, args.status),
+        eq(reservationTable.updatedAt, args.updatedAt),
+      ),
+    });
+
+    return ResultAsync.fromPromise(
+      db.batch([updateQuery, ...outbox.statements]),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "予約ステータスの更新および通知 outbox の作成に失敗しました。",
+        cause: error,
+      }),
+    ).map((results) => {
+      const updateRows = results[0] as { id: string }[];
+      const applied = updateRows.length > 0;
+      return {
+        applied,
+        enqueuedMailIds: applied ? outbox.ids : [],
+      };
+    });
+  };
+
+  return { findById, create, existsApprovedOverlap, applyStatusTransition, applyContentEdit };
 };

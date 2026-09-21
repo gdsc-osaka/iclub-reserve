@@ -34,6 +34,7 @@ export const ReservationAction = {
   CreateProvisional: "create_provisional",
   Withdraw: "withdraw",
   Cancel: "cancel",
+  Edit: "edit",
 } as const;
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
 
@@ -115,6 +116,17 @@ export interface ApplyStatusTransitionArgs {
   readonly requireNoApprovedOverlap: boolean;
 }
 
+export interface ApplyContentEditArgs {
+  id: string;
+  facilityId: string;
+  startAt: Date;
+  endAt: Date;
+  headCount: number;
+  note: string | null;
+  status: ReservationStatus;
+  updatedAt: Date;
+}
+
 /** 予約作成の結果。予約の INSERT は条件付きではないので applied は持たない */
 export interface CreateReservationOutcome {
   /** この操作で outbox に積んだメールの ID。Queues への投入に使う */
@@ -125,6 +137,10 @@ export interface CreateReservationOutcome {
 export interface ApplyStatusTransitionOutcome {
   readonly applied: boolean;
   /** この操作で outbox に積んだメールの ID。Queues への投入に使う */
+  readonly enqueuedMailIds: readonly string[];
+}
+
+export interface ApplyContentEditOutcome {
   readonly enqueuedMailIds: readonly string[];
 }
 
@@ -155,6 +171,11 @@ export interface ReservationRepository {
     args: ApplyStatusTransitionArgs,
     mails: readonly MailDraft[],
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError>;
+
+  applyContentEdit(
+    args: ApplyContentEditArgs,
+    mails: readonly MailDraft[],
+  ): ResultAsync<ApplyContentEditOutcome, ReservationError>;
 }
 
 /**
