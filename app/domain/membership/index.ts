@@ -71,6 +71,18 @@ export interface MembershipError extends BaseError {
   readonly code: MembershipErrorCode;
 }
 
+/** 役割の更新に必要な値。触ってよい列だけを並べる */
+export interface UpdateMembershipRoleInput {
+  readonly groupId: string;
+  readonly userId: string;
+  /**
+   * 検証済みの役割。COND-007 により常に 1 つで、`isMembershipRole` を通っていること。
+   * 検証はユースケースの担当で、リポジトリでは確かめ直さない。
+   */
+  readonly role: MembershipRole;
+  readonly updatedAt: Date;
+}
+
 /**
  * メンバーシップの永続化層に対する窓口 (ポート)。
  */
@@ -94,4 +106,37 @@ export interface MembershipRepository {
     groupId: string,
     userId: string,
   ): ResultAsync<Membership | null, MembershipError>;
+
+  /**
+   * その団体の管理者の人数を数える（最後の管理者の保護に使う）。
+   *
+   * 数えるのは行数ではなく「人数」。member テーブルに (団体, ユーザー) の一意制約が無い一方で、
+   * updateRole と remove はその組に一致する行をまとめて変更するため、
+   * 同じ人の行が重複していると行数では保護をすり抜けてしまう。
+   */
+  countAdmins(groupId: string): ResultAsync<number, MembershipError>;
+
+  /**
+   * 役割を更新し、更新した行数を返す。
+   *
+   * 戻り値の件数について:
+   * 0 件は「対象がその団体に居なかった」ということであり、DB アクセス自体の異常ではない
+   * （画面を開いたあとに別の管理者が先に削除した場合など）。
+   * これをどう扱うか（見つからなかったエラーとするか等）は呼び出し側（ユースケース）が決める。
+   * これは `findByGroupAndUser` が「所属していない」をエラーにしないのと同じ考え方。
+   *
+   * 対象を member.id ではなく (groupId, userId) の組で指定する理由:
+   * 認可の判定も既存の `findByGroupAndUser` もこの組を使っており、ここだけ別のキー（member.id）にすると
+   * 不要なキーの突き合わせや問い合わせが増えてしまう。
+   * また、member テーブルに一意制約はないが、同じユーザーが同じ団体に複数行持つのは異常なデータ状態であり、
+   * その場合もまとめて反映されるほうが望ましいため。
+   */
+  updateRole(input: UpdateMembershipRoleInput): ResultAsync<number, MembershipError>;
+
+  /**
+   * 所属を取り消し、削除した行数を返す。
+   *
+   * 戻り値の件数の考え方および (groupId, userId) の組で指定する理由は updateRole と同様。
+   */
+  remove(groupId: string, userId: string): ResultAsync<number, MembershipError>;
 }

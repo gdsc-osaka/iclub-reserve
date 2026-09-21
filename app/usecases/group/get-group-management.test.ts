@@ -96,6 +96,13 @@ const createFakeMembershipRepository = (memberships: readonly Membership[]) => {
 
       return okAsync(found ?? null);
     },
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    countAdmins: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateRole: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    remove: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   return { repository, callCount: () => callCount };
@@ -329,6 +336,13 @@ describe("getGroupManagementUseCase", () => {
           message: "メンバーシップの取得に失敗しました。",
           cause: new Error("DB error"),
         }),
+      // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+      countAdmins: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+      updateRole: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+      remove: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     };
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);

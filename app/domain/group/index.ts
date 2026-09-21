@@ -76,8 +76,12 @@ export const GroupErrorCode = {
   GroupNotFound: "GROUP_NOT_FOUND",
   /** 団体を見られるが、その操作をする権限が無い */
   GroupForbidden: "GROUP_FORBIDDEN",
-  /** 入力された値が不正（団体名が空・長すぎるなど） */
+  /** 入力された値が不正（団体名が空・役割が不正など） */
   GroupInvalidInput: "GROUP_INVALID_INPUT",
+  /** 操作の対象にしたメンバーが、その団体に居ない */
+  MemberNotFound: "MEMBER_NOT_FOUND",
+  /** その操作をすると団体の管理者が 0 人になってしまう */
+  LastAdminRequired: "LAST_ADMIN_REQUIRED",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type GroupErrorCode = (typeof GroupErrorCode)[keyof typeof GroupErrorCode];

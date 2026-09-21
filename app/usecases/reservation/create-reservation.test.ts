@@ -5,7 +5,12 @@ import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/dom
 import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~/domain/group";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { ReservationMailAudience } from "~/domain/mail/reservation-mail";
-import { MembershipRole, type Membership, type MembershipRepository } from "~/domain/membership";
+import {
+  MembershipErrorCode,
+  MembershipRole,
+  type Membership,
+  type MembershipRepository,
+} from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationStatus,
@@ -94,6 +99,13 @@ const createDeps = (
   const membershipRepository: MembershipRepository = {
     findByGroupAndUser: () =>
       okAsync(overrides.membership === undefined ? membership : overrides.membership),
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    countAdmins: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateRole: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    remove: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   const groupRepository: GroupRepository = {

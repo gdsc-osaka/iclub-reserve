@@ -36,3 +36,28 @@ export const toMembership = (row: MemberRow): Membership => ({
   userId: row.userId,
   roles: toMembershipRoles(row.role),
 });
+
+/**
+ * member 行の一覧から、管理者である「人数」を数える。
+ *
+ * 行数ではなく、ユーザー単位で数える点に意味がある。
+ * member テーブルには (organization_id, user_id) の一意制約が無いため、
+ * 同じ人の行が同じ団体に 2 つある異常なデータが理論上ありえる。
+ * 一方で役割の更新・削除は (団体, ユーザー) に一致する行をまとめて書き換えるので、
+ * 行数で数えると「管理者は 2 人いる」と誤って判定したまま
+ * 1 人分の行をすべて消してしまい、管理者が 0 人になる。
+ * 数える単位と、変更する単位をそろえるために Set で重複を畳む。
+ */
+export const countAdminUsers = (
+  rows: readonly { readonly userId: string; readonly role: string }[],
+): number => {
+  const adminUserIds = new Set<string>();
+
+  for (const row of rows) {
+    if (toMembershipRoles(row.role).includes(MembershipRole.Admin)) {
+      adminUserIds.add(row.userId);
+    }
+  }
+
+  return adminUserIds.size;
+};
