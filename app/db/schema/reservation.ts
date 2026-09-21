@@ -1,6 +1,7 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
-import { organization, user } from "./auth";
+import { user } from "./auth";
+import { groupTable } from "./group";
 import { ReservationStatus } from "~/domain/reservation";
 
 export const facilityTable = sqliteTable("facility", {
@@ -35,7 +36,7 @@ export const reservationTable = sqliteTable("reservation", {
     .$defaultFn(() => createId()),
 
   groupId: text("group_id")
-    .references(() => organization.id)
+    .references(() => groupTable.id)
     .notNull(),
 
   facilityId: text("facility_id")
