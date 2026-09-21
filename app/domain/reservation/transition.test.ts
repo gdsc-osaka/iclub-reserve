@@ -12,10 +12,10 @@ import {
 
 describe("canTransition", () => {
   /** 指定した役割でその予約の団体に所属している人 */
-  const membershipOf = (...roles: MembershipRole[]) => ({
+  const membershipOf = (role: MembershipRole) => ({
     groupId: "grp_01",
     userId: "usr_01",
-    roles,
+    role,
   });
 
   const memberActor = { isStaff: false, membership: membershipOf(MembershipRole.Member) };
@@ -41,12 +41,15 @@ describe("canTransition", () => {
       ).toBe(true);
     });
 
-    it("役割を 1 つも持たない所属では、取り消しもキャンセルもできない", () => {
+    it("未定義の役割の所属では、取り消しもキャンセルもできない", () => {
       /*
        * 所属しているかどうかだけで判定していると、この場合も通ってしまう。
        * 権限表を引いていることを、ここで固定しておく。
        */
-      const rolelessActor = { isStaff: false, membership: membershipOf() };
+      const rolelessActor = {
+        isStaff: false,
+        membership: membershipOf("unknown" as MembershipRole),
+      };
 
       expect(
         canTransition(

@@ -32,10 +32,10 @@ const combinations = Object.values(MembershipRole).flatMap((role) =>
   Object.values(GroupAction).map((action) => [role, action] as const),
 );
 
-const membershipOf = (...roles: MembershipRole[]): Membership => ({
+const membershipOf = (role: MembershipRole): Membership => ({
   groupId: "grp_test",
   userId: "usr_test",
-  roles,
+  role,
 });
 
 describe("groupPermissions", () => {
@@ -49,12 +49,5 @@ describe("groupPermissions", () => {
 
   it.each(Object.values(GroupAction))("所属していなければ %s は許可されない", (action) => {
     expect(canPerform(groupPermissions, null, action)).toBe(false);
-  });
-
-  it("役割を複数持つ場合は、いずれかが許可していれば許可される", () => {
-    const membership = membershipOf(MembershipRole.Member, MembershipRole.Admin);
-
-    expect(canPerform(groupPermissions, membership, GroupAction.Update)).toBe(true);
-    expect(canPerform(groupPermissions, membership, GroupAction.InviteMember)).toBe(true);
   });
 });

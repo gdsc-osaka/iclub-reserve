@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
-import { member, reservationTable, user } from "~/db/schema";
+import { groupMemberTable, reservationTable, user } from "~/db/schema";
 import { MembershipRole } from "~/domain/membership";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
@@ -9,7 +9,7 @@ import type {
   ReservationMailRecipientsQuery,
 } from "~/query/reservation/reservation-mail-recipients";
 import type { Database } from "../db";
-import { toMembershipRoles } from "../membership/membership-converter";
+import { toMembershipRole } from "../membership/membership-converter";
 
 /** 申請者を引く SELECT が返す行。2 つのメソッドで起点の表は違うが、取る列はそろえてある */
 type ApplicantRow = { id: string; email: string; name: string };
@@ -43,7 +43,7 @@ const buildGroupRecipients = (
   // 2. 団体の管理者メンバーを追加
   for (const row of memberRows) {
     if (!row.email) continue;
-    if (!toMembershipRoles(row.role).includes(MembershipRole.Admin)) continue;
+    if (toMembershipRole(row.role) !== MembershipRole.Admin) continue;
     if (recipients.has(row.email)) continue;
 
     recipients.set(row.email, {
@@ -131,11 +131,11 @@ export const createReservationMailRecipientsQuery = (
           userId: user.id,
           email: user.email,
           name: user.name,
-          role: member.role,
+          role: groupMemberTable.role,
         })
         .from(reservationTable)
-        .innerJoin(member, eq(member.organizationId, reservationTable.groupId))
-        .innerJoin(user, eq(user.id, member.userId))
+        .innerJoin(groupMemberTable, eq(groupMemberTable.groupId, reservationTable.groupId))
+        .innerJoin(user, eq(user.id, groupMemberTable.userId))
         .where(eq(reservationTable.id, reservationId));
 
       return ResultAsync.fromPromise(
@@ -175,11 +175,11 @@ export const createReservationMailRecipientsQuery = (
           userId: user.id,
           email: user.email,
           name: user.name,
-          role: member.role,
+          role: groupMemberTable.role,
         })
-        .from(member)
-        .innerJoin(user, eq(user.id, member.userId))
-        .where(eq(member.organizationId, args.groupId));
+        .from(groupMemberTable)
+        .innerJoin(user, eq(user.id, groupMemberTable.userId))
+        .where(eq(groupMemberTable.groupId, args.groupId));
 
       return ResultAsync.fromPromise(
         db.batch([applicantQuery, groupMembersQuery, staffQuery()]),

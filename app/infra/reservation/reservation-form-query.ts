@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
-import { facilityTable, member, organization, reservationTable } from "~/db/schema";
+import { facilityTable, groupMemberTable, groupTable, reservationTable } from "~/db/schema";
 import { GroupStatus } from "~/domain/group";
 import { calendarVisibleStatuses } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
@@ -39,26 +39,28 @@ const selectGroups = async (
   db: Database,
   memberUserId: string | null,
 ): Promise<ReservationFormGroup[]> => {
-  const columns = { id: organization.id, name: organization.name };
+  const columns = { id: groupTable.id, name: groupTable.name };
   /*
    * 同名の団体があっても並びが入れ替わらないよう、主キーを第 2 キーにする。
    * 団体名には一意制約がなく、名前だけで並べると同名どうしの順序を SQL が保証しない。
    */
-  const order = [asc(organization.name), asc(organization.id)] as const;
+  const order = [asc(groupTable.name), asc(groupTable.id)] as const;
 
   if (memberUserId === null) {
     return db
       .select(columns)
-      .from(organization)
-      .where(eq(organization.status, GroupStatus.Enabled))
+      .from(groupTable)
+      .where(eq(groupTable.status, GroupStatus.Enabled))
       .orderBy(...order);
   }
 
   return db
     .select(columns)
-    .from(member)
-    .innerJoin(organization, eq(member.organizationId, organization.id))
-    .where(and(eq(member.userId, memberUserId), eq(organization.status, GroupStatus.Enabled)))
+    .from(groupMemberTable)
+    .innerJoin(groupTable, eq(groupMemberTable.groupId, groupTable.id))
+    .where(
+      and(eq(groupMemberTable.userId, memberUserId), eq(groupTable.status, GroupStatus.Enabled)),
+    )
     .orderBy(...order);
 };
 
@@ -104,13 +106,13 @@ const selectReservations = (
       id: reservationTable.id,
       facilityId: reservationTable.facilityId,
       groupId: reservationTable.groupId,
-      groupName: organization.name,
+      groupName: groupTable.name,
       startAt: reservationTable.startAt,
       endAt: reservationTable.endAt,
       status: reservationTable.status,
     })
     .from(reservationTable)
-    .innerJoin(organization, eq(reservationTable.groupId, organization.id))
+    .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))
     .innerJoin(facilityTable, eq(reservationTable.facilityId, facilityTable.id))
     .where(
       and(

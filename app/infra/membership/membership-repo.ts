@@ -1,16 +1,17 @@
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { ok, ResultAsync } from "neverthrow";
 
-import { member } from "~/db/schema";
+import { groupMemberTable } from "~/db/schema";
 import {
   MembershipErrorCode,
+  MembershipRole,
   type Membership,
   type MembershipError,
   type MembershipRepository,
   type UpdateMembershipRoleInput,
 } from "~/domain/membership";
 import type { Database } from "../db";
-import { countAdminUsers, toMembership } from "./membership-converter";
+import { toMembership } from "./membership-converter";
 
 export const createMembershipRepository = (db: Database): MembershipRepository => {
   const findByGroupAndUser = (
@@ -20,8 +21,8 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
     ResultAsync.fromPromise(
       db
         .select()
-        .from(member)
-        .where(and(eq(member.organizationId, groupId), eq(member.userId, userId)))
+        .from(groupMemberTable)
+        .where(and(eq(groupMemberTable.groupId, groupId), eq(groupMemberTable.userId, userId)))
         .limit(1),
       (error): MembershipError => ({
         code: MembershipErrorCode.DatabaseError,
@@ -43,37 +44,44 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
   const countAdmins = (groupId: string): ResultAsync<number, MembershipError> =>
     ResultAsync.fromPromise(
       /*
-       * SQL で count(*) ... where role = 'admin' と数えない理由:
-       * Better Auth は複数の役割を "admin,member" のようなカンマ区切りの 1 つの文字列で持ちうるため、
-       * SQL の等値比較では複数役割を持つ行を数え落としてしまう。
-       * 役割文字列の解釈は toMembershipRoles ただ 1 か所に集約するのがこのコードベースの設計方針なので、
-       * 団体の行を取り出して TypeScript 側で数える。
-       * 1 つの団体に属するメンバー数は多くないため、これで性能上の問題にはならない。
+       * group_member テーブルには (group_id, user_id) の UNIQUE 制約があり、
+       * 役割も COND-007 により単一値（"admin" または "member"）で保持されるため、
+       * SQL の count() で一致する行数を直接数えるだけで正確な管理者人数が得られる。
+       * 全行を取得して TypeScript 側で重複排除・集計する必要はなくなった。
        */
       db
-        .select({ userId: member.userId, role: member.role })
-        .from(member)
-        .where(eq(member.organizationId, groupId)),
+        .select({ count: count() })
+        .from(groupMemberTable)
+        .where(
+          and(
+            eq(groupMemberTable.groupId, groupId),
+            eq(groupMemberTable.role, MembershipRole.Admin),
+          ),
+        ),
       (error): MembershipError => ({
         code: MembershipErrorCode.DatabaseError,
         message: "管理者人数の取得に失敗しました。",
         cause: error,
       }),
-      // 行数ではなくユーザー単位で数える（理由は countAdminUsers の説明を参照）
-    ).map(countAdminUsers);
+    ).map((rows) => rows.at(0)?.count ?? 0);
 
   const updateRole = (input: UpdateMembershipRoleInput): ResultAsync<number, MembershipError> =>
     ResultAsync.fromPromise(
       db
-        .update(member)
+        .update(groupMemberTable)
         .set({ role: input.role, updatedAt: input.updatedAt })
         /*
-         * where に organizationId を必ず含める理由:
+         * where に groupId を必ず含める理由:
          * userId のみで条件を指定すると、他団体の所属行まで意図せず書き換えてしまう脆弱性・不具合につながる。
          * 更新対象を必ず指定された団体 (groupId) 内に閉じ込めるために含める。
          */
-        .where(and(eq(member.organizationId, input.groupId), eq(member.userId, input.userId)))
-        .returning({ id: member.id }),
+        .where(
+          and(
+            eq(groupMemberTable.groupId, input.groupId),
+            eq(groupMemberTable.userId, input.userId),
+          ),
+        )
+        .returning({ id: groupMemberTable.id }),
       (error): MembershipError => ({
         code: MembershipErrorCode.DatabaseError,
         message: "メンバーの役割の更新に失敗しました。",
@@ -84,14 +92,14 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
   const remove = (groupId: string, userId: string): ResultAsync<number, MembershipError> =>
     ResultAsync.fromPromise(
       db
-        .delete(member)
+        .delete(groupMemberTable)
         /*
-         * where に organizationId を必ず含める理由:
+         * where に groupId を必ず含める理由:
          * updateRole と同様、他団体のメンバー行を誤って削除することを確実に防ぎ、
          * 操作の対象を URL に含まれる団体に限定するため。
          */
-        .where(and(eq(member.organizationId, groupId), eq(member.userId, userId)))
-        .returning({ id: member.id }),
+        .where(and(eq(groupMemberTable.groupId, groupId), eq(groupMemberTable.userId, userId)))
+        .returning({ id: groupMemberTable.id }),
       (error): MembershipError => ({
         code: MembershipErrorCode.DatabaseError,
         message: "メンバーの削除に失敗しました。",

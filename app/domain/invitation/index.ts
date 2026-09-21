@@ -3,12 +3,12 @@ import type { GroupError } from "../group";
 import type { MailDraft } from "../mail/mail-outbox";
 import type { MembershipRole } from "../membership";
 
-/** 招待の状態。値は Better Auth の組織プラグインが書く値とそろえてある */
+/** 招待の状態。もとが Better Auth の綴りで、既存データと既定値がこの値のため踏襲している */
 export const InvitationStatus = {
   Pending: "pending",
   Accepted: "accepted",
   Rejected: "rejected",
-  /** 取り消し済み。Better Auth の綴りに合わせて l は 1 つ */
+  /** 取り消し済み。もとが Better Auth の綴りで、既存データと既定値がこの値のため踏襲している */
   Canceled: "canceled",
 } as const;
 export type InvitationStatus = (typeof InvitationStatus)[keyof typeof InvitationStatus];
@@ -47,15 +47,12 @@ export const invitationAcceptPath = (invitationId: string): string =>
 
 /**
  * 招待を表すドメインモデル。
- *
- * roles を配列にしているのは Membership と同じ理由
- * （Better Auth が "admin,member" のようにカンマ区切りで持ちうるため）。
  */
 export interface Invitation {
   readonly id: string;
   readonly groupId: string;
   readonly email: string;
-  readonly roles: readonly MembershipRole[];
+  readonly role: MembershipRole;
   readonly status: InvitationStatus;
   readonly expiresAt: Date;
   readonly createdAt: Date;

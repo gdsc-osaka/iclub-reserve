@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { ok, ResultAsync } from "neverthrow";
-import { invitation } from "~/db/schema";
+import { groupInvitationTable } from "~/db/schema";
 import { GroupErrorCode, type GroupError } from "~/domain/group";
 import {
   InvitationStatus,
@@ -31,12 +31,12 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
     ResultAsync.fromPromise(
       db
         .select()
-        .from(invitation)
+        .from(groupInvitationTable)
         .where(
           and(
-            eq(invitation.organizationId, groupId),
-            eq(invitation.email, email),
-            eq(invitation.status, InvitationStatus.Pending),
+            eq(groupInvitationTable.groupId, groupId),
+            eq(groupInvitationTable.email, email),
+            eq(groupInvitationTable.status, InvitationStatus.Pending),
           ),
         )
         /*
@@ -47,7 +47,7 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
          * どちらが返るか DB 任せになり、期限切れのほうを拾った回だけ
          * 「有効な招待は無い」と判断して二重に招待を作ってしまう。
          */
-        .orderBy(desc(invitation.expiresAt))
+        .orderBy(desc(groupInvitationTable.expiresAt))
         .limit(1),
       databaseError("取得"),
     ).andThen((rows) => {
@@ -62,9 +62,9 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
     input: CreateInvitationInput,
     mails: readonly MailDraft[],
   ): ResultAsync<CreateInvitationOutcome, GroupError> => {
-    const insertInvitationQuery = db.insert(invitation).values({
+    const insertInvitationQuery = db.insert(groupInvitationTable).values({
       id: input.id,
-      organizationId: input.groupId,
+      groupId: input.groupId,
       email: input.email,
       role: input.role,
       status: InvitationStatus.Pending,
@@ -100,21 +100,21 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
   const cancel = (groupId: string, invitationId: string): ResultAsync<number, GroupError> =>
     ResultAsync.fromPromise(
       db
-        .update(invitation)
+        .update(groupInvitationTable)
         .set({ status: InvitationStatus.Canceled })
         .where(
           and(
-            eq(invitation.id, invitationId),
+            eq(groupInvitationTable.id, invitationId),
             /*
              * 他団体の招待を取り消せないよう、必ず団体 ID で絞る。
              * 操作者が意図しない団体の招待 ID を指定しても、団体の外へ影響が漏れないようにするため。
              */
-            eq(invitation.organizationId, groupId),
+            eq(groupInvitationTable.groupId, groupId),
             // 承諾済み・取り消し済みの招待を蒸し返さない
-            eq(invitation.status, InvitationStatus.Pending),
+            eq(groupInvitationTable.status, InvitationStatus.Pending),
           ),
         )
-        .returning({ id: invitation.id }),
+        .returning({ id: groupInvitationTable.id }),
       databaseError("取り消し"),
     ).map((rows) => rows.length);
 

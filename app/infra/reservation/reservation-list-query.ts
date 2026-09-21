@@ -2,7 +2,7 @@ import { and, asc, desc, eq, exists, gt, gte, inArray, lt, ne, sql, type SQL } f
 import { alias } from "drizzle-orm/sqlite-core";
 import { okAsync, ResultAsync } from "neverthrow";
 
-import { facilityTable, organization, reservationTable, user } from "~/db/schema";
+import { facilityTable, groupTable, reservationTable, user } from "~/db/schema";
 import { ReservationStatus } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
@@ -113,7 +113,7 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
       .select({
         id: reservationTable.id,
         groupId: reservationTable.groupId,
-        groupName: organization.name,
+        groupName: groupTable.name,
         facilityId: reservationTable.facilityId,
         facilityName: facilityTable.name,
         startAt: reservationTable.startAt,
@@ -129,7 +129,7 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
       })
       .from(reservationTable)
       .innerJoin(facilityTable, eq(reservationTable.facilityId, facilityTable.id))
-      .innerJoin(organization, eq(reservationTable.groupId, organization.id))
+      .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))
       // 作成者が未設定または削除済みでも予約行自体が落ちないよう leftJoin にする
       .leftJoin(user, eq(reservationTable.createdBy, user.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)

@@ -21,10 +21,10 @@ const table: PermissionTable<MembershipRole, TestAction> = {
   [MembershipRole.Member]: [TestAction.Harmless],
 };
 
-const membershipOf = (...roles: MembershipRole[]): Membership => ({
+const membershipOf = (role: MembershipRole): Membership => ({
   groupId: "grp_test",
   userId: "usr_test",
-  roles,
+  role,
 });
 
 describe("canPerform", () => {
@@ -40,17 +40,6 @@ describe("canPerform", () => {
     );
     expect(canPerform(table, membershipOf(MembershipRole.Member), TestAction.Harmless)).toBe(true);
   });
-
-  it("役割を複数持つ場合は、いずれかが許可していれば許可される", () => {
-    const membership = membershipOf(MembershipRole.Member, MembershipRole.Admin);
-
-    expect(canPerform(table, membership, TestAction.Privileged)).toBe(true);
-  });
-
-  it("役割を 1 つも持たない所属は何も許可されない", () => {
-    // toMembershipRoles を通せば空にはならないが、判定側でも取りこぼさないこと
-    expect(canPerform(table, membershipOf(), TestAction.Harmless)).toBe(false);
-  });
 });
 
 describe("isMembershipRole", () => {
@@ -59,13 +48,12 @@ describe("isMembershipRole", () => {
   });
 
   it.each([
-    // Better Auth の既定の役割。設定側の roles に無くても API からは指定できてしまうため、
-    // ここで弾けることが認可の前提になっている
+    // このアプリで定義されていない未知の役割文字列（例: "owner"）は弾く
     "owner",
     // 大文字小文字は区別する。DB には小文字しか入らない
     "Admin",
     "ADMIN",
-    // カンマ区切りは呼び出し側が分解してから渡す
+    // カンマ区切りの文字列は弾く
     "admin,member",
     "",
     " admin",

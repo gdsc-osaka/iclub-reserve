@@ -5,12 +5,12 @@ import type { QueryError } from "../error";
 
 /** 一覧に並ぶメンバー 1 人分。画面に出す項目だけを持つ。 */
 export interface GroupMemberListItem {
-  /** member テーブルの行 ID。役割変更・削除のときに指す対象になる */
+  /** group_member テーブルの行 ID。役割変更・削除のときに指す対象になる */
   readonly memberId: string;
   readonly userId: string;
   readonly name: string;
   readonly email: string;
-  readonly roles: readonly MembershipRole[];
+  readonly role: MembershipRole;
 }
 
 export type GroupMemberList = readonly GroupMemberListItem[];
@@ -28,7 +28,7 @@ export type GroupMemberList = readonly GroupMemberListItem[];
  *   一般メンバー向けの一覧では、ユースケース層でメールアドレスを除去すること。
  * - 所属メンバーが 0 件であることは異常ではない（ただし団体には必ず 1 人以上いる運用なので、
  *   実際には起きない想定）。
- * - 並び順はユーザー名の昇順で固定し、同名の場合は member.id の昇順とする。
+ * - 並び順はユーザー名の昇順で固定し、同名の場合は group_member.id の昇順とする。
  *   順序を決めずに返すと、再読み込みのたびに一覧の並びが入れ替わって見えてしまう。
  */
 export interface GroupMemberListQuery {
