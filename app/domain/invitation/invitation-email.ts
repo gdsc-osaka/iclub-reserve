@@ -44,6 +44,16 @@ const invalidInput = (message: string): GroupError => ({
  * createEmailAddress の失敗は「形式が不正」の 1 種類しか区別できず、
  * 「空白が入っている」「長すぎる」という直し方の分かる案内を出せないため。
  */
+/**
+ * 突き合わせ用にメールアドレスの形をそろえる。
+ *
+ * 招待は保存の時点で小文字に正規化しているので、承諾のときに突き合わせる
+ * ログイン中の人のアドレスも同じ形にしてから比べる必要がある。
+ * 正規化の規則を 2 か所に書くと、いつか片方だけ変わって
+ * 「自分宛ての招待なのに承諾できない」が起きるため、ここ 1 か所に閉じる。
+ */
+export const normalizeInvitationEmail = (raw: string): string => raw.trim().toLowerCase();
+
 export const validateInvitationEmail = (
   raw: string | null | undefined,
 ): Result<string, GroupError> => {
@@ -77,5 +87,5 @@ export const validateInvitationEmail = (
     );
   }
 
-  return ok(trimmed.toLowerCase());
+  return ok(normalizeInvitationEmail(trimmed));
 };
