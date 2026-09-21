@@ -73,6 +73,13 @@ const createFakeMembershipRepository = (memberships: Membership[]) => {
 
       return okAsync(found ?? null);
     },
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    countAdmins: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateRole: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    remove: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   return { repository, callCount: () => callCount };
@@ -86,6 +93,13 @@ const createFailingMembershipRepository = (): MembershipRepository => ({
       message: "メンバーシップの取得に失敗しました。",
       cause: new Error("D1 との接続に失敗しました"),
     }),
+  // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+  countAdmins: () =>
+    errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+  updateRole: () =>
+    errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+  remove: () =>
+    errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
 });
 
 /** 必ず DB エラーを返すダミーのグループリポジトリ */

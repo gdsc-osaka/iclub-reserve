@@ -79,6 +79,13 @@ const createFakeMembershipRepository = (memberships: readonly Membership[]) => {
       const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
       return okAsync(found ?? null);
     },
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    countAdmins: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateRole: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    remove: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   return {
@@ -296,6 +303,13 @@ describe("updateGroupNameUseCase", () => {
           message: "メンバーシップの取得に失敗しました。",
           cause: new Error("DB error"),
         }),
+      // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+      countAdmins: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+      updateRole: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+      remove: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     };
 
     const result = await updateGroupNameUseCase(
