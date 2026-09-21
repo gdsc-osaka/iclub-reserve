@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Form, useNavigation } from "react-router";
 
 import {
@@ -101,10 +101,35 @@ export function MemberActionDialog({
 
   const config = getDialogConfig(action, targetName, isCurrentUser);
 
+  // この行のこの操作が送信中か。同じ画面に他のメンバーのボタンが並ぶので、
+  // intent だけでなく user_id まで見て、押したボタンだけを「処理中」にする
   const isSubmitting =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === config.intent &&
     navigation.formData?.get("user_id") === targetUserId;
+
+  /*
+   * 送信が終わったら、このダイアログを自分で閉じる。
+   *
+   * 開閉は open の state だけで決まるので、閉じる処理を書かないと送信後も開いたままになる。
+   * 削除は対象の行ごと消えて気付きにくいが、昇格・降格は行が残るため必ず開いたままになり、
+   * 失敗したときは背後のメンバーカードに出したエラーがダイアログに隠れて読めない。
+   *
+   * 「送信中になった」ことを覚えておき、それが終わった瞬間に閉じる。
+   * 成功・失敗のどちらでも閉じてよい（結果は画面側に反映される）。
+   */
+  const hasSubmittedRef = useRef(false);
+  useEffect(() => {
+    if (isSubmitting) {
+      hasSubmittedRef.current = true;
+      return;
+    }
+
+    if (hasSubmittedRef.current) {
+      hasSubmittedRef.current = false;
+      setOpen(false);
+    }
+  }, [isSubmitting]);
 
   return (
     <>

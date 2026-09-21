@@ -4,14 +4,13 @@ import { ok, ResultAsync } from "neverthrow";
 import { member } from "~/db/schema";
 import {
   MembershipErrorCode,
-  MembershipRole,
   type Membership,
   type MembershipError,
   type MembershipRepository,
   type UpdateMembershipRoleInput,
 } from "~/domain/membership";
 import type { Database } from "../db";
-import { toMembership, toMembershipRoles } from "./membership-converter";
+import { countAdminUsers, toMembership } from "./membership-converter";
 
 export const createMembershipRepository = (db: Database): MembershipRepository => {
   const findByGroupAndUser = (
@@ -43,24 +42,25 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
 
   const countAdmins = (groupId: string): ResultAsync<number, MembershipError> =>
     ResultAsync.fromPromise(
-      db.select({ role: member.role }).from(member).where(eq(member.organizationId, groupId)),
+      /*
+       * SQL で count(*) ... where role = 'admin' と数えない理由:
+       * Better Auth は複数の役割を "admin,member" のようなカンマ区切りの 1 つの文字列で持ちうるため、
+       * SQL の等値比較では複数役割を持つ行を数え落としてしまう。
+       * 役割文字列の解釈は toMembershipRoles ただ 1 か所に集約するのがこのコードベースの設計方針なので、
+       * 団体の行を取り出して TypeScript 側で数える。
+       * 1 つの団体に属するメンバー数は多くないため、これで性能上の問題にはならない。
+       */
+      db
+        .select({ userId: member.userId, role: member.role })
+        .from(member)
+        .where(eq(member.organizationId, groupId)),
       (error): MembershipError => ({
         code: MembershipErrorCode.DatabaseError,
         message: "管理者人数の取得に失敗しました。",
         cause: error,
       }),
-    ).map((rows) => {
-      /*
-       * SQL で eq(member.role, "admin") と直接比較しない理由:
-       * Better Auth は複数の役割を "admin,member" のようなカンマ区切りの 1 つの文字列で持ちうる。
-       * SQL の等値比較ではそうした複数役割を持つ行を数え落としてしまう危険がある。
-       * 役割文字列の解釈は toMembershipRoles ただ 1 か所に集約するのがこのコードベースの設計方針。
-       * 1 つの団体に属するメンバー数は多くないため、団体の行を取得して TypeScript 側で数えても
-       * パフォーマンス上の問題にはならない。
-       */
-      return rows.filter((row) => toMembershipRoles(row.role).includes(MembershipRole.Admin))
-        .length;
-    });
+      // 行数ではなくユーザー単位で数える（理由は countAdminUsers の説明を参照）
+    ).map(countAdminUsers);
 
   const updateRole = (input: UpdateMembershipRoleInput): ResultAsync<number, MembershipError> =>
     ResultAsync.fromPromise(

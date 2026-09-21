@@ -109,6 +109,10 @@ export interface MembershipRepository {
 
   /**
    * その団体の管理者の人数を数える（最後の管理者の保護に使う）。
+   *
+   * 数えるのは行数ではなく「人数」。member テーブルに (団体, ユーザー) の一意制約が無い一方で、
+   * updateRole と remove はその組に一致する行をまとめて変更するため、
+   * 同じ人の行が重複していると行数では保護をすり抜けてしまう。
    */
   countAdmins(groupId: string): ResultAsync<number, MembershipError>;
 
