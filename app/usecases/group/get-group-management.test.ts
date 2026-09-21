@@ -77,6 +77,9 @@ const createFakeGroupRepository = (groups: readonly Group[]) => {
 
       return okAsync(found);
     },
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    updateName: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   return { repository, findByIdCallCount: () => findByIdCallCount };

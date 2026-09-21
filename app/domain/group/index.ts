@@ -74,6 +74,10 @@ export const groupPermissions: PermissionTable<MembershipRole, GroupAction> = {
 
 export const GroupErrorCode = {
   GroupNotFound: "GROUP_NOT_FOUND",
+  /** 団体を見られるが、その操作をする権限が無い */
+  GroupForbidden: "GROUP_FORBIDDEN",
+  /** 入力された値が不正（団体名が空・長すぎるなど） */
+  GroupInvalidInput: "GROUP_INVALID_INPUT",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type GroupErrorCode = (typeof GroupErrorCode)[keyof typeof GroupErrorCode];
@@ -82,6 +86,20 @@ export interface GroupError extends BaseError {
   readonly code: GroupErrorCode;
 }
 
+/** 団体名の更新に必要な値。触ってよい列だけを並べる */
+export interface UpdateGroupNameInput {
+  readonly id: string;
+  /**
+   * 検証済みの団体名（`validateGroupName` を通したもの）。
+   *
+   * ここへ渡ってくる時点で検証済みであること。
+   * 検証はドメインの `validateGroupName` が唯一の担当で、リポジトリでは確かめ直さない。
+   */
+  readonly name: string;
+  readonly updatedAt: Date;
+}
+
 export interface GroupRepository {
   findById(id: string): ResultAsync<Group, GroupError>;
+  updateName(input: UpdateGroupNameInput): ResultAsync<Group, GroupError>;
 }

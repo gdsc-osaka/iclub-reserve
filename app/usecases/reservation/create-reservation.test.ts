@@ -101,6 +101,9 @@ const createDeps = (
       overrides.groupNotFound === true
         ? errAsync({ code: GroupErrorCode.GroupNotFound, message: "not found" })
         : okAsync(overrides.group ?? enabledGroup),
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    updateName: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   const facilityRepository: FacilityRepository = {
