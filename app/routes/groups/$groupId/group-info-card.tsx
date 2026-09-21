@@ -1,42 +1,28 @@
-import { CalendarPlus, Hash, RefreshCw, ToggleLeft } from "lucide-react";
+import { CalendarPlus, RefreshCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { GroupStatusBadge, groupStatusLabel } from "~/components/group/group-status-badge";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import type { Group } from "~/domain/group";
 import { formatDateTime } from "~/lib/date";
 
-/** グループ 1 件の登録情報を並べるカード。この画面の本体にあたる。 */
+/**
+ * 団体 1 件の登録情報を並べるカード。
+ *
+ * 利用者にとって意味を持たない団体 ID は非表示とし、
+ * 団体の状態はページ上部の見出しバッジで表示するため、
+ * ここでは登録日時・最終更新日時の 2 項目を表示する。
+ */
 export function GroupInfoCard({ group }: Readonly<{ group: Group }>) {
   return (
     <Card className="[--card-spacing:--spacing(6)]">
       <CardHeader>
-        <CardTitle className="text-xl">{group.name}</CardTitle>
-        <CardDescription>グループの登録情報</CardDescription>
-        <CardAction>
-          <GroupStatusBadge status={group.status} />
-        </CardAction>
+        <CardTitle>団体情報</CardTitle>
       </CardHeader>
 
       <CardContent>
         {/* 項目名と値の組み合わせなので、見出し付きのリスト（dl）で表す */}
         <dl className="grid gap-5 sm:grid-cols-2">
-          <InfoItem icon={Hash} label="グループ ID">
-            <span className="font-mono break-all">{group.id}</span>
-          </InfoItem>
-
-          <InfoItem icon={ToggleLeft} label="状態">
-            {groupStatusLabel[group.status]}
-          </InfoItem>
-
           <InfoItem icon={CalendarPlus} label="登録日時">
             {formatDateTime(group.createdAt)}
           </InfoItem>
@@ -66,7 +52,7 @@ function InfoItem({
         <Icon aria-hidden className="size-3.5" />
         {label}
       </dt>
-      <dd className="text-sm">{children}</dd>
+      <dd className="text-sm font-medium">{children}</dd>
     </div>
   );
 }
