@@ -1,7 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 import type { PermissionTable } from "../authz";
 import type { BaseError } from "../error";
-import { MembershipRole } from "../membership";
+import { MembershipRole, StaffRole, type ActorRole } from "../membership";
 
 export const GroupStatus = {
   Enabled: "enabled",
@@ -40,25 +40,45 @@ export const GroupAction = {
 export type GroupAction = (typeof GroupAction)[keyof typeof GroupAction];
 
 /**
- * 役割ごとに許可されるグループへの操作。
+ * グループへの操作を誰に許すかの表。
  *
  * グループの権限のルールはこの表が唯一の定義元。
- * 判定するときは Membership の `canPerform` にこの表を渡すこと。
- * この表を直接読むと「所属しているか」の判定が抜け落ちる。
+ * 判定するときは Membership の `canAct` にこの表を渡すこと。
+ * この表を直接読むと「所属しているか」「事務局か」の判定が抜け落ちる。
  *
  * NOTE: グループの削除は意図的に含めていない。
  * 予約が紐づくグループを物理削除すると外部キー違反になるため、
  * 無効化 (GroupStatus.Disabled) で運用する。
  */
-export const groupPermissions: PermissionTable<MembershipRole, GroupAction> = {
-  [MembershipRole.Admin]: [
-    GroupAction.View,
-    GroupAction.Update,
-    GroupAction.InviteMember,
-    GroupAction.RemoveMember,
-    GroupAction.UpdateMemberRole,
-  ],
-  [MembershipRole.Member]: [GroupAction.View],
+export const groupPermissions: PermissionTable<ActorRole, GroupAction> = {
+  /*
+   * 所属していない人には何ひとつ許さない (COND-011 団体情報の存在秘匿)。
+   * 空であることがこの条件の表明なので、消さないこと。
+   */
+  base: [],
+  byRole: {
+    [MembershipRole.Admin]: [
+      GroupAction.View,
+      GroupAction.Update,
+      GroupAction.InviteMember,
+      GroupAction.RemoveMember,
+      GroupAction.UpdateMemberRole,
+    ],
+    [MembershipRole.Member]: [GroupAction.View],
+    /*
+     * 事務局は所属に関わらず全団体を管理できる (COND-009)。
+     * 管理者と同じ内容を書き写しているのは、二次的に導かれる値ではなく
+     * それ自体が決定だから。管理者の権限を増やしたときに事務局も一緒に増えると、
+     * 事務局に何を許したのかを誰も決めないまま広がってしまう。
+     */
+    [StaffRole]: [
+      GroupAction.View,
+      GroupAction.Update,
+      GroupAction.InviteMember,
+      GroupAction.RemoveMember,
+      GroupAction.UpdateMemberRole,
+    ],
+  },
 };
 
 export const GroupErrorCode = {

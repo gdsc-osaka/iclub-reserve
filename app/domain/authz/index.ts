@@ -10,24 +10,65 @@
  */
 
 /**
- * 役割ごとに許可される操作を並べた表。
+ * 資源ごとに許可される操作を並べた表。
  *
- * `Record` なので役割を 1 つでも書き忘れると型エラーになる。
- * 役割を増やしたとき、どの資源の表を直し忘れているかがコンパイル時に分かる。
- *
- * 型引数を `string` で縛っているのは、役割にも操作にも
- * `as const` で作った文字列ユニオンを渡す前提だから。
+ * 最終的な権限は `base` と `byRole` の和集合で決まる。
+ * 上書きや禁止は無く、役割が増えれば許可も増える一方である。
+ * 「この役割にはさせない」という制限は表では表せないので、
+ * 必要になったらユースケース側の確認として別に書くこと。
  */
-export type PermissionTable<R extends string, A extends string> = Readonly<Record<R, readonly A[]>>;
+export interface PermissionTable<R extends string, A extends string> {
+  /**
+   * 役割を問わず、全員が持つ権限。
+   *
+   * ここでいう「全員」はログイン済みの利用者全員を指す。
+   * ログインしていない相手への公開 (COND-008 の Google Calendar 列) は
+   * セッションが無く操作する人が居ないので、この表の外で決める。
+   *
+   * 役割を 1 つも持たない人 (どの団体にも所属しておらず事務局でもない) は、
+   * この権限だけを持つ。所属外に何も見せないなら空の配列を書くこと。
+   * 空であることも決定なので、書かずに済ませられない形にしてある。
+   */
+  readonly base: readonly A[];
+
+  /**
+   * 役割ごとに上乗せする権限。
+   *
+   * `R` には、その資源で可否を実際に分ける軸だけを渡すこと。
+   * 例えば施設は団体での役割によって可否が変わらないので、事務局かどうかだけを渡す。
+   * 可否を分けない役割まで並べると、表が「ここで区別している」と嘘をつくことになる。
+   *
+   * `Record` なので、渡した軸の役割を 1 つでも書き忘れると型エラーになる。
+   * 役割を増やしたとき、どの資源の表を直し忘れているかがコンパイル時に分かる。
+   */
+  readonly byRole: Readonly<Record<R, readonly A[]>>;
+}
 
 /**
- * その役割単体で操作が許可されるかを判定する。
+ * その役割の組み合わせで操作が許可されるかを判定する。
+ *
+ * 1 人が複数の役割を同時に持つことがある (事務局でありながら、その団体のメンバーでもある等) ため、
+ * 役割は配列で受け取り、どれか 1 つでも許可していれば許可する。
+ * どちらか一方に畳むと、畳んだ側の権限が消える。
+ *
+ * 役割を `R` ではなく `string` で受け取るのは、操作する人が持つ役割が資源とは無関係に決まるから。
+ * 団体の管理者が施設の表を引くこともあり、その役割は施設の表の軸には無い。
+ * 表に無い役割は黙って無視する。役割名を書き間違えた表や、その資源の軸に無い役割を
+ * 渡したときに、許可が増える方向へ倒れないようにするため。
  *
  * 誰かがその役割を持っているかどうかは見ない。認可の判定に使うときは、
- * 所属の有無まで含めて判定する Membership の `canPerform` を通すこと。
+ * 所属と事務局かどうかから役割を組み立てる Membership の `canAct` を通すこと。
  */
-export const roleCan = <R extends string, A extends string>(
+export const rolesCan = <R extends string, A extends string>(
   table: PermissionTable<R, A>,
-  role: R,
+  roles: readonly string[],
   action: A,
-): boolean => table[role]?.includes(action) ?? false;
+): boolean =>
+  table.base.includes(action) ||
+  roles.some(
+    /*
+     * `Object.hasOwn` で確かめてから引く。役割は文字列なので、"constructor" のような
+     * Object の持ち物の名前が渡ると、表に無いのに値が取れてしまう。
+     */
+    (role) => Object.hasOwn(table.byRole, role) && table.byRole[role as R].includes(action),
+  );
