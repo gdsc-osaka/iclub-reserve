@@ -21,7 +21,7 @@ export function GroupInvitationCard({
   return (
     <Card className="[--card-spacing:--spacing(6)]">
       <CardHeader>
-        <CardTitle className="text-xl">承諾待ちの招待（{invitations.length} 件）</CardTitle>
+        <CardTitle>承諾待ちの招待（{invitations.length} 件）</CardTitle>
       </CardHeader>
 
       <CardContent>
@@ -39,7 +39,7 @@ export function GroupInvitationCard({
             {invitations.map((invitation) => (
               <li
                 key={invitation.id}
-                className="flex min-h-[44px] flex-col justify-center gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                className="flex min-h-11 flex-col justify-center gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <Mail className="size-4 shrink-0 text-muted-foreground" aria-hidden />

@@ -17,7 +17,7 @@ export function GroupInfoCard({ group }: Readonly<{ group: Group }>) {
   return (
     <Card className="[--card-spacing:--spacing(6)]">
       <CardHeader>
-        <CardTitle className="text-xl">団体情報</CardTitle>
+        <CardTitle>団体情報</CardTitle>
       </CardHeader>
 
       <CardContent>
