@@ -1,5 +1,5 @@
 import { CircleAlert } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, useNavigation } from "react-router";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -49,6 +49,36 @@ export function InvitationForm({ state }: Readonly<{ state: GroupInviteFormState
       : MembershipRole.Member;
   const [role, setRole] = useState<string>(initialRole);
 
+  /*
+   * 送信に成功したら、メールアドレスの欄を自分で空にする。
+   *
+   * 成功すると action は redirect(".") を返すので state は null に戻るが、
+   * この欄は非制御入力（defaultValue）で、画面も作り直されない。
+   * React は非制御入力の値を defaultValue の変化では消さないため、
+   * 何もしないと送ったばかりの宛先が残り続ける。
+   * そのまま押し直すと「すでに招待を送っています」と断られ、成功したのに
+   * 失敗したように見えてしまう。
+   *
+   * 失敗したときは逆に残す。入力の誤りを直してもらうため（state に誤りの内容が入っている）。
+   * 役割の選択は残す。同じ役割で続けて何人か招待することがあるため。
+   */
+  const emailRef = useRef<HTMLInputElement>(null);
+  const hasSubmittedRef = useRef(false);
+
+  useEffect(() => {
+    if (isSubmitting) {
+      hasSubmittedRef.current = true;
+      return;
+    }
+
+    if (!hasSubmittedRef.current) return;
+    hasSubmittedRef.current = false;
+
+    if (state === null && emailRef.current !== null) {
+      emailRef.current.value = "";
+    }
+  }, [isSubmitting, state]);
+
   return (
     <Form method="post" className="space-y-4">
       <input type="hidden" name="intent" value="invite-member" />
@@ -72,6 +102,7 @@ export function InvitationForm({ state }: Readonly<{ state: GroupInviteFormState
               メールアドレス
             </Label>
             <Input
+              ref={emailRef}
               id="invite-email"
               name="email"
               type="email"
