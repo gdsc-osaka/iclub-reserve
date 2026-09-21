@@ -92,6 +92,13 @@
       "when": 1789879844983,
       "tag": "0012_faithful_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1789960382419,
+      "tag": "0013_flashy_earthquake",
+      "breakpoints": true
     }
   ]
 }
