@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, Link } from "react-router";
+import { data, isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { GroupStatusBadge } from "~/components/group/group-status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -12,8 +12,10 @@ import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { logServerError } from "~/lib/log.server";
 import { getGroupManagementUseCase } from "~/usecases/group/get-group-management";
+import { updateGroupNameUseCase } from "~/usecases/group/update-group-name";
 
 import type { Route } from "./+types/route";
+import { toActionErrors } from "./action-error";
 import { GroupInfoCard } from "./group-info-card";
 import { GroupInvitationCard } from "./group-invitation-card";
 import { GroupMemberCard } from "./group-member-card";
@@ -80,11 +82,67 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 }
 
 /**
+ * 団体管理画面のアクション。
+ *
+ * 団体名の編集などの更新操作を処理する。
+ */
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const user = requireRequestUser(context);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const rawName = formData.get("name");
+  const submittedName = typeof rawName === "string" ? rawName : "";
+
+  // この画面が出している操作だけを受け付ける。PR3・PR4 でここに分岐が増える
+  if (intent !== "update-group-name") {
+    return { submittedName, nameError: null, formError: "不正な操作です。" };
+  }
+
+  const db = createDb(env.DB);
+  const result = await updateGroupNameUseCase(
+    {
+      groupRepository: createGroupRepository(db),
+      membershipRepository: createMembershipRepository(db),
+    },
+    {
+      groupId: params.groupId,
+      actorUserId: user.id,
+      isStaff: user.is_staff,
+      name: submittedName,
+      now: new Date(),
+    },
+  );
+
+  if (result.isErr()) {
+    const error = result.error;
+
+    /*
+     * 「見つからない」は GET と同じ応答（404）にそろえる（COND-011 存在の秘匿）。
+     * ローダーが 404 を返す状況で action だけ 200 を返すと、
+     * 応答ステータスの違いから団体の有無を外部から推測できてしまうため。
+     */
+    if (error.code === GroupErrorCode.GroupNotFound) {
+      throw data({ message: "Group not found" }, { status: 404 });
+    }
+
+    // 差し戻し（入力の誤り・権限）は想定内なのでログに残さない
+    if (error.code === GroupErrorCode.DatabaseError) {
+      logServerError("groups.detail.action", error);
+    }
+
+    return { submittedName, ...toActionErrors(error) };
+  }
+
+  // 同じ内容の再送信を防ぐ PRG。戻ったあとはローダーが新しい名前を読み直す
+  return redirect(".");
+}
+
+/**
  * 団体管理画面（SCR-007）。
  *
  * 団体の基本情報、所属メンバー一覧、および承諾待ちの招待（管理者・事務局のみ）を表示する。
  */
-export default function GroupManagementRoute({ loaderData }: Route.ComponentProps) {
+export default function GroupManagementRoute({ loaderData, actionData }: Route.ComponentProps) {
   const { view, now, currentUserId } = loaderData;
   const nowDate = new Date(now);
 
@@ -104,7 +162,7 @@ export default function GroupManagementRoute({ loaderData }: Route.ComponentProp
       </div>
 
       {/* 団体情報カード */}
-      <GroupInfoCard group={view.group} />
+      <GroupInfoCard group={view.group} canManage={view.canManage} nameForm={actionData ?? null} />
 
       {/* メンバーカード */}
       <GroupMemberCard view={view} currentUserId={currentUserId} />

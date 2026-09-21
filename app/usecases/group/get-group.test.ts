@@ -54,6 +54,9 @@ const createFakeGroupRepository = (groups: Group[]) => {
 
       return okAsync(found);
     },
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    updateName: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   return { repository, findByIdCallCount: () => findByIdCallCount };
@@ -93,6 +96,9 @@ const createFailingGroupRepository = (): GroupRepository => ({
       message: "グループ情報の取得に失敗しました。",
       cause: new Error("D1 との接続に失敗しました"),
     }),
+  // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+  updateName: () =>
+    errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
 });
 
 describe("getGroupUseCase", () => {
