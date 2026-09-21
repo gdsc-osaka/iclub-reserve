@@ -13,6 +13,19 @@ export const MembershipRole = {
 export type MembershipRole = (typeof MembershipRole)[keyof typeof MembershipRole];
 
 /**
+ * メンバーの役割を利用者向けの日本語にする。
+ *
+ * 表示名は必ずここを通すこと。画面ごとに文字列を書くと、
+ * 同じ役割が「管理者」「管理者ユーザー」のように場所によって違う名前で出てしまう。
+ *
+ * 画面（バッジ）だけでなく招待メールの本文でも使うため、部品ではなくドメインに置いている。
+ */
+export const membershipRoleLabel: Record<MembershipRole, string> = {
+  [MembershipRole.Admin]: "管理者",
+  [MembershipRole.Member]: "メンバー",
+};
+
+/**
  * 文字列がこのアプリの役割かどうかを判定する。
  *
  * Better Auth は自前で `owner` を含む既定の役割一覧を持っており、

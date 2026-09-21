@@ -32,6 +32,9 @@ export const toGroupErrorMessage = (error: GroupError): string => {
     case GroupErrorCode.MemberNotFound:
       return "対象のメンバーが見つかりませんでした。画面を読み込み直してください。";
 
+    case GroupErrorCode.InvitationNotFound:
+      return "対象の招待が見つかりませんでした。画面を読み込み直してください。";
+
     // ルート側で 404 を throw するため通常ここへは来ないが、網羅のために残す
     case GroupErrorCode.GroupNotFound:
       return "団体が見つかりませんでした。画面を読み込み直してください。";
@@ -40,6 +43,31 @@ export const toGroupErrorMessage = (error: GroupError): string => {
     case GroupErrorCode.DatabaseError:
       return "保存できませんでした。時間をおいて、もう一度お試しください。";
   }
+};
+
+/** 招待フォーム用のアクションエラー形状 */
+export interface GroupInviteFormErrors {
+  /** 入力欄のすぐ下に出す文言（未入力・許可外ドメイン・招待済みなど） */
+  readonly emailError: string | null;
+  /** フォームの上に Alert で出す文言（権限不足・システムエラーなど） */
+  readonly formError: string | null;
+}
+
+/** 招待フォーム用。入力欄の下に出すか、フォーム全体の Alert に出すかを決める */
+export const toInviteFormErrors = (error: GroupError): GroupInviteFormErrors => {
+  const message = toGroupErrorMessage(error);
+
+  if (error.code === GroupErrorCode.GroupInvalidInput) {
+    return {
+      emailError: message,
+      formError: null,
+    };
+  }
+
+  return {
+    emailError: null,
+    formError: message,
+  };
 };
 
 /** 団体名フォーム用。入力欄の下に出すか、フォーム全体の Alert に出すかを決める */

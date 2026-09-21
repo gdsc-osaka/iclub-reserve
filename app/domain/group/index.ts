@@ -80,6 +80,8 @@ export const GroupErrorCode = {
   GroupInvalidInput: "GROUP_INVALID_INPUT",
   /** 操作の対象にしたメンバーが、その団体に居ない */
   MemberNotFound: "MEMBER_NOT_FOUND",
+  /** 操作の対象にした招待が、その団体に無い（すでに取り消された・承諾された・期限切れなど） */
+  InvitationNotFound: "INVITATION_NOT_FOUND",
   /** その操作をすると団体の管理者が 0 人になってしまう */
   LastAdminRequired: "LAST_ADMIN_REQUIRED",
   DatabaseError: "DATABASE_ERROR",
