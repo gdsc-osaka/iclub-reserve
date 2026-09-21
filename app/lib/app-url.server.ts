@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 
+import { toMailableOrigin } from "./app-url";
+
 /**
  * 実行環境の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
  *
@@ -11,19 +13,29 @@ type AppUrlSecrets = { readonly BETTER_AUTH_URL?: string };
 /**
  * 招待メール等に記載する、このアプリの絶対 URL の基底（origin）を解決する。
  *
- * 【なぜリクエストの URL を第一候補にしないのか】
+ * 【なぜリクエストの URL を使わないのか】
  * Cloudflare Workers では request.url のホスト名はクライアントから送られた Host ヘッダーに従う。
- * これをそのままメール本文に載せると、Host ヘッダー偽装攻撃によりリンクの飛び先を第三者の悪意ある
- * サイトに向けられてしまう危険がある。そのため、環境変数（設定値）を最優先で確認する。
+ * これをそのままメール本文に載せると、Host ヘッダーを差し替えられる経路から
+ * 招待リンクの飛び先を攻撃者の用意した origin に向けられてしまう。
+ * そのため、設定値（BETTER_AUTH_URL）を唯一の正とする。
  *
- * 【なぜフォールバックを残すのか】
- * BETTER_AUTH_URL はシークレットとして設定されるため、未設定のローカル開発環境でも
- * 招待作成とメール送信の流れを最後まで動作確認できるようにするため。
+ * 【ローカルだけリクエストの origin に落とす理由】
+ * BETTER_AUTH_URL はシークレットなので、設定していない手元の環境でも
+ * 招待の作成からメールの中身までを一通り確認できるようにしておきたい。
+ * 逆に preview・production でここへ落ちるのは設定漏れであり、
+ * 偽装されうる origin をメールに載せるくらいなら、操作を失敗させて気付けるようにする。
  */
 export const resolveAppBaseUrl = (request: Request): string => {
-  const authUrl = (env as Env & AppUrlSecrets).BETTER_AUTH_URL;
-  if (typeof authUrl === "string" && URL.canParse(authUrl)) {
-    return new URL(authUrl).origin;
+  const { BETTER_AUTH_URL } = env as Env & AppUrlSecrets;
+
+  const configured = toMailableOrigin(BETTER_AUTH_URL);
+  if (configured !== null) return configured;
+
+  if (env.APP_ENV !== "local") {
+    throw new Error(
+      `BETTER_AUTH_URL が未設定か http(s) の URL ではないため、招待リンクを組み立てられません (APP_ENV=${env.APP_ENV})`,
+    );
   }
+
   return new URL(request.url).origin;
 };
