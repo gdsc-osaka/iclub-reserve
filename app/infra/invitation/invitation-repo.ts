@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { ok, ResultAsync } from "neverthrow";
 import { invitation } from "~/db/schema";
 import { GroupErrorCode, type GroupError } from "~/domain/group";
@@ -39,6 +39,15 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
             eq(invitation.status, InvitationStatus.Pending),
           ),
         )
+        /*
+         * 期限の新しいものから取る。
+         *
+         * 期限切れの招待は送り直せる仕様なので、同じ宛先に「期限切れの pending」と
+         * 「有効な pending」が並んで残ることがある。並び順を決めずに limit(1) すると
+         * どちらが返るか DB 任せになり、期限切れのほうを拾った回だけ
+         * 「有効な招待は無い」と判断して二重に招待を作ってしまう。
+         */
+        .orderBy(desc(invitation.expiresAt))
         .limit(1),
       databaseError("取得"),
     ).andThen((rows) => {
