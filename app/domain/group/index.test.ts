@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { GroupAction, groupPermissions } from ".";
-import { canAct, canPerform, MembershipRole, type Actor, type Membership } from "../membership";
+import { canAct, MembershipRole, type Actor, type Membership } from "../membership";
 
 const membershipOf = (role: MembershipRole): Membership => ({
   groupId: "grp_test",
@@ -79,22 +79,8 @@ const combinations = (Object.keys(actors) as readonly ActorName[]).flatMap((name
   Object.values(GroupAction).map((action) => [name, action] as const),
 );
 
-/** 事務局でない人。canPerform は事務局を見ないので、この人たちでしか比べられない */
-const nonStaffActorNames = ["所属なし", "メンバー", "管理者"] as const;
-
 describe("groupPermissions", () => {
   it.each(combinations)("%s は %s を許可されているか判定できる", (name, action) => {
     expect(canAct(groupPermissions, actors[name], action)).toBe(expected[name][action]);
-  });
-
-  it.each(
-    nonStaffActorNames.flatMap((name) =>
-      Object.values(GroupAction).map((action) => [name, action] as const),
-    ),
-  )("canPerform でも %s の %s は同じ結果になる", (name, action) => {
-    // 移行が終わるまでユースケースは canPerform を通るので、そちらも合わせて確かめる
-    expect(canPerform(groupPermissions, actors[name].membership, action)).toBe(
-      expected[name][action],
-    );
   });
 });

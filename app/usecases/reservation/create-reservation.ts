@@ -5,7 +5,7 @@ import { FacilityErrorCode, type FacilityRepository } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type GroupRepository } from "~/domain/group";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createReservationMailDrafts, ReservationMailEvent } from "~/domain/mail/reservation-mail";
-import { canPerform, type MembershipRepository } from "~/domain/membership";
+import { canAct, type Actor, type MembershipRepository } from "~/domain/membership";
 import {
   ReservationAction,
   ReservationErrorCode,
@@ -52,17 +52,18 @@ export interface CreateProvisionalReservationReturns {
 }
 
 /**
- * 申請する人がこの団体で仮予約を作れるかを確かめる。
+ * 申請する人を組み立てる。
  *
- * 事務局は所属に関わらず全団体の予約を作成できる（COND-009）。
- * この分岐が無いと、団体に所属していない事務局の人が
- * どの団体の予約も作れないことになってしまう。
+ * 事務局のときは所属を引かない。権限表の事務局の行に仮予約の申請が入っているので（COND-009）、
+ * 団体での役割を足しても結果は変わらず、D1 への往復を 1 回省ける。
  */
-const ensureCanCreate = (
+const resolveActor = (
   deps: CreateProvisionalReservationDeps,
   args: CreateProvisionalReservationArgs,
-): ResultAsync<null, ReservationError> => {
-  if (args.isStaff) return okAsync(null);
+): ResultAsync<Actor, ReservationError> => {
+  if (args.isStaff) {
+    return okAsync<Actor, ReservationError>({ isStaff: true, membership: null });
+  }
 
   return deps.membershipRepository
     .findByGroupAndUser(args.reservation.groupId, args.actorUserId)
@@ -71,15 +72,27 @@ const ensureCanCreate = (
       message: "所属の確認に失敗しました。",
       cause: error,
     }))
-    .andThen((membership) =>
-      canPerform(reservationPermissions, membership, ReservationAction.CreateProvisional)
-        ? okAsync(null)
-        : errAsync({
-            code: ReservationErrorCode.ReservationForbidden,
-            message: "この団体で予約を申請する権限がありません。",
-          } satisfies ReservationError),
-    );
+    .map((membership): Actor => ({ isStaff: false, membership }));
 };
+
+/**
+ * 申請する人がこの団体で仮予約を作れるかを確かめる。
+ *
+ * 事務局は所属に関わらず全団体の予約を作成できる（COND-009）。
+ * 権限表の事務局の行がそれを持っているので、ここに分岐は要らない。
+ */
+const ensureCanCreate = (
+  deps: CreateProvisionalReservationDeps,
+  args: CreateProvisionalReservationArgs,
+): ResultAsync<null, ReservationError> =>
+  resolveActor(deps, args).andThen((actor) =>
+    canAct(reservationPermissions, actor, ReservationAction.CreateProvisional)
+      ? okAsync<null, ReservationError>(null)
+      : errAsync<null, ReservationError>({
+          code: ReservationErrorCode.ReservationForbidden,
+          message: "この団体で予約を申請する権限がありません。",
+        }),
+  );
 
 /**
  * 申請元の団体が有効かを確かめる（COND-006 / STATE-001）。

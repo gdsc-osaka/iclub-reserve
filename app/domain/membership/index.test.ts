@@ -4,7 +4,6 @@ import type { PermissionTable } from "../authz";
 import {
   actorRoles,
   canAct,
-  canPerform,
   isMembershipRole,
   MembershipRole,
   StaffRole,
@@ -126,28 +125,6 @@ const combinations = (Object.keys(actors) as readonly ActorName[]).flatMap((name
 describe("canAct", () => {
   it.each(combinations)("%s は %s を許可されているか判定できる", (name, action) => {
     expect(canAct(table, actors[name], action)).toBe(expected[name][action]);
-  });
-});
-
-describe("canPerform", () => {
-  it.each(Object.values(TestAction))(
-    "所属していなければ、役割の上乗せ分の %s は許可されない",
-    (action) => {
-      // 認可の要。ここが base どまりでなくなると、所属していないグループを操作できてしまう
-      expect(canPerform(table, null, action)).toBe(expected["所属なし"][action]);
-    },
-  );
-
-  it("所属していれば役割どおりに判定される", () => {
-    expect(canPerform(table, membershipOf(MembershipRole.Admin), TestAction.Privileged)).toBe(true);
-    expect(canPerform(table, membershipOf(MembershipRole.Member), TestAction.Privileged)).toBe(
-      false,
-    );
-    expect(canPerform(table, membershipOf(MembershipRole.Member), TestAction.Harmless)).toBe(true);
-  });
-
-  it("事務局の権限は見ない（canAct へ移行するまでの窓口であるため）", () => {
-    expect(canPerform(table, membershipOf(MembershipRole.Admin), TestAction.StaffOnly)).toBe(false);
   });
 });
 

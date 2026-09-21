@@ -1,8 +1,8 @@
 import { createId } from "@paralleldrive/cuid2";
-import { errAsync, okAsync, ResultAsync } from "neverthrow";
+import { errAsync, ResultAsync } from "neverthrow";
 
 import type { GroupError, GroupRepository } from "~/domain/group";
-import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
+import { GroupAction, GroupErrorCode } from "~/domain/group";
 import {
   invitationExpiresAt,
   type CreateInvitationInput,
@@ -11,8 +11,9 @@ import {
 import { validateInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createInvitationMailDraft } from "~/domain/mail/invitation-mail";
-import type { MembershipError, MembershipRepository } from "~/domain/membership";
-import { canPerform, isMembershipRole, type MembershipRole } from "~/domain/membership";
+import type { MembershipRepository } from "~/domain/membership";
+import { isMembershipRole, type MembershipRole } from "~/domain/membership";
+import { ensureGroupPermission, groupNotFound } from "./_shared/group-authorization";
 
 export interface InviteMemberDeps {
   readonly groupRepository: GroupRepository;
@@ -41,24 +42,6 @@ export interface InviteMemberResult {
 }
 
 /**
- * 団体が存在しないか、あるいは所属していない（存在秘匿）ときに返すエラー。
- *
- * 「所属していないグループ」と「存在しないグループ」で同じ値を返すことで、
- * グループ ID を総当たりされても、そのグループがあるかどうかを気取られないようにする（COND-011 存在の秘匿）。
- */
-const groupNotFound = (): GroupError => ({
-  code: GroupErrorCode.GroupNotFound,
-  message: "グループが見つかりません。",
-});
-
-/** Membership 取得時の DB エラーを GroupError に変換する */
-const toGroupDatabaseError = (error: MembershipError): GroupError => ({
-  code: GroupErrorCode.DatabaseError,
-  message: "メンバー情報の処理に失敗しました。",
-  cause: error,
-});
-
-/**
  * 団体へメンバーを招待するユースケース（REQ-017 / UC-011 / EVT-014）。
  *
  * 【処理の流れと設計上の配慮】
@@ -73,11 +56,8 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  *    一方で、無効なリクエストに対して不要な DB 問い合わせ（D1 の往復レイテンシとクエリコスト）を
  *    確実に削減できる。
  * 5. 認可判定（COND-009 / COND-011）:
- *    - 事務局スタッフの場合: 事務局は所属の有無に関わらず全団体の管理権限を持つため（COND-009）、
- *      membershipRepository の所属確認をスキップして直接操作を許可する。
- *    - 一般利用者の場合: 操作者のメンバーシップを取得し、閲覧権限（GroupAction.View）がなければ
- *      存在秘匿のため groupNotFound() を返す。View 権限はあるが InviteMember 権限がない場合は、
- *      GroupForbidden「メンバーを招待できるのは管理者と事務局だけです。」を返す。
+ *    ensureGroupPermission に任せる。事務局は所属を問わず通し、団体を見られない人には
+ *    存在を秘匿し、見られるが招待できない人には足りない権限を伝える。
  * 6. 団体の存在確認と団体名取得（groupRepository.findById）:
  *    メールの本文に団体名を載せるために取得する。
  *    認可より後に置いている理由: 先に引くと、存在する団体のときだけ往復が 1 回増え、
@@ -125,34 +105,8 @@ export const inviteMemberUseCase = (
   }
   const role: MembershipRole = args.role;
 
-  // 4. 認可判定（事務局は所属確認をスキップ、一般利用者は所属と権限を確認）
-  const checkPermission = (): ResultAsync<void, GroupError> => {
-    if (args.isStaff) {
-      return okAsync(undefined);
-    }
-
-    return deps.membershipRepository
-      .findByGroupAndUser(groupId, args.actorUserId)
-      .mapErr(toGroupDatabaseError)
-      .andThen((actorMembership) => {
-        // 閲覧権限がない場合は団体の存在自体を秘匿する（COND-011）
-        if (!canPerform(groupPermissions, actorMembership, GroupAction.View)) {
-          return errAsync(groupNotFound());
-        }
-
-        // 閲覧権限はあるが招待権限がない一般メンバーの場合
-        if (!canPerform(groupPermissions, actorMembership, GroupAction.InviteMember)) {
-          return errAsync({
-            code: GroupErrorCode.GroupForbidden,
-            message: "メンバーを招待できるのは管理者と事務局だけです。",
-          });
-        }
-
-        return okAsync(undefined);
-      });
-  };
-
-  return checkPermission().andThen(() =>
+  // 4. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
+  return ensureGroupPermission(deps, { ...args, groupId }, GroupAction.InviteMember).andThen(() =>
     // 5. 団体情報を取得する（メール本文に団体名を載せるため）
     deps.groupRepository.findById(groupId).andThen((group) =>
       // 6. 重複する承諾待ち招待の有無を確認する

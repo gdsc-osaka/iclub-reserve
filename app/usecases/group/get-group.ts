@@ -4,7 +4,8 @@ import { errAsync } from "neverthrow";
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
 import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
 import type { MembershipError, MembershipRepository } from "~/domain/membership";
-import { canPerform } from "~/domain/membership";
+import { canAct } from "~/domain/membership";
+import { groupNotFound } from "./_shared/group-authorization";
 
 /** このユースケースが必要とする依存 */
 export interface GetGroupDeps {
@@ -18,18 +19,6 @@ export interface GetGroupArgs {
   /** 閲覧しようとしているユーザーの ID */
   readonly actorUserId: string;
 }
-
-/**
- * 閲覧できないときに返すエラー。
- *
- * 「所属していないグループ」と「存在しないグループ」で同じ値を返すことで、
- * グループ ID を総当たりされても、そのグループがあるかどうかを気取られないようにする。
- * そのため、この関数を通さずに個別のメッセージを書いてはいけない。
- */
-const groupNotFound = (): GroupError => ({
-  code: GroupErrorCode.GroupNotFound,
-  message: "グループが見つかりません。",
-});
 
 /**
  * グループ ID を指定して、そのグループの情報を 1 件取得するユースケース。
@@ -71,7 +60,11 @@ export const getGroupUseCase = (
       }),
     )
     .andThen((membership) =>
-      canPerform(groupPermissions, membership, GroupAction.View)
+      /*
+       * NOTE: このユースケースは事務局かどうかを受け取っていないため、所属だけで判定している。
+       * 事務局から呼ぶ必要が出たら、引数に isStaff を足して actor を組み立てること。
+       */
+      canAct(groupPermissions, { isStaff: false, membership }, GroupAction.View)
         ? deps.groupRepository.findById(id)
         : errAsync(groupNotFound()),
     );

@@ -108,20 +108,6 @@ export const canAct = <R extends string, A extends string>(
   action: A,
 ): boolean => rolesCan(table, actorRoles(actor), action);
 
-/**
- * 所属だけを見て操作の可否を判定する。
- *
- * NOTE: 事務局の権限 (COND-009) を見ない移行途中の窓口である。
- * 呼び出し側を順次 `canAct` へ移し、移し終えたらこの関数は消すこと。
- * 表の `base` が空でなくなると、所属していない人に `base` を渡せないこの形は
- * 誤った判定を返すようになる。
- */
-export const canPerform = <R extends string, A extends string>(
-  table: PermissionTable<R, A>,
-  membership: Membership | null,
-  action: A,
-): boolean => canAct(table, { isStaff: false, membership }, action);
-
 /** メンバーシップに関するエラーの種類 */
 export const MembershipErrorCode = {
   /** DB へのアクセスに失敗した */

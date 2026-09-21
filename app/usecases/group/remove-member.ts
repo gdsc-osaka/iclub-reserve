@@ -1,10 +1,15 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import type { GroupError } from "~/domain/group";
-import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
-import { wouldRemoveLastAdmin } from "~/domain/group/admin-count";
-import type { MembershipError, MembershipRepository } from "~/domain/membership";
-import { canPerform, MembershipRole } from "~/domain/membership";
+import { GroupAction, GroupErrorCode } from "~/domain/group";
+import type { MembershipRepository } from "~/domain/membership";
+import { MembershipRole } from "~/domain/membership";
+import {
+  ensureGroupPermission,
+  groupNotFound,
+  toGroupDatabaseError,
+} from "./_shared/group-authorization";
+import { ensureNotLastAdmin } from "./_shared/last-admin";
 
 export interface RemoveMemberDeps {
   readonly membershipRepository: MembershipRepository;
@@ -25,25 +30,6 @@ export interface RemoveMemberResult {
 }
 
 /**
- * 団体が存在しないか、あるいは所属していない（存在秘匿）ときに返すエラー。
- *
- * 「所属していないグループ」と「存在しないグループ」で同じ値を返すことで、
- * グループ ID を総当たりされても、そのグループがあるかどうかを気取られないようにする（COND-011 存在の秘匿）。
- * そのため、この関数を通さずに個別のメッセージを書いてはいけない。
- */
-const groupNotFound = (): GroupError => ({
-  code: GroupErrorCode.GroupNotFound,
-  message: "グループが見つかりません。",
-});
-
-/** Membership 取得・削除時の DB エラーを GroupError に変換する */
-const toGroupDatabaseError = (error: MembershipError): GroupError => ({
-  code: GroupErrorCode.DatabaseError,
-  message: "メンバー情報の処理に失敗しました。",
-  cause: error,
-});
-
-/**
  * メンバーを団体から削除（所属解除）するユースケース（REQ-019 / UC-011）。
  *
  * 【処理の流れと設計上の配慮】
@@ -55,18 +41,13 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  *    入力値の検証は特定の団体に依存しないため、先に返しても団体の有無が外部に漏れることはない。
  *    無駄な DB 往復を削減する。
  * 4. 認可判定（COND-009 / COND-011）:
- *    - 事務局スタッフの場合: 事務局は所属の有無に関わらず全団体の管理権限を持つため（COND-009）、
- *      membershipRepository の所属確認をスキップして直接操作を許可する。
- *    - 一般利用者の場合: 操作者のメンバーシップを取得し、閲覧権限（GroupAction.View）がなければ
- *      存在秘匿のため groupNotFound() を返す。View 権限はあるが RemoveMember 権限がない場合は、
- *      GroupForbidden「メンバーを削除できるのは管理者と事務局だけです。」を返す。
+ *    ensureGroupPermission に任せる。事務局は所属を問わず通し、団体を見られない人には
+ *    存在を秘匿し、見られるが削除できない人には足りない権限を伝える。
  * 5. 対象メンバーの存在確認:
  *    指定された団体に対象ユーザーが所属しているかを検索し、存在しなければ MemberNotFound を返す。
  * 6. 最後の管理者の保護（GROUP_MIN_ADMIN_COUNT = 1）:
- *    対象が管理者のときだけ countAdmins で管理者数を取得し、wouldRemoveLastAdmin で 0 人にならないかを判定する。
- *    一般メンバーの削除では管理者の人数は減らないため、countAdmins は呼ばない。
- *    なお、対象が自分自身かどうかは条件に含めない。他に管理者がいるなら自分自身の脱退も許容するという
- *    運用方針が、この 1 つの条件に自然に含まれているためである。
+ *    ensureNotLastAdmin に任せる。管理者が減る操作のときだけ人数を数え、
+ *    0 人になるなら止める。一般メンバーの削除では人数が減らないので countAdmins は呼ばない。
  * 7. メンバーの削除:
  *    remove を実行し、削除件数が 0 件の場合は MemberNotFound を返す。
  *    成功時は removedUserId を返却し、画面側で自分自身を削除した場合のリダイレクト先切り替えに用いる。
@@ -97,34 +78,8 @@ export const removeMemberUseCase = (
     });
   }
 
-  // 3. 認可判定
-  const checkPermission = (): ResultAsync<void, GroupError> => {
-    if (args.isStaff) {
-      return okAsync(undefined);
-    }
-
-    return deps.membershipRepository
-      .findByGroupAndUser(groupId, args.actorUserId)
-      .mapErr(toGroupDatabaseError)
-      .andThen((actorMembership) => {
-        // 閲覧権限がない場合は団体の存在自体を秘匿する（COND-011）
-        if (!canPerform(groupPermissions, actorMembership, GroupAction.View)) {
-          return errAsync(groupNotFound());
-        }
-
-        // 閲覧権限はあるが削除権限がない一般メンバーの場合
-        if (!canPerform(groupPermissions, actorMembership, GroupAction.RemoveMember)) {
-          return errAsync({
-            code: GroupErrorCode.GroupForbidden,
-            message: "メンバーを削除できるのは管理者と事務局だけです。",
-          });
-        }
-
-        return okAsync(undefined);
-      });
-  };
-
-  return checkPermission().andThen(() =>
+  // 3. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
+  return ensureGroupPermission(deps, { ...args, groupId }, GroupAction.RemoveMember).andThen(() =>
     // 4. 操作対象のメンバーを取得する
     deps.membershipRepository
       .findByGroupAndUser(groupId, targetUserId)
@@ -139,37 +94,13 @@ export const removeMemberUseCase = (
 
         const targetIsAdmin = targetMembership.role === MembershipRole.Admin;
 
-        // 5. 最後の管理者の保護
-        //    対象が管理者である場合のみ管理者人数を確認する。
-        //    一般メンバーの削除では人数が減らないため countAdmins は呼ばない。
-        const checkLastAdmin = (): ResultAsync<void, GroupError> => {
-          if (targetIsAdmin) {
-            return deps.membershipRepository
-              .countAdmins(groupId)
-              .mapErr(toGroupDatabaseError)
-              .andThen((adminCount) => {
-                if (
-                  wouldRemoveLastAdmin({
-                    adminCount,
-                    targetIsAdmin: true,
-                    targetStaysAdmin: false,
-                  })
-                ) {
-                  return errAsync({
-                    code: GroupErrorCode.LastAdminRequired,
-                    message:
-                      "管理者が 0 人になるため、最後の管理者は削除できません。先に別のメンバーを管理者にしてください。",
-                  });
-                }
-
-                return okAsync(undefined);
-              });
-          }
-
-          return okAsync(undefined);
-        };
-
-        return checkLastAdmin().andThen(() =>
+        // 5. 最後の管理者の保護（管理者が減らない操作では人数を数えない）
+        return ensureNotLastAdmin(
+          deps,
+          groupId,
+          { targetIsAdmin, targetStaysAdmin: false },
+          "管理者が 0 人になるため、最後の管理者は削除できません。先に別のメンバーを管理者にしてください。",
+        ).andThen(() =>
           // 6. メンバーの削除を実行する
           deps.membershipRepository
             .remove(groupId, targetUserId)

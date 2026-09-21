@@ -23,7 +23,7 @@ export interface Group {
  *
  * ここに並べてよいのは「グループそのもの」への操作だけ。
  * 予約や施設への操作は、それぞれのドメインが自分の一覧を持つこと。
- * この表が権限の唯一の定義元であり、判定は canPerform を通す。
+ * この表が権限の唯一の定義元であり、判定は canAct を通す。
  */
 export const GroupAction = {
   /** グループ情報の閲覧 */
@@ -79,6 +79,30 @@ export const groupPermissions: PermissionTable<ActorRole, GroupAction> = {
       GroupAction.UpdateMemberRole,
     ],
   },
+};
+
+/**
+ * 団体を見る以外の操作。
+ *
+ * 見る権限が無い相手への応答は存在秘匿に揃えるため（COND-011）、
+ * 拒否のメッセージを持つのはこちらだけになる。
+ */
+export type GroupManageAction = Exclude<GroupAction, typeof GroupAction.View>;
+
+/**
+ * 団体を見られるのに、その操作は許されていないときのメッセージ。
+ *
+ * 画面ごとに文字列を書くと、同じ拒否が場所によって違う言い方で出てしまう。
+ * メッセージは必ずここを通すこと。
+ *
+ * View を持たないのは、見る権限すら無い相手には操作の可否を伝えないため。
+ * その場合は「団体が見つからない」に揃えて存在を秘匿する（COND-011）。
+ */
+export const groupForbiddenMessages: Record<GroupManageAction, string> = {
+  [GroupAction.Update]: "団体情報を編集できるのは管理者と事務局だけです。",
+  [GroupAction.InviteMember]: "メンバーを招待できるのは管理者と事務局だけです。",
+  [GroupAction.UpdateMemberRole]: "メンバーの役割を変更できるのは管理者と事務局だけです。",
+  [GroupAction.RemoveMember]: "メンバーを削除できるのは管理者と事務局だけです。",
 };
 
 export const GroupErrorCode = {
