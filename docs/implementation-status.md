@@ -4,7 +4,7 @@ RDRA 成果物（[`rdra/`](../rdra/)）と PRD（[`prd.md`](prd.md)）で定義�
 
 要件そのものの変更履歴は [`change-log.md`](../change-log.md) を参照。あちらは追記専用の履歴、こちらは現状を写した表である。
 
-> **最終確認**: 2026-09-21 / `feat/scr-007-invitations` ブランチ時点
+> **最終確認**: 2026-09-21 / `refactor/drop-better-auth-organization` ブランチ時点
 
 ## 凡例
 
@@ -24,9 +24,9 @@ RDRA 成果物（[`rdra/`](../rdra/)）と PRD（[`prd.md`](prd.md)）で定義�
 | イベント（EVT）    |   7 |   1 |   6 |  14 |
 | 情報（INFO）       |   5 |   1 |   1 |   7 |
 | 状態（STATE）      |   0 |   2 |   0 |   2 |
-| 条件（COND）       |   4 |   5 |   2 |  11 |
+| 条件（COND）       |   5 |   4 |   2 |  11 |
 
-実装が進んでいるのは認証（BIZ-006）と、Better Auth の組織プラグインが素で提供する団体管理の API である。予約（BIZ-001）は空き状況の確認（UC-001）、仮予約の申請（UC-002）、自団体・事務局の予約一覧表示および状態変更操作（SCR-003 フェーズ2: 取り消し・キャンセル・承認・却下）まで実装した。申請・状態変更の通知メール（EVT-001・002・003・005・006・007）は Transactional Outbox 経由で配送キューに積む仕組みまで実装済みであり、予約承認（BIZ-002）・施設管理（BIZ-004）・カレンダー連携（BIZ-005）の外部連携は未着手である。
+実装が進んでいるのは認証（BIZ-006）と団体管理（BIZ-003）である。団体管理は当初 Better Auth の組織プラグインに乗せていたが、ADR-003 で撤去し、`group` / `group_member` / `group_invitation` の自前テーブルとユースケースに移した。予約（BIZ-001）は空き状況の確認（UC-001）、仮予約の申請（UC-002）、自団体・事務局の予約一覧表示および状態変更操作（SCR-003 フェーズ2: 取り消し・キャンセル・承認・却下）まで実装した。申請・状態変更の通知メール（EVT-001・002・003・005・006・007）は Transactional Outbox 経由で配送キューに積む仕組みまで実装済みであり、予約承認（BIZ-002）・施設管理（BIZ-004）・カレンダー連携（BIZ-005）の外部連携は未着手である。
 
 ## 要求（REQ）
 
@@ -47,12 +47,12 @@ RDRA 成果物（[`rdra/`](../rdra/)）と PRD（[`prd.md`](prd.md)）で定義�
 | REQ-013 | 全団体の予約のカレンダー・一覧確認     |  🟡  | 一覧は `/staff/reservations`（SCR-003）で対応。カレンダーは未対応                   |
 | REQ-014 | 事務局による予約の直接作成・変更・削除 |  ❌  |                                                                                     |
 | REQ-015 | 事務局による予約メッセージの確認・送信 |  ❌  |                                                                                     |
-| REQ-016 | 団体アカウントの新規作成               |  ❌  | `allowUserToCreateOrganization: false` のため利用者は作成できない                   |
+| REQ-016 | 団体アカウントの新規作成               |  ❌  | 作成の経路がどこにも無く、事務局が直接データを投入している                          |
 | REQ-017 | メンバーの招待                         |  🟡  | SCR-007 で招待の送信・取り消しと招待メール（EVT-014）を実装。承諾（UC-022）が未実装 |
 | REQ-018 | 管理者の昇格・降格                     |  ✅  | SCR-007 で管理者への昇格・メンバーへの降格ができる（最後の 1 人は降格できない）     |
 | REQ-019 | メンバーの削除                         |  ✅  | SCR-007 でメンバーを団体から削除できる（最後の管理者は削除できない）                |
 | REQ-020 | 団体情報の編集                         |  ✅  | SCR-007 で団体名を編集できる。名称以外の項目は編集の対象にしていない                |
-| REQ-021 | 事務局による団体の有効化・無効化       |  ❌  | `status` が `input: false` のため変更する経路がどこにも無い                         |
+| REQ-021 | 事務局による団体の有効化・無効化       |  ❌  | `group.status` を変更する経路がどこにも無く、全団体が `pending` のまま              |
 | REQ-022 | 施設・設備の新規登録                   |  ❌  | フォームは送信先ルートが存在せず動作しない                                          |
 | REQ-023 | 施設・設備情報の編集                   |  ❌  |                                                                                     |
 | REQ-024 | 施設・設備の無効化                     |  ❌  |                                                                                     |
@@ -143,11 +143,11 @@ RDRA 成果物（[`rdra/`](../rdra/)）と PRD（[`prd.md`](prd.md)）で定義�
 | -------- | -------------- | :--: | ---------------------------------------------------------------------------------------- |
 | INFO-001 | 予約           |  🟡  | `created_by` が NULL 可・外部キー無しで、定義と食い違う                                  |
 | INFO-002 | 施設/設備      |  ✅  | `facility` テーブルが定義と一致                                                          |
-| INFO-003 | 団体           |  ✅  | `organization` テーブル                                                                  |
+| INFO-003 | 団体           |  ✅  | `group` テーブル                                                                         |
 | INFO-004 | メッセージ     |  ❌  | テーブルが無い                                                                           |
-| INFO-005 | メンバーシップ |  ✅  | `member` テーブル                                                                        |
+| INFO-005 | メンバーシップ |  ✅  | `group_member` テーブル                                                                  |
 | INFO-006 | ユーザー       |  ✅  | `user` テーブル。`is_staff` は可視範囲（SCR-001）と予約の承認操作（SCR-003）で使っている |
-| INFO-007 | 招待           |  ✅  | `invitation` テーブル                                                                    |
+| INFO-007 | 招待           |  ✅  | `group_invitation` テーブル                                                              |
 
 ## 状態（STATE）
 
@@ -163,14 +163,14 @@ RDRA 成果物（[`rdra/`](../rdra/)）と PRD（[`prd.md`](prd.md)）で定義�
 | COND-001 | 重複予約不可条件                       |  🟡  | 申請時（UC-002）および承認時（UC-006）で確認。変更・事務局直接作成では未確認 |
 | COND-002 | 却下・キャンセル必須入力               |  ✅  | 事務局による却下（UC-006）およびキャンセル（UC-007）時の理由入力を必須化     |
 | COND-003 | 施設無効化の前提条件                   |  ❌  |                                                                              |
-| COND-004 | メールドメイン検証                     |  🟡  | 登録・ログインでは働く。変更後アドレスへの適用は未確認（実装課題 11）        |
+| COND-004 | メールドメイン検証                     |  🟡  | 登録・ログインでは働く。変更後アドレスへの適用は未確認（実装課題 8）         |
 | COND-005 | 承認済み予約の変更種別による再承認要否 |  ❌  |                                                                              |
 | COND-006 | 承認待ち団体の利用制限                 |  ✅  | SCR-001 の導線・SCR-002 の選択肢・申請時の判定の 3 か所でそろえている        |
-| COND-007 | メンバーロールの単一性                 |  🟡  | 定義外の役割は拒否するが、カンマ区切りの複数指定は通ってしまう               |
-| COND-008 | 予約の可視範囲                         |  🟡  | SCR-001・SCR-002 は対応済み。SCR-005 は未対応（実装課題 8）                  |
+| COND-007 | メンバーロールの単一性                 |  ✅  | `group_member.role` は単一値。型と DB の両方で保証（ADR-003）                |
+| COND-008 | 予約の可視範囲                         |  🟡  | SCR-001・SCR-002 は対応済み。SCR-005 は未対応（実装課題 5）                  |
 | COND-009 | 事務局の横断権限                       |  🟡  | SCR-001 の可視範囲、UC-002 の申請元、UC-006/007 の管理操作に反映             |
 | COND-010 | パスキー登録案内の再表示間隔           |  ✅  |                                                                              |
-| COND-011 | 団体情報の存在秘匿                     |  ✅  | `get-group.ts` のエラー統一と `organization-guard.ts` の経路遮断             |
+| COND-011 | 団体情報の存在秘匿                     |  ✅  | `get-group.ts` と各ユースケースでエラーを統一している                        |
 
 ---
 
@@ -180,15 +180,13 @@ RDRA 成果物（[`rdra/`](../rdra/)）と PRD（[`prd.md`](prd.md)）で定義�
 
 | #   | 課題                                                                                                                                                                                                                                        | 根拠                         | 対象                                                                                                                                       |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | 利用者が団体を作成できるようにする（`allowUserToCreateOrganization: false` → `true`）                                                                                                                                                       | REQ-016                      | `app/lib/auth/auth.server.ts`                                                                                                              |
-| 2   | 団体を有効化・無効化する経路を作る。`status` は `input: false` のため Better Auth の `updateOrganization` では変えられず、現在すべての団体が `pending` のまま                                                                               | REQ-021 / UC-014 / STATE-002 | `app/lib/auth/auth.server.ts`、団体管理のユースケース                                                                                      |
-| 3   | 役割の複数指定（`"admin,member"` のようなカンマ区切り）を入口で拒否する。現在は `parseRequestedRoles` が分解して個別に検証しており、複数指定そのものは通る                                                                                  | COND-007                     | `app/lib/auth/organization-guard.ts`                                                                                                       |
-| 4   | Better Auth の招待エンドポイント（`/organization/invite-member` / `/organization/cancel-invitation`）を塞ぐ。招待は自前のユースケースで実装したが、Better Auth 側の経路が残っており、そこから作られた招待には EVT-014 のメールが積まれない  | EVT-014 / REQ-017            | `app/lib/auth/organization-guard.ts`                                                                                                       |
-| 5   | seed の施設データを PRD 3-5 の8件に差し替える。予約サンプルの参照先 ID も合わせる                                                                                                                                                           | PRD 3-5 / BIZ-004            | `scripts/seed/seed-data.ts`                                                                                                                |
-| 6   | 施設登録フォーム（`/facility`）が、どこにも無い `/group_reservation/create` へ送信している。入力項目にも写真・有効/無効・Google Calendar ID が無く、事務局限定でもない                                                                      | REQ-022 / SCR-009 / COND-009 | `app/routes/facility/route.tsx`、`app/routes.ts`                                                                                           |
-| 7   | 予約詳細（SCR-005）に 3 段階の可視範囲を実装する。SCR-001・SCR-002 は対応済みだが、`/reservations/:reservationId` は所属チェックが無く、ログインさえしていれば他団体の予約を全項目読める。`get-availability-calendar.ts` と同じ形で絞ること | COND-008                     | `app/routes/reservations/$reservationId/route.tsx`、`app/usecases/reservation/`、`app/domain/reservation/index.ts`（`groupId` を持たせる） |
-| 8   | `is_staff` を残りの認可判定にも反映する。予約の承認・却下・事務局キャンセル（`change-reservation-status.ts`）には反映済み。施設管理（SCR-009）など、残りの事務局限定の操作には接続されていない                                              | COND-009                     | `app/lib/auth/permission.ts`、各ユースケース                                                                                               |
-| 9   | 利用規約への同意を登録フローに組み込む。現在コード中に該当箇所が無い                                                                                                                                                                        | REQ-033                      | `app/routes/login/route.tsx`                                                                                                               |
-| 10  | メールアドレス変更画面（SCR-017）を実装する。`changeEmail` は Better Auth 側で有効になっているが、画面も導線も無い                                                                                                                          | REQ-035 / SCR-017            | `app/routes/`、`app/routes.ts`                                                                                                             |
-| 11  | 事務局が承認フローを経ずに予約を直接作成する（UC-008）。画面は SCR-002 と同じで、違いは作られる状態が `approved` になること。Google Calendar 登録（EVT-009）が伴うので、連携と合わせて入れる                                                | UC-008 / STATE-001           | `app/usecases/reservation/`、`app/routes/reservations/new/`                                                                                |
-| 12  | 招待の承諾画面（SCR-016）を実装する。招待メールの承諾リンク（`/invitations/:invitationId`）に対応するルートがまだ無く、開いても 404 になる                                                                                                  | REQ-017 / UC-022 / SCR-016   | `app/routes/`、`app/routes.ts`、`app/usecases/group/`                                                                                      |
+| 1   | 団体を作成する経路（ユースケースと画面）を作る。現在は作成する手段がどこにも無い                                                                                                                                                            | REQ-016                      | `app/usecases/group/`、`app/routes/`                                                                                                       |
+| 2   | 団体を有効化・無効化する経路を作る。`group.status` を変える手段がどこにも無く、現在すべての団体が `pending` のまま                                                                                                                          | REQ-021 / UC-014 / STATE-002 | `app/usecases/group/`、`app/routes/`                                                                                                       |
+| 3   | seed の施設データを PRD 3-5 の8件に差し替える。予約サンプルの参照先 ID も合わせる                                                                                                                                                           | PRD 3-5 / BIZ-004            | `scripts/seed/seed-data.ts`                                                                                                                |
+| 4   | 施設登録フォーム（`/facility`）が、どこにも無い `/group_reservation/create` へ送信している。入力項目にも写真・有効/無効・Google Calendar ID が無く、事務局限定でもない                                                                      | REQ-022 / SCR-009 / COND-009 | `app/routes/facility/route.tsx`、`app/routes.ts`                                                                                           |
+| 5   | 予約詳細（SCR-005）に 3 段階の可視範囲を実装する。SCR-001・SCR-002 は対応済みだが、`/reservations/:reservationId` は所属チェックが無く、ログインさえしていれば他団体の予約を全項目読める。`get-availability-calendar.ts` と同じ形で絞ること | COND-008                     | `app/routes/reservations/$reservationId/route.tsx`、`app/usecases/reservation/`、`app/domain/reservation/index.ts`（`groupId` を持たせる） |
+| 6   | `is_staff` を残りの認可判定にも反映する。予約の承認・却下・事務局キャンセル（`change-reservation-status.ts`）には反映済み。施設管理（SCR-009）など、残りの事務局限定の操作には接続されていない                                              | COND-009                     | `app/domain/group/index.ts`、各ユースケース                                                                                                |
+| 7   | 利用規約への同意を登録フローに組み込む。現在コード中に該当箇所が無い                                                                                                                                                                        | REQ-033                      | `app/routes/login/route.tsx`                                                                                                               |
+| 8   | メールアドレス変更画面（SCR-017）を実装する。`changeEmail` は Better Auth 側で有効になっているが、画面も導線も無い                                                                                                                          | REQ-035 / SCR-017            | `app/routes/`、`app/routes.ts`                                                                                                             |
+| 9   | 事務局が承認フローを経ずに予約を直接作成する（UC-008）。画面は SCR-002 と同じで、違いは作られる状態が `approved` になること。Google Calendar 登録（EVT-009）が伴うので、連携と合わせて入れる                                                | UC-008 / STATE-001           | `app/usecases/reservation/`、`app/routes/reservations/new/`                                                                                |
+| 10  | 招待の承諾画面（SCR-016）を実装する。招待メールの承諾リンク（`/invitations/:invitationId`）に対応するルートがまだ無く、開いても 404 になる                                                                                                  | REQ-017 / UC-022 / SCR-016   | `app/routes/`、`app/routes.ts`、`app/usecases/group/`                                                                                      |
