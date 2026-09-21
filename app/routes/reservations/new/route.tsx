@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { createGroupRepository } from "~/infra/group/group-repo";
+import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationFormQuery } from "~/infra/reservation/reservation-form-query";
+import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
@@ -146,6 +148,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       membershipRepository: createMembershipRepository(db),
       groupRepository: createGroupRepository(db),
       facilityRepository: createFacilityRepository(db),
+      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+      mailOutboxNotifier: createQueueMailOutboxNotifier(),
     },
     { actorUserId: user.id, isStaff: user.is_staff, now, reservation },
   );

@@ -1,8 +1,7 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
-import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
-import { createReservationApprovedMailDrafts } from "~/domain/mail/reservation-mail";
+import { createReservationMailDrafts, transitionMailEvent } from "~/domain/mail/reservation-mail";
 import {
   ReservationErrorCode,
   ReservationStatus,
@@ -25,7 +24,7 @@ export interface ChangeReservationStatusDeps {
   readonly reservationRepository: ReservationRepository;
   /** 操作者が予約の団体に所属しているかを検証するためのクエリ */
   readonly userGroupListQuery: UserGroupListQuery;
-  /** 予約の承認時に通知先メールアドレス（申請者＋団体管理者）を取得するためのクエリ */
+  /** 状態変更通知メールの宛先を取得するためのクエリ */
   readonly reservationMailRecipientsQuery: ReservationMailRecipientsQuery;
   /** outbox に積んだメールの即時配送を依頼する先（ADR-002 決定 1） */
   readonly mailOutboxNotifier: MailOutboxNotifier;
@@ -130,18 +129,27 @@ export const changeReservationStatusUseCase = (
                 )
             : okAsync(null);
 
-        // 承認時のみ outbox に積むメールを組み立てる（EVT-005。却下・キャンセル等ではメールを積まない）
-        const mailDraftsCheck =
-          args.transition === ReservationTransition.Approve
-            ? deps.reservationMailRecipientsQuery
-                .findByReservationId(reservation.id)
-                .mapErr((error): ReservationError => ({
-                  code: ReservationErrorCode.DatabaseError,
-                  message: "通知先メールアドレスの取得に失敗しました。",
-                  cause: error,
-                }))
-                .map((recipients) => createReservationApprovedMailDrafts(reservation, recipients))
-            : okAsync<readonly MailDraft[], ReservationError>([]);
+        // 状態変更通知メール（EVT-002/003/005/006/007）を組み立てる
+        const event = transitionMailEvent[args.transition];
+        const mailDraftsCheck = deps.reservationMailRecipientsQuery
+          .findByReservationId(reservation.id)
+          .mapErr((error): ReservationError => ({
+            code: ReservationErrorCode.DatabaseError,
+            message: "通知先メールアドレスの取得に失敗しました。",
+            cause: error,
+          }))
+          .map((audience) =>
+            createReservationMailDrafts(
+              event,
+              {
+                id: reservation.id,
+                startAt: reservation.startAt,
+                endAt: reservation.endAt,
+                statusReason,
+              },
+              audience,
+            ),
+          );
 
         const targetStatus = transitionTargetStatus[args.transition];
 
@@ -151,7 +159,7 @@ export const changeReservationStatusUseCase = (
          * 仮予約を 2 人の事務局が同時に承認する）、D1 では確認と更新を 1 つの
          * トランザクションで囲めないため、条件を UPDATE 文の中に持ち込む。
          *
-         * 承認通知メール（EVT-005）がある場合は、UPDATE と不可分に outbox へ積むため
+         * 状態変更通知メールがある場合は、UPDATE と不可分に outbox へ積むため
          * applyStatusTransition の第 2 引数に渡す（ADR-002 決定 3）。
          */
         return ResultAsync.combine([overlapCheck, mailDraftsCheck]).andThen(([, mailDrafts]) =>

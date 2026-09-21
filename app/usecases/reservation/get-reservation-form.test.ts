@@ -100,7 +100,7 @@ const createDeps = (
             message: "予約を読めませんでした",
           })
         : okAsync(overrides.created),
-    create: () => okAsync(null),
+    create: () => okAsync({ enqueuedMailIds: [] }),
     existsApprovedOverlap: () => okAsync(false),
     applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
   };

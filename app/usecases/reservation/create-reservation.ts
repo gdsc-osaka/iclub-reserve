@@ -3,6 +3,8 @@ import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 
 import { FacilityErrorCode, type FacilityRepository } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type GroupRepository } from "~/domain/group";
+import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
+import { createReservationMailDrafts, ReservationMailEvent } from "~/domain/mail/reservation-mail";
 import { canPerform, type MembershipRepository } from "~/domain/membership";
 import {
   ReservationAction,
@@ -14,6 +16,7 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 import { validateReservationDraft } from "~/domain/reservation/validation";
+import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 
 export interface CreateProvisionalReservationDeps {
   readonly reservationRepository: ReservationRepository;
@@ -22,6 +25,10 @@ export interface CreateProvisionalReservationDeps {
   readonly groupRepository: GroupRepository;
   /** 申請先の施設・設備が使えるかを確かめるために使う */
   readonly facilityRepository: FacilityRepository;
+  /** 申請通知メール（EVT-001）の宛先（申請者・団体管理者全員・事務局）を取得するために使う */
+  readonly reservationMailRecipientsQuery: ReservationMailRecipientsQuery;
+  /** outbox に積んだメールの即時配送を依頼する先（ADR-002 決定 1） */
+  readonly mailOutboxNotifier: MailOutboxNotifier;
 }
 
 export interface CreateProvisionalReservationArgs {
@@ -185,9 +192,7 @@ const ensureNoApprovedOverlap = (
  * 3. 申請元の団体が有効か（COND-006）
  * 4. 申請先の施設・設備が使えるか
  * 5. 承認済みの予約との重複（COND-001）— 作成の直前に置いて、確認から作成までを短くする
- *
- * NOTE: 申請の通知（EVT-001）はまだ送っていない。宛先（申請者・団体管理者全員・事務局）を
- * 引く Query が要るので、別の変更として入れること。
+ * 6. 通知先の取得（EVT-001）— 確認がすべて通ったあとに引き、予約の作成と不可分に outbox へ積む（ADR-002 決定 3）
  */
 export const createProvisionalReservationUseCase = (
   deps: CreateProvisionalReservationDeps,
@@ -210,6 +215,48 @@ export const createProvisionalReservationUseCase = (
     .andThen(() => ensureGroupIsEnabled(deps, args.reservation.groupId))
     .andThen(() => ensureFacilityIsAvailable(deps, args.reservation.facilityId))
     .andThen(() => ensureNoApprovedOverlap(deps, args))
-    .andThen(() => deps.reservationRepository.create(reservation))
-    .map(() => ({ reservationId: id }));
+    .andThen(() =>
+      deps.reservationMailRecipientsQuery
+        .findForNewReservation({
+          groupId: args.reservation.groupId,
+          applicantUserId: args.actorUserId,
+        })
+        .mapErr((error): ReservationError => ({
+          code: ReservationErrorCode.DatabaseError,
+          message: "通知先メールアドレスの取得に失敗しました。",
+          cause: error,
+        })),
+    )
+    .map((audience) =>
+      createReservationMailDrafts(
+        ReservationMailEvent.Applied,
+        {
+          id,
+          startAt: args.reservation.startAt,
+          endAt: args.reservation.endAt,
+          statusReason: null,
+        },
+        audience,
+      ),
+    )
+    .andThen((mails) => deps.reservationRepository.create(reservation, mails))
+    .map((outcome) => {
+      /*
+       * 予約の作成と outbox への追加が不可分に成功したあとにだけ、即時配送を依頼する（ADR-002 決定 1）。
+       *
+       * 依頼の結果は受け取らない（notifyEnqueued は void）。キューへ届かなくても
+       * outbox の行は残り、遅くとも 1 分後に cron が拾うので、業務処理としては成功のまま返す。
+       *
+       * ポートの取り決めでは notifyEnqueued は例外を投げないが、ここで捕まえておく。
+       * 予約の作成はすでに確定しているので、通知の都合で画面にエラーを出すと
+       * 利用者は「失敗した」と思って同じ内容をもう一度申請してしまう。
+       */
+      try {
+        deps.mailOutboxNotifier.notifyEnqueued(outcome.enqueuedMailIds);
+      } catch (error) {
+        console.error("Failed to request immediate mail delivery:", error);
+      }
+
+      return { reservationId: id };
+    });
 };
