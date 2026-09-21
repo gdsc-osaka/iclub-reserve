@@ -1,3 +1,4 @@
+import { InvitationStatus, invitationExpiresAt } from "~/domain/invitation";
 import { ReservationStatus } from "~/domain/reservation";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
@@ -140,6 +141,27 @@ export const seedGroupMembers: (typeof schema.groupMemberTable.$inferInsert)[] =
     role: MembershipRole.Member,
     createdAt: new Date(),
     updatedAt: new Date(),
+  },
+];
+
+/**
+ * 承諾待ちの招待のシードデータ。
+ *
+ * 招待の承諾画面（SCR-016）をローカルで開けるようにするためのもの。
+ * 花子は「AI ハッカソンチーム」に所属していないので、承諾すると実際にメンバーが増える。
+ * 有効期限は運用と同じ規則（`invitationExpiresAt`）で決める。ここで独自の値を書くと、
+ * 期限の考え方が 2 か所に散ってしまう。
+ */
+export const seedGroupInvitations: (typeof schema.groupInvitationTable.$inferInsert)[] = [
+  {
+    id: "inv_seed_hanako_ai",
+    groupId: "grp_ai_hackers",
+    email: "hanako@ecs.osaka-u.ac.jp",
+    role: MembershipRole.Member,
+    status: InvitationStatus.Pending,
+    expiresAt: invitationExpiresAt(new Date()),
+    createdAt: new Date(),
+    inviterId: "usr_student_01",
   },
 ];
 
