@@ -1,8 +1,8 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import type { GroupError } from "~/domain/group";
-import { wouldRemoveLastAdmin } from "~/domain/group/admin-count";
 import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
+import { wouldRemoveLastAdmin } from "~/domain/group/admin-count";
 import type { MembershipError, MembershipRepository } from "~/domain/membership";
 import { canPerform, MembershipRole } from "~/domain/membership";
 

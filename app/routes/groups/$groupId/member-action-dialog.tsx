@@ -12,6 +12,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { MembershipRole } from "~/domain/membership";
 
 /** メンバー 1 人に対してできる操作 */
 export const MemberAction = {
@@ -31,7 +32,8 @@ interface MemberActionDialogProps {
 
 interface DialogConfig {
   readonly intent: "update-member-role" | "remove-member";
-  readonly role?: "admin" | "member";
+  /** 役割変更のときだけ送る。DB に入る値と同じものをドメインから取る */
+  readonly role?: MembershipRole;
   readonly title: string;
   readonly actionLabel: string;
   readonly actionVariant: "default" | "destructive";
@@ -48,7 +50,7 @@ const getDialogConfig = (
     case MemberAction.Promote:
       return {
         intent: "update-member-role",
-        role: "admin",
+        role: MembershipRole.Admin,
         title: "管理者にしますか？",
         actionLabel: "管理者にする",
         actionVariant: "default",
@@ -58,7 +60,7 @@ const getDialogConfig = (
     case MemberAction.Demote:
       return {
         intent: "update-member-role",
-        role: "member",
+        role: MembershipRole.Member,
         title: "メンバーに戻しますか？",
         actionLabel: "メンバーにする",
         actionVariant: "default",
