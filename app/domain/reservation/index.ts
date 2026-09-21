@@ -25,7 +25,7 @@ export interface Reservation {
   note: string | null;
   status: ReservationStatus;
   statusReason: string | null;
-  createdBy: string | null;
+  createdBy: string;
   createdAt: Date;
   updatedAt: Date;
 }

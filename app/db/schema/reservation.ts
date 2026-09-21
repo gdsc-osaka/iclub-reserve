@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
-import { organization } from "./auth";
+import { organization, user } from "./auth";
 import { ReservationStatus } from "~/domain/reservation";
 
 export const facilityTable = sqliteTable("facility", {
@@ -61,7 +61,9 @@ export const reservationTable = sqliteTable("reservation", {
 
   statusReason: text("status_reason"),
 
-  createdBy: text("created_by"),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => user.id),
 
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
