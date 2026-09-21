@@ -48,7 +48,8 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  * 1. groupId のトリム検証:
  *    空文字または空白のみの場合は DB 問い合わせを行わず、即座に groupNotFound() を返す。
  * 2. 役割（role）の検証（isMembershipRole）:
- *    COND-007（単一ロール原則）を満たす。isMembershipRole は "admin" または "member" の完全一致のみを受け付けるため、不正な入力値をこの 1 行で確実に弾ける。
+ *    COND-007（単一ロール原則）を満たす。isMembershipRole は "admin" または "member" の
+ *    完全一致のみを受け付けるため、不正な入力値をこの 1 行で確実に弾ける。
  * 3. targetUserId のトリム検証:
  *    空文字の場合は無効な入力として GroupInvalidInput を返す。
  * 4. 2・3 の検証を認可判定より先に置く理由:

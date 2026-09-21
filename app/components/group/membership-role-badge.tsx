@@ -1,4 +1,4 @@
-import { type MembershipRole, membershipRoleLabel } from "~/domain/membership";
+import { MembershipRole, membershipRoleLabel } from "~/domain/membership";
 import { cn } from "~/lib/utils";
 
 /** 役割ごとの配色。管理者は primary 系で強調し、一般メンバーは muted 系で控えめにする。 */
@@ -6,11 +6,11 @@ const membershipRoleStyle: Record<
   MembershipRole,
   { readonly badge: string; readonly dot: string }
 > = {
-  admin: {
+  [MembershipRole.Admin]: {
     badge: "bg-primary/10 text-primary ring-primary/20",
     dot: "bg-primary",
   },
-  member: {
+  [MembershipRole.Member]: {
     badge: "bg-muted text-muted-foreground ring-foreground/10",
     dot: "bg-muted-foreground",
   },
