@@ -7,8 +7,8 @@ import { formatDateTime } from "~/lib/date";
  * 招待通知メールの本文・属性組み立て。
  *
  * 【承諾リンクについて】
- * 招待メールに記載される承諾画面（SCR-016 / UC-022）はまだ実装されていないため、
- * 現時点でリンクを開くと 404 になる（次の PR で実装予定）。
+ * 招待メールに記載される承諾画面（SCR-016 / UC-022）は `/invitations/:invitationId` に配置されている。
+ * 承諾リンクの URL は、画面パスを一元管理する `invitationAcceptPath` を通して組み立てる。
  */
 
 export interface InvitationMailArgs {
