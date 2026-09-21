@@ -5,8 +5,10 @@
  * `db.batch()` による承諾処理は、条件付き UPDATE と `INSERT ... SELECT` の 2 文で構成されている。
  * この 2 文は、WHERE 句の条件が 1 つでも欠けると、期限切れや取り消し済み、宛先違いなど
  * 承諾できないはずの人が誤ってメンバーに追加されてしまう重大な不具合を引き起こす。
- * また、`INSERT ... SELECT` は列が位置で対応するため、列の並び順がテーブル定義と一致していることが
- * 必須条件となる。これらの安全性が保たれていることを、本番環境で実行する前にテストで担保する。
+ * また、`INSERT ... SELECT` の SELECT 側は、挿入先の列と 1 対 1 に対応していなければならない。
+ * Drizzle は挿入先の列名を明示して出すため位置だけで対応が決まるわけではないが、
+ * 並びが定義とずれていると読む人が対応を追えなくなるので、並び順もあわせて確かめる。
+ * これらが保たれていることを、本番環境で実行する前にテストで担保する。
  */
 import { drizzle } from "drizzle-orm/d1";
 import { describe, expect, it } from "vitest";
@@ -29,7 +31,7 @@ const toSQL = (statement: ReturnType<typeof invitationAcceptStatements>[number])
  */
 const db = drizzle(undefined as unknown as D1Database, { schema }) as unknown as Database;
 
-/** `group_member` の列。INSERT ... SELECT は位置で対応するため、並び順が重要 */
+/** `group_member` の列。SELECT 側がこの並びと一致していることを確かめる */
 const memberColumns = ["id", "group_id", "user_id", "role", "created_at", "updated_at"];
 
 describe("invitationAcceptStatements", () => {

@@ -145,7 +145,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       }
 
       if (error.code === GroupErrorCode.DatabaseError) {
-        logServerError("invitations.accept.action", error);
+        logServerError("invitations.reject.action", error);
       }
 
       return {
