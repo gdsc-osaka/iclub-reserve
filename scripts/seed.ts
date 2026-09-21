@@ -11,6 +11,7 @@ import {
   seedReservations,
   seedUsers,
   seedGroupMembers,
+  seedGroupInvitations,
 } from "./seed/seed-data.js";
 
 /**
@@ -42,19 +43,22 @@ async function seedLocal() {
   console.log(`接続先 DB: ${dbPath}`);
 
   try {
-    console.log("1/5 施設・備品データを投入中...");
+    console.log("1/6 施設・備品データを投入中...");
     await db.insert(schema.facilityTable).values(seedFacilities).onConflictDoNothing();
 
-    console.log("2/5 テストユーザーデータを投入中...");
+    console.log("2/6 テストユーザーデータを投入中...");
     await db.insert(schema.user).values(seedUsers).onConflictDoNothing();
 
-    console.log("3/5 団体データを投入中...");
+    console.log("3/6 団体データを投入中...");
     await db.insert(schema.groupTable).values(seedGroups).onConflictDoNothing();
 
-    console.log("4/5 団体メンバーシップデータを投入中...");
+    console.log("4/6 団体メンバーシップデータを投入中...");
     await db.insert(schema.groupMemberTable).values(seedGroupMembers).onConflictDoNothing();
 
-    console.log("5/5 サンプル予約データを投入中...");
+    console.log("5/6 招待データを投入中...");
+    await db.insert(schema.groupInvitationTable).values(seedGroupInvitations).onConflictDoNothing();
+
+    console.log("6/6 サンプル予約データを投入中...");
     await db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing();
 
     console.log("🎉 ローカル D1 データベースへのシードが正常に完了しました！");
@@ -86,6 +90,13 @@ function seedRemote() {
       ),
       toExecutableSql(
         db.insert(schema.groupMemberTable).values(seedGroupMembers).onConflictDoNothing().toSQL(),
+      ),
+      toExecutableSql(
+        db
+          .insert(schema.groupInvitationTable)
+          .values(seedGroupInvitations)
+          .onConflictDoNothing()
+          .toSQL(),
       ),
       toExecutableSql(
         db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing().toSQL(),

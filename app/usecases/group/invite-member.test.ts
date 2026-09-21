@@ -155,6 +155,21 @@ const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {})
         code: GroupErrorCode.DatabaseError,
         message: "cancel is not used in this test",
       }),
+    findById: () =>
+      errAsync({
+        code: GroupErrorCode.DatabaseError,
+        message: "findById is not used in this test",
+      }),
+    accept: () =>
+      errAsync({
+        code: GroupErrorCode.DatabaseError,
+        message: "accept is not used in this test",
+      }),
+    reject: () =>
+      errAsync({
+        code: GroupErrorCode.DatabaseError,
+        message: "reject is not used in this test",
+      }),
   };
 
   return {

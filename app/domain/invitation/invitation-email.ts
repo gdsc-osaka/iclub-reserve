@@ -17,6 +17,16 @@ const invalidInput = (message: string): GroupError => ({
 });
 
 /**
+ * 突き合わせ用にメールアドレスの形をそろえる。
+ *
+ * 招待は保存の時点で小文字に正規化しているので、承諾のときに突き合わせる
+ * ログイン中の人のアドレスも同じ形にしてから比べる必要がある。
+ * 正規化の規則を 2 か所に書くと、いつか片方だけ変わって
+ * 「自分宛ての招待なのに承諾できない」が起きるため、ここ 1 か所に閉じる。
+ */
+export const normalizeInvitationEmail = (raw: string): string => raw.trim().toLowerCase();
+
+/**
  * 招待先メールアドレスの入力を検証・正規化する純粋関数。
  *
  * 【形式の検証を createEmailAddress に任せる理由】
@@ -77,5 +87,5 @@ export const validateInvitationEmail = (
     );
   }
 
-  return ok(trimmed.toLowerCase());
+  return ok(normalizeInvitationEmail(trimmed));
 };

@@ -73,7 +73,7 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  *    一方で、無効なリクエストに対して不要な DB 問い合わせ（D1 の往復レイテンシとクエリコスト）を
  *    確実に削減できる。
  * 5. 認可判定（COND-009 / COND-011）:
- *    - 事務局スタッフの場合: 事務局は団体に所属せず（group_member 行を持たない）、全団体の管理権限を持つため、
+ *    - 事務局スタッフの場合: 事務局は所属の有無に関わらず全団体の管理権限を持つため（COND-009）、
  *      membershipRepository の所属確認をスキップして直接操作を許可する。
  *    - 一般利用者の場合: 操作者のメンバーシップを取得し、閲覧権限（GroupAction.View）がなければ
  *      存在秘匿のため groupNotFound() を返す。View 権限はあるが InviteMember 権限がない場合は、

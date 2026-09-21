@@ -18,6 +18,7 @@ export default [
     route("availability", "routes/availability/route.tsx"),
     route("facility", "routes/facility/route.tsx"),
     route("groups/:groupId", "routes/groups/$groupId/route.tsx"),
+    route("invitations/:invitationId", "routes/invitations/$invitationId/route.tsx"),
     route("facility/:facilityId", "routes/facility/$facilityId/route.tsx"),
     /*
      * 予約は複数形の `reservations` にそろえる。

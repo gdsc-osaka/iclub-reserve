@@ -52,7 +52,7 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  *    先に返しても団体の有無が外部に漏れることはない。無効な入力に対して無駄な DB 往復を
  *    確実に 1 回削減できる（Cloudflare D1 のレイテンシとコストの削減）。
  * 3. 事務局スタッフの場合（COND-009）:
- *    事務局は団体に所属せず（group_member 行を持たない）、全団体の管理権限を持つため、
+ *    事務局は所属の有無に関わらず全団体の管理権限を持つため（COND-009）、
  *    membershipRepository を問い合わせずに直接 updateName を実行する。
  *    事務局に対しては存在秘匿（COND-011）の対象外であるため、団体が存在しない場合は
  *    素直に GroupNotFound が返る。
