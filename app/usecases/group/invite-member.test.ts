@@ -68,6 +68,11 @@ const createFakeGroupRepository = (options: FakeGroupRepoOptions = {}) => {
         code: GroupErrorCode.DatabaseError,
         message: "updateName is not used in this test",
       }),
+    create: () =>
+      errAsync({
+        code: GroupErrorCode.DatabaseError,
+        message: "このテストでは create は使わない",
+      }),
   };
 
   return {

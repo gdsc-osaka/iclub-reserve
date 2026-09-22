@@ -138,7 +138,34 @@ export interface UpdateGroupNameInput {
   readonly updatedAt: Date;
 }
 
+/**
+ * 団体の新規作成に必要な値。
+ *
+ * `status` を受け取らないのは、作成時の状態が常に pending だから（STATE-002）。
+ * 引数で渡せるようにすると、フォームから届いた値がそのまま状態になる経路ができてしまい、
+ * 事務局の承認を飛ばして enabled の団体を作れてしまう（COND-006）。
+ */
+export interface CreateGroupInput {
+  readonly id: string;
+  /** 検証済みの団体名（`validateGroupName` を通したもの） */
+  readonly name: string;
+  /** 初期の管理者になる人（REQ-016） */
+  readonly ownerUserId: string;
+  /** 作成する group_member 行の ID */
+  readonly membershipId: string;
+  /** createdAt / updatedAt に書き込む時刻 */
+  readonly now: Date;
+}
+
 export interface GroupRepository {
   findById(id: string): ResultAsync<Group, GroupError>;
   updateName(input: UpdateGroupNameInput): ResultAsync<Group, GroupError>;
+  /**
+   * 団体と初期メンバーを 1 つの `db.batch()` で作成する。
+   *
+   * `group_member` も同時に書き込むが、2 つの文を 1 つの batch に載せて
+   * トランザクション整合性を保つ必要があるため、GroupRepository のメソッドとして配置している
+   * （`invitation-repo.ts` の `accept` と同様の構成）。
+   */
+  create(input: CreateGroupInput): ResultAsync<Group, GroupError>;
 }

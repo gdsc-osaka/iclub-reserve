@@ -59,6 +59,11 @@ const createFakeGroupRepository = (options: FakeGroupRepositoryOptions = {}) => 
         updatedAt: input.updatedAt,
       });
     },
+    create: () =>
+      errAsync({
+        code: GroupErrorCode.DatabaseError,
+        message: "このテストでは create は使わない",
+      }),
   };
 
   return {

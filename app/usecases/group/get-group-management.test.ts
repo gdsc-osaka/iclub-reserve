@@ -80,6 +80,8 @@ const createFakeGroupRepository = (groups: readonly Group[]) => {
     // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
     updateName: () =>
       errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    create: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは create は使わない" }),
   };
 
   return { repository, findByIdCallCount: () => findByIdCallCount };
