@@ -27,27 +27,39 @@ type ActorName = keyof typeof actors;
  * 何も検証できないので、ここには期待する結果を独立して書き下す。
  */
 const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
+  /*
+   * COND-008: 所属していなくても、ログインしていれば概要（施設・日時・団体名・ステータス）は見える。
+   * 空き状況カレンダー（SCR-001）が「いつ空いているか」を答えるために要る。
+   */
   所属なし: {
+    [ReservationAction.ViewSummary]: true,
+    [ReservationAction.ViewDetail]: false,
     [ReservationAction.CreateProvisional]: false,
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
   },
   // 団体の中では役割によらず同じことができる
   メンバー: {
+    [ReservationAction.ViewSummary]: true,
+    [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
   },
   管理者: {
+    [ReservationAction.ViewSummary]: true,
+    [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
   },
   /*
-   * COND-009: 事務局は所属していない団体でも予約を作れる。
+   * COND-009: 事務局は所属していない団体でも予約を作れ、中身も全部見られる（COND-008）。
    * 取り消し・キャンセルは事務局の操作ではない（却下・事務局キャンセルが別にある）。
    */
   事務局: {
+    [ReservationAction.ViewSummary]: true,
+    [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
@@ -57,11 +69,15 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
    * 事務局であることを理由に、自団体の予約を取り消せなくなってはいけない。
    */
   事務局かつメンバー: {
+    [ReservationAction.ViewSummary]: true,
+    [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
   },
   事務局かつ管理者: {
+    [ReservationAction.ViewSummary]: true,
+    [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,

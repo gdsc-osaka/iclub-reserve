@@ -31,6 +31,19 @@ export interface Reservation {
 }
 
 export const ReservationAction = {
+  /**
+   * 概要（施設・日時・団体名・ステータス）を見る（COND-008）。
+   *
+   * 予約そのものを開けるかどうかは、この操作が許されるかで決まる。
+   */
+  ViewSummary: "view_summary",
+  /**
+   * 詳しい項目（使用人数・備考・却下/キャンセル理由・作成者・メッセージ）まで見る（COND-008）。
+   *
+   * ViewSummary とは別の操作にしてある。1 つにまとめて「見られるか」だけを問うと、
+   * 表からは 2 段階に分かれていることが読み取れなくなる。
+   */
+  ViewDetail: "view_detail",
   CreateProvisional: "create_provisional",
   Withdraw: "withdraw",
   Cancel: "cancel",
@@ -47,19 +60,26 @@ export type ReservationAction = (typeof ReservationAction)[keyof typeof Reservat
  */
 export const reservationPermissions: PermissionTable<ActorRole, ReservationAction> = {
   /*
-   * 所属していない人に許す操作は、いまのところ無い。
+   * 所属していない人でも、予約の概要は見られる (COND-008)。
+   * 空き状況カレンダー (SCR-001) が「いつ空いているか」を答えるには、
+   * 他団体の予約も施設・日時・団体名・ステータスまで見えている必要がある。
    *
-   * NOTE: 他団体の予約を概要だけ見られる範囲 (COND-008) は、まだこの表に載っていない。
-   * 閲覧を操作として足すときに base へ書くこと。
+   * ここに ViewDetail を足してはいけない。使用人数・備考・却下理由・作成者は
+   * 自団体と事務局にだけ見せる項目である (COND-008)。
+   *
+   * NOTE: COND-008 の 3 段目 (Google Calendar 経由で誰でも見られる範囲) はここに無い。
+   * ログインしていない相手には操作する人が居ないので、表の外で決める (authz.ts 参照)。
    */
-  base: [],
+  base: [ReservationAction.ViewSummary],
   byRole: {
     [MembershipRole.Admin]: [
+      ReservationAction.ViewDetail,
       ReservationAction.CreateProvisional,
       ReservationAction.Withdraw,
       ReservationAction.Cancel,
     ],
     [MembershipRole.Member]: [
+      ReservationAction.ViewDetail,
       ReservationAction.CreateProvisional,
       ReservationAction.Withdraw,
       ReservationAction.Cancel,
@@ -72,7 +92,7 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
      * 事務局の人が自分の所属する団体の予約を取り消すときは、
      * メンバーとしての役割が和集合で効くので、そちらから取り消せる。
      */
-    [StaffRole]: [ReservationAction.CreateProvisional],
+    [StaffRole]: [ReservationAction.ViewDetail, ReservationAction.CreateProvisional],
   },
 };
 
