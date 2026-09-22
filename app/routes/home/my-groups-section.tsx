@@ -2,6 +2,7 @@ import { ChevronRight, Users } from "lucide-react";
 import { Link } from "react-router";
 
 import { GroupStatusBadge } from "~/components/group/group-status-badge";
+import { Button } from "~/components/ui/button";
 
 import type { DashboardGroup } from "./dashboard-group";
 
@@ -18,10 +19,17 @@ export function MyGroupsSection({
 }: Readonly<{ groups: readonly DashboardGroup[]; isUnavailable: boolean }>) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <Users aria-hidden className="size-4" />
-        所属団体
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Users aria-hidden className="size-4" />
+          所属団体
+        </h2>
+        {groups.length > 0 && (
+          <Button asChild variant="outline" size="sm">
+            <Link to="/groups/new">団体を登録</Link>
+          </Button>
+        )}
+      </div>
 
       {groups.length === 0 ? (
         !isUnavailable && <NoGroupsCard />
@@ -40,19 +48,19 @@ export function MyGroupsSection({
 
 /**
  * どの団体にも所属していない人に出す案内。
- *
- * NOTE: 団体の登録（REQ-016）は現在未実装で、事務局が直接データを投入している運用。
- * 団体登録機能が実装されたら、ここに「団体を登録」の導線を足す。
  */
 function NoGroupsCard() {
   return (
-    <div className="rounded-lg border border-dashed p-6 text-center">
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center">
       <p className="text-sm font-medium">まだどの団体にも所属していません</p>
       <p className="mt-1.5 text-sm text-muted-foreground">
         団体に招待されると、ここに表示されます。
-        <br />
-        新しく団体を登録したいときは、事務局にご連絡ください。
       </p>
+      <div className="mt-4">
+        <Button asChild size="sm">
+          <Link to="/groups/new">団体を登録</Link>
+        </Button>
+      </div>
     </div>
   );
 }
