@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert, Clock } from "lucide-react";
+import { useState } from "react";
 import { Form, Link, redirect, useNavigation } from "react-router";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -97,6 +98,18 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
+  /*
+   * 送信して戻ってきたエラーを、利用者が団体名を打ち直した時点で消すための印。
+   *
+   * 消さずに残すと、直し終えた入力欄に赤い文言が出たままになるだけでなく、
+   * `aria-invalid` も true のままになる。読み上げは正しく直した欄を
+   * 「不正な入力」と言い続けるので、画面を見ずに使っている人には直したことが伝わらない。
+   *
+   * 送信のたびに false へ戻すのは、送信した値に対する新しいエラーは出したいため。
+   */
+  const [isNameEdited, setIsNameEdited] = useState(false);
+  const nameError = isNameEdited ? null : (actionData?.nameError ?? null);
+
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-8 md:py-10">
       <Card>
@@ -123,7 +136,7 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
             </Alert>
           )}
 
-          <Form method="post" className="space-y-6">
+          <Form method="post" className="space-y-6" onSubmit={() => setIsNameEdited(false)}>
             <div className="space-y-2">
               <Label htmlFor="group-name">団体名</Label>
               {/*
@@ -138,13 +151,14 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
                 required
                 maxLength={GROUP_NAME_MAX_LENGTH}
                 disabled={isSubmitting}
-                aria-invalid={Boolean(actionData?.nameError)}
-                aria-describedby={actionData?.nameError ? "group-name-error" : undefined}
+                onChange={() => setIsNameEdited(true)}
+                aria-invalid={Boolean(nameError)}
+                aria-describedby={nameError ? "group-name-error" : undefined}
                 placeholder="例: ロボティクス開発プロジェクト"
               />
-              {actionData?.nameError && (
+              {nameError && (
                 <p id="group-name-error" className="text-sm text-destructive">
-                  {actionData.nameError}
+                  {nameError}
                 </p>
               )}
             </div>
