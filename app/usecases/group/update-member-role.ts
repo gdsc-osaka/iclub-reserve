@@ -10,6 +10,7 @@ import {
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import { ensureNotLastAdmin } from "./_shared/last-admin";
+import { memberNotFound, memberNotSpecified } from "./_shared/target-member";
 
 export interface UpdateMemberRoleDeps {
   readonly membershipRepository: MembershipRepository;
@@ -83,10 +84,7 @@ export const updateMemberRoleUseCase = (
   // 3. 対象ユーザー ID のバリデーション
   const targetUserId = args.targetUserId.trim();
   if (targetUserId === "") {
-    return errAsync({
-      code: GroupErrorCode.GroupInvalidInput,
-      message: "対象のメンバーが指定されていません。",
-    });
+    return errAsync(memberNotSpecified());
   }
 
   // 4. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
@@ -98,10 +96,7 @@ export const updateMemberRoleUseCase = (
         .mapErr(toGroupDatabaseError)
         .andThen((targetMembership) => {
           if (targetMembership === null) {
-            return errAsync({
-              code: GroupErrorCode.MemberNotFound,
-              message: "対象のメンバーはこの団体に所属していません。",
-            });
+            return errAsync(memberNotFound());
           }
 
           const targetIsAdmin = targetMembership.role === MembershipRole.Admin;
@@ -126,10 +121,7 @@ export const updateMemberRoleUseCase = (
               .andThen((updatedCount) => {
                 // 事前に存在を確認したが、直前に別操作で削除された等で 0 件だった場合
                 if (updatedCount === 0) {
-                  return errAsync({
-                    code: GroupErrorCode.MemberNotFound,
-                    message: "対象のメンバーはこの団体に所属していません。",
-                  });
+                  return errAsync(memberNotFound());
                 }
 
                 return okAsync(null);

@@ -5,19 +5,7 @@ import { GroupErrorCode } from "~/domain/group";
 import { InvitationStatus, type InvitationRepository } from "~/domain/invitation";
 import { normalizeInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { MembershipRole } from "~/domain/membership";
-
-/**
- * 招待を承諾できないときに返すエラー。
- *
- * 「存在しない」「期限切れ」「取り消し済み」「すでに承諾済み」「宛先が違う」を
- * すべて同じ値にまとめている。書き分けると、招待 ID を総当たりして
- * 「この招待は実在する」と分かってしまい、所属していない団体の存在が漏れる（COND-011 存在の秘匿）。
- * そのため、この関数を通さずに個別のメッセージを書いてはいけない。
- */
-const invitationNotFound = (): GroupError => ({
-  code: GroupErrorCode.InvitationNotFound,
-  message: "招待が見つかりません。",
-});
+import { invitationNotFound } from "./_shared/invitation-visibility";
 
 export interface GetInvitationDeps {
   readonly invitationRepository: InvitationRepository;

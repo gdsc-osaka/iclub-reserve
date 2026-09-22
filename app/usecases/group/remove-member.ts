@@ -1,7 +1,7 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import type { GroupError } from "~/domain/group";
-import { GroupAction, GroupErrorCode } from "~/domain/group";
+import { GroupAction } from "~/domain/group";
 import type { MembershipRepository } from "~/domain/membership";
 import { MembershipRole } from "~/domain/membership";
 import {
@@ -10,6 +10,7 @@ import {
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import { ensureNotLastAdmin } from "./_shared/last-admin";
+import { memberNotFound, memberNotSpecified } from "./_shared/target-member";
 
 export interface RemoveMemberDeps {
   readonly membershipRepository: MembershipRepository;
@@ -72,10 +73,7 @@ export const removeMemberUseCase = (
   // 2. 対象ユーザー ID のバリデーション
   const targetUserId = args.targetUserId.trim();
   if (targetUserId === "") {
-    return errAsync({
-      code: GroupErrorCode.GroupInvalidInput,
-      message: "対象のメンバーが指定されていません。",
-    });
+    return errAsync(memberNotSpecified());
   }
 
   // 3. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
@@ -86,10 +84,7 @@ export const removeMemberUseCase = (
       .mapErr(toGroupDatabaseError)
       .andThen((targetMembership) => {
         if (targetMembership === null) {
-          return errAsync({
-            code: GroupErrorCode.MemberNotFound,
-            message: "対象のメンバーはこの団体に所属していません。",
-          });
+          return errAsync(memberNotFound());
         }
 
         const targetIsAdmin = targetMembership.role === MembershipRole.Admin;
@@ -107,10 +102,7 @@ export const removeMemberUseCase = (
             .mapErr(toGroupDatabaseError)
             .andThen((removedCount) => {
               if (removedCount === 0) {
-                return errAsync({
-                  code: GroupErrorCode.MemberNotFound,
-                  message: "対象のメンバーはこの団体に所属していません。",
-                });
+                return errAsync(memberNotFound());
               }
 
               return okAsync({ removedUserId: targetUserId });

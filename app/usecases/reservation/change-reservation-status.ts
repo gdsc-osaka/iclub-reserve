@@ -18,6 +18,7 @@ import {
 } from "~/domain/reservation/transition";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import type { UserGroupListQuery } from "~/query/user/user-group-list";
+import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 
 /** 予約ステータス変更ユースケースの依存 */
 export interface ChangeReservationStatusDeps {
@@ -184,22 +185,8 @@ export const changeReservationStatusUseCase = (
                 });
               }
 
-              /*
-               * 更新と outbox への追加が不可分に成功したあとにだけ、即時配送を依頼する（ADR-002 決定 1）。
-               * 競合で 0 件更新だったときは outbox にも積まれていないため、ここへは来ない。
-               *
-               * 依頼の結果は受け取らない（notifyEnqueued は void）。キューへ届かなくても
-               * outbox の行は残り、遅くとも 1 分後に cron が拾うので、業務処理としては成功のまま返す。
-               *
-               * ポートの取り決めでは notifyEnqueued は例外を投げないが、ここで捕まえておく。
-               * 予約の更新はすでに確定しているので、通知の都合で画面にエラーを出すと
-               * 利用者は「失敗した」と思って同じ操作をやり直し、今度は競合で弾かれる。
-               */
-              try {
-                deps.mailOutboxNotifier.notifyEnqueued(outcome.enqueuedMailIds);
-              } catch (error) {
-                console.error("Failed to request immediate mail delivery:", error);
-              }
+              // 競合で 0 件更新だったときは outbox にも積まれていないため、ここへは来ない
+              requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
 
               return okAsync<ChangeReservationStatusResult, ReservationError>({
                 reservationId: reservation.id,

@@ -17,6 +17,7 @@ import {
 } from "~/domain/reservation";
 import { validateReservationDraft } from "~/domain/reservation/validation";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
+import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 
 export interface CreateProvisionalReservationDeps {
   readonly reservationRepository: ReservationRepository;
@@ -254,21 +255,7 @@ export const createProvisionalReservationUseCase = (
     )
     .andThen((mails) => deps.reservationRepository.create(reservation, mails))
     .map((outcome) => {
-      /*
-       * 予約の作成と outbox への追加が不可分に成功したあとにだけ、即時配送を依頼する（ADR-002 決定 1）。
-       *
-       * 依頼の結果は受け取らない（notifyEnqueued は void）。キューへ届かなくても
-       * outbox の行は残り、遅くとも 1 分後に cron が拾うので、業務処理としては成功のまま返す。
-       *
-       * ポートの取り決めでは notifyEnqueued は例外を投げないが、ここで捕まえておく。
-       * 予約の作成はすでに確定しているので、通知の都合で画面にエラーを出すと
-       * 利用者は「失敗した」と思って同じ内容をもう一度申請してしまう。
-       */
-      try {
-        deps.mailOutboxNotifier.notifyEnqueued(outcome.enqueuedMailIds);
-      } catch (error) {
-        console.error("Failed to request immediate mail delivery:", error);
-      }
+      requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
 
       return { reservationId: id };
     });

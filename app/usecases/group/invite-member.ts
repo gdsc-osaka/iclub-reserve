@@ -13,6 +13,7 @@ import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createInvitationMailDraft } from "~/domain/mail/invitation-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import { isMembershipRole, type MembershipRole } from "~/domain/membership";
+import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureGroupPermission, groupNotFound } from "./_shared/group-authorization";
 
 export interface InviteMemberDeps {
@@ -69,8 +70,8 @@ export interface InviteMemberResult {
  *    createId() で招待 ID を生成し、48 時間後の期限を決め、メールドラフトを生成する。
  * 9. 永続化（invitationRepository.create）:
  *    招待の INSERT と outbox への INSERT を同じ batch で不可分に実行する（ADR-002 決定 3）。
- * 10. 即時配送の通知（mailOutboxNotifier.notifyEnqueued）:
- *     通知に失敗してもキュー・cron で配送されるため、画面にエラーを出さないよう try/catch で囲む。
+ * 10. 即時配送の通知（requestImmediateDelivery）:
+ *     通知に失敗してもキュー・cron で配送されるため、画面にはエラーを出さない。
  *
  * 【同時実行の限界について】
  * 2 人の管理者が同時に同じ宛先へ招待すると、承諾待ちの招待が 2 件できる余地がある
@@ -149,16 +150,7 @@ export const inviteMemberUseCase = (
           };
 
           return deps.invitationRepository.create(createInput, [mailDraft]).map((outcome) => {
-            /*
-             * 招待の作成と outbox への追加が成功したあとに即時配送を依頼する（ADR-002 決定 1）。
-             * 招待は既に確定しているので、通知の都合で画面にエラーを出すと
-             * 利用者が同じ招待をもう一度送ってしまうため、例外は捕まえておく。
-             */
-            try {
-              deps.mailOutboxNotifier.notifyEnqueued(outcome.enqueuedMailIds);
-            } catch (error) {
-              console.error("Failed to request immediate mail delivery for invitation:", error);
-            }
+            requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
 
             return { invitationId };
           });
