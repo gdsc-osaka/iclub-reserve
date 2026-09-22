@@ -17,6 +17,12 @@ export default [
     index("routes/home/route.tsx"),
     route("availability", "routes/availability/route.tsx"),
     route("facility", "routes/facility/route.tsx"),
+    /*
+     * 団体登録（SCR-006）のルート。
+     * `new` は `:groupId` より具体的なので先に選ばれるが、
+     * 意図を明確にするため `groups/:groupId` より前に配置する。
+     */
+    route("groups/new", "routes/groups/new/route.tsx"),
     route("groups/:groupId", "routes/groups/$groupId/route.tsx"),
     route("invitations/:invitationId", "routes/invitations/$invitationId/route.tsx"),
     route("facility/:facilityId", "routes/facility/$facilityId/route.tsx"),
