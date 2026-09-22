@@ -1,15 +1,16 @@
-import { errAsync, okAsync, ResultAsync } from "neverthrow";
+import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import type { GroupError } from "~/domain/group";
-import { GroupAction, GroupErrorCode } from "~/domain/group";
+import { GroupAction } from "~/domain/group";
 import type { MembershipRepository } from "~/domain/membership";
-import { isMembershipRole, MembershipRole } from "~/domain/membership";
+import { MembershipRole } from "~/domain/membership";
 import {
   ensureGroupPermission,
   groupNotFound,
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import { ensureNotLastAdmin } from "./_shared/last-admin";
+import { validateMembershipRole } from "./_shared/member-role";
 import { memberNotFound, memberNotSpecified } from "./_shared/target-member";
 
 export interface UpdateMemberRoleDeps {
@@ -31,102 +32,54 @@ export interface UpdateMemberRoleArgs {
 /**
  * メンバーの役割を変更するユースケース（REQ-018 / UC-012）。
  *
- * 【処理の流れと設計上の配慮】
- * 1. groupId のトリム検証:
- *    空文字または空白のみの場合は DB 問い合わせを行わず、即座に groupNotFound() を返す。
- * 2. 役割（role）の検証（isMembershipRole）:
- *    COND-007（単一ロール原則）を満たす。isMembershipRole は "admin" または "member" の
- *    完全一致のみを受け付けるため、不正な入力値をこの 1 行で確実に弾ける。
- * 3. targetUserId のトリム検証:
- *    空文字の場合は無効な入力として GroupInvalidInput を返す。
- * 4. 2・3 の検証を認可判定より先に置く理由:
- *    これらの検証結果は特定の団体に依存しないため、先に返しても団体の有無が外部に漏れることはない。
- *    一方で、無効なリクエストに対して不要な DB 問い合わせ（D1 の往復レイテンシとクエリコスト）を
- *    確実に削減できる。
- * 5. 認可判定（COND-009 / COND-011）:
- *    ensureGroupPermission に任せる。事務局は所属を問わず通し、団体を見られない人には
- *    存在を秘匿し、見られるが役割を変えられない人には足りない権限を伝える。
- * 6. 対象メンバーの存在確認:
- *    指定された団体に対象ユーザーが所属しているかを検索し、存在しなければ MemberNotFound を返す。
- * 7. 最後の管理者の保護（GROUP_MIN_ADMIN_COUNT = 1）:
- *    ensureNotLastAdmin に任せる。管理者から降格する操作のときだけ人数を数え、
- *    0 人になるなら止める。昇格時や管理者維持時は人数が減らないので countAdmins は呼ばない。
- * 8. 役割の更新:
- *    updateRole を実行し、更新件数が 0 件の場合は確認後に削除されたものとして MemberNotFound を返す。
+ * 【確かめる順序の理由】
+ * 入力の検証（役割・対象）を認可より先に置いている。検証の結果は特定の団体に依存しないので、
+ * 先に返しても団体の有無は漏れず、無効なリクエストで D1 を往復せずに済む。
+ * 認可そのものの判断（事務局を通す・存在を秘匿する・足りない権限を伝える）は
+ * ensureGroupPermission が持つ（COND-009 / COND-011）。
  *
  * 【同時実行の限界について】
- * Cloudflare D1 では複数クエリにまたがる厳密なトランザクションを張ることができないため、
- * 2 人の管理者が同時に互いを降格させた場合、極稀に管理者が 0 人になってしまう余地が理論上存在する。
- * しかし、万が一その状態になったとしても、システム全体の管理権限を持つ事務局スタッフ（COND-009）が
- * 役割を復旧できるため、ここでは過剰に複雑な排他制御を行わず、この割り切りを許容している。
+ * Cloudflare D1 では複数クエリにまたがる厳密なトランザクションを張れないため、
+ * 2 人の管理者が同時に互いを降格させた場合、極稀に管理者が 0 人になる余地が理論上残る。
+ * それでもシステム全体の管理権限を持つ事務局スタッフ（COND-009）が役割を復旧できるので、
+ * 過剰な排他制御は行わず、この割り切りを許容している。
  */
 export const updateMemberRoleUseCase = (
   deps: UpdateMemberRoleDeps,
   args: UpdateMemberRoleArgs,
-): ResultAsync<null, GroupError> => {
-  const groupId = args.groupId.trim();
+): ResultAsync<null, GroupError> =>
+  safeTry(async function* () {
+    // 空文字や空白だけの ID は、DB へ問い合わせずに打ち切る（存在秘匿）
+    const groupId = args.groupId.trim();
+    if (groupId === "") return errAsync(groupNotFound());
 
-  // 1. 空文字や空白のみの ID は DB へ問い合わせずに即座に打ち切る（存在秘匿）
-  if (groupId === "") {
-    return errAsync(groupNotFound());
-  }
+    const nextRole = yield* validateMembershipRole(args.role);
 
-  // 2. 役割の単一性と有効性のバリデーション（COND-007）
-  //    "admin,member" などの複数指定や未知の文字列もここで弾く
-  if (!isMembershipRole(args.role)) {
-    return errAsync({
-      code: GroupErrorCode.GroupInvalidInput,
-      message: "指定できない役割です。",
-    });
-  }
-  const nextRole = args.role;
+    const targetUserId = args.targetUserId.trim();
+    if (targetUserId === "") return errAsync(memberNotSpecified());
 
-  // 3. 対象ユーザー ID のバリデーション
-  const targetUserId = args.targetUserId.trim();
-  if (targetUserId === "") {
-    return errAsync(memberNotSpecified());
-  }
+    yield* ensureGroupPermission(deps, { ...args, groupId }, GroupAction.UpdateMemberRole);
 
-  // 4. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
-  return ensureGroupPermission(deps, { ...args, groupId }, GroupAction.UpdateMemberRole).andThen(
-    () =>
-      // 5. 操作対象のメンバーを取得する
-      deps.membershipRepository
-        .findByGroupAndUser(groupId, targetUserId)
-        .mapErr(toGroupDatabaseError)
-        .andThen((targetMembership) => {
-          if (targetMembership === null) {
-            return errAsync(memberNotFound());
-          }
+    const target = yield* deps.membershipRepository
+      .findByGroupAndUser(groupId, targetUserId)
+      .mapErr(toGroupDatabaseError);
+    if (target === null) return errAsync(memberNotFound());
 
-          const targetIsAdmin = targetMembership.role === MembershipRole.Admin;
-          const nextIsAdmin = nextRole === MembershipRole.Admin;
+    yield* ensureNotLastAdmin(
+      deps,
+      groupId,
+      {
+        targetIsAdmin: target.role === MembershipRole.Admin,
+        targetStaysAdmin: nextRole === MembershipRole.Admin,
+      },
+      "管理者が 0 人になるため、最後の管理者は降格できません。先に別のメンバーを管理者にしてください。",
+    );
 
-          // 6. 最後の管理者の保護（管理者が減らない操作では人数を数えない）
-          return ensureNotLastAdmin(
-            deps,
-            groupId,
-            { targetIsAdmin, targetStaysAdmin: nextIsAdmin },
-            "管理者が 0 人になるため、最後の管理者は降格できません。先に別のメンバーを管理者にしてください。",
-          ).andThen(() =>
-            // 7. 役割の更新を実行する
-            deps.membershipRepository
-              .updateRole({
-                groupId,
-                userId: targetUserId,
-                role: nextRole,
-                updatedAt: args.now,
-              })
-              .mapErr(toGroupDatabaseError)
-              .andThen((updatedCount) => {
-                // 事前に存在を確認したが、直前に別操作で削除された等で 0 件だった場合
-                if (updatedCount === 0) {
-                  return errAsync(memberNotFound());
-                }
+    const updatedCount = yield* deps.membershipRepository
+      .updateRole({ groupId, userId: targetUserId, role: nextRole, updatedAt: args.now })
+      .mapErr(toGroupDatabaseError);
+    // 存在は確認済みだが、そこから更新までの間に別の操作で外されていることがある
+    if (updatedCount === 0) return errAsync(memberNotFound());
 
-                return okAsync(null);
-              }),
-          );
-        }),
-  );
-};
+    return okAsync(null);
+  });

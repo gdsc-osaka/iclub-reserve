@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { errAsync, ResultAsync } from "neverthrow";
+import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import type { GroupError, GroupRepository } from "~/domain/group";
 import { GroupAction, GroupErrorCode } from "~/domain/group";
@@ -12,9 +12,9 @@ import { validateInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createInvitationMailDraft } from "~/domain/mail/invitation-mail";
 import type { MembershipRepository } from "~/domain/membership";
-import { isMembershipRole, type MembershipRole } from "~/domain/membership";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureGroupPermission, groupNotFound } from "./_shared/group-authorization";
+import { validateMembershipRole } from "./_shared/member-role";
 
 export interface InviteMemberDeps {
   readonly groupRepository: GroupRepository;
@@ -45,33 +45,14 @@ export interface InviteMemberResult {
 /**
  * 団体へメンバーを招待するユースケース（REQ-017 / UC-011 / EVT-014）。
  *
- * 【処理の流れと設計上の配慮】
- * 1. groupId のトリム検証:
- *    空文字または空白のみの場合は DB 問い合わせを行わず、即座に groupNotFound() を返す。
- * 2. メールアドレスの検証（validateInvitationEmail）:
- *    未入力、空白・改行混入、文字数超過、許可ドメイン外を弾き、小文字に正規化する。
- * 3. 役割（role）の検証（isMembershipRole）:
- *    COND-007（単一ロール原則）を満たす。未知の文字列や不正な入力値をここで弾く。
- * 4. 2・3 の検証を認可判定より先に置く理由:
- *    これらの検証結果は特定の団体に依存しないため、先に返しても団体の有無が外部に漏れることはない。
- *    一方で、無効なリクエストに対して不要な DB 問い合わせ（D1 の往復レイテンシとクエリコスト）を
- *    確実に削減できる。
- * 5. 認可判定（COND-009 / COND-011）:
- *    ensureGroupPermission に任せる。事務局は所属を問わず通し、団体を見られない人には
- *    存在を秘匿し、見られるが招待できない人には足りない権限を伝える。
- * 6. 団体の存在確認と団体名取得（groupRepository.findById）:
- *    メールの本文に団体名を載せるために取得する。
- *    認可より後に置いている理由: 先に引くと、存在する団体のときだけ往復が 1 回増え、
- *    応答時間の差から団体の存在を推測されうるため。
- * 7. 既存の承諾待ち招待の確認（invitationRepository.findPendingByGroupAndEmail）:
- *    すでに有効期限内の承諾待ち招待がある場合は、二重招待を防ぐため GroupInvalidInput を返す。
- *    期限切れの招待は妨げにしない（送り直せるようにするため）。
- * 8. 招待と通知メールの作成:
- *    createId() で招待 ID を生成し、48 時間後の期限を決め、メールドラフトを生成する。
- * 9. 永続化（invitationRepository.create）:
- *    招待の INSERT と outbox への INSERT を同じ batch で不可分に実行する（ADR-002 決定 3）。
- * 10. 即時配送の通知（requestImmediateDelivery）:
- *     通知に失敗してもキュー・cron で配送されるため、画面にはエラーを出さない。
+ * 【確かめる順序の理由】
+ * 入力の検証（メールアドレス・役割）を認可より先に置いている。検証の結果は特定の団体に
+ * 依存しないので、先に返しても団体の有無は漏れず、無効なリクエストで D1 を往復せずに済む。
+ * 認可そのものの判断（事務局を通す・存在を秘匿する・足りない権限を伝える）は
+ * ensureGroupPermission が持つ（COND-009 / COND-011）。
+ *
+ * 逆に団体の取得は認可より後に置く。先に引くと、存在する団体のときだけ往復が 1 回増え、
+ * 応答時間の差から団体の存在を推測されうる。
  *
  * 【同時実行の限界について】
  * 2 人の管理者が同時に同じ宛先へ招待すると、承諾待ちの招待が 2 件できる余地がある
@@ -82,79 +63,55 @@ export interface InviteMemberResult {
 export const inviteMemberUseCase = (
   deps: InviteMemberDeps,
   args: InviteMemberArgs,
-): ResultAsync<InviteMemberResult, GroupError> => {
-  const groupId = args.groupId.trim();
+): ResultAsync<InviteMemberResult, GroupError> =>
+  safeTry(async function* () {
+    // 空文字や空白だけの ID は、DB へ問い合わせずに打ち切る（存在秘匿）
+    const groupId = args.groupId.trim();
+    if (groupId === "") return errAsync(groupNotFound());
 
-  // 1. 空文字や空白のみの ID は DB へ問い合わせずに即座に打ち切る（存在秘匿）
-  if (groupId === "") {
-    return errAsync(groupNotFound());
-  }
+    const email = yield* validateInvitationEmail(args.email);
+    const role = yield* validateMembershipRole(args.role);
 
-  // 2. メールアドレスのバリデーションと正規化
-  const emailResult = validateInvitationEmail(args.email);
-  if (emailResult.isErr()) {
-    return errAsync(emailResult.error);
-  }
-  const normalizedEmail = emailResult.value;
+    yield* ensureGroupPermission(deps, { ...args, groupId }, GroupAction.InviteMember);
 
-  // 3. 役割の単一性と有効性のバリデーション（COND-007）
-  if (!isMembershipRole(args.role)) {
-    return errAsync({
-      code: GroupErrorCode.GroupInvalidInput,
-      message: "指定できない役割です。",
+    // 団体名はメールの本文に載せるために引く
+    const group = yield* deps.groupRepository.findById(groupId);
+
+    const pending = yield* deps.invitationRepository.findPendingByGroupAndEmail(groupId, email);
+    if (pending !== null && pending.expiresAt.getTime() > args.now.getTime()) {
+      return errAsync<never, GroupError>({
+        code: GroupErrorCode.GroupInvalidInput,
+        message:
+          "このメールアドレスには、すでに招待を送っています。取り消してから送り直してください。",
+      });
+    }
+
+    // 期限切れの招待は妨げにしない。送り直せるよう、そのまま新規作成へ進む
+    const invitationId = createId();
+    const expiresAt = invitationExpiresAt(args.now);
+
+    const mailDraft = createInvitationMailDraft({
+      invitationId,
+      groupName: group.name,
+      email,
+      role,
+      expiresAt,
+      appBaseUrl: args.appBaseUrl,
     });
-  }
-  const role: MembershipRole = args.role;
 
-  // 4. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
-  return ensureGroupPermission(deps, { ...args, groupId }, GroupAction.InviteMember).andThen(() =>
-    // 5. 団体情報を取得する（メール本文に団体名を載せるため）
-    deps.groupRepository.findById(groupId).andThen((group) =>
-      // 6. 重複する承諾待ち招待の有無を確認する
-      deps.invitationRepository
-        .findPendingByGroupAndEmail(groupId, normalizedEmail)
-        .andThen((existingInvitation) => {
-          // 既存の招待が存在し、かつ有効期限内の場合は二重招待を弾く
-          if (
-            existingInvitation !== null &&
-            existingInvitation.expiresAt.getTime() > args.now.getTime()
-          ) {
-            return errAsync({
-              code: GroupErrorCode.GroupInvalidInput,
-              message:
-                "このメールアドレスには、すでに招待を送っています。取り消してから送り直してください。",
-            });
-          }
+    const createInput: CreateInvitationInput = {
+      id: invitationId,
+      groupId,
+      email,
+      role,
+      inviterUserId: args.actorUserId,
+      expiresAt,
+      createdAt: args.now,
+    };
 
-          // 期限切れの場合は再送を許可するため、そのまま新規作成を進める
-          const invitationId = createId();
-          const expiresAt = invitationExpiresAt(args.now);
+    // 招待の INSERT と outbox への INSERT は同じ batch で不可分に実行される（ADR-002 決定 3）
+    const outcome = yield* deps.invitationRepository.create(createInput, [mailDraft]);
+    requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
 
-          const mailDraft = createInvitationMailDraft({
-            invitationId,
-            groupName: group.name,
-            email: normalizedEmail,
-            role,
-            expiresAt,
-            appBaseUrl: args.appBaseUrl,
-          });
-
-          const createInput: CreateInvitationInput = {
-            id: invitationId,
-            groupId,
-            email: normalizedEmail,
-            role,
-            inviterUserId: args.actorUserId,
-            expiresAt,
-            createdAt: args.now,
-          };
-
-          return deps.invitationRepository.create(createInput, [mailDraft]).map((outcome) => {
-            requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
-
-            return { invitationId };
-          });
-        }),
-    ),
-  );
-};
+    return okAsync({ invitationId });
+  });
