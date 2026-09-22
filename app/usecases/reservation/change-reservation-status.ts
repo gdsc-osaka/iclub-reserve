@@ -2,6 +2,7 @@ import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createReservationMailDrafts, transitionMailEvent } from "~/domain/mail/reservation-mail";
+import type { MembershipRepository } from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationStatus,
@@ -11,22 +12,23 @@ import {
 import {
   canTransition,
   ReservationTransition,
+  transitionAuthority,
   transitionSourceStatus,
   transitionTargetStatus,
   validateTransitionReason,
   type ReservationActor,
 } from "~/domain/reservation/transition";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
-import type { UserGroupListQuery } from "~/query/user/user-group-list";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { toRecipientsError } from "./_shared/mail-recipients";
+import { resolveReservationActor } from "./_shared/reservation-authorization";
 
 /** 予約ステータス変更ユースケースの依存 */
 export interface ChangeReservationStatusDeps {
   readonly reservationRepository: ReservationRepository;
-  /** 操作者が予約の団体に所属しているかを検証するためのクエリ */
-  readonly userGroupListQuery: UserGroupListQuery;
+  /** 操作者が予約の団体に所属しているかを確かめるために使う（COND-009） */
+  readonly membershipRepository: MembershipRepository;
   /** 状態変更通知メールの宛先を取得するためのクエリ */
   readonly reservationMailRecipientsQuery: ReservationMailRecipientsQuery;
   /** outbox に積んだメールの即時配送を依頼する先（ADR-002 決定 1） */
@@ -83,27 +85,22 @@ export const changeReservationStatusUseCase = (
 
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
-    const userGroups = yield* deps.userGroupListQuery
-      .findByUserId(args.actorUserId)
-      .mapErr((error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "所属団体の確認に失敗しました。",
-        cause: error,
-      }));
-
     /*
-     * 予約の団体での所属を組み立てる。所属していなければ null。
-     * 役割（管理者・メンバー）まで持たせているのは、取り消し・キャンセルの可否を
-     * ドメインの権限表（reservationPermissions）で判定するため。
+     * 操作する人を組み立てる。
+     *
+     * 事務局だけの操作（承認・却下・事務局キャンセル）は、canTransition が
+     * isStaff しか見ないので所属を引きに行かない。引いても判定は変わらず、
+     * D1 への往復が 1 回増えるだけになる。
+     *
+     * 取り消し・キャンセルは団体での役割で判定するので、事務局であっても所属を引く。
+     * 事務局の人が自分の所属する団体の予約を取り消すときは、メンバーとしての
+     * 役割が和集合で効くため、省くと取り消せなくなる。
      */
-    const group = userGroups.find((candidate) => candidate.id === reservation.groupId);
-    const actor: ReservationActor = {
-      isStaff: args.isStaff,
-      membership:
-        group === undefined
-          ? null
-          : { groupId: group.id, userId: args.actorUserId, role: group.role },
-    };
+    const authority = transitionAuthority[args.transition];
+    const actor: ReservationActor =
+      authority === "staff"
+        ? { isStaff: args.isStaff, membership: null }
+        : yield* resolveReservationActor(deps, reservation.groupId, args, authority);
 
     // 誰が・いまの状態から動かせるか（COND-009 / STATE-001）
     yield* canTransition(reservation, args.transition, actor);
