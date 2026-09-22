@@ -2,7 +2,7 @@ import type { ResultAsync } from "neverthrow";
 
 import type { PermissionTable } from "../authz";
 import type { MailDraft } from "../mail/mail-outbox";
-import { MembershipRole } from "../membership";
+import { MembershipRole, StaffRole, type ActorRole } from "../membership";
 
 export const ReservationStatus = {
   Provisional: "provisional",
@@ -31,6 +31,19 @@ export interface Reservation {
 }
 
 export const ReservationAction = {
+  /**
+   * 概要（施設・日時・団体名・ステータス）を見る（COND-008）。
+   *
+   * 予約そのものを開けるかどうかは、この操作が許されるかで決まる。
+   */
+  ViewSummary: "view_summary",
+  /**
+   * 詳しい項目（使用人数・備考・却下/キャンセル理由・作成者・メッセージ）まで見る（COND-008）。
+   *
+   * ViewSummary とは別の操作にしてある。1 つにまとめて「見られるか」だけを問うと、
+   * 表からは 2 段階に分かれていることが読み取れなくなる。
+   */
+  ViewDetail: "view_detail",
   CreateProvisional: "create_provisional",
   Withdraw: "withdraw",
   Cancel: "cancel",
@@ -38,23 +51,49 @@ export const ReservationAction = {
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
 
 /**
- * 団体の中での役割ごとに許可する操作。
+ * 予約への操作を誰に許すかの表。
  *
- * 承認・却下・事務局キャンセルはここに無い。事務局の権限は団体での役割とは
- * 別の軸にあり（COND-009）、団体に所属していない事務局の人にも成り立つため、
- * 役割の表では表せない。判定は transition.ts の canTransition の `isStaff` で行う。
+ * 承認・却下・事務局キャンセルはここに無い。状態を遷移させる操作なので、
+ * どの状態からどの状態へ動かせるかと一体で transition.ts の transitionAuthority が持つ。
+ *
+ * 判定するときは Membership の `canAct` にこの表を渡すこと。
  */
-export const reservationPermissions: PermissionTable<MembershipRole, ReservationAction> = {
-  [MembershipRole.Admin]: [
-    ReservationAction.CreateProvisional,
-    ReservationAction.Withdraw,
-    ReservationAction.Cancel,
-  ],
-  [MembershipRole.Member]: [
-    ReservationAction.CreateProvisional,
-    ReservationAction.Withdraw,
-    ReservationAction.Cancel,
-  ],
+export const reservationPermissions: PermissionTable<ActorRole, ReservationAction> = {
+  /*
+   * 所属していない人でも、予約の概要は見られる (COND-008)。
+   * 空き状況カレンダー (SCR-001) が「いつ空いているか」を答えるには、
+   * 他団体の予約も施設・日時・団体名・ステータスまで見えている必要がある。
+   *
+   * ここに ViewDetail を足してはいけない。使用人数・備考・却下理由・作成者は
+   * 自団体と事務局にだけ見せる項目である (COND-008)。
+   *
+   * NOTE: COND-008 の 3 段目 (Google Calendar 経由で誰でも見られる範囲) はここに無い。
+   * ログインしていない相手には操作する人が居ないので、表の外で決める (authz.ts 参照)。
+   */
+  base: [ReservationAction.ViewSummary],
+  byRole: {
+    [MembershipRole.Admin]: [
+      ReservationAction.ViewDetail,
+      ReservationAction.CreateProvisional,
+      ReservationAction.Withdraw,
+      ReservationAction.Cancel,
+    ],
+    [MembershipRole.Member]: [
+      ReservationAction.ViewDetail,
+      ReservationAction.CreateProvisional,
+      ReservationAction.Withdraw,
+      ReservationAction.Cancel,
+    ],
+    /*
+     * 事務局は所属していない団体でも予約を作れる (COND-009)。
+     *
+     * 取り消し・キャンセルを入れていないのは、事務局にはそれ用の操作
+     * (却下・事務局キャンセル) が別にあり、理由の入力を必須にしてあるため (COND-002)。
+     * 事務局の人が自分の所属する団体の予約を取り消すときは、
+     * メンバーとしての役割が和集合で効くので、そちらから取り消せる。
+     */
+    [StaffRole]: [ReservationAction.ViewDetail, ReservationAction.CreateProvisional],
+  },
 };
 
 export const ReservationErrorCode = {

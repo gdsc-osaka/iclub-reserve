@@ -3,7 +3,12 @@ import { errAsync, ResultAsync } from "neverthrow";
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
 import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
 import type { MembershipError, MembershipRepository, MembershipRole } from "~/domain/membership";
-import { canPerform } from "~/domain/membership";
+import { canAct } from "~/domain/membership";
+import {
+  ensureGroupIsVisible,
+  groupNotFound,
+  resolveGroupActor,
+} from "./_shared/group-authorization";
 import type { QueryError } from "~/query/error";
 import type {
   GroupInvitationList,
@@ -53,18 +58,6 @@ export type GroupManagementView =
       readonly invitations: GroupInvitationList;
     };
 
-/**
- * 閲覧できないときに返すエラー。
- *
- * 「所属していないグループ」と「存在しないグループ」で同じ値を返すことで、
- * グループ ID を総当たりされても、そのグループがあるかどうかを気取られないようにする（COND-011 存在の秘匿）。
- * そのため、この関数を通さずに個別のメッセージを書いてはいけない。
- */
-const groupNotFound = (): GroupError => ({
-  code: GroupErrorCode.GroupNotFound,
-  message: "グループが見つかりません。",
-});
-
 /** Query や Membership 取得時の DB エラーを GroupError に変換する */
 const toGroupDatabaseError = (error: QueryError | MembershipError): GroupError => ({
   code: GroupErrorCode.DatabaseError,
@@ -77,20 +70,17 @@ const toGroupDatabaseError = (error: QueryError | MembershipError): GroupError =
  *
  * 【処理の流れと設計上の配慮】
  * 1. groupId が空文字または空白のみの場合、DB 問い合わせを行わず即座に NOT_FOUND を返す。
- * 2. 事務局（isStaff === true）の場合:
- *    事務局は所属の有無に関わらず全団体の管理権限を持つ（COND-009）。
- *    そのため membershipRepository を引かず、canManage: true として扱う。
- *    また事務局に対しては存在秘匿（COND-011）の必要がないため、存在しない場合は素直に GroupNotFound を返す。
- * 3. 事務局でない一般利用者の場合:
- *    先に membershipRepository を確認する。DB エラーは GroupNotFound に潰さず DatabaseError として返す
- *    （潰すとシステム障害が 404 として誤認され、監視や対応が遅れるため）。
- *    閲覧権限（GroupAction.View）が無い場合は、団体本体を取りに行かずに groupNotFound() を返す。
+ * 2. 認可判定（resolveGroupActor と ensureGroupIsVisible）:
+ *    事務局は所属を引かずに通る（COND-009）。一般利用者は先に所属を確認し、
+ *    閲覧権限（GroupAction.View）が無ければ団体本体を取りに行かずに存在を秘匿する（COND-011）。
  *    先に団体を取りに行くと、存在する団体のときだけ DB クエリが 1 回増え、
- *    応答時間の差から団体の存在を推測できてしまう（COND-011）。
- *    管理権限（canManage）の判定には `GroupAction.Update` で代表させる。
+ *    応答時間の差から団体の存在を推測できてしまう。
+ *    DB エラーは GroupNotFound に潰さず DatabaseError として返す
+ *    （潰すとシステム障害が 404 として誤認され、監視や対応が遅れるため）。
+ * 3. 管理権限（canManage）の判定には `GroupAction.Update` で代表させる。
  *    SCR-007 の各操作（編集・招待・昇格/降格・削除）は `groupPermissions` 上すべて同じ管理者（admin）にのみ
  *    許可されているため、どれで代表させても結果が変わらない。将来これらが別の役割に分かれる場合は、
- *    セクションごとに canPerform を呼び分けること。
+ *    セクションごとに canAct を呼び分けること。
  * 4. 取得と詰め替え:
  *    - canManage === false: 団体とメンバー一覧を取得。メンバーから実際に email を除去して
  *      GroupMemberSummary に詰め替える（型を絞るだけでなく実データを捨てることで漏洩を防ぐ）。
@@ -108,32 +98,15 @@ export const getGroupManagementUseCase = (
     return errAsync(groupNotFound());
   }
 
-  // 2. 事務局スタッフの場合（COND-009）
-  if (args.isStaff) {
-    return deps.groupRepository.findById(groupId).andThen((group) =>
-      ResultAsync.combine([
-        deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-        deps.groupInvitationListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-      ]).map(([members, invitations]): GroupManagementView => ({
-        canManage: true,
-        group,
-        members,
-        invitations: invitations.filter((inv) => inv.expiresAt.getTime() > args.now.getTime()),
-      })),
-    );
-  }
-
-  // 3. 事務局でない一般利用者の場合
-  return deps.membershipRepository
-    .findByGroupAndUser(groupId, args.actorUserId)
-    .mapErr(toGroupDatabaseError)
-    .andThen((membership) => {
-      // 閲覧権限がない場合は団体を取りに行かずに存在秘匿（COND-011）
-      if (!canPerform(groupPermissions, membership, GroupAction.View)) {
-        return errAsync(groupNotFound());
-      }
-
-      const canManage = canPerform(groupPermissions, membership, GroupAction.Update);
+  // 2. 認可判定（事務局は所属を引かずに通る。COND-009 / COND-011）
+  return resolveGroupActor(deps, { ...args, groupId }).andThen((actor) =>
+    ensureGroupIsVisible(actor).andThen(() => {
+      /*
+       * 管理できる人（管理者と事務局）にだけ、承諾待ちの招待とメンバーのメールアドレスを渡す。
+       * 一般メンバーには招待を取りに行かず、メールアドレスは実データごと落とす。
+       * 型を絞るだけでは、通信の中身を見れば読めてしまう。
+       */
+      const canManage = canAct(groupPermissions, actor, GroupAction.Update);
 
       if (canManage) {
         return ResultAsync.combine([
@@ -148,7 +121,6 @@ export const getGroupManagementUseCase = (
         }));
       }
 
-      // 一般メンバー: 招待は取得せず、メンバーのメールアドレスを除去して詰め替える
       return ResultAsync.combine([
         deps.groupRepository.findById(groupId),
         deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
@@ -162,5 +134,6 @@ export const getGroupManagementUseCase = (
           role: m.role,
         })),
       }));
-    });
+    }),
+  );
 };

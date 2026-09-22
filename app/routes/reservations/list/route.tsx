@@ -10,6 +10,7 @@ import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
+import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { logServerError } from "~/lib/log.server";
@@ -97,7 +98,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const result = await changeReservationStatusUseCase(
     {
       reservationRepository: createReservationRepository(db),
-      userGroupListQuery: createUserGroupListQuery(db),
+      membershipRepository: createMembershipRepository(db),
       reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
       mailOutboxNotifier: createQueueMailOutboxNotifier(),
     },

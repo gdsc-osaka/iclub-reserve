@@ -1,10 +1,10 @@
 import { errAsync, ResultAsync } from "neverthrow";
 
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
-import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
+import { GroupAction } from "~/domain/group";
 import { validateGroupName } from "~/domain/group/group-name";
-import type { MembershipError, MembershipRepository } from "~/domain/membership";
-import { canPerform } from "~/domain/membership";
+import type { MembershipRepository } from "~/domain/membership";
+import { ensureGroupPermission, groupNotFound } from "./_shared/group-authorization";
 
 export interface UpdateGroupNameDeps {
   readonly groupRepository: GroupRepository;
@@ -21,25 +21,6 @@ export interface UpdateGroupNameArgs {
   /** 更新日時として書き込む時刻 */
   readonly now: Date;
 }
-
-/**
- * 団体が存在しないか、あるいは所属していない（存在秘匿）ときに返すエラー。
- *
- * 「所属していないグループ」と「存在しないグループ」で同じ値を返すことで、
- * グループ ID を総当たりされても、そのグループがあるかどうかを気取られないようにする（COND-011 存在の秘匿）。
- * そのため、この関数を通さずに個別のメッセージを書いてはいけない。
- */
-const groupNotFound = (): GroupError => ({
-  code: GroupErrorCode.GroupNotFound,
-  message: "グループが見つかりません。",
-});
-
-/** Membership 取得時の DB エラーを GroupError に変換する */
-const toGroupDatabaseError = (error: MembershipError): GroupError => ({
-  code: GroupErrorCode.DatabaseError,
-  message: "グループ情報の取得に失敗しました。",
-  cause: error,
-});
 
 /**
  * 団体名を更新するユースケース（REQ-020 / UC-013）。
@@ -84,38 +65,13 @@ export const updateGroupNameUseCase = (
   }
   const validatedName = nameValidationResult.value;
 
-  // 3. 事務局スタッフの場合（COND-009: group_member 行を持たないため所属チェックをスキップ）
-  if (args.isStaff) {
-    return deps.groupRepository.updateName({
+  // 3. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
+  return ensureGroupPermission(deps, { ...args, groupId }, GroupAction.Update).andThen(() =>
+    // 4. 団体名を更新する
+    deps.groupRepository.updateName({
       id: groupId,
       name: validatedName,
       updatedAt: args.now,
-    });
-  }
-
-  // 4. 事務局以外の一般利用者の場合（所属確認と権限判定）
-  return deps.membershipRepository
-    .findByGroupAndUser(groupId, args.actorUserId)
-    .mapErr(toGroupDatabaseError)
-    .andThen((membership) => {
-      // 閲覧権限がない場合は存在秘匿（COND-011）
-      if (!canPerform(groupPermissions, membership, GroupAction.View)) {
-        return errAsync(groupNotFound());
-      }
-
-      // 管理権限がない一般メンバーの場合
-      if (!canPerform(groupPermissions, membership, GroupAction.Update)) {
-        return errAsync({
-          code: GroupErrorCode.GroupForbidden,
-          message: "団体情報を編集できるのは管理者と事務局だけです。",
-        });
-      }
-
-      // 権限確認を通過したら名前を更新する
-      return deps.groupRepository.updateName({
-        id: groupId,
-        name: validatedName,
-        updatedAt: args.now,
-      });
-    });
+    }),
+  );
 };

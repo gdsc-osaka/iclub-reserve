@@ -1,6 +1,6 @@
 import type { ResultAsync } from "neverthrow";
 import type { PermissionTable } from "../authz";
-import { roleCan } from "../authz";
+import { rolesCan } from "../authz";
 import type { BaseError } from "../error";
 
 /**
@@ -43,22 +43,70 @@ export interface Membership {
 }
 
 /**
- * ユーザーがそのグループで操作を実行できるかを判定する。
+ * 事務局を表す、認可の判定にだけ使う役割。
  *
- * 所属していない場合は `membership` に null を渡す。null なら必ず false になるので、
- * 「所属していないグループでは何もできない」が判定を書き忘れようのない形で保証される。
- * 認可の判定は、資源側の表を直接読まずに必ずこの関数を通すこと。
- * 各ドメインが `membership !== null` を自前で書く形にすると、
- * いつか書き忘れが起きる。
+ * 事務局は group_member の行を持たない (COND-009: 所属に関わらず全団体を操作できる) ので、
+ * 保存される役割 (MembershipRole) とは別の値にしてある。
  *
- * 表そのものは資源ごとのドメインが持つ。
- * ここが知っているのは「Membership が表に対して何を意味するか」だけ。
+ * この値をフォームから届いた文字列の検証に使ってはいけない。
+ * 保存される役割の入口は `isMembershipRole` だけであり、
+ * そこを staff が通ると、団体の管理者が事務局を作れてしまう。
  */
-export const canPerform = <A extends string>(
-  table: PermissionTable<MembershipRole, A>,
-  membership: Membership | null,
+export const StaffRole = "staff" as const;
+
+/** 認可の判定に使う役割。保存される役割と事務局を合わせたもの */
+export type ActorRole = MembershipRole | typeof StaffRole;
+
+/**
+ * 操作する人。
+ *
+ * 事務局かどうかと、その資源が属する団体での所属を別々に持つ。
+ * 2 つは別の軸にあり (COND-009)、どちらか一方には畳めない。
+ *
+ * 一覧のように複数の団体の資源が混ざる画面では、行ごとに組み立てること。
+ * 1 つを使い回すと、自団体の権限で他団体の資源を読んでしまう。
+ */
+export interface Actor {
+  /** 事務局スタッフかどうか (COND-009) */
+  readonly isStaff: boolean;
+  /** その資源が属する団体での所属。所属していなければ null */
+  readonly membership: Membership | null;
+}
+
+/**
+ * 操作する人が持つ役割をすべて挙げる。
+ *
+ * 事務局でありながら、その団体のメンバーでもあることがある。
+ * 例えば事務局の人が自分の所属する団体の予約を取り消す場合、
+ * 使われるのはメンバーとしての権限であって、事務局の権限ではない。
+ * どちらか一方に畳むと、畳んだ側の権限が消える。
+ *
+ * 役割を 1 つも持たない場合は空になり、表の `base` だけが効く。
+ */
+export const actorRoles = (actor: Actor): readonly ActorRole[] => {
+  const roles: ActorRole[] = [];
+
+  if (actor.isStaff) {
+    roles.push(StaffRole);
+  }
+  if (actor.membership !== null) {
+    roles.push(actor.membership.role);
+  }
+
+  return roles;
+};
+
+/**
+ * 操作する人がその資源に対して操作を実行できるかを判定する。
+ *
+ * 認可の判定は、資源側の表を直接読まずに必ずこの関数を通すこと。
+ * 表を直接読むと「所属しているか」「事務局か」の判定が抜け落ちる。
+ */
+export const canAct = <R extends string, A extends string>(
+  table: PermissionTable<R, A>,
+  actor: Actor,
   action: A,
-): boolean => membership !== null && roleCan(table, membership.role, action);
+): boolean => rolesCan(table, actorRoles(actor), action);
 
 /** メンバーシップに関するエラーの種類 */
 export const MembershipErrorCode = {

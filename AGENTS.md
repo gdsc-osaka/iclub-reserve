@@ -52,6 +52,17 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 - **React Router**: Keep data loaders and actions collocated with route components where possible to maintain feature-based cohesion.
 - **UI Components**: Rely on `shadcn/ui` components before creating custom ones. Keep styling isolated via Tailwind utility classes.
 - **Constraints**: Do not introduce unnecessary dependencies. Ensure code runs on Edge environments (Cloudflare Workers). Node.js specific APIs (`fs`, `path`, etc.) might not be available or require special handling.
+- **UseCase の構造**: 本線は `safeTry(async function* () { ... })` に平らに並べ、各ステップを `yield*` で繋ぐ（`andThen` を入れ子にしない）。補助関数は接頭辞で役割を示し、複数のユースケースから使うものは `_shared/` に置く。
+
+  | 接頭辞      | 役割                                     | 戻り値                      |
+  | ----------- | ---------------------------------------- | --------------------------- |
+  | `ensure*`   | 門番。通すか止めるかだけを決める         | `ResultAsync<null, E>`      |
+  | `resolve*`  | 判定に使う値を組み立てる                 | `ResultAsync<T, E>`         |
+  | `validate*` | 未検証の入力を検証し、正規化した値を返す | `Result<T, E>`              |
+  | `find*`     | 読み取る。無ければ `null`                | `ResultAsync<T \| null, E>` |
+  | `to*`       | 純粋な詰め替え・変換                     | `T`                         |
+
+  同じ判定を 2 つのユースケースに書き写さないこと。文言だけが違うなら、`ensureNotLastAdmin` や `ensureNoApprovedOverlap` のようにメッセージを引数で受け取る。
 
 ## 6. Bundled Skills
 

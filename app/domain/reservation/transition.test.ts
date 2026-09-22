@@ -96,22 +96,20 @@ describe("canTransition", () => {
       expect(result.isOk()).toBe(true);
     });
 
-    it("事務局は理由を入力して仮予約を却下できる（provisional → rejected）", () => {
+    it("事務局は仮予約を却下できる（provisional → rejected）", () => {
       const result = canTransition(
         { status: ReservationStatus.Provisional },
         ReservationTransition.Reject,
         staffActor,
-        "施設のメンテナンスのため",
       );
       expect(result.isOk()).toBe(true);
     });
 
-    it("事務局は理由を入力して承認済み予約をキャンセルできる（approved → cancelled_by_staff）", () => {
+    it("事務局は承認済み予約をキャンセルできる（approved → cancelled_by_staff）", () => {
       const result = canTransition(
         { status: ReservationStatus.Approved },
         ReservationTransition.StaffCancel,
         staffActor,
-        "緊急点検のため",
       );
       expect(result.isOk()).toBe(true);
     });
@@ -150,7 +148,6 @@ describe("canTransition", () => {
         { status: ReservationStatus.Provisional },
         ReservationTransition.Reject,
         memberActor,
-        "理由",
       );
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
     });
@@ -160,7 +157,6 @@ describe("canTransition", () => {
         { status: ReservationStatus.Approved },
         ReservationTransition.StaffCancel,
         memberActor,
-        "理由",
       );
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
     });
@@ -214,7 +210,6 @@ describe("canTransition", () => {
         { status: ReservationStatus.Approved },
         ReservationTransition.Reject,
         staffActor,
-        "理由",
       );
       expect(result._unsafeUnwrapErr().code).toBe(
         ReservationErrorCode.ReservationInvalidTransition,
@@ -226,7 +221,6 @@ describe("canTransition", () => {
         { status: ReservationStatus.Provisional },
         ReservationTransition.StaffCancel,
         staffActor,
-        "理由",
       );
       expect(result._unsafeUnwrapErr().code).toBe(
         ReservationErrorCode.ReservationInvalidTransition,
@@ -243,7 +237,7 @@ describe("canTransition", () => {
     it.each(endedStatuses)("終了した状態（%s）からの遷移はすべて拒否される", (status) => {
       for (const transition of Object.values(ReservationTransition)) {
         const actor = { isStaff: true, membership: membershipOf(MembershipRole.Admin) };
-        const result = canTransition({ status }, transition, actor, "理由");
+        const result = canTransition({ status }, transition, actor);
         expect(result._unsafeUnwrapErr().code).toBe(
           ReservationErrorCode.ReservationInvalidTransition,
         );

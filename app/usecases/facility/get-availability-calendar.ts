@@ -1,6 +1,8 @@
 import { ResultAsync } from "neverthrow";
 
 import { GroupStatus } from "~/domain/group";
+import type { Actor, MembershipRole } from "~/domain/membership";
+import { canViewReservationDetail } from "~/domain/reservation/visibility";
 import type { QueryError } from "~/query/error";
 import type {
   AvailabilityCalendar,
@@ -31,11 +33,25 @@ export interface GetAvailabilityCalendarArgs {
   readonly to: Date;
 }
 
+/** カレンダーを見ている人。行ごとに所属を判定するために持ち回る */
+interface CalendarViewer {
+  readonly userId: string;
+  readonly isStaff: boolean;
+  /** 所属している団体の ID と、そこでの役割 */
+  readonly rolesByGroupId: ReadonlyMap<string, MembershipRole>;
+}
+
 /**
  * 予約 1 件を、見ている人に見せてよい形に絞る（COND-008）。
  *
  * - 自団体のメンバーと事務局: 全項目
  * - ログイン済みの他団体ユーザー: 団体名・施設・日時・ステータスのみ
+ *
+ * どちらになるかは自前で判定せず、予約の権限表（reservationPermissions）に尋ねる。
+ * 判定を画面ごとに書くと、予約詳細（SCR-005）とこの画面で見せる範囲がすぐにずれる。
+ *
+ * 操作する人は行ごとに組み立てる。1 つを使い回すと、自団体の権限で
+ * 他団体の予約を読んでしまう。
  *
  * 使用人数と備考を落とすのをここで行うのは、画面に渡す前に落とす必要があるため。
  * 画面へ渡してから隠しても、通信の中身を見れば読めてしまう。
@@ -46,10 +62,13 @@ export interface GetAvailabilityCalendarArgs {
  */
 const toVisibleReservation = (
   row: AvailabilityReservationRow,
-  myGroupIds: ReadonlySet<string>,
-  isStaff: boolean,
+  viewer: CalendarViewer,
 ): AvailabilityReservation => {
-  const isOwnGroup = myGroupIds.has(row.groupId);
+  const role = viewer.rolesByGroupId.get(row.groupId);
+  const actor: Actor = {
+    isStaff: viewer.isStaff,
+    membership: role === undefined ? null : { groupId: row.groupId, userId: viewer.userId, role },
+  };
 
   return {
     id: row.id,
@@ -57,8 +76,8 @@ const toVisibleReservation = (
     startAt: row.startAt,
     endAt: row.endAt,
     status: row.status,
-    isOwnGroup,
-    detail: isOwnGroup || isStaff ? { headCount: row.headCount, note: row.note } : null,
+    isOwnGroup: role !== undefined,
+    detail: canViewReservationDetail(actor) ? { headCount: row.headCount, note: row.note } : null,
   };
 };
 
@@ -96,14 +115,16 @@ export const getAvailabilityCalendarUseCase = (
       to: args.to,
     }),
   ]).map(([groups, calendar]): AvailabilityCalendar => {
-    const myGroupIds = new Set(groups.map((group) => group.id));
+    const viewer: CalendarViewer = {
+      userId: args.actorUserId,
+      isStaff: args.isStaff,
+      rolesByGroupId: new Map(groups.map((group) => [group.id, group.role])),
+    };
 
     return {
       facilities: calendar.facilities,
       facility: calendar.facility,
-      reservations: calendar.reservations.map((row) =>
-        toVisibleReservation(row, myGroupIds, args.isStaff),
-      ),
+      reservations: calendar.reservations.map((row) => toVisibleReservation(row, viewer)),
       canApplyReservation: canApplyReservation(groups, args.isStaff),
     };
   });

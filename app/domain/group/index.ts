@@ -1,7 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 import type { PermissionTable } from "../authz";
 import type { BaseError } from "../error";
-import { MembershipRole } from "../membership";
+import { MembershipRole, StaffRole, type ActorRole } from "../membership";
 
 export const GroupStatus = {
   Enabled: "enabled",
@@ -23,7 +23,7 @@ export interface Group {
  *
  * ここに並べてよいのは「グループそのもの」への操作だけ。
  * 予約や施設への操作は、それぞれのドメインが自分の一覧を持つこと。
- * この表が権限の唯一の定義元であり、判定は canPerform を通す。
+ * この表が権限の唯一の定義元であり、判定は canAct を通す。
  */
 export const GroupAction = {
   /** グループ情報の閲覧 */
@@ -40,25 +40,69 @@ export const GroupAction = {
 export type GroupAction = (typeof GroupAction)[keyof typeof GroupAction];
 
 /**
- * 役割ごとに許可されるグループへの操作。
+ * グループへの操作を誰に許すかの表。
  *
  * グループの権限のルールはこの表が唯一の定義元。
- * 判定するときは Membership の `canPerform` にこの表を渡すこと。
- * この表を直接読むと「所属しているか」の判定が抜け落ちる。
+ * 判定するときは Membership の `canAct` にこの表を渡すこと。
+ * この表を直接読むと「所属しているか」「事務局か」の判定が抜け落ちる。
  *
  * NOTE: グループの削除は意図的に含めていない。
  * 予約が紐づくグループを物理削除すると外部キー違反になるため、
  * 無効化 (GroupStatus.Disabled) で運用する。
  */
-export const groupPermissions: PermissionTable<MembershipRole, GroupAction> = {
-  [MembershipRole.Admin]: [
-    GroupAction.View,
-    GroupAction.Update,
-    GroupAction.InviteMember,
-    GroupAction.RemoveMember,
-    GroupAction.UpdateMemberRole,
-  ],
-  [MembershipRole.Member]: [GroupAction.View],
+export const groupPermissions: PermissionTable<ActorRole, GroupAction> = {
+  /*
+   * 所属していない人には何ひとつ許さない (COND-011 団体情報の存在秘匿)。
+   * 空であることがこの条件の表明なので、消さないこと。
+   */
+  base: [],
+  byRole: {
+    [MembershipRole.Admin]: [
+      GroupAction.View,
+      GroupAction.Update,
+      GroupAction.InviteMember,
+      GroupAction.RemoveMember,
+      GroupAction.UpdateMemberRole,
+    ],
+    [MembershipRole.Member]: [GroupAction.View],
+    /*
+     * 事務局は所属に関わらず全団体を管理できる (COND-009)。
+     * 管理者と同じ内容を書き写しているのは、二次的に導かれる値ではなく
+     * それ自体が決定だから。管理者の権限を増やしたときに事務局も一緒に増えると、
+     * 事務局に何を許したのかを誰も決めないまま広がってしまう。
+     */
+    [StaffRole]: [
+      GroupAction.View,
+      GroupAction.Update,
+      GroupAction.InviteMember,
+      GroupAction.RemoveMember,
+      GroupAction.UpdateMemberRole,
+    ],
+  },
+};
+
+/**
+ * 団体を見る以外の操作。
+ *
+ * 見る権限が無い相手への応答は存在秘匿に揃えるため（COND-011）、
+ * 拒否のメッセージを持つのはこちらだけになる。
+ */
+export type GroupManageAction = Exclude<GroupAction, typeof GroupAction.View>;
+
+/**
+ * 団体を見られるのに、その操作は許されていないときのメッセージ。
+ *
+ * 画面ごとに文字列を書くと、同じ拒否が場所によって違う言い方で出てしまう。
+ * メッセージは必ずここを通すこと。
+ *
+ * View を持たないのは、見る権限すら無い相手には操作の可否を伝えないため。
+ * その場合は「団体が見つからない」に揃えて存在を秘匿する（COND-011）。
+ */
+export const groupForbiddenMessages: Record<GroupManageAction, string> = {
+  [GroupAction.Update]: "団体情報を編集できるのは管理者と事務局だけです。",
+  [GroupAction.InviteMember]: "メンバーを招待できるのは管理者と事務局だけです。",
+  [GroupAction.UpdateMemberRole]: "メンバーの役割を変更できるのは管理者と事務局だけです。",
+  [GroupAction.RemoveMember]: "メンバーを削除できるのは管理者と事務局だけです。",
 };
 
 export const GroupErrorCode = {
