@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { errAsync, okAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import { FacilityErrorCode, type FacilityRepository } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type GroupRepository } from "~/domain/group";
@@ -18,6 +18,8 @@ import {
 import { validateReservationDraft } from "~/domain/reservation/validation";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
+import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
+import { toRecipientsError } from "./_shared/mail-recipients";
 
 export interface CreateProvisionalReservationDeps {
   readonly reservationRepository: ReservationRepository;
@@ -166,97 +168,64 @@ const ensureFacilityIsAvailable = (
     );
 
 /**
- * 同一施設・同一時間帯に承認済みの予約が無いかを確かめる（COND-001）。
- *
- * 確認から作成までの間に別の予約が承認される可能性は残るが、
- * ここで作るのは仮予約なので実害は出ない。承認（UC-006）でも同じ条件を確かめるため、
- * すり抜けた仮予約は承認の段階で止まる。
- */
-const ensureNoApprovedOverlap = (
-  deps: CreateProvisionalReservationDeps,
-  args: CreateProvisionalReservationArgs,
-): ResultAsync<null, ReservationError> =>
-  deps.reservationRepository
-    .existsApprovedOverlap({
-      facilityId: args.reservation.facilityId,
-      startAt: args.reservation.startAt,
-      endAt: args.reservation.endAt,
-    })
-    .andThen((exists) =>
-      exists
-        ? errAsync({
-            code: ReservationErrorCode.ReservationConflict,
-            message:
-              "選んだ時間帯には、すでに承認済みの予約が入っています。別の時間帯を選んでください。",
-          } satisfies ReservationError)
-        : okAsync(null),
-    );
-
-/**
  * 仮予約を申請するユースケース（UC-002 / SCR-002）。
  *
  * ステータスは必ず「仮予約」で作る（STATE-001）。引数に status を受け取っていないのは、
  * 申請者が選べてしまう余地を型から無くすため。事務局が承認フローを経ずに
  * 承認済みの予約を直接作る操作（UC-008）は、別のユースケースとして用意すること。
  *
- * 確かめる順序には意味がある。
+ * 【確かめる順序の理由】
+ * DB を引かずに分かる入力の検証を先に、権限をその次に置く。権限を団体の確認より先に
+ * 置かないと、団体に所属していない人が団体 ID を当てずっぽうに送るだけで
+ * 「その団体が有効かどうか」を読み取れてしまう。
+ * 重複の確認（COND-001）は作成の直前に置き、確認から作成までを短くする。
+ * 通知先の取得（EVT-001）は確認がすべて通ったあとに引き、予約の作成と不可分に
+ * outbox へ積む（ADR-002 決定 3）。
  *
- * 1. 入力そのもの（利用可能時間・刻み・過去日時・使用人数・備考）— DB を引かずに分かる
- * 2. 権限（COND-009 / 権限表）— 団体の状態を他人に読み取らせないため、団体の確認より先
- * 3. 申請元の団体が有効か（COND-006）
- * 4. 申請先の施設・設備が使えるか
- * 5. 承認済みの予約との重複（COND-001）— 作成の直前に置いて、確認から作成までを短くする
- * 6. 通知先の取得（EVT-001）— 確認がすべて通ったあとに引き、予約の作成と不可分に outbox へ積む（ADR-002 決定 3）
+ * 各ステップを動かしてよいかは、それぞれの関数のコメントに書いてある。
  */
 export const createProvisionalReservationUseCase = (
   deps: CreateProvisionalReservationDeps,
   args: CreateProvisionalReservationArgs,
-): ResultAsync<CreateProvisionalReservationReturns, ReservationError> => {
-  const id = createId();
-  const now = args.now;
-  const reservation: Reservation = {
-    ...args.reservation,
-    id,
-    status: ReservationStatus.Provisional,
-    statusReason: null,
-    createdBy: args.actorUserId,
-    createdAt: now,
-    updatedAt: now,
-  };
+): ResultAsync<CreateProvisionalReservationReturns, ReservationError> =>
+  safeTry(async function* () {
+    const id = createId();
+    const now = args.now;
+    const reservation: Reservation = {
+      ...args.reservation,
+      id,
+      status: ReservationStatus.Provisional,
+      statusReason: null,
+      createdBy: args.actorUserId,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-  return validateReservationDraft(args.reservation, now)
-    .asyncAndThen(() => ensureCanCreate(deps, args))
-    .andThen(() => ensureGroupIsEnabled(deps, args.reservation.groupId))
-    .andThen(() => ensureFacilityIsAvailable(deps, args.reservation.facilityId))
-    .andThen(() => ensureNoApprovedOverlap(deps, args))
-    .andThen(() =>
-      deps.reservationMailRecipientsQuery
-        .findForNewReservation({
-          groupId: args.reservation.groupId,
-          applicantUserId: args.actorUserId,
-        })
-        .mapErr((error): ReservationError => ({
-          code: ReservationErrorCode.DatabaseError,
-          message: "通知先メールアドレスの取得に失敗しました。",
-          cause: error,
-        })),
-    )
-    .map((audience) =>
-      createReservationMailDrafts(
-        ReservationMailEvent.Applied,
-        {
-          id,
-          startAt: args.reservation.startAt,
-          endAt: args.reservation.endAt,
-          statusReason: null,
-        },
-        audience,
-      ),
-    )
-    .andThen((mails) => deps.reservationRepository.create(reservation, mails))
-    .map((outcome) => {
-      requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
+    yield* validateReservationDraft(args.reservation, now);
+    yield* ensureCanCreate(deps, args);
+    yield* ensureGroupIsEnabled(deps, args.reservation.groupId);
+    yield* ensureFacilityIsAvailable(deps, args.reservation.facilityId);
+    yield* ensureNoApprovedOverlap(
+      deps,
+      args.reservation,
+      "選んだ時間帯には、すでに承認済みの予約が入っています。別の時間帯を選んでください。",
+    );
 
-      return { reservationId: id };
-    });
-};
+    const audience = yield* deps.reservationMailRecipientsQuery
+      .findForNewReservation({
+        groupId: args.reservation.groupId,
+        applicantUserId: args.actorUserId,
+      })
+      .mapErr(toRecipientsError);
+
+    const mails = createReservationMailDrafts(
+      ReservationMailEvent.Applied,
+      { id, startAt: args.reservation.startAt, endAt: args.reservation.endAt, statusReason: null },
+      audience,
+    );
+
+    const outcome = yield* deps.reservationRepository.create(reservation, mails);
+    requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
+
+    return okAsync({ reservationId: id });
+  });

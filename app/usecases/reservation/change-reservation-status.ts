@@ -19,6 +19,8 @@ import {
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import type { UserGroupListQuery } from "~/query/user/user-group-list";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
+import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
+import { toRecipientsError } from "./_shared/mail-recipients";
 
 /** 予約ステータス変更ユースケースの依存 */
 export interface ChangeReservationStatusDeps {
@@ -111,31 +113,17 @@ export const changeReservationStatusUseCase = (
     // 承認のときだけ、同一施設・同一時間帯の承認済み予約を確かめる（COND-001）
     const overlapCheck =
       args.transition === ReservationTransition.Approve
-        ? deps.reservationRepository
-            .existsApprovedOverlap({
-              facilityId: reservation.facilityId,
-              startAt: reservation.startAt,
-              endAt: reservation.endAt,
-            })
-            .andThen((exists) =>
-              exists
-                ? errAsync<null, ReservationError>({
-                    code: ReservationErrorCode.ReservationConflict,
-                    message:
-                      "同一施設・同一時間帯に別の承認済み予約が存在します。先にそちらをキャンセルしてください。",
-                  })
-                : okAsync(null),
-            )
-        : okAsync(null);
+        ? ensureNoApprovedOverlap(
+            deps,
+            reservation,
+            "同一施設・同一時間帯に別の承認済み予約が存在します。先にそちらをキャンセルしてください。",
+          )
+        : okAsync<null, ReservationError>(null);
 
     // 状態変更通知メール（EVT-002/003/005/006/007）を組み立てる
     const mailDraftsCheck = deps.reservationMailRecipientsQuery
       .findByReservationId(reservation.id)
-      .mapErr((error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "通知先メールアドレスの取得に失敗しました。",
-        cause: error,
-      }))
+      .mapErr(toRecipientsError)
       .map((audience) =>
         createReservationMailDrafts(
           transitionMailEvent[args.transition],
@@ -149,6 +137,7 @@ export const changeReservationStatusUseCase = (
         ),
       );
 
+    // この 2 つは同時に投げる。どちらも D1 への往復なので、順に待つとそのまま待ち時間になる
     const [, mailDrafts] = yield* ResultAsync.combine([overlapCheck, mailDraftsCheck]);
 
     const targetStatus = transitionTargetStatus[args.transition];
