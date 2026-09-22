@@ -1,6 +1,5 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert, Clock } from "lucide-react";
-import { useState } from "react";
 import { Form, Link, redirect, useNavigation } from "react-router";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -10,6 +9,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { GroupErrorCode } from "~/domain/group";
 import { GROUP_NAME_MAX_LENGTH } from "~/domain/group/group-name";
+import { useFieldErrors } from "~/hooks/use-field-errors";
 import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
@@ -99,16 +99,15 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
   const isSubmitting = navigation.state === "submitting";
 
   /*
-   * 送信して戻ってきたエラーを、利用者が団体名を打ち直した時点で消すための印。
+   * 送信して戻ってきたエラーは、利用者が団体名を打ち直した時点で消す。
    *
-   * 消さずに残すと、直し終えた入力欄に赤い文言が出たままになるだけでなく、
-   * `aria-invalid` も true のままになる。読み上げは正しく直した欄を
-   * 「不正な入力」と言い続けるので、画面を見ずに使っている人には直したことが伝わらない。
+   * 残すと、直し終えた入力欄の `aria-invalid` が true のままになり、読み上げは
+   * 直した欄を「不正な入力」と言い続ける（詳しくは `useFieldErrors` の説明を参照）。
    *
-   * 送信のたびに false へ戻すのは、送信した値に対する新しいエラーは出したいため。
+   * SCR-002・SCR-007 のフォームと同じ考え方で動かすため、判定はフックに寄せている。
    */
-  const [isNameEdited, setIsNameEdited] = useState(false);
-  const nameError = isNameEdited ? null : (actionData?.nameError ?? null);
+  const { fieldError, markEdited, resetEdited } = useFieldErrors({ name: actionData?.nameError });
+  const nameError = fieldError("name");
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-8 md:py-10">
@@ -136,7 +135,7 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
             </Alert>
           )}
 
-          <Form method="post" className="space-y-6" onSubmit={() => setIsNameEdited(false)}>
+          <Form method="post" className="space-y-6" onSubmit={resetEdited}>
             <div className="space-y-2">
               <Label htmlFor="group-name">団体名</Label>
               {/*
@@ -151,12 +150,12 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
                 required
                 maxLength={GROUP_NAME_MAX_LENGTH}
                 disabled={isSubmitting}
-                onChange={() => setIsNameEdited(true)}
-                aria-invalid={Boolean(nameError)}
-                aria-describedby={nameError ? "group-name-error" : undefined}
+                onChange={() => markEdited("name")}
+                aria-invalid={nameError !== undefined}
+                aria-describedby={nameError !== undefined ? "group-name-error" : undefined}
                 placeholder="例: ロボティクス開発プロジェクト"
               />
-              {nameError && (
+              {nameError !== undefined && (
                 <p id="group-name-error" className="text-sm text-destructive">
                   {nameError}
                 </p>

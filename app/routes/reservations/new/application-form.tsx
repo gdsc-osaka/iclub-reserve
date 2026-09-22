@@ -1,5 +1,5 @@
 import { CircleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useState } from "react";
 import { Form, useNavigation } from "react-router";
 
@@ -24,6 +24,7 @@ import {
   RESERVATION_STEP_MINUTES,
   ReservationStatus,
 } from "~/domain/reservation";
+import { useFieldErrors } from "~/hooks/use-field-errors";
 import { formatTimeRange, parseTokyoDateKey, parseTokyoTimeKey, startOfTokyoDay } from "~/lib/date";
 import type {
   ReservationFormFacility,
@@ -112,7 +113,24 @@ export function ApplicationForm({
    */
   const isBusy = navigation.state !== "idle";
 
-  const fieldErrors = actionData?.fieldErrors ?? {};
+  /*
+   * 申請して戻ってきた欄ごとのエラーは、その欄を打ち直した時点で消す。
+   *
+   * 残すと、直し終えた欄の `aria-invalid` が true のままになり、読み上げは直した欄を
+   * 「不正な入力」と言い続ける（詳しくは `useFieldErrors` の説明を参照）。
+   *
+   * SCR-006・SCR-007 のフォームと同じ考え方で動かすため、判定はフックに寄せている。
+   */
+  const { fieldError, markEdited, resetEdited } = useFieldErrors(actionData?.fieldErrors);
+  /** いま出してよい、欄ごとのエラー。打ち直された欄のぶんは入らない */
+  const fieldErrors = {
+    groupId: fieldError("groupId"),
+    facilityId: fieldError("facilityId"),
+    period: fieldError("period"),
+    headCount: fieldError("headCount"),
+    note: fieldError("note"),
+  };
+
   const submitted = actionData?.values ?? null;
 
   const [groupId, setGroupId] = useState(submitted?.groupId ?? groups.at(0)?.id ?? "");
@@ -125,6 +143,34 @@ export function ApplicationForm({
   const [range, setRange] = useState<SlotRange | null>(() =>
     toInitialRange(submitted, initial.startMinutes),
   );
+
+  /*
+   * 値を変える口はここにまとめ、変えると同時にその欄を「打ち直した」印を付ける。
+   * 入力の変化はどれもこの 5 つを通るので、印の付け忘れが起きない。
+   *
+   * 時間帯だけ触れる口が 3 つ（タイムラインの選択・ドラッグ・時刻の欄）あるが、
+   * 日付・開始・終了は 3 つで 1 つの `period` なので、どこを触っても同じ印を付ける。
+   */
+  const changeGroupId = (value: string) => {
+    setGroupId(value);
+    markEdited("groupId");
+  };
+  const changeFacilityId = (value: string) => {
+    setFacilityId(value);
+    markEdited("facilityId");
+  };
+  const changeHeadCount = (value: string) => {
+    setHeadCount(value);
+    markEdited("headCount");
+  };
+  const changeNote = (value: string) => {
+    setNote(value);
+    markEdited("note");
+  };
+  const changeRange: Dispatch<SetStateAction<SlotRange | null>> = (next) => {
+    setRange(next);
+    markEdited("period");
+  };
 
   const day = parseTokyoDateKey(initial.dateKey) ?? startOfTokyoDay(now);
   const facility = facilities.find((item) => item.id === facilityId) ?? facilities[0];
@@ -159,6 +205,8 @@ export function ApplicationForm({
     <Form
       method="post"
       className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]"
+      /* 送信のたびに打ち直しの印を消す。いま送った値に対する新しいエラーは出したいため */
+      onSubmit={resetEdited}
     >
       <div className="flex min-w-0 flex-col gap-4">
         {actionData?.formError != null && (
@@ -180,7 +228,7 @@ export function ApplicationForm({
                 <input type="hidden" name="group_id" value={groups[0].id} />
               </>
             ) : (
-              <Select name="group_id" required value={groupId} onValueChange={setGroupId}>
+              <Select name="group_id" required value={groupId} onValueChange={changeGroupId}>
                 <SelectTrigger
                   id="group_id"
                   className="w-full"
@@ -224,7 +272,7 @@ export function ApplicationForm({
              * 施設を変えてもサーバーへは取りに行かない。ローダーはその日の予約を
              * 施設で絞らずに読んでいるので、必要なぶんはもう手元にある。
              */}
-            <Select name="facility_id" required value={facilityId} onValueChange={setFacilityId}>
+            <Select name="facility_id" required value={facilityId} onValueChange={changeFacilityId}>
               <SelectTrigger
                 id="facility_id"
                 className="w-full"
@@ -275,15 +323,17 @@ export function ApplicationForm({
             pastSlots={pastSlots}
             range={range}
             disabled={isBusy}
-            onSelectSlot={(slot) => setRange((current) => selectSlot(current, slot, blockedSlots))}
-            onSelectRange={setRange}
+            onSelectSlot={(slot) =>
+              changeRange((current) => selectSlot(current, slot, blockedSlots))
+            }
+            onSelectRange={changeRange}
           />
 
           <ReservationTimelineLegend />
 
           <TimeRangeFields
             range={range}
-            onChange={setRange}
+            onChange={changeRange}
             blockedSlots={blockedSlots}
             pastSlots={pastSlots}
             hasError={fieldErrors.period !== undefined}
@@ -330,7 +380,7 @@ export function ApplicationForm({
               required
               min={RESERVATION_MIN_HEAD_COUNT}
               value={headCount}
-              onChange={(event) => setHeadCount(event.target.value)}
+              onChange={(event) => changeHeadCount(event.target.value)}
               aria-invalid={fieldErrors.headCount !== undefined}
               aria-describedby={
                 fieldErrors.headCount !== undefined ? "head_count-error" : undefined
@@ -359,7 +409,7 @@ export function ApplicationForm({
               maxLength={RESERVATION_NOTE_MAX_LENGTH}
               placeholder="使い方や、事務局に伝えておきたいことがあれば書いてください。"
               value={note}
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => changeNote(event.target.value)}
               aria-invalid={fieldErrors.note !== undefined}
               aria-describedby={fieldErrors.note !== undefined ? "note-error" : undefined}
             />

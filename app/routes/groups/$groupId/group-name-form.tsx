@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { GROUP_NAME_MAX_LENGTH } from "~/domain/group/group-name";
+import { useFieldErrors } from "~/hooks/use-field-errors";
 
 /** action から戻ってくる、フォームの状態 */
 export interface GroupNameFormState {
@@ -27,8 +28,19 @@ export function GroupNameForm({
   const isSubmitting =
     navigation.state === "submitting" && navigation.formData?.get("intent") === "update-group-name";
 
+  /*
+   * 送信して戻ってきたエラーは、利用者が団体名を打ち直した時点で消す。
+   *
+   * 残すと、直し終えた入力欄の `aria-invalid` が true のままになり、読み上げは
+   * 直した欄を「不正な入力」と言い続ける（詳しくは `useFieldErrors` の説明を参照）。
+   *
+   * SCR-002・SCR-006 のフォームと同じ考え方で動かすため、判定はフックに寄せている。
+   */
+  const { fieldError, markEdited, resetEdited } = useFieldErrors({ name: state?.nameError });
+  const nameError = fieldError("name");
+
   return (
-    <Form method="post" className="space-y-4">
+    <Form method="post" className="space-y-4" onSubmit={resetEdited}>
       <input type="hidden" name="intent" value="update-group-name" />
 
       {/* 権限不足やサーバーエラーなどの全体エラー */}
@@ -63,12 +75,13 @@ export function GroupNameForm({
               required
               maxLength={GROUP_NAME_MAX_LENGTH}
               disabled={isSubmitting}
-              aria-invalid={Boolean(state?.nameError)}
-              aria-describedby={state?.nameError ? "group-name-error" : undefined}
+              onChange={() => markEdited("name")}
+              aria-invalid={nameError !== undefined}
+              aria-describedby={nameError !== undefined ? "group-name-error" : undefined}
             />
-            {state?.nameError && (
+            {nameError !== undefined && (
               <p id="group-name-error" className="text-sm text-destructive">
-                {state.nameError}
+                {nameError}
               </p>
             )}
           </div>
