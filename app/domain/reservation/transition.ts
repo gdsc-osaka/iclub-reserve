@@ -187,20 +187,24 @@ const statusMismatchMessage = (current: ReservationStatus): string => {
 };
 
 /**
- * 予約に対する状態変更操作が可能かを判定する純粋関数（STATE-001 / COND-002 / COND-009）。
+ * 予約に対する状態変更操作が可能かを判定する純粋関数（STATE-001 / COND-009）。
  *
- * 画面でのボタン表示可否判定にも使えるよう、reason が渡された場合のみ COND-002（理由の検証）も行う。
+ * 判定するのは「誰が」と「いまの状態から動かせるか」だけで、理由（COND-002）は見ない。
+ * 理由の検証と正規化は {@link validateTransitionReason} が持つ。
+ * かつてはここでも reason を受け取って検証していたが、保存する値を得るために
+ * 呼び出し側が validateTransitionReason を呼び直すことになり、同じ検証が 2 度走っていた。
+ *
+ * 画面のボタン表示可否（reservation-list-row）もこの関数で判定する。
+ * 理由をまだ入力していない段階でボタンが消えないよう、理由は判定に含めない。
  *
  * @param reservation 現在の予約情報（status を参照）
  * @param transition 実行したい操作
  * @param actor 操作者（事務局かどうかと、その予約の団体での所属）
- * @param reason 操作理由（省略時はステータス遷移と権限のみを検証）
  */
 export const canTransition = (
   reservation: Pick<Reservation, "status">,
   transition: ReservationTransition,
   actor: ReservationActor,
-  reason?: string | null,
 ): Result<void, ReservationError> => {
   /*
    * 1. 操作権限の確認（COND-009）
@@ -238,11 +242,6 @@ export const canTransition = (
       code: ReservationErrorCode.ReservationInvalidTransition,
       message: statusMismatchMessage(reservation.status),
     });
-  }
-
-  // 3. 理由の入力検証（理由が引数として与えられている場合のみ検証）
-  if (reason !== undefined) {
-    return validateTransitionReason(transition, reason).map(() => undefined);
   }
 
   return ok(undefined);
