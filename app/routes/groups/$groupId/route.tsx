@@ -13,6 +13,7 @@ import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { toGroupErrorMessage } from "~/lib/group-error-message";
 import { logServerError } from "~/lib/log.server";
 import { cancelInvitationUseCase } from "~/usecases/group/cancel-invitation";
 import { getGroupManagementUseCase } from "~/usecases/group/get-group-management";
@@ -23,7 +24,7 @@ import { updateMemberRoleUseCase } from "~/usecases/group/update-member-role";
 
 import type { Route } from "./+types/route";
 import type { GroupActionData } from "./action-data";
-import { toActionErrors, toGroupErrorMessage, toInviteFormErrors } from "./action-error";
+import { toActionErrors, toInviteFormErrors } from "./action-error";
 import { GroupInfoCard } from "./group-info-card";
 import { GroupInvitationCard } from "./group-invitation-card";
 import { GroupMemberCard } from "./group-member-card";
