@@ -34,6 +34,9 @@ const activeFacility: Facility = {
   id: "fac_meeting_a",
   name: "会議室 A",
   description: null,
+  photoUrl: null,
+  googleCalendarId: null,
+  calendarUrl: null,
   isActive: true,
   createdAt: new Date("2026-04-01T00:00:00+09:00"),
   updatedAt: new Date("2026-04-01T00:00:00+09:00"),
@@ -127,6 +130,14 @@ const createDeps = (
       overrides.facilityNotFound === true
         ? errAsync({ code: FacilityErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.facility ?? activeFacility),
+    create: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    update: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    countBlockingReservations: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateActiveStatus: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   const findForNewReservation = vi.fn((_args: { groupId: string; applicantUserId: string }) =>
