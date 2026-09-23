@@ -41,11 +41,13 @@ There are two named environments in `wrangler.jsonc`, with separate Workers **an
 | `production` | `main`                     | `iclub-reserve`         | `iclub-reserve-db`         |
 | `preview`    | `develop` and its branches | `iclub-reserve-preview` | `iclub-reserve-preview-db` |
 
+Branches of `develop` are deployed as [Worker Previews](https://developers.cloudflare.com/workers/previews/) under `iclub-reserve-preview` (`pnpm run deploy:preview-branch`, i.e. `wrangler preview --env preview`), served at `https://<branch>.iclub-preview.gdgoc-osaka.jp`. `develop` itself is served at `https://iclub-preview.gdgoc-osaka.jp`, so every preview shares the passkey rpID `iclub-preview.gdgoc-osaka.jp`. Previews do not inherit `env.preview`; their settings live in `env.preview.previews`. Queue consumers and Cron Triggers never run in a Preview, so they must stay out of that block (see `docs/adr/006-preview-environments.md`).
+
 The top level of `wrangler.jsonc` is for local development only. It is deliberately named `iclub-reserve-local` and points at the preview D1, so that a `wrangler deploy` without `--env` cannot overwrite production.
 
 Because `@cloudflare/vite-plugin` resolves the environment **at build time**, adding `--env` to `wrangler deploy` afterwards does _not_ switch environments — the already-built configuration wins. Always use the provided scripts (`pnpm run deploy` / `pnpm run deploy:preview`), which set `CLOUDFLARE_ENV` for the build and pass a matching `--env` to the deploy. Wrangler errors out if the two disagree.
 
-`vars` and bindings are **not** inherited by named environments. When adding a variable, add it to all three places (top level, `env.production`, `env.preview`) and keep the key sets identical — `wrangler types` runs without `--env`, so a key missing from the top level will not appear in the `Env` type.
+`vars` and bindings are **not** inherited by named environments or by Previews. When adding a variable, add it to all four places (top level, `env.production`, `env.preview`, `env.preview.previews`) and keep the key sets identical — `wrangler types` runs without `--env`, so a key missing from the top level will not appear in the `Env` type.
 
 ## 5. Coding Guidelines & Constraints
 

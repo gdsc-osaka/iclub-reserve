@@ -16,13 +16,17 @@
    * | `preview`     | `iclub-reserve-preview`  | `iclub-reserve-preview-db` |
    * | トップレベル  | ローカル開発専用         | `iclub-reserve-preview-db` |
    *
+   * `preview` の派生ブランチは、`iclub-reserve-preview` の下の Worker Previews として
+   * デプロイする（`env.preview.previews`、ADR-006）。
+   *
    * トップレベルの `name` をあえて本番と別名にしてあるのは、`--env` を付け忘れた
    * `wrangler deploy` が本番を上書きするのを防ぐため。付け忘れても、無害な Worker が
    * 1 つ増えるだけで済む。同じ理由で、トップレベルの D1 もプレビュー側を指している。
    *
-   * `vars` と `d1_databases`（バインディング全般）は env に**継承されない**ため、
-   * 3 か所すべてに同じ内容を書く必要がある。とくに `vars` のキー集合は 3 つとも
-   * 揃えること。`wrangler types` は `--env` なし（＝トップレベル）で走るので、
+   * `vars` と `d1_databases`（バインディング全般）は env にも Previews にも**継承されない**ため、
+   * 4 か所（トップレベル・`env.production`・`env.preview`・`env.preview.previews`）すべてに
+   * 同じ内容を書く必要がある。とくに `vars` のキー集合は 4 つとも揃えること。
+   * `wrangler types` は `--env` なし（＝トップレベル）で走るので、
    * トップレベルにないキーは `Env` の型に現れない。
    *
    * 一方 `main` `compatibility_date` `compatibility_flags` `observability`
@@ -93,7 +97,7 @@
    * Cloudflare R2 の設定（ADR-005 決定 1）。
    *
    * バインディングは vars や queues と同様に環境に継承されないため、
-   * トップレベル、env.production、env.preview の 3 か所すべてに記述する必要がある。
+   * トップレベル、env.production、env.preview、env.preview.previews の 4 か所すべてに記述する必要がある。
    * また、wrangler types はトップレベルを基準に走るため、トップレベルに書かないと
    * Env に MEDIA の型が現れない。
    *
@@ -112,6 +116,7 @@
    *
    * queues は vars や d1_databases と同様に環境に継承されないため、
    * トップレベル、env.production、env.preview の 3 か所すべてに記述する必要がある。
+   * env.preview.previews には producers だけを書く（consumer は Preview では動かないため。ADR-006）。
    * また、wrangler types はトップレベルを基準に走るため、トップレベルに書かないと
    * Env に MAIL_QUEUE の型が現れない。
    */
@@ -187,11 +192,38 @@
      * 本番とは Worker も D1 も別物なので、DB を壊しても本番には影響しない。
      * `BETTER_AUTH_SECRET` も本番とは別の値を入れること
      * （同じ値だと本番のセッション Cookie がプレビューでも通ってしまう）。
+     *
+     * `develop` は Worker 本体として `wrangler deploy --env preview` で、
+     * 派生ブランチは Worker Previews として `wrangler preview --env preview` でデプロイする
+     * （ADR-006）。どちらも下の `routes` のカスタムドメインで公開する。
      */
     "preview": {
       "name": "iclub-reserve-preview",
-      // 派生ブランチごとのプレビュー URL を発行するために必要。
-      "preview_urls": true,
+      /**
+       * workers.dev では公開しない（ADR-006）。
+       *
+       * パスキーの rpID は BETTER_AUTH_URL のホスト名（iclub-preview.gdgoc-osaka.jp）になるため、
+       * workers.dev の URL ではパスキーが使えず、ログインも INVALID_ORIGIN で弾かれる。
+       * 使えない URL に人が迷い込まないよう、本体（workers_dev）と
+       * ブランチごとの Preview（preview_urls）の両方を止めておく。
+       */
+      "workers_dev": false,
+      "preview_urls": false,
+      /**
+       * `develop` を `iclub-preview.gdgoc-osaka.jp` で、
+       * 派生ブランチの Preview を `<ブランチ名>.iclub-preview.gdgoc-osaka.jp` で公開する。
+       *
+       * 両方が同じ親ドメインの下にあるので、パスキーの rpID（iclub-preview.gdgoc-osaka.jp）を
+       * すべてのプレビューで共有できる。develop で登録したパスキーがどのブランチでも使える。
+       * ワイルドカードの DNS レコードと証明書は Cloudflare が自動で作る。
+       */
+      "routes": [
+        {
+          "pattern": "iclub-preview.gdgoc-osaka.jp",
+          "custom_domain": true,
+          "previews_enabled": true,
+        },
+      ],
       "vars": {
         // 実行環境の名前。詳細はトップレベルの `vars` のコメントを参照。
         // これが "preview" のときだけ、認証コードはメールではなく Discord のスレッドへ届く。
@@ -232,6 +264,47 @@
             "max_concurrency": 2,
           },
         ],
+      },
+
+      /**
+       * 派生ブランチの Preview（`wrangler preview --env preview`）の設定（ADR-006）。
+       *
+       * Preview は上の `env.preview` の設定を**継承しない**ため、vars とバインディングを
+       * もう一度書く。`vars` のキー集合は、他の 3 か所
+       * （トップレベル・env.production・env.preview）と揃えること。
+       * D1・R2・Queue は develop と同じものを指し、データはすべてのプレビューで共有する。
+       *
+       * Queue の consumer と Cron Triggers はここに書かない。Preview では動かない仕様のため、
+       * Preview が積んだメールは、上の Worker 本体（develop）の consumer と Cron が送る。
+       */
+      "previews": {
+        "vars": {
+          // 実行環境の名前。詳細はトップレベルの `vars` のコメントを参照。
+          "APP_ENV": "preview",
+          "VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
+          // SMTP の設定についてはトップレベルの `vars` のコメントを参照。
+          "SMTP_HOST": "smtp.email.ap-osaka-1.oci.oraclecloud.com",
+          "SMTP_PORT": "465",
+          "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
+          "MAIL_FROM_NAME": "i-Club 予約システム",
+        },
+        "d1_databases": [
+          {
+            "binding": "DB",
+            "database_name": "iclub-reserve-preview-db",
+            "database_id": "0de33eb1-9e5c-4721-bda8-7dc7c201157a",
+            "migrations_dir": "drizzle/migrations",
+          },
+        ],
+        "r2_buckets": [
+          {
+            "binding": "MEDIA",
+            "bucket_name": "iclub-reserve-media-preview",
+          },
+        ],
+        "queues": {
+          "producers": [{ "queue": "iclub-reserve-mail-preview", "binding": "MAIL_QUEUE" }],
+        },
       },
     },
   },

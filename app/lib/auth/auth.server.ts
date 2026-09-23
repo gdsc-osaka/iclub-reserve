@@ -49,6 +49,23 @@ const toOrigin = (baseURL: string | undefined): string | undefined =>
   typeof baseURL === "string" && URL.canParse(baseURL) ? new URL(baseURL).origin : undefined;
 
 /**
+ * パスキーの検証で期待する origin を、環境に応じて決める。
+ *
+ * プレビューだけは固定しない。派生ブランチの Preview は `<ブランチ名>.<代表 URL のホスト名>`
+ * で公開され（ADR-006）、origin がブランチごとに違うため、1 つの値に決められない。
+ * Better Auth の `origin` はワイルドカードを受け付けないので、未指定にして
+ * リクエストの Origin ヘッダーを期待値に使わせる。
+ *
+ * その Origin は、先に trustedOrigins（代表 URL とそのサブドメイン）の検査を通ったものだけ。
+ * さらにブラウザは rpID（代表 URL のホスト名）の配下の origin にしかパスキーを使わせないので、
+ * 信頼できる範囲は代表 URL のサブドメインに限られる。
+ */
+const toPasskeyOrigin = (
+  appEnv: Env["APP_ENV"],
+  baseURL: string | undefined,
+): string | undefined => (appEnv === "preview" ? undefined : toOrigin(baseURL));
+
+/**
  * Better Auth の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
  *
  * `wrangler types` が生成する `Env` には「今の環境に実際にある値」しか載らない。
@@ -198,10 +215,14 @@ const createAuth = () => {
        * rpID は指定しなければ baseURL のホスト名になる。
        * この値は登録済みのパスキー 1 つ 1 つに焼き付けられるため、
        * 後から変えると既存のパスキーが**すべて使えなくなる**点に注意。
+       *
+       * プレビューでは rpID が `iclub-preview.gdgoc-osaka.jp` になり、派生ブランチの Preview
+       * （`<ブランチ名>.iclub-preview.gdgoc-osaka.jp`）はその配下にあるため、
+       * develop で登録したパスキーがどのブランチでもそのまま使える（ADR-006）。
        */
       passkey({
         rpName: APP_NAME,
-        origin: toOrigin(BETTER_AUTH_URL),
+        origin: toPasskeyOrigin(env.APP_ENV, BETTER_AUTH_URL),
 
         authenticatorSelection: {
           /**
