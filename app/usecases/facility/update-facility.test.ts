@@ -10,6 +10,12 @@ import {
 import type { FacilityPhotoStorage } from "~/domain/facility/facility-photo";
 import { updateFacilityUseCase } from "./update-facility";
 
+/** 先頭のバイトが本物の PNG・WebP になっている写真（形式は先頭のバイトで判定される） */
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+const WEBP_BYTES = new Uint8Array([
+  0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+]);
+
 describe("updateFacilityUseCase", () => {
   const now = new Date("2026-10-01T12:00:00Z");
 
@@ -67,7 +73,7 @@ describe("updateFacilityUseCase", () => {
       delete: deleteMock,
     } as unknown as FacilityPhotoStorage;
 
-    const newPhoto = new File(["new image data"], "new.png", { type: "image/png" });
+    const newPhoto = new File([PNG_BYTES], "new.png", { type: "image/png" });
 
     const result = await updateFacilityUseCase(
       { facilityRepository, facilityPhotoStorage },
@@ -243,7 +249,7 @@ describe("updateFacilityUseCase", () => {
       delete: deleteMock,
     } as unknown as FacilityPhotoStorage;
 
-    const newPhoto = new File(["new file"], "new.webp", { type: "image/webp" });
+    const newPhoto = new File([WEBP_BYTES], "new.webp", { type: "image/webp" });
 
     const result = await updateFacilityUseCase(
       { facilityRepository, facilityPhotoStorage },
@@ -264,6 +270,79 @@ describe("updateFacilityUseCase", () => {
     expect(result._unsafeUnwrapErr().code).toBe(FacilityErrorCode.DatabaseError);
     // 新しくアップロードした写真の削除が呼ばれたこと
     expect(deleteMock).toHaveBeenCalledWith(expect.stringMatching(/^[a-z0-9]+\.webp$/));
+  });
+
+  it("読んだときの写真の URL を、更新の条件（expectedPhotoUrl）として渡す", async () => {
+    const updateMock = vi
+      .fn()
+      .mockImplementation((input: UpdateFacilityInput) =>
+        okAsync({ ...existingFacility, ...input }),
+      );
+    const facilityRepository = {
+      findById: vi.fn().mockReturnValue(okAsync(existingFacility)),
+      update: updateMock,
+    } as unknown as FacilityRepository;
+    const facilityPhotoStorage = {} as unknown as FacilityPhotoStorage;
+
+    await updateFacilityUseCase(
+      { facilityRepository, facilityPhotoStorage },
+      {
+        facilityId: "fac_existing",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        name: "名前だけ変える",
+        description: null,
+        googleCalendarId: null,
+        photo: null,
+        removePhoto: false,
+        now,
+      },
+    );
+
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoUrl: "/facility-photos/oldphoto123.jpg",
+        expectedPhotoUrl: "/facility-photos/oldphoto123.jpg",
+      }),
+    );
+  });
+
+  it("別の人が先に写真を変えていて Conflict になったら、新しい写真だけを片付け、古い写真は消さない", async () => {
+    const deleteMock = vi.fn().mockReturnValue(okAsync(undefined));
+    const facilityRepository = {
+      findById: vi.fn().mockReturnValue(okAsync(existingFacility)),
+      update: vi.fn().mockReturnValue(
+        errAsync({
+          code: FacilityErrorCode.Conflict,
+          message: "写真が先に変わっていた",
+          userMessage: "ほかの人が同時にこの施設を更新しました。",
+        }),
+      ),
+    } as unknown as FacilityRepository;
+    const facilityPhotoStorage = {
+      put: vi.fn().mockReturnValue(okAsync(undefined)),
+      delete: deleteMock,
+    } as unknown as FacilityPhotoStorage;
+
+    const result = await updateFacilityUseCase(
+      { facilityRepository, facilityPhotoStorage },
+      {
+        facilityId: "fac_existing",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        name: "名前",
+        description: null,
+        googleCalendarId: null,
+        photo: new File([PNG_BYTES], "new.png", { type: "image/png" }),
+        removePhoto: false,
+        now,
+      },
+    );
+
+    expect(result._unsafeUnwrapErr().code).toBe(FacilityErrorCode.Conflict);
+    expect(deleteMock).toHaveBeenCalledOnce();
+    expect(deleteMock).toHaveBeenCalledWith(expect.stringMatching(/^[a-z0-9]+\.png$/));
+    expect(deleteMock).not.toHaveBeenCalledWith("oldphoto123.jpg");
   });
 
   it("Google Calendar ID を空にすると google_calendar_id と calendar_url の両方が null になる", async () => {

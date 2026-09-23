@@ -27,6 +27,8 @@ export const FacilityErrorCode = {
   Forbidden: "FACILITY_FORBIDDEN",
   InvalidInput: "FACILITY_INVALID_INPUT",
   InvalidTransition: "FACILITY_INVALID_TRANSITION",
+  /** 同じ施設への別の更新が先に反映された（読んでから書くまでの間に写真が変わった） */
+  Conflict: "FACILITY_CONFLICT",
   HasUpcomingReservations: "FACILITY_HAS_UPCOMING_RESERVATIONS",
   PhotoStorageError: "FACILITY_PHOTO_STORAGE_ERROR",
   DatabaseError: "DATABASE_ERROR",
@@ -43,6 +45,7 @@ export const facilityErrorKind: Record<FacilityErrorCode, ErrorKind> = {
   [FacilityErrorCode.Forbidden]: ErrorKind.Forbidden,
   [FacilityErrorCode.InvalidInput]: ErrorKind.InvalidInput,
   [FacilityErrorCode.InvalidTransition]: ErrorKind.Conflict,
+  [FacilityErrorCode.Conflict]: ErrorKind.Conflict,
   [FacilityErrorCode.HasUpcomingReservations]: ErrorKind.Conflict,
   [FacilityErrorCode.PhotoStorageError]: ErrorKind.Internal,
   [FacilityErrorCode.DatabaseError]: ErrorKind.Internal,
@@ -112,6 +115,13 @@ export interface UpdateFacilityInput {
   readonly name: string;
   readonly description: string | null;
   readonly photoUrl: string | null;
+  /**
+   * 更新前の写真の URL（読んだときの値）。
+   *
+   * DB がこの値のままでなければ 1 件も更新しない。読んでから書くまでの間に別の人が写真を差し替えると、
+   * 差し替え前の写真はもう R2 から消されている。そのまま書くと、消えた写真を指す行が残ってしまう。
+   */
+  readonly expectedPhotoUrl: string | null;
   readonly googleCalendarId: string | null;
   readonly calendarUrl: string | null;
   readonly updatedAt: Date;

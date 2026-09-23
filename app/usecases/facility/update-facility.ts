@@ -21,7 +21,7 @@ import {
   type FacilityPhotoStorage,
 } from "~/domain/facility/facility-photo";
 import { ensureFacilityPermission } from "./_shared/facility-authorization";
-import { deleteFacilityPhotoQuietly } from "./_shared/facility-photo";
+import { deleteFacilityPhotoQuietly, resolveFacilityPhotoHead } from "./_shared/facility-photo";
 
 export interface UpdateFacilityDeps {
   readonly facilityRepository: FacilityRepository;
@@ -53,7 +53,8 @@ export interface UpdateFacilityArgs {
  *    - 写真がなく removePhoto が指定された場合: photoUrl を null にし、古い写真を削除対象にする。
  *    - いずれでもない場合: 既存の photoUrl をそのまま維持する。
  * 5. DB 更新: facility テーブルを更新。
- *    - 失敗時: 今回新しくアップロードした写真があれば削除（ロールバック）。
+ *    - 3 で読んだ写真の URL を条件に入れる。その間に別の人が写真を変えていたら Conflict になる。
+ *    - 失敗時（Conflict を含む）: 今回新しくアップロードした写真があれば削除（ロールバック）。
  * 6. 古い写真の削除: DB 更新が成功した後に実行。削除失敗時も操作は成功として返しログを残す。
  */
 export const updateFacilityUseCase = (
@@ -87,16 +88,15 @@ export const updateFacilityUseCase = (
     let oldPhotoToDelete: string | null = null;
 
     if (args.photo !== null && args.photo.size > 0) {
-      yield* validateFacilityPhoto({
-        type: args.photo.type,
-        size: args.photo.size,
-      });
+      // 形式は申告された MIME タイプではなく、先頭のバイトで決める（ADR-005 決定 8）
+      const head = yield* resolveFacilityPhotoHead(args.photo);
+      const format = yield* validateFacilityPhoto({ size: args.photo.size, head });
 
-      const photoName = yield* toFacilityPhotoName(args.photo.type);
+      const photoName = toFacilityPhotoName(format.extension);
       yield* deps.facilityPhotoStorage.put({
         photoName,
         body: args.photo.stream(),
-        contentType: args.photo.type,
+        contentType: format.contentType,
       });
 
       uploadedPhotoName = photoName;
@@ -113,6 +113,7 @@ export const updateFacilityUseCase = (
       name,
       description,
       photoUrl: newPhotoUrl,
+      expectedPhotoUrl: existing.photoUrl,
       googleCalendarId,
       calendarUrl,
       updatedAt: args.now,

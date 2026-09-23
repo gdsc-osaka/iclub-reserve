@@ -34,6 +34,14 @@ export const facilityErrorView: Record<FacilityErrorCode, ErrorView> = {
     message: "施設の状態が変わっています。画面を読み込み直してください。",
   },
   /*
+   * 編集の保存中に、別の人が同じ施設の写真を先に変えた。
+   * 画面が古いという意味で 409 にする。
+   */
+  [FacilityErrorCode.Conflict]: {
+    status: 409,
+    message: "ほかの人が同時にこの施設を更新しました。画面を読み込み直してください。",
+  },
+  /*
    * 将来の予約が残っているため無効化できない（COND-003）。
    * 予約の状態との競合であるため 409 にする。
    */

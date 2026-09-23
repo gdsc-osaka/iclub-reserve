@@ -1,4 +1,27 @@
-import type { FacilityPhotoStorage } from "~/domain/facility/facility-photo";
+import { ResultAsync } from "neverthrow";
+
+import { FacilityErrorCode, FacilityField, type FacilityError } from "~/domain/facility";
+import {
+  FACILITY_PHOTO_HEAD_BYTES,
+  type FacilityPhotoStorage,
+} from "~/domain/facility/facility-photo";
+
+/**
+ * アップロードされた写真の先頭のバイトを読む。形式の判定（`validateFacilityPhoto`）に渡す。
+ *
+ * 読むのは先頭の `FACILITY_PHOTO_HEAD_BYTES` バイトだけで、写真全体は読まない。
+ */
+export const resolveFacilityPhotoHead = (photo: Blob): ResultAsync<Uint8Array, FacilityError> =>
+  ResultAsync.fromPromise(
+    photo.slice(0, FACILITY_PHOTO_HEAD_BYTES).arrayBuffer(),
+    (error): FacilityError => ({
+      code: FacilityErrorCode.InvalidInput,
+      field: FacilityField.Photo,
+      message: "アップロードされた写真の先頭を読み取れなかった。",
+      userMessage: "写真を読み込めませんでした。もう一度選択してください。",
+      cause: error,
+    }),
+  ).map((buffer) => new Uint8Array(buffer));
 
 /**
  * 写真ストレージから写真を消す。失敗してもログに残すだけで、呼び出し元には伝えない。

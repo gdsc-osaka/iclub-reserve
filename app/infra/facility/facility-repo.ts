@@ -1,4 +1,4 @@
-import { and, count, eq, gt, notExists, or } from "drizzle-orm";
+import { and, count, eq, gt, isNull, notExists, or } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { facilityTable, reservationTable } from "~/db/schema";
 import {
@@ -81,7 +81,15 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
           calendarUrl: input.calendarUrl,
           updatedAt: input.updatedAt,
         })
-        .where(eq(facilityTable.id, input.id))
+        .where(
+          and(
+            eq(facilityTable.id, input.id),
+            // 読んだときから写真が変わっていたら書かない（UpdateFacilityInput.expectedPhotoUrl）
+            input.expectedPhotoUrl === null
+              ? isNull(facilityTable.photoUrl)
+              : eq(facilityTable.photoUrl, input.expectedPhotoUrl),
+          ),
+        )
         .returning(),
       (error): FacilityError => ({
         code: FacilityErrorCode.DatabaseError,
@@ -90,13 +98,19 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
       }),
     ).andThen((rows) => {
       const row = rows.at(0);
-      if (row === undefined) {
-        return err({
-          code: FacilityErrorCode.NotFound,
-          message: `施設 ${input.id} が見つからない。`,
-        });
+      if (row !== undefined) {
+        return ok(toFacility(row));
       }
-      return ok(toFacility(row));
+
+      // 1 件も更新しなかった。施設が無ければ NotFound、あれば写真が先に変わっていた
+      return findById(input.id).andThen(() =>
+        err({
+          code: FacilityErrorCode.Conflict,
+          message: `施設 ${input.id} の写真が、読んでから書くまでの間に変わっていた。`,
+          userMessage:
+            "ほかの人が同時にこの施設を更新しました。画面を読み込み直してから、もう一度保存してください。",
+        }),
+      );
     });
 
   /*

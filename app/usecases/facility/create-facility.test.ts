@@ -11,6 +11,12 @@ import {
 import type { FacilityPhotoStorage } from "~/domain/facility/facility-photo";
 import { createFacilityUseCase } from "./create-facility";
 
+/** 先頭のバイトが本物の PNG・JPEG になっている写真（形式は先頭のバイトで判定される） */
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+const JPEG_BYTES = new Uint8Array([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1,
+]);
+
 describe("createFacilityUseCase", () => {
   const now = new Date("2026-10-01T10:00:00Z");
 
@@ -108,6 +114,65 @@ describe("createFacilityUseCase", () => {
     },
   );
 
+  it("MIME タイプを画像と偽った画像でないファイルは InvalidInput で、R2 に置かない", async () => {
+    const putMock = vi.fn();
+    const createMock = vi.fn();
+    const facilityPhotoStorage = { put: putMock } as unknown as FacilityPhotoStorage;
+    const facilityRepository = { create: createMock } as unknown as FacilityRepository;
+
+    const result = await createFacilityUseCase(
+      { facilityRepository, facilityPhotoStorage },
+      {
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        name: "施設名",
+        description: null,
+        googleCalendarId: null,
+        photo: new File(["<html><script>alert(1)</script>"], "photo.png", { type: "image/png" }),
+        isActive: true,
+        now,
+      },
+    );
+
+    const error = result._unsafeUnwrapErr();
+    expect(error.code).toBe(FacilityErrorCode.InvalidInput);
+    expect(error.field).toBe(FacilityField.Photo);
+    expect(putMock).not.toHaveBeenCalled();
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("拡張子と中身が違う写真は、中身の形式の Content-Type と拡張子で保存する", async () => {
+    const putMock = vi.fn().mockReturnValue(okAsync(undefined));
+    const createMock = vi
+      .fn()
+      .mockImplementation((input: CreateFacilityInput) => okAsync(mockCreatedFacility(input)));
+    const facilityPhotoStorage = { put: putMock } as unknown as FacilityPhotoStorage;
+    const facilityRepository = { create: createMock } as unknown as FacilityRepository;
+
+    const result = await createFacilityUseCase(
+      { facilityRepository, facilityPhotoStorage },
+      {
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        name: "施設名",
+        description: null,
+        googleCalendarId: null,
+        // 中身は PNG だが、名前と MIME タイプは JPEG
+        photo: new File([PNG_BYTES], "photo.jpg", { type: "image/jpeg" }),
+        isActive: true,
+        now,
+      },
+    );
+
+    expect(result._unsafeUnwrap().photoUrl).toMatch(/^\/facility-photos\/[a-z0-9]+\.png$/);
+    expect(putMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        photoName: expect.stringMatching(/^[a-z0-9]+\.png$/),
+        contentType: "image/png",
+      }),
+    );
+  });
+
   it("写真を置いた後 DB 登録が失敗したら、アップロードした写真を削除してロールバックする", async () => {
     const putMock = vi.fn().mockReturnValue(okAsync(undefined));
     const deleteMock = vi.fn().mockReturnValue(okAsync(undefined));
@@ -126,7 +191,7 @@ describe("createFacilityUseCase", () => {
       create: createMock,
     } as unknown as FacilityRepository;
 
-    const file = new File(["dummy content"], "photo.png", { type: "image/png" });
+    const file = new File([PNG_BYTES], "photo.png", { type: "image/png" });
 
     const result = await createFacilityUseCase(
       { facilityRepository, facilityPhotoStorage },
@@ -164,7 +229,7 @@ describe("createFacilityUseCase", () => {
       create: createMock,
     } as unknown as FacilityRepository;
 
-    const file = new File(["dummy jpeg"], "camera.jpg", { type: "image/jpeg" });
+    const file = new File([JPEG_BYTES], "camera.jpg", { type: "image/jpeg" });
 
     const result = await createFacilityUseCase(
       { facilityRepository, facilityPhotoStorage },

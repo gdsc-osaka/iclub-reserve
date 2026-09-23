@@ -19,7 +19,7 @@ import {
   type FacilityPhotoStorage,
 } from "~/domain/facility/facility-photo";
 import { ensureFacilityPermission } from "./_shared/facility-authorization";
-import { deleteFacilityPhotoQuietly } from "./_shared/facility-photo";
+import { deleteFacilityPhotoQuietly, resolveFacilityPhotoHead } from "./_shared/facility-photo";
 
 export interface CreateFacilityDeps {
   readonly facilityRepository: FacilityRepository;
@@ -67,16 +67,15 @@ export const createFacilityUseCase = (
     let uploadedPhotoName: string | null = null;
 
     if (args.photo !== null && args.photo.size > 0) {
-      yield* validateFacilityPhoto({
-        type: args.photo.type,
-        size: args.photo.size,
-      });
+      // 形式は申告された MIME タイプではなく、先頭のバイトで決める（ADR-005 決定 8）
+      const head = yield* resolveFacilityPhotoHead(args.photo);
+      const format = yield* validateFacilityPhoto({ size: args.photo.size, head });
 
-      const photoName = yield* toFacilityPhotoName(args.photo.type);
+      const photoName = toFacilityPhotoName(format.extension);
       yield* deps.facilityPhotoStorage.put({
         photoName,
         body: args.photo.stream(),
-        contentType: args.photo.type,
+        contentType: format.contentType,
       });
 
       uploadedPhotoName = photoName;
