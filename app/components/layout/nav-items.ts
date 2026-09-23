@@ -88,7 +88,7 @@ export const commonNavItems: readonly NavItem[] = [
     label: "所属団体",
     to: "/groups",
     icon: Users,
-    enabled: false,
+    enabled: true,
     screen: "SCR-008",
   },
 ];
@@ -115,7 +115,7 @@ export const staffNavItems: readonly NavItem[] = [
     label: "団体の管理",
     to: "/staff/groups",
     icon: Building2,
-    enabled: false,
+    enabled: true,
     screen: "SCR-008",
   },
   {
