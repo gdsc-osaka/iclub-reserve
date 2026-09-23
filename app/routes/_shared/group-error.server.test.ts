@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GroupErrorCode, GroupField, type GroupError } from "~/domain/group";
 
-import { groupActionErrors, groupErrorResponse } from "./group-error.server";
+import {
+  groupActionErrors,
+  groupErrorResponse,
+  invitationActionErrors,
+  invitationErrorResponse,
+} from "./group-error.server";
 
 const context = { where: "groups.detail.test", userId: "usr_01" };
 
@@ -169,15 +174,16 @@ describe("groupActionErrors", () => {
     expect(errors.formError).toBe("保存できませんでした。時間をおいて、もう一度お試しください。");
   });
 
-  it.each([GroupErrorCode.MemberNotFound, GroupErrorCode.InvitationNotFound])(
-    "%s は画面ごと差し替えず、フォームの上に読み込み直しの案内を出す",
-    (code) => {
-      // URL が指す団体はあるので、404 にしてはいけない。フォームで指したものが無くなっただけ
-      const errors = groupActionErrors(context, errorOf(code));
+  it.each([
+    GroupErrorCode.MemberNotFound,
+    GroupErrorCode.InvitationNotFound,
+    GroupErrorCode.InvitationNotVisible,
+  ])("%s は画面ごと差し替えず、フォームの上に読み込み直しの案内を出す", (code) => {
+    // URL が指す団体はあるので、404 にしてはいけない。フォームで指したものが無くなっただけ
+    const errors = groupActionErrors(context, errorOf(code));
 
-      expect(errors.formError).toContain("画面を読み込み直してください。");
-    },
-  );
+    expect(errors.formError).toContain("画面を読み込み直してください。");
+  });
 
   it.each([
     [GroupErrorCode.InvalidInput, "info"],
@@ -200,5 +206,83 @@ describe("groupActionErrors", () => {
     thrownBy(() => groupActionErrors(context, errorOf(GroupErrorCode.NotVisible)));
 
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("COND-011: 宛先が本人ではない招待は、無い招待と同じ応答になる（招待の承諾画面 SCR-016）", () => {
+  it("loader の応答（status と中身）が InvitationNotFound と同一になる", () => {
+    const notVisible = invitationErrorResponse(
+      context,
+      errorOf(GroupErrorCode.InvitationNotVisible),
+    );
+    const notFound = invitationErrorResponse(context, errorOf(GroupErrorCode.InvitationNotFound));
+
+    expect(notVisible.init?.status).toBe(404);
+    expect(notVisible).toEqual(notFound);
+  });
+
+  it("action でも InvitationNotFound と同一の 404 を投げる", () => {
+    const notVisible = thrownBy(() =>
+      invitationActionErrors(context, errorOf(GroupErrorCode.InvitationNotVisible)),
+    );
+    const notFound = thrownBy(() =>
+      invitationActionErrors(context, errorOf(GroupErrorCode.InvitationNotFound)),
+    );
+
+    // action だけ 200 を返すと、応答の違いから招待の有無を推測できてしまう
+    expect(notVisible).toEqual(
+      invitationErrorResponse(context, errorOf(GroupErrorCode.InvitationNotFound)),
+    );
+    expect(notVisible).toEqual(notFound);
+  });
+
+  it("InvitationNotVisible に userMessage が付いていても、応答には出ない", () => {
+    // 「宛先が違う」と誰かが書いてしまっても、秘匿が崩れないこと
+    const leaked = invitationErrorResponse(
+      context,
+      errorOf(GroupErrorCode.InvitationNotVisible, {
+        userMessage: "この招待は別のメールアドレス宛てです。",
+      }),
+    );
+
+    expect(leaked).toEqual(
+      invitationErrorResponse(context, errorOf(GroupErrorCode.InvitationNotFound)),
+    );
+  });
+
+  it("ログには秘匿せず、InvitationNotVisible として warn で残る", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    invitationErrorResponse(context, errorOf(GroupErrorCode.InvitationNotVisible));
+
+    // 秘匿が要るのは外部への応答で、サーバーのログではない（ADR-004 決定 4）
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "warn",
+        code: "INVITATION_NOT_VISIBLE",
+        kind: "forbidden",
+        userId: "usr_01",
+      }),
+    );
+  });
+
+  it("団体の画面（SCR-007）と違い、招待が無いときは画面ごと 404 にする", () => {
+    // この画面では招待が URL の指すものなので、読み込み直しの案内を出す先の画面が無い
+    const thrown = thrownBy(() =>
+      invitationActionErrors(context, errorOf(GroupErrorCode.InvitationNotFound)),
+    );
+
+    expect(thrown).toEqual(expect.objectContaining({ init: { status: 404 } }));
+  });
+
+  it("DB の失敗は、フォームの上に表の汎用文言を出す", () => {
+    const errors = invitationActionErrors(
+      context,
+      errorOf(GroupErrorCode.DatabaseError, { message: "D1_ERROR: no such table" }),
+    );
+
+    expect(errors).toEqual({
+      formError: "保存できませんでした。時間をおいて、もう一度お試しください。",
+    });
   });
 });

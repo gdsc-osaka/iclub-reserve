@@ -131,7 +131,7 @@ describe("acceptInvitationUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      expect(result.error.userMessage).toBeUndefined();
     }
   });
 
@@ -149,7 +149,7 @@ describe("acceptInvitationUseCase", () => {
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
         expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-        expect(result.error.message).toBe("招待が見つかりません。");
+        expect(result.error.userMessage).toBeUndefined();
       }
       expect(fakeInvitation.acceptCallCount()).toBe(0);
     },

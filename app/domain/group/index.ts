@@ -134,8 +134,17 @@ export const GroupErrorCode = {
   InvalidInput: "GROUP_INVALID_INPUT",
   /** 操作の対象にしたメンバーが、その団体に居ない */
   MemberNotFound: "MEMBER_NOT_FOUND",
-  /** 操作の対象にした招待が、その団体に無い（すでに取り消された・承諾された・期限切れなど） */
+  /** 操作の対象にした招待が無い（すでに取り消された・承諾された・期限切れなど） */
   InvitationNotFound: "INVITATION_NOT_FOUND",
+  /**
+   * 招待はあるが、宛先が本人ではないので見せない。
+   *
+   * 利用者には `InvitationNotFound` と同じ応答を返す（COND-011）。宛先が違うと答えると、
+   * 招待 ID を知っている人に「この招待は実在する」と伝わってしまう。
+   * ユースケースが `InvitationNotFound` に潰さずに正直に返すのは、他人宛ての招待を開こうとしたことを
+   * サーバーのログに権限の問題として残したいため。秘匿は画面の側が行う（ADR-004 決定 4）。
+   */
+  InvitationNotVisible: "INVITATION_NOT_VISIBLE",
   /** その操作をすると団体の管理者が 0 人になってしまう */
   LastAdminRequired: "LAST_ADMIN_REQUIRED",
   DatabaseError: "DATABASE_ERROR",
@@ -146,7 +155,7 @@ export type GroupErrorCode = (typeof GroupErrorCode)[keyof typeof GroupErrorCode
  * 団体まわりのエラーコードの分類（ADR-004 決定 3）。
  *
  * HTTP の status とログのレベルは、この表から決まる。
- * `NotVisible` を `not_found` にしないこと。ログで総当たりを見つけるには
+ * `NotVisible`・`InvitationNotVisible` を `not_found` にしないこと。ログで総当たりを見つけるには
  * `forbidden`（warn）として残る必要がある。利用者への応答を 404 に揃えるのは画面の側の仕事である。
  */
 export const groupErrorKind: Record<GroupErrorCode, ErrorKind> = {
@@ -156,6 +165,7 @@ export const groupErrorKind: Record<GroupErrorCode, ErrorKind> = {
   [GroupErrorCode.InvalidInput]: ErrorKind.InvalidInput,
   [GroupErrorCode.MemberNotFound]: ErrorKind.NotFound,
   [GroupErrorCode.InvitationNotFound]: ErrorKind.NotFound,
+  [GroupErrorCode.InvitationNotVisible]: ErrorKind.Forbidden,
   [GroupErrorCode.LastAdminRequired]: ErrorKind.Conflict,
   [GroupErrorCode.DatabaseError]: ErrorKind.Internal,
 };

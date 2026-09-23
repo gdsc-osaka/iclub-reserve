@@ -28,6 +28,7 @@ export interface RejectInvitationArgs {
  * 条件付き UPDATE 1 文で「辞退できるなら辞退する・できなければ 0 件」が判定できるため、
  * 事前 SELECT を行わない。D1 への往復レイテンシを 1 回削減でき、
  * 読んでから書くまでの競合も原理的に防止できる。
+ * 同じ理由で、宛先違いを `InvitationNotVisible` と見分けない（`acceptInvitationUseCase` を参照）。
  */
 export const rejectInvitationUseCase = (
   deps: RejectInvitationDeps,
@@ -37,7 +38,7 @@ export const rejectInvitationUseCase = (
 
   // 1. 空文字なら DB を引かずに終了（存在秘匿）
   if (invitationId === "") {
-    return errAsync(invitationNotFound());
+    return errAsync(invitationNotFound("辞退する招待の ID が空である。"));
   }
 
   // 2. 条件付き UPDATE による辞退を実行（事前 SELECT は行わない）
@@ -50,7 +51,11 @@ export const rejectInvitationUseCase = (
     .andThen((rejectedCount) => {
       // 3. 辞退できた行数が 0 件なら、対象の招待が無かったか条件不一致
       if (rejectedCount === 0) {
-        return errAsync(invitationNotFound());
+        return errAsync(
+          invitationNotFound(
+            "辞退できる招待が無かった（無い・期限切れ・承諾待ちではない・宛先違いのどれか）。",
+          ),
+        );
       }
 
       return ok(null);

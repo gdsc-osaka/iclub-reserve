@@ -35,6 +35,11 @@ export interface AcceptInvitationResult {
  * 事前に findById を呼んで確かめるのではなく、リポジトリ層の条件付き UPDATE 1 文（および batch 内の INSERT ... SELECT）に
  * 判定を畳み込んでいる。これにより、D1 への往復レイテンシが 1 回削減され、
  * 「読んでから書く」までの間に他者が取り消す・本人が二重送信するといった競合が原理的に起きなくなる。
+ *
+ * 【宛先違いを `InvitationNotVisible` と見分けない理由】
+ * 判定を UPDATE の条件に畳み込んでいるので、どの条件で外れたのかは分からない。
+ * 見分けるために事前に SELECT すると、上の利点を失う。
+ * 宛先違いは、承諾より前に画面を開いた時点（`getInvitationUseCase`）で `InvitationNotVisible` として残る。
  */
 export const acceptInvitationUseCase = (
   deps: AcceptInvitationDeps,
@@ -44,7 +49,7 @@ export const acceptInvitationUseCase = (
 
   // 1. 空文字なら DB を引かずに終了（存在秘匿）
   if (invitationId === "") {
-    return errAsync(invitationNotFound());
+    return errAsync(invitationNotFound("承諾する招待の ID が空である。"));
   }
 
   // 2. 条件付き UPDATE とメンバー追加を実行（事前 SELECT は行わない）
@@ -59,7 +64,11 @@ export const acceptInvitationUseCase = (
     .andThen((groupId) => {
       // 3. 対象の招待が無かった（条件に合致しなかった）場合
       if (groupId === null) {
-        return errAsync(invitationNotFound());
+        return errAsync(
+          invitationNotFound(
+            "承諾できる招待が無かった（無い・期限切れ・承諾待ちではない・宛先違いのどれか）。",
+          ),
+        );
       }
 
       return ok({ groupId });
