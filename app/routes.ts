@@ -63,6 +63,9 @@ export default [
   // Better Auth のエンドポイント（/api/auth/... を全て受ける）
   route("api/auth/*", "routes/api/auth/route.ts"),
 
+  // 施設写真の配信ルート（ADR-005: ログイン必須・プライベートキャッシュ）
+  route("facility-photos/:photoName", "routes/facility-photos/$photoName/route.ts"),
+
   // 開発専用ルート（ローカルでの outbox 手動送信確認用 / ADR-002 実装ガイド 5）
   route("dev/flush-mail", "routes/dev/flush-mail/route.ts"),
 ] satisfies RouteConfig;

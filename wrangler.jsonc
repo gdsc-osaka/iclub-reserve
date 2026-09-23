@@ -90,6 +90,24 @@
   ],
 
   /**
+   * Cloudflare R2 の設定（ADR-005 決定 1）。
+   *
+   * バインディングは vars や queues と同様に環境に継承されないため、
+   * トップレベル、env.production、env.preview の 3 か所すべてに記述する必要がある。
+   * また、wrangler types はトップレベルを基準に走るため、トップレベルに書かないと
+   * Env に MEDIA の型が現れない。
+   *
+   * バケットは施設写真専用ではなくアプリの画像全般（今後追加される団体のロゴ等）を
+   * 集約して保存する。種類はキーの接頭辞で分けており、一覧は app/infra/media/media-bucket.ts に定義する。
+   */
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "iclub-reserve-media-preview",
+    },
+  ],
+
+  /**
    * Cloudflare Queues の設定（ADR-002 決定 1 / 決定 4 / 第 4 節）。
    *
    * queues は vars や d1_databases と同様に環境に継承されないため、
@@ -139,6 +157,13 @@
           "migrations_dir": "drizzle/migrations",
         },
       ],
+      // r2_buckets は継承されないため環境ごとに記述。詳細はトップレベルのコメントを参照
+      "r2_buckets": [
+        {
+          "binding": "MEDIA",
+          "bucket_name": "iclub-reserve-media",
+        },
+      ],
       // queues は継承されないため環境ごとに記述。詳細はトップレベルのコメントを参照
       "queues": {
         "producers": [{ "queue": "iclub-reserve-mail", "binding": "MAIL_QUEUE" }],
@@ -184,6 +209,13 @@
           "database_name": "iclub-reserve-preview-db",
           "database_id": "0de33eb1-9e5c-4721-bda8-7dc7c201157a",
           "migrations_dir": "drizzle/migrations",
+        },
+      ],
+      // r2_buckets は継承されないため環境ごとに記述。詳細はトップレベルのコメントを参照
+      "r2_buckets": [
+        {
+          "binding": "MEDIA",
+          "bucket_name": "iclub-reserve-media-preview",
         },
       ],
       // queues は継承されないため環境ごとに記述。詳細はトップレベルのコメントを参照

@@ -113,7 +113,7 @@ export const isFacilityPhotoName = (value: string): boolean =>
 /** 写真の保存先への書き込み入力 */
 export interface PutFacilityPhotoInput {
   readonly photoName: string;
-  readonly body: ReadableStream<Uint8Array> | ArrayBuffer;
+  readonly body: ReadableStream<Uint8Array> | ArrayBuffer | ArrayBufferView;
   readonly contentType: string;
 }
 
