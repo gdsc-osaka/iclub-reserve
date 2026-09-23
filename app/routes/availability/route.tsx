@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert } from "lucide-react";
-import { data, isRouteErrorResponse, Link } from "react-router";
+import { isRouteErrorResponse, Link } from "react-router";
 
 import { DAYS_IN_WEEK } from "~/components/reservation/availability-week";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -10,7 +10,7 @@ import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facili
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { addDays, parseTokyoDateKey, startOfTokyoWeek } from "~/lib/date";
-import { QueryErrorCode } from "~/query/error";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { getAvailabilityCalendarUseCase } from "~/usecases/facility/get-availability-calendar";
 
 import type { Route } from "./+types/route";
@@ -63,11 +63,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    if (result.error.code === QueryErrorCode.NotFound) {
-      throw data({ message: "Facility not found" }, { status: 404 });
-    }
-
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 無い施設は 404、DB の失敗は 500 になる。どちらもログに残る
+    throw queryErrorResponse({ where: "availability.loader", userId: user.id }, result.error);
   }
 
   return { calendar: result.value, weekStart, now };

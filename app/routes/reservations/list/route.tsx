@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, Link, redirect } from "react-router";
+import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -12,7 +12,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { logServerError } from "~/lib/log.server";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
@@ -53,12 +53,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    /*
-     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
-     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
-     */
-    logServerError("reservations.loader", result.error);
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 失敗の中身は画面へ出さず、ログにだけ残す。決めているのは表の側
+    throw queryErrorResponse({ where: "reservations.loader", userId: user.id }, result.error);
   }
 
   return {

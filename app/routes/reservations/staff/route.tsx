@@ -12,8 +12,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { logServerError } from "~/lib/log.server";
-import { QueryErrorCode } from "~/query/error";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { parseReservationListParams } from "~/routes/reservations/list/query-params";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
@@ -60,16 +59,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    // 権限が無いのは想定内の応答なので、ログには残さない
-    if (result.error.code === QueryErrorCode.Forbidden) {
-      throw data({ message: "Forbidden" }, { status: 403 });
-    }
-    /*
-     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
-     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
-     */
-    logServerError("staff.reservations.loader", result.error);
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 事務局でなければ 403、DB の失敗は 500 になる。どちらもログに残る
+    throw queryErrorResponse({ where: "staff.reservations.loader", userId: user.id }, result.error);
   }
 
   return {

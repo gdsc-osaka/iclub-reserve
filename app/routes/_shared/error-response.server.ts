@@ -105,7 +105,14 @@ const logLevelOf: Record<ErrorKind, LogLevel> = {
  */
 const PAGE_NOT_FOUND_STATUS = 404;
 
-const logDomainError = <C extends string>(
+/**
+ * ログにだけ残し、応答は作らない。
+ *
+ * 失敗しても画面は開けるようにする loader（ダッシュボードなど）のためのもの。
+ * 失敗を握って画面を続けるかどうかは画面が決めてよいが、ログに残すかどうかは画面に決めさせない
+ * （ADR-004 決定 7・9）。応答を返す・投げるときは、ログも一緒に残す `toErrorResponse`・`toActionErrors` を使うこと。
+ */
+export const logDomainError = <C extends string>(
   tables: ErrorTables<C>,
   context: ErrorContext,
   error: DomainError<C, string>,
