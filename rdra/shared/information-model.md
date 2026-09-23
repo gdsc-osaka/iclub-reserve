@@ -135,6 +135,7 @@ entities:
         "SCR-001",
         "SCR-002",
         "SCR-003",
+        "SCR-005",
         "SCR-009",
         "SCR-010",
         "SCR-018",
@@ -194,7 +195,10 @@ entities:
         "UC-010",
         "UC-013",
         "UC-014",
+        "SCR-001",
+        "SCR-002",
         "SCR-003",
+        "SCR-005",
         "SCR-006",
         "SCR-007",
         "SCR-008",
@@ -218,6 +222,10 @@ entities:
         type: "string"
         required: true
         description: "送信者のユーザーID"
+      - name: "sent_as_staff"
+        type: "boolean"
+        required: true
+        description: "事務局の横断権限（COND-009）によって初めて許された送信であれば true。送信者がその予約の団体に所属していない事務局である場合にあたる。送信時に固定し、後から所属や事務局権限が変わっても表示は変わらない。団体側の表示で送信者を「事務局」とするかの判定に使う（COND-008）。考え方は INFO-008.acted_as_staff と同じ。"
       - name: "body"
         type: "string"
         required: true
@@ -342,6 +350,7 @@ entities:
         "UC-027",
         "UC-028",
         "UC-029",
+        "SCR-005",
         "SCR-007",
         "SCR-012",
         "SCR-014",
@@ -675,6 +684,7 @@ erDiagram
         string id PK
         string reservation_id FK
         string sender_id FK
+        boolean sent_as_staff
         string body
         datetime sent_at
     }
@@ -736,6 +746,8 @@ INFO-001 の属性は、見る人によって次の3段階で開示する。
 | INFO-004 メッセージ   |       ○        |           ×            |            ×            |
 
 Google Calendar に載せるのは承認済みの予約のみ。他団体のログイン済みユーザーには、仮予約もステータス付きで表示する。
+
+メッセージの送信者は氏名で表示する。ただし自団体のメンバーには、INFO-004.sent_as_staff が true のメッセージの送信者を「事務局」とだけ表示する（操作履歴の COND-012 と同じ考え方）。
 
 ## 操作履歴の開示範囲（COND-012）
 

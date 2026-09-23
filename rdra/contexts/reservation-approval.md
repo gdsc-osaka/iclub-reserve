@@ -104,7 +104,7 @@ boundary:
       description: "団体側送信時→事務局へ通知。事務局送信時→申請者・団体管理者全員へ通知。"
 
 system:
-  information: ["INFO-001", "INFO-002", "INFO-003", "INFO-004", "INFO-008"]
+  information: ["INFO-001", "INFO-002", "INFO-003", "INFO-004", "INFO-006", "INFO-008"]
   states: ["STATE-001"]
   conditions:
     - id: "COND-001"
