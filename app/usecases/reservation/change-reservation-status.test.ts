@@ -95,7 +95,7 @@ const createMockDeps = (options?: {
     res
       ? okAsync(res)
       : errAsync({
-          code: ReservationErrorCode.ReservationNotFound,
+          code: ReservationErrorCode.NotFound,
           message: "Reservation not Found",
         }),
   );
@@ -519,8 +519,8 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
-      expect(result._unsafeUnwrapErr().message).toContain("却下理由を入力してください");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("却下理由を入力してください");
     });
 
     it("理由なしの事務局キャンセルは弾かれる（COND-002）", async () => {
@@ -536,8 +536,8 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
-      expect(result._unsafeUnwrapErr().message).toContain("キャンセル理由を入力してください");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("キャンセル理由を入力してください");
     });
 
     it("他団体所属のユーザーによる取り消しは拒否される（自団体の突き合わせ）", async () => {
@@ -555,7 +555,7 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("非スタッフによる承認は拒否される", async () => {
@@ -570,7 +570,7 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("承認時に同一施設・同一時間帯に承認済みの重複予約が存在する場合は拒否される（COND-001）", async () => {
@@ -589,8 +589,8 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
-      expect(result._unsafeUnwrapErr().message).toContain("先にそちらをキャンセルしてください");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Conflict);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("先にそちらをキャンセルしてください");
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
 
@@ -606,9 +606,7 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
 
@@ -628,8 +626,8 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
-      expect(result._unsafeUnwrapErr().message).toContain("読み込み直して");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Conflict);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("読み込み直して");
       // 0 件更新なら outbox にも積まれていないので、配送を依頼してはいけない
       expect(spies.notifyEnqueued).not.toHaveBeenCalled();
     });
@@ -646,7 +644,7 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationNotFound);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
     });
 
     it("宛先取得に失敗した場合は DatabaseError となり applyStatusTransition は呼ばれない", async () => {

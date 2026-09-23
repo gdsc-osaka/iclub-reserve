@@ -54,7 +54,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
       db.select().from(reservationTable).where(eq(reservationTable.id, id)).limit(1),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "Failed to query the database",
+        message: "予約テーブルを読み取れなかった。",
         cause: error,
       }),
     ).andThen((rows) => {
@@ -62,8 +62,8 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
       if (row === undefined) {
         return err({
-          code: ReservationErrorCode.ReservationNotFound,
-          message: "Reservation not Found",
+          code: ReservationErrorCode.NotFound,
+          message: `予約 ${id} が見つからない。`,
         });
       }
 
@@ -81,7 +81,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
     if (mails.length === 0) {
       return ResultAsync.fromPromise(insertReservationQuery, (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "予約の作成に失敗しました。",
+        message: "予約を書き込めなかった。",
         cause: error,
       })).map(() => ({ enqueuedMailIds: [] }));
     }
@@ -99,7 +99,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
       db.batch([insertReservationQuery, ...outbox.statements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "予約の作成および通知 outbox の作成に失敗しました。",
+        message: "予約と通知の outbox を書き込めなかった。",
         cause: error,
       }),
     ).map(() => ({
@@ -132,7 +132,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
         .limit(1),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "重複する予約の確認に失敗しました。",
+        message: "承認済みの予約との重なりを読み取れなかった。",
         cause: error,
       }),
     ).map((rows) => rows.length > 0);
@@ -163,7 +163,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
     if (mails.length === 0) {
       return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "予約ステータスの更新に失敗しました。",
+        message: "予約のステータスを書き込めなかった。",
         cause: error,
       })).map((rows) => ({
         applied: rows.length > 0,
@@ -191,7 +191,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
       db.batch([updateQuery, ...outbox.statements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "予約ステータスの更新および通知 outbox の作成に失敗しました。",
+        message: "予約のステータスと通知の outbox を書き込めなかった。",
         cause: error,
       }),
     ).map((results) => {

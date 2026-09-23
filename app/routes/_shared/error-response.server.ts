@@ -26,6 +26,16 @@ export interface ErrorView {
    * 画面ごと差し替える応答（404 など）と `internal` の失敗では、`userMessage` があっても常にこれを出す。
    */
   readonly message: string;
+  /**
+   * true なら、エラーが `userMessage` を持っていても使わず、常に `message` を出す。
+   *
+   * 秘匿のために、別の行と同じ応答へ揃えた行に付ける（予約の `NotFound` と `NotVisible` など）。
+   * 付けないと、どちらかのエラーに誰かが文言を書いたとき、その文言の有無で 2 つの応答が変わり、
+   * 違いから存在を推測されてしまう。
+   *
+   * status が 404 の行には要らない。画面ごと差し替える応答は、もともと `userMessage` を使わない。
+   */
+  readonly ignoreUserMessage?: true;
 }
 
 /** ドメインごとに用意する 2 枚の表 */
@@ -112,12 +122,20 @@ const logDomainError = <C extends string>(
   });
 };
 
+/** 表の行に、分類から決まる既定の status を埋めたもの */
+interface ResolvedView {
+  readonly status: number;
+  readonly message: string;
+  readonly ignoreUserMessage: boolean;
+}
+
 /** 表の行に、分類から決まる既定の status を埋める */
-const resolveView = <C extends string>(tables: ErrorTables<C>, code: C): Required<ErrorView> => {
+const resolveView = <C extends string>(tables: ErrorTables<C>, code: C): ResolvedView => {
   const view = tables.viewOf[code];
   return {
     status: view.status ?? statusOf[tables.kindOf[code]],
     message: view.message,
+    ignoreUserMessage: view.ignoreUserMessage === true,
   };
 };
 
@@ -164,9 +182,12 @@ export const toActionErrors = <C extends string, F extends string, K extends str
 
   logDomainError(tables, context, error);
 
-  // internal の失敗は、userMessage を持っていても出さない。内部の事情を画面に漏らさないため
+  /*
+   * internal の失敗は、userMessage を持っていても出さない。内部の事情を画面に漏らさないため。
+   * 秘匿のために揃えた行（ignoreUserMessage）も、応答が揃ったままになるよう表の文言だけを出す
+   */
   const text =
-    tables.kindOf[error.code] === ErrorKind.Internal
+    tables.kindOf[error.code] === ErrorKind.Internal || view.ignoreUserMessage
       ? view.message
       : (error.userMessage ?? view.message);
 

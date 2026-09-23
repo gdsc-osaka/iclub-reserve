@@ -9,6 +9,7 @@ import type { MembershipRepository } from "~/domain/membership";
 import {
   ReservationAction,
   ReservationErrorCode,
+  ReservationField,
   ReservationStatus,
   type Reservation,
   type ReservationError,
@@ -69,12 +70,14 @@ const ensureGroupIsEnabled = (
     .mapErr((error): ReservationError =>
       error.code === GroupErrorCode.NotFound
         ? {
-            code: ReservationErrorCode.ReservationGroupNotEligible,
-            message: "選んだ団体が見つかりません。",
+            code: ReservationErrorCode.GroupNotEligible,
+            field: ReservationField.Group,
+            message: `申請元の団体 ${groupId} が見つからない。`,
+            userMessage: "選んだ団体が見つかりません。",
           }
         : {
             code: ReservationErrorCode.DatabaseError,
-            message: "団体の確認に失敗しました。",
+            message: "申請元の団体を読み取れなかった。",
             cause: error,
           },
     )
@@ -82,8 +85,10 @@ const ensureGroupIsEnabled = (
       group.status === GroupStatus.Enabled
         ? okAsync(null)
         : errAsync({
-            code: ReservationErrorCode.ReservationGroupNotEligible,
-            message: "予約を申請できるのは、事務局が有効にした団体だけです。",
+            code: ReservationErrorCode.GroupNotEligible,
+            field: ReservationField.Group,
+            message: `申請元の団体 ${groupId} が有効でない (${group.status})。`,
+            userMessage: "予約を申請できるのは、事務局が有効にした団体だけです。",
           } satisfies ReservationError),
     );
 
@@ -106,12 +111,14 @@ const ensureFacilityIsAvailable = (
     .mapErr((error): ReservationError =>
       error.code === FacilityErrorCode.FacilityNotFound
         ? {
-            code: ReservationErrorCode.ReservationFacilityNotAvailable,
-            message: "選んだ施設・設備が見つかりません。",
+            code: ReservationErrorCode.FacilityNotAvailable,
+            field: ReservationField.Facility,
+            message: `申請先の施設 ${facilityId} が見つからない。`,
+            userMessage: "選んだ施設・設備が見つかりません。",
           }
         : {
             code: ReservationErrorCode.DatabaseError,
-            message: "施設・設備の確認に失敗しました。",
+            message: "申請先の施設を読み取れなかった。",
             cause: error,
           },
     )
@@ -119,8 +126,10 @@ const ensureFacilityIsAvailable = (
       facility.isActive
         ? okAsync(null)
         : errAsync({
-            code: ReservationErrorCode.ReservationFacilityNotAvailable,
-            message: "選んだ施設・設備は、いま予約を受け付けていません。",
+            code: ReservationErrorCode.FacilityNotAvailable,
+            field: ReservationField.Facility,
+            message: `申請先の施設 ${facilityId} が無効になっている。`,
+            userMessage: "選んだ施設・設備は、いま予約を受け付けていません。",
           } satisfies ReservationError),
     );
 

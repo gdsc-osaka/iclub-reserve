@@ -2,6 +2,7 @@ import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 
 import {
   ReservationErrorCode,
+  ReservationField,
   type ReservationError,
   type ReservationOverlapArgs,
   type ReservationRepository,
@@ -23,9 +24,12 @@ export interface ApprovedOverlapDeps {
  * 仮予約の申請（UC-002）はすり抜けても実害が無く、承認（UC-006）では同じ条件を
  * UPDATE 文にも持ち込んで止めている。どちらの場合も、この確認は書き込みの直前に置くこと。
  *
- * 拒否したときのメッセージを引数で受け取るのは、操作によって利用者に促すことが
+ * 拒否したときに利用者へ出す文言を引数で受け取るのは、操作によって利用者に促すことが
  * 変わるため（別の時間帯を選ぶ／先に既存の予約をキャンセルする）。
  * 何をすれば先へ進めるのかが伝わらないと、利用者は同じ操作を繰り返すことになる。
+ *
+ * 重なりは時間帯の問題なので、`field` に利用時間を入れておく。
+ * 時間帯の欄がある画面（申請フォーム）ではその下に出て、無い画面（一覧）ではフォームの上に出る。
  *
  * slot は 3 項目だけを取り出し直してからポートへ渡す。呼び出し側は予約そのものを
  * 渡せばよいが、そのまま素通しすると、ポートが受け取ると宣言していない項目まで
@@ -35,7 +39,7 @@ export interface ApprovedOverlapDeps {
 export const ensureNoApprovedOverlap = (
   deps: ApprovedOverlapDeps,
   slot: ReservationOverlapArgs,
-  conflictMessage: string,
+  userMessage: string,
 ): ResultAsync<null, ReservationError> =>
   deps.reservationRepository
     .existsApprovedOverlap({
@@ -46,8 +50,10 @@ export const ensureNoApprovedOverlap = (
     .andThen((exists) =>
       exists
         ? errAsync<null, ReservationError>({
-            code: ReservationErrorCode.ReservationConflict,
-            message: conflictMessage,
+            code: ReservationErrorCode.Conflict,
+            field: ReservationField.Period,
+            message: `施設 ${slot.facilityId} の同じ時間帯に、承認済みの予約がある。`,
+            userMessage,
           })
         : okAsync(null),
     );

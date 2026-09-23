@@ -8,8 +8,7 @@
 import {
   RESERVATION_MIN_HEAD_COUNT,
   RESERVATION_NOTE_MAX_LENGTH,
-  ReservationErrorCode,
-  type ReservationError,
+  ReservationField,
 } from "~/domain/reservation";
 import { validateReservationPeriod } from "~/domain/reservation/validation";
 import { atTokyoMinutes, parseTokyoDateKey, parseTokyoTimeKey } from "~/lib/date";
@@ -26,14 +25,15 @@ export interface FormValues {
 }
 
 /**
- * 入力の欄ごとのエラー。
+ * 誤りを出す欄の名前。
  *
  * 日付・開始・終了は 3 つで 1 つの「日時」なので、まとめて `period` に出す。
  * 欄ごとに分けても、直すべき組み合わせが伝わらない。
  */
-export type FieldErrors = Partial<
-  Record<"groupId" | "facilityId" | "period" | "headCount" | "note", string>
->;
+type FieldKey = "groupId" | "facilityId" | "period" | "headCount" | "note";
+
+/** 入力の欄ごとのエラー。誤りのある欄だけを持つ */
+export type FieldErrors = Partial<Record<FieldKey, string>>;
 
 const readString = (formData: FormData, name: string): string => {
   const value = formData.get(name);
@@ -96,7 +96,8 @@ export const parseReservation = (
     const validated = validateReservationPeriod(period, now);
 
     if (validated.isErr()) {
-      fieldErrors.period = validated.error.message;
+      // message はログ用なので出さない。利用時間の検証はどの誤りにも userMessage を付けている
+      fieldErrors.period = validated.error.userMessage ?? "日付と時間帯を確認してください。";
     } else {
       startAt = period.startAt;
       endAt = period.endAt;
@@ -138,33 +139,39 @@ export const parseReservation = (
 };
 
 /**
- * ユースケースのエラーを、画面のどこに出すかへ振り分ける。
+ * ドメインの項目（`ReservationField`）から、この画面の欄を引く表（ADR-004 決定 6）。
  *
- * DB の失敗だけは中身を伝えない。利用者には直しようがなく、
- * 内部の事情を画面に出しても不安にさせるだけのため。
+ * どのエラーをどの欄に出すかは、ドメインが付けた `field` とこの表だけで決まる。
+ * 団体・施設の状態や、承認済みの予約との重なりも、それぞれの欄の下に出る。
+ * 選び直せば通るので、どれを選び直せばよいかが欄の位置で伝わる。
+ *
+ * 載っていない項目の誤りと、項目を持たない誤り（権限・DB の失敗など）はフォームの上に出る。
  */
-export const toFormErrors = (
-  error: ReservationError,
-): { readonly fieldErrors: FieldErrors; readonly formError: string | null } => {
-  switch (error.code) {
-    case ReservationErrorCode.ReservationInvalidPeriod:
-    case ReservationErrorCode.ReservationConflict:
-      return { fieldErrors: { period: error.message }, formError: null };
+export const fieldKeyOf = {
+  [ReservationField.Group]: "groupId",
+  [ReservationField.Facility]: "facilityId",
+  [ReservationField.Period]: "period",
+  [ReservationField.HeadCount]: "headCount",
+  [ReservationField.Note]: "note",
+} as const satisfies Partial<Record<ReservationField, FieldKey>>;
 
-    case ReservationErrorCode.ReservationForbidden:
-    case ReservationErrorCode.ReservationGroupNotEligible:
-      return { fieldErrors: { groupId: error.message }, formError: null };
-
-    case ReservationErrorCode.ReservationFacilityNotAvailable:
-      return { fieldErrors: { facilityId: error.message }, formError: null };
-
-    case ReservationErrorCode.ReservationInvalidInput:
-      return { fieldErrors: {}, formError: error.message };
-
-    default:
-      return {
-        fieldErrors: {},
-        formError: "申請できませんでした。時間をおいて、もう一度お試しください。",
-      };
-  }
-};
+/**
+ * action の誤り（`app/routes/_shared/` のグルーが返す形）を、この画面の形に直す。
+ *
+ * グルーは誤りの無い欄も null で並べて返すが、この画面は誤りのある欄だけを持つ形で受け取る。
+ * `parseReservation` が複数の欄に同時に誤りを出すので、そちらに形を揃えている。
+ */
+export const toFormErrors = ({
+  formError,
+  ...fields
+}: { readonly formError: string | null } & Partial<Record<FieldKey, string | null>>): {
+  readonly fieldErrors: FieldErrors;
+  readonly formError: string | null;
+} => ({
+  fieldErrors: Object.fromEntries(
+    Object.entries(fields).filter(
+      (entry): entry is [FieldKey, string] => typeof entry[1] === "string",
+    ),
+  ),
+  formError,
+});

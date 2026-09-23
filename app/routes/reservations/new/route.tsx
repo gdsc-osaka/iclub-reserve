@@ -24,13 +24,14 @@ import {
 } from "~/lib/date";
 import { logServerError } from "~/lib/log.server";
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
+import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { createProvisionalReservationUseCase } from "~/usecases/reservation/create-reservation";
 import { getReservationFormUseCase } from "~/usecases/reservation/get-reservation-form";
 
 import type { Route } from "./+types/route";
 import { ApplicationForm } from "./application-form";
 import { CreatedPanel } from "./created-panel";
-import { parseReservation, readValues, toFormErrors } from "./form-values";
+import { fieldKeyOf, parseReservation, readValues, toFormErrors } from "./form-values";
 import { toCalendarPath } from "./paths";
 
 export function meta() {
@@ -161,7 +162,16 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
 
   if (result.isErr()) {
-    return { values, ...toFormErrors(result.error) };
+    return {
+      values,
+      ...toFormErrors(
+        reservationActionErrors(
+          { where: "reservations.new.action", userId: user.id },
+          result.error,
+          fieldKeyOf,
+        ),
+      ),
+    };
   }
 
   const params = new URLSearchParams({

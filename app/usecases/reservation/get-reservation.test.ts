@@ -45,7 +45,7 @@ const createDeps = (
 ) => {
   const findById = vi.fn((_id: string) =>
     overrides.reservationNotFound === true
-      ? errAsync({ code: ReservationErrorCode.ReservationNotFound, message: "not found" })
+      ? errAsync({ code: ReservationErrorCode.NotFound, message: "not found" })
       : okAsync(reservation),
   );
 
@@ -202,7 +202,7 @@ describe("getReservationUseCase", () => {
         isStaff: false,
       });
 
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationNotFound);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
       expect(spies.findById).not.toHaveBeenCalled();
     });
 
@@ -227,7 +227,7 @@ describe("getReservationUseCase", () => {
         isStaff: false,
       });
 
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationNotFound);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
     });
   });
 });

@@ -3,7 +3,6 @@ import { data, isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { ReservationErrorCode } from "~/domain/reservation";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
@@ -15,7 +14,7 @@ import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { logServerError } from "~/lib/log.server";
 import { QueryErrorCode } from "~/query/error";
-import { toActionErrorMessage } from "~/routes/reservations/list/action-error";
+import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { parseReservationListParams } from "~/routes/reservations/list/query-params";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
@@ -96,7 +95,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const reason = formData.get("reason");
 
   if (typeof reservationId !== "string" || !reservationId) {
-    return { error: "予約が指定されていません。" };
+    return { formError: "予約が指定されていません。" };
   }
 
   /*
@@ -107,7 +106,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const transition = parseReservationTransition(intent);
 
   if (transition === null || !isStaffTransition(transition)) {
-    return { error: "不正な操作です。" };
+    return { formError: "不正な操作です。" };
   }
 
   const db = createDb(env.DB);
@@ -130,14 +129,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (result.isErr()) {
     /*
-     * 差し戻し（理由の未入力・重なり・権限）は想定内なのでログに残さない。
-     * DB の失敗だけは、画面に出さない代わりに原因をサーバー側へ残す。
+     * 一覧には欄が無いので、誤りはすべて一覧の上に出す。却下・キャンセルの理由も、
+     * 入力するダイアログは送信のたびに閉じるので、欄の下に出す先が無い。
+     * ログの where に操作の種類まで入れて、どの操作で失敗したかを絞り込めるようにする。
      */
-    if (result.error.code === ReservationErrorCode.DatabaseError) {
-      logServerError("staff.reservations.action", result.error);
-    }
-
-    return { error: toActionErrorMessage(result.error) };
+    return reservationActionErrors(
+      { where: `staff.reservations.${transition}`, userId: user.id },
+      result.error,
+    );
   }
 
   /*
@@ -163,7 +162,7 @@ export default function StaffReservationListRoute({
       params={params}
       scope="all"
       now={new Date(now)}
-      actionError={actionData?.error}
+      actionError={actionData?.formError}
     />
   );
 }
