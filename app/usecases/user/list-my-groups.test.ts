@@ -17,6 +17,7 @@ const roboticsGroup: UserGroupListItem = {
   name: "ロボティクス開発プロジェクト",
   status: GroupStatus.Enabled,
   role: MembershipRole.Admin,
+  memberCount: 5,
 };
 
 /**

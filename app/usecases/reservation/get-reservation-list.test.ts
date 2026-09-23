@@ -67,12 +67,14 @@ const userGroups: UserGroupList = [
     name: "ロボティクス開発プロジェクト",
     status: GroupStatus.Enabled,
     role: MembershipRole.Member,
+    memberCount: 3,
   },
   {
     id: "grp_second_group",
     name: "第2所属団体",
     status: GroupStatus.Enabled,
     role: MembershipRole.Admin,
+    memberCount: 5,
   },
 ];
 

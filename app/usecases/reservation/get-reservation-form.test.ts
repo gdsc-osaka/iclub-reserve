@@ -48,6 +48,7 @@ const myGroups: UserGroupList = [
     name: "ロボティクス開発プロジェクト",
     status: GroupStatus.Enabled,
     role: MembershipRole.Member,
+    memberCount: 4,
   },
 ];
 
