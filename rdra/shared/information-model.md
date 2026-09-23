@@ -264,7 +264,7 @@ entities:
       - name: "name"
         type: "string"
         required: true
-        description: "氏名。NULLは許さず、未設定は空文字で表す。アカウント作成の直後は空文字であり、初回セットアップ（SCR-014）で登録して本登録が完了する。空白のみの値も未設定として扱う。"
+        description: "氏名（本名）。NULLは許さず、未設定は空文字で表す。アカウント作成の直後は空文字であり、初回セットアップ（SCR-014）で登録して本登録が完了する。空白のみの値も未設定として扱う。登録・変更（SCR-021）の入力はCOND-017を満たすこと。"
       - name: "email_verified"
         type: "boolean"
         required: true
@@ -301,6 +301,12 @@ entities:
       - target: "INFO-009"
         type: "1:N"
         label: "送信した事務局招待"
+      - target: "INFO-010"
+        type: "1:N"
+        label: "登録したパスキー"
+      - target: "INFO-011"
+        type: "1:N"
+        label: "ログイン中の端末"
     traces_to:
       [
         "UC-010",
@@ -308,16 +314,20 @@ entities:
         "UC-019",
         "UC-020",
         "UC-021",
+        "UC-023",
         "UC-026",
         "UC-027",
         "UC-028",
+        "UC-029",
         "SCR-006",
         "SCR-007",
         "SCR-012",
         "SCR-013",
         "SCR-014",
         "SCR-015",
+        "SCR-017",
         "SCR-019",
+        "SCR-021",
       ]
 
   - id: "INFO-007"
@@ -473,11 +483,91 @@ entities:
         type: "N:1"
         label: "招待者"
     traces_to: ["UC-026", "UC-027", "SCR-019", "SCR-020"]
+
+  - id: "INFO-010"
+    name: "パスキー"
+    description: "ユーザーがログインに使うパスキー（WebAuthn の資格情報）。認証基盤（Better Auth）が管理するが、利用者がアカウント設定（SCR-021）で一覧し、名前を変え、削除するため本モデルに含める。ここに載せるのは画面に出す・判定に使う属性だけで、公開鍵・署名カウンター・通信方式・認証器の種別など、認証のためだけの値は省く。last_used_at だけは Better Auth が記録しない値で、アプリが自分で持つ。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "パスキーID（主キー）"
+      - name: "user_id"
+        type: "string"
+        required: true
+        description: "持ち主のユーザーID（外部キー）"
+      - name: "name"
+        type: "string"
+        required: false
+        description: "表示名。登録時にサーバーが付け（COND-020）、利用者が変更できる。名前の無い既存のパスキーは、表示の際にCOND-020の規則で組み立てる。"
+      - name: "credential_id"
+        type: "string"
+        required: true
+        description: "資格情報ID。認証器の中でこのパスキーを指す値。削除したことを端末へ伝える（UC-030・WebAuthn の Signal API）ときに使う。"
+      - name: "aaguid"
+        type: "string"
+        required: false
+        description: "認証器の機種ID。名前を決めるのに使う（COND-020）。Appleの端末などは0埋めで届き、機種が分からない。"
+      - name: "backed_up"
+        type: "boolean"
+        required: true
+        description: "同期されるかどうか。true なら iCloud キーチェーンや Google Password Manager などで他の端末と同期される。false なら登録した認証器（セキュリティキーなど）だけに保存されている。登録した時点の値で、その後は更新されない。一覧には「同期される」「同期されない（登録した認証器だけ）」と表示する（別の端末から一覧を見たときに誤解されないよう「この端末」とは書かない）。"
+      - name: "created_at"
+        type: "datetime"
+        required: true
+        description: "登録日時。Better Auth が登録時に必ず入れる（DB の列自体は NULL を許す）。"
+      - name: "last_used_at"
+        type: "datetime"
+        required: false
+        description: "最後にこのパスキーでログインした日時。Better Auth は記録しないため、アプリが持つ。パスキーでのログインが成功するたびに更新する。登録してから一度も使っていなければ空。"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "持ち主"
+    traces_to: ["UC-020", "UC-021", "UC-030", "SCR-014", "SCR-015", "SCR-021"]
+
+  - id: "INFO-011"
+    name: "ログインセッション"
+    description: "ログイン中の端末を表す。ログインのたびに1件作られ、ログアウト・有効期限切れ・ほかの端末からのログアウト（UC-031）・メールアドレスの変更（COND-018）で消える。認証基盤（Better Auth）が管理するが、利用者がアカウント設定（SCR-021）で一覧し、ログアウトさせるため本モデルに含める。セッションを識別するトークンは、ほかの端末のログインを乗っ取る手がかりになるため画面にも利用者のブラウザにも渡さず、一覧とログアウトはサーバー側で行う。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "セッションID（主キー）"
+      - name: "user_id"
+        type: "string"
+        required: true
+        description: "ログインしているユーザーのID（外部キー）"
+      - name: "user_agent"
+        type: "string"
+        required: false
+        description: "ログインした端末の User-Agent。端末名の組み立てに使う（COND-020）。"
+      - name: "ip_address"
+        type: "string"
+        required: false
+        description: "ログインしたときの IP アドレス。学内ネットワークではほぼ同じ値になり見分けに役立たないため、画面には表示しない。"
+      - name: "created_at"
+        type: "datetime"
+        required: true
+        description: "ログインした日時"
+      - name: "updated_at"
+        type: "datetime"
+        required: true
+        description: "最終更新日時。使い続けると有効期限の延長のたびに更新されるが、延長は多くても1日に1回であるため、「最後に使った日」として日単位の目安で表示する。"
+      - name: "expires_at"
+        type: "datetime"
+        required: true
+        description: "有効期限。最後の延長から7日（Better Auth の既定値）。"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "ログインしているユーザー"
+    traces_to: ["UC-019", "UC-020", "UC-023", "UC-031", "SCR-021"]
 ---
 
 # 情報モデル（横断）
 
-認証基盤（Better Auth）が内部で管理するデータ——セッション・外部アカウント・認証コード・パスキー——は業務上の情報ではないため、本モデルには含めない。一方、招待（INFO-007）は団体運営の業務そのものに現れる情報なので含めている。
+認証基盤（Better Auth）が内部で管理するデータのうち、外部アカウント・認証コードは業務上の情報ではないため、本モデルには含めない。パスキー（INFO-010）とログインセッション（INFO-011）も同じく Better Auth が管理するが、利用者がアカウント設定（SCR-021）で見て操作するため含めている。その場合も、画面に出す・判定に使う属性だけを載せる。招待（INFO-007）は団体運営の業務そのものに現れる情報なので含めている。
 
 ## ER図
 
@@ -495,6 +585,8 @@ erDiagram
     INFO_006 ||--o{ INFO_008 : "操作する"
     INFO_003 |o--o{ INFO_008 : "対象になる"
     INFO_006 ||--o{ INFO_009 : "事務局に招待する"
+    INFO_006 ||--o{ INFO_010 : "登録する"
+    INFO_006 ||--o{ INFO_011 : "ログインする"
 
     INFO_006["INFO-006: ユーザー"] {
         string id PK
@@ -584,6 +676,25 @@ erDiagram
         datetime expires_at
         string inviter_id FK
         datetime created_at
+    }
+    INFO_010["INFO-010: パスキー"] {
+        string id PK
+        string user_id FK
+        string name
+        string credential_id
+        string aaguid
+        boolean backed_up
+        datetime created_at
+        datetime last_used_at
+    }
+    INFO_011["INFO-011: ログインセッション"] {
+        string id PK
+        string user_id FK
+        string user_agent
+        string ip_address
+        datetime created_at
+        datetime updated_at
+        datetime expires_at
     }
 ```
 
