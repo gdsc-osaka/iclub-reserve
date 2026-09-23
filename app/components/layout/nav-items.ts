@@ -123,7 +123,7 @@ export const staffNavItems: readonly NavItem[] = [
     label: "施設の管理",
     to: "/staff/facilities",
     icon: Settings2,
-    enabled: false,
+    enabled: true,
     screen: "SCR-009",
   },
 ];

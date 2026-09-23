@@ -101,7 +101,7 @@ entities:
       - name: "photo_url"
         type: "string"
         required: false
-        description: "施設・設備の写真URL"
+        description: "施設・設備の写真URL（R2 に置いた写真の配信 URL。アプリ内の相対パス）"
       - name: "google_calendar_id"
         type: "string"
         required: false

@@ -20,7 +20,6 @@ export default [
   layout("routes/app-layout/route.tsx", [
     index("routes/home/route.tsx"),
     route("availability", "routes/availability/route.tsx"),
-    route("facility", "routes/facility/route.tsx"),
     /*
      * 団体一覧（SCR-008）。
      * 一般ユーザー向け（/groups）と事務局向け（/staff/groups）に分ける。
@@ -36,7 +35,14 @@ export default [
     route("groups/new", "routes/groups/new/route.tsx"),
     route("groups/:groupId", "routes/groups/$groupId/route.tsx"),
     route("invitations/:invitationId", "routes/invitations/$invitationId/route.tsx"),
-    route("facility/:facilityId", "routes/facility/$facilityId/route.tsx"),
+    /*
+     * 施設管理（SCR-009）。
+     * 事務局スタッフ限定の画面。登録・編集・無効化を扱う。
+     * `new` は `:facilityId` より具体的なので、先に配置する。
+     */
+    route("staff/facilities", "routes/facilities/staff/route.tsx"),
+    route("staff/facilities/new", "routes/facilities/staff/new/route.tsx"),
+    route("staff/facilities/:facilityId", "routes/facilities/staff/$facilityId/route.tsx"),
     /*
      * 予約は複数形の `reservations` にそろえる。
      * 一覧（SCR-003）が `/reservations` に入る想定なので（`nav-items.ts`）、
@@ -62,6 +68,9 @@ export default [
 
   // Better Auth のエンドポイント（/api/auth/... を全て受ける）
   route("api/auth/*", "routes/api/auth/route.ts"),
+
+  // 施設写真の配信ルート（ADR-005: ログイン必須・プライベートキャッシュ）
+  route("facility-photos/:photoName", "routes/facility-photos/$photoName/route.ts"),
 
   // 開発専用ルート（ローカルでの outbox 手動送信確認用 / ADR-002 実装ガイド 5）
   route("dev/flush-mail", "routes/dev/flush-mail/route.ts"),
