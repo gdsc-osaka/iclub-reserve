@@ -70,14 +70,25 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
   const facilityId = params.facilityId;
 
-  const intent =
-    new URL(request.url).searchParams.get("intent") ??
-    (await request.clone().formData()).get("intent");
+  /*
+   * 本文を読む前に Content-Length を見て、明らかに大きすぎる送信を止める。
+   * `request.formData()` は本文をすべてメモリに読み込むので、読んでからでは遅い。
+   * 状態変更の送信は小さいので、この判定に引っかかるのは写真付きの更新だけである。
+   */
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (contentLength > MAX_CONTENT_LENGTH_BYTES) {
+    return {
+      intent: "update" as const,
+      [FacilityField.Photo]: "送信サイズが大きすぎます（上限 5 MiB）。",
+      formError: "送信されたデータが上限を超えています。",
+    };
+  }
 
+  const formData = await request.formData();
+  const intent = formData.get("intent");
   const db = createDb(env.DB);
 
   if (intent === "change-status") {
-    const formData = await request.formData();
     const rawStatus = formData.get("status");
     const status = typeof rawStatus === "string" ? rawStatus : "";
 
@@ -93,34 +104,29 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
 
     if (result.isErr()) {
-      return facilityActionErrors(
-        { where: "staff.facilities.detail.change-status", userId: user.id },
-        result.error,
-      );
+      return {
+        intent: "change-status" as const,
+        ...facilityActionErrors(
+          { where: "staff.facilities.detail.change-status", userId: user.id },
+          result.error,
+        ),
+      };
     }
 
     return {
+      intent: "change-status" as const,
       success: {
-        kind: "change-status" as const,
         message: `${result.value.name} を${facilityStatusLabel(result.value.isActive)}にしました。`,
       },
     };
   }
 
   // 施設情報の更新（intent === "update"）
-  const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (contentLength > MAX_CONTENT_LENGTH_BYTES) {
-    return {
-      [FacilityField.Photo]: "送信サイズが大きすぎます（上限 5 MiB）。",
-      formError: "送信されたデータが上限を超えています。",
-    };
-  }
-
-  const formData = await request.formData();
   const rawName = formData.get(FacilityField.Name);
   const rawDescription = formData.get(FacilityField.Description);
   const rawGoogleCalendarId = formData.get(FacilityField.GoogleCalendarId);
-  const photo = formData.get(FacilityField.Photo) as File | null;
+  const rawPhoto = formData.get(FacilityField.Photo);
+  const photo = rawPhoto instanceof File ? rawPhoto : null;
   const removePhoto = formData.get("remove_photo") === "on";
 
   const name = typeof rawName === "string" ? rawName : "";
@@ -147,21 +153,24 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   );
 
   if (result.isErr()) {
-    return facilityActionErrors(
-      { where: "staff.facilities.detail.update", userId: user.id },
-      result.error,
-      {
-        [FacilityField.Name]: FacilityField.Name,
-        [FacilityField.Description]: FacilityField.Description,
-        [FacilityField.Photo]: FacilityField.Photo,
-        [FacilityField.GoogleCalendarId]: FacilityField.GoogleCalendarId,
-      },
-    );
+    return {
+      intent: "update" as const,
+      ...facilityActionErrors(
+        { where: "staff.facilities.detail.update", userId: user.id },
+        result.error,
+        {
+          [FacilityField.Name]: FacilityField.Name,
+          [FacilityField.Description]: FacilityField.Description,
+          [FacilityField.Photo]: FacilityField.Photo,
+          [FacilityField.GoogleCalendarId]: FacilityField.GoogleCalendarId,
+        },
+      ),
+    };
   }
 
   return {
+    intent: "update" as const,
     success: {
-      kind: "update" as const,
       message: "施設情報を保存しました。",
     },
   };
@@ -183,8 +192,12 @@ export default function EditFacilityPage({ loaderData, actionData }: Route.Compo
     }
   }, [actionData]);
 
+  /*
+   * 入力欄の誤りは、施設情報の更新（intent=update）に失敗したときだけフォームに出す。
+   * 状態変更の失敗はトーストで知らせるので、フォームの上には出さない。
+   */
   const formErrors: FacilityFormProps["errors"] =
-    actionData && !("success" in actionData)
+    actionData && actionData.intent === "update" && !("success" in actionData)
       ? {
           [FacilityField.Name]:
             "facility_name" in actionData && typeof actionData.facility_name === "string"
@@ -234,7 +247,12 @@ export default function EditFacilityPage({ loaderData, actionData }: Route.Compo
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Form method="post" encType="multipart/form-data">
+          {/*
+           * 保存に成功すると updatedAt が変わるので、key でフォームを作り直す。
+           * 作り直さないと、選んだ写真や「写真を外す」のチェックが残り、もう一度保存したときに同じ写真を上げ直してしまう。
+           * 失敗したときは updatedAt が変わらないので、入力した内容はそのまま残る。
+           */}
+          <Form key={facility.updatedAt.toISOString()} method="post" encType="multipart/form-data">
             <input type="hidden" name="intent" value="update" />
             <FacilityForm
               mode="edit"

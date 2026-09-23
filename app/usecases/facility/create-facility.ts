@@ -19,6 +19,7 @@ import {
   type FacilityPhotoStorage,
 } from "~/domain/facility/facility-photo";
 import { ensureFacilityPermission } from "./_shared/facility-authorization";
+import { deleteFacilityPhotoQuietly } from "./_shared/facility-photo";
 
 export interface CreateFacilityDeps {
   readonly facilityRepository: FacilityRepository;
@@ -97,7 +98,7 @@ export const createFacilityUseCase = (
     if (createResult.isErr()) {
       // DB 登録失敗時は、アップロードした写真を削除してロールバックする
       if (uploadedPhotoName !== null) {
-        await deps.facilityPhotoStorage.delete(uploadedPhotoName);
+        await deleteFacilityPhotoQuietly(deps.facilityPhotoStorage, uploadedPhotoName);
       }
       return errAsync(createResult.error);
     }

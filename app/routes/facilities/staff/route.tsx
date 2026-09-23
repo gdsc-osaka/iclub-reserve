@@ -139,9 +139,16 @@ const toActionResultMessage = (
 
 export default function StaffFacilitiesPage({ loaderData, actionData }: Route.ComponentProps) {
   const { items } = loaderData;
-  const message = toActionResultMessage(actionData);
+  const resultMessage = toActionResultMessage(actionData);
 
+  /*
+   * 操作の結果は、画面上部に一時的に出す通知（トースト）で知らせる。
+   *
+   * actionData は送信のたびに新しいオブジェクトになるので、それが変わったときに 1 回だけ出す。
+   * resultMessage は描画のたびに作り直されるので、依存に入れると描画のたびに通知が出てしまう。
+   */
   useEffect(() => {
+    const message = toActionResultMessage(actionData);
     if (message === null) {
       return;
     }
@@ -154,7 +161,7 @@ export default function StaffFacilitiesPage({ loaderData, actionData }: Route.Co
         duration: ERROR_TOAST_DURATION_MS,
       });
     }
-  }, [message]);
+  }, [actionData]);
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
@@ -175,16 +182,16 @@ export default function StaffFacilitiesPage({ loaderData, actionData }: Route.Co
       </div>
 
       {/* JavaScript が無効な環境向けの通知バー */}
-      {message !== null && (
+      {resultMessage !== null && (
         <noscript>
-          <Alert variant={message.kind === "error" ? "destructive" : "default"}>
-            {message.kind === "error" ? (
+          <Alert variant={resultMessage.kind === "error" ? "destructive" : "default"}>
+            {resultMessage.kind === "error" ? (
               <CircleAlert className="size-4" />
             ) : (
               <CheckCircle2 className="size-4" />
             )}
-            <AlertTitle>{message.title}</AlertTitle>
-            <AlertDescription>{message.description}</AlertDescription>
+            <AlertTitle>{resultMessage.title}</AlertTitle>
+            <AlertDescription>{resultMessage.description}</AlertDescription>
           </Alert>
         </noscript>
       )}

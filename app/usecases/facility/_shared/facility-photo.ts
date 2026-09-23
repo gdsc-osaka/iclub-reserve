@@ -1,28 +1,22 @@
-import { toFacilityPhotoNameFromUrl } from "~/domain/facility/facility-photo";
 import type { FacilityPhotoStorage } from "~/domain/facility/facility-photo";
 
 /**
- * 写真ストレージから古い写真を削除する。
+ * 写真ストレージから写真を消す。失敗してもログに残すだけで、呼び出し元には伝えない。
  *
  * 【設計上の配慮（ADR-005）】
- * DB の更新が成功した後に古い写真を削除する。
- * もしこの削除が失敗しても、DB の更新は既に確定しているため、ユーザーへの操作結果としては
- * 成功を返し、エラーはログ（console.error）に記録して処理を継続する。
- * 画面にエラーを返すと利用者が再操作して二重更新等を起こす恐れがあるためである。
- * R2 に孤立したオブジェクトが残る可能性は許容する。
+ * 次の 2 か所で使う。どちらも、消せなくても利用者に見せる結果は変わらない。
+ * - DB の更新が成功した後に、差し替え前の写真を消すとき。DB の更新は確定しているので成功を返す。
+ *   画面にエラーを返すと、利用者が再操作して二重に更新する恐れがある。
+ * - DB への書き込みが失敗したときに、先に置いた写真を片付けるとき。利用者には DB の失敗を返す。
+ * R2 に孤立した写真が残ることは許容する。
  */
 export const deleteFacilityPhotoQuietly = async (
   storage: FacilityPhotoStorage,
-  photoUrl: string | null | undefined,
+  photoName: string,
 ): Promise<void> => {
-  const photoName = toFacilityPhotoNameFromUrl(photoUrl);
-  if (!photoName) {
-    return;
-  }
-
   const result = await storage.delete(photoName);
   if (result.isErr()) {
-    console.error("古い施設写真の削除に失敗しました（処理は継続します）:", {
+    console.error("施設写真を消せなかった（処理は続ける。R2 に孤立した写真が残る）:", {
       photoName,
       error: result.error,
     });

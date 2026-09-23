@@ -15,6 +15,7 @@ import {
 } from "~/domain/facility/facility-input";
 import {
   toFacilityPhotoName,
+  toFacilityPhotoNameFromUrl,
   toFacilityPhotoUrl,
   validateFacilityPhoto,
   type FacilityPhotoStorage,
@@ -120,14 +121,16 @@ export const updateFacilityUseCase = (
     if (updateResult.isErr()) {
       // DB 更新失敗時は新しく置いた写真を削除してロールバック
       if (uploadedPhotoName !== null) {
-        await deps.facilityPhotoStorage.delete(uploadedPhotoName);
+        await deleteFacilityPhotoQuietly(deps.facilityPhotoStorage, uploadedPhotoName);
       }
       return errAsync(updateResult.error);
     }
 
     // 6. DB 更新成功後、古い写真を静かに削除
-    if (oldPhotoToDelete !== null && oldPhotoToDelete !== newPhotoUrl) {
-      await deleteFacilityPhotoQuietly(deps.facilityPhotoStorage, oldPhotoToDelete);
+    const oldPhotoName =
+      oldPhotoToDelete !== newPhotoUrl ? toFacilityPhotoNameFromUrl(oldPhotoToDelete) : null;
+    if (oldPhotoName !== null) {
+      await deleteFacilityPhotoQuietly(deps.facilityPhotoStorage, oldPhotoName);
     }
 
     return okAsync(updateResult.value);

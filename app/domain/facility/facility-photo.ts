@@ -52,10 +52,7 @@ export const validateFacilityPhoto = (photo: {
 
   if (!Object.hasOwn(FACILITY_PHOTO_MIME_TO_EXT, photo.type)) {
     return err(
-      invalidPhoto(
-        `非対応の写真形式である: ${photo.type}`,
-        "写真は JPEG、PNG、WebP 形式のみ対応しています。",
-      ),
+      invalidPhoto("非対応の写真形式である。", "写真は JPEG、PNG、WebP 形式のみ対応しています。"),
     );
   }
 
@@ -72,10 +69,7 @@ export const validateFacilityPhoto = (photo: {
 export const toFacilityPhotoName = (contentType: string): Result<string, FacilityError> => {
   if (!Object.hasOwn(FACILITY_PHOTO_MIME_TO_EXT, contentType)) {
     return err(
-      invalidPhoto(
-        `非対応の写真形式である: ${contentType}`,
-        "写真は JPEG、PNG、WebP 形式のみ対応しています。",
-      ),
+      invalidPhoto("非対応の写真形式である。", "写真は JPEG、PNG、WebP 形式のみ対応しています。"),
     );
   }
 

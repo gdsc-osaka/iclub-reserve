@@ -5,7 +5,7 @@ import { Form, isRouteErrorResponse, Link, redirect, useNavigation } from "react
 import { FacilityForm } from "~/components/facility/facility-form";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { FacilityErrorCode, FacilityField } from "~/domain/facility";
+import { FacilityField } from "~/domain/facility";
 import { createDb } from "~/infra/db";
 import { createR2FacilityPhotoStorage } from "~/infra/facility/r2-facility-photo-storage";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
@@ -15,6 +15,7 @@ import {
   facilityErrorResponse,
 } from "~/routes/_shared/facility-error.server";
 import { createFacilityUseCase } from "~/usecases/facility/create-facility";
+import { openFacilityCreateFormUseCase } from "~/usecases/facility/open-facility-create-form";
 
 import type { Route } from "./+types/route";
 
@@ -33,13 +34,15 @@ const MAX_CONTENT_LENGTH_BYTES = 6 * 1024 * 1024;
 export async function loader({ context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
 
-  if (!user.is_staff) {
+  const result = await openFacilityCreateFormUseCase({
+    actorUserId: user.id,
+    isStaff: user.is_staff,
+  });
+
+  if (result.isErr()) {
     throw facilityErrorResponse(
       { where: "staff.facilities.new.loader", userId: user.id },
-      {
-        code: FacilityErrorCode.Forbidden,
-        message: "事務局ではないユーザーが施設登録画面を開こうとした。",
-      },
+      result.error,
     );
   }
 
@@ -75,7 +78,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   const rawName = formData.get(FacilityField.Name);
   const rawDescription = formData.get(FacilityField.Description);
   const rawGoogleCalendarId = formData.get(FacilityField.GoogleCalendarId);
-  const photo = formData.get(FacilityField.Photo) as File | null;
+  const rawPhoto = formData.get(FacilityField.Photo);
+  const photo = rawPhoto instanceof File ? rawPhoto : null;
   const isActive = formData.get("is_active") === "on";
 
   const name = typeof rawName === "string" ? rawName : "";

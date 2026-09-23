@@ -38,7 +38,7 @@ const validateTargetStatus = (status: string): Result<boolean, FacilityError> =>
 
   return err({
     code: FacilityErrorCode.InvalidInput,
-    message: `変更後のステータスに不正な値が指定された: ${status}`,
+    message: "変更後のステータスに不正な値が指定された。",
     userMessage: "変更後の状態は「有効」または「無効」を指定してください。",
   });
 };

@@ -4,6 +4,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { isFacilityPhotoName } from "~/domain/facility/facility-photo";
 import { createR2FacilityPhotoStorage } from "~/infra/facility/r2-facility-photo-storage";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { facilityErrorResponse } from "~/routes/_shared/facility-error.server";
 
 /**
  * 施設・設備写真の配信リソースルート（ADR-005）。
@@ -26,7 +27,7 @@ import { requireRequestUser } from "~/lib/auth/auth-session.server";
  *    必要な場合がある）。種類ごとにルートを分けることで、将来にわたって安全なアクセス制御を維持する。
  */
 export async function loader({ params, context }: LoaderFunctionArgs) {
-  requireRequestUser(context);
+  const user = requireRequestUser(context);
 
   const photoName = params.photoName;
   if (!photoName || !isFacilityPhotoName(photoName)) {
@@ -36,7 +37,12 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
   const storage = createR2FacilityPhotoStorage(env.MEDIA);
   const result = await storage.get(photoName);
 
-  if (result.isErr() || result.value === null) {
+  // R2 の障害は 404 に紛れさせず、表を通してログに残す（500 になる）
+  if (result.isErr()) {
+    throw facilityErrorResponse({ where: "facility-photos.loader", userId: user.id }, result.error);
+  }
+
+  if (result.value === null) {
     throw new Response("Not Found", { status: 404 });
   }
 
