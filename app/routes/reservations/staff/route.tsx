@@ -87,7 +87,7 @@ export async function action({ request, context }: Route.ActionArgs) {
    * この画面が出している操作（事務局のもの）だけを受け付ける。どれが事務局の操作かは
    * ドメインの表（transitionAuthority）が決めるので、ここに操作名を書き並べない。
    * 操作そのものの可否（事務局かどうか・今の状態・理由）はユースケースの canTransition が見る。
-   * 事務局でない人の送信も canTransition が `Forbidden` で止め、warn でログに残る。
+   * 事務局でない人の送信は、ユースケースが予約を引く前に `Forbidden` で止め、warn でログに残る。
    * ここで先に弾くと、判定が 2 か所に分かれるうえログに残らない（loader と同じ）。
    */
   const transition = parseReservationTransition(intent);
