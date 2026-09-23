@@ -17,15 +17,32 @@ import {
 import type { QueryError } from "~/query/error";
 
 /**
- * 団体が存在しないか、あるいは所属していない（存在秘匿）ときに返すエラー。
+ * 団体が存在しないときに返すエラー。
  *
- * 「所属していないグループ」と「存在しないグループ」で同じ値を返すことで、
- * グループ ID を総当たりされても、そのグループがあるかどうかを気取られないようにする（COND-011）。
- * そのため、この関数を通さずに個別のメッセージを書いてはいけない。
+ * 所属していなくて見られないときは、こちらではなく `groupNotVisible` を返すこと。
+ * 利用者への応答はどちらも同じ 404 になるが（COND-011）、それを揃えるのは画面の側で、
+ * ユースケースは起きたことをそのまま返す（ADR-004 決定 4）。
  */
 export const groupNotFound = (): GroupError => ({
-  code: GroupErrorCode.GroupNotFound,
-  message: "グループが見つかりません。",
+  code: GroupErrorCode.NotFound,
+  message: "団体が見つからない。",
+});
+
+/**
+ * 所属していないので見せないときに返すエラー。
+ *
+ * その ID の団体が存在するかは確かめない。確かめると応答時間の差から存在が漏れる（`ensureGroupIsVisible`）。
+ * `groupNotFound` と分けているのは、所属の無い団体 ID へのアクセスを
+ * サーバーのログに権限の問題（warn）として残すため。打ち間違いか総当たりかは、利用者ごとの件数で見分ける。
+ * 利用者に見せる応答を `NotFound` と同じにする（COND-011）のは
+ * `app/routes/_shared/group-error.server.ts` の表で、2 つの応答が同じになることをテストで固定している。
+ *
+ * `userMessage` を持たせないこと。持たせても画面には出ないが、
+ * 「見られない理由」を書く場所があると、いつか誰かが書いてしまう。
+ */
+export const groupNotVisible = (): GroupError => ({
+  code: GroupErrorCode.NotVisible,
+  message: "所属の無い団体を開こうとした（団体が存在するかは確かめていない）。",
 });
 
 /**
@@ -33,8 +50,8 @@ export const groupNotFound = (): GroupError => ({
  *
  * 所属 (Membership) の読み書きと、団体管理画面の Query の両方をここで受ける。
  * 失敗した場所ごとに文言を書き分けていないのは、この `message` がログにしか出ないため。
- * 画面に出る文言は `DatabaseError` として一律に差し替えられる（`toGroupErrorMessage`）。
- * どこで失敗したかは `logServerError` の `where` と、ここに詰めた `cause` が持っている。
+ * 画面に出る文言は `DatabaseError` として一律に差し替えられる（`app/routes/_shared/group-error.server.ts`）。
+ * どこで失敗したかはログの `where` と、ここに詰めた `cause` が持っている。
  *
  * ユースケースごとに同じ変換を書き直さないこと。文言が増えるだけで、
  * ログから読み取れることは変わらない。
@@ -86,18 +103,18 @@ export const resolveGroupActor = (
 /**
  * その団体を見られるかを確かめる。
  *
- * 見られないときに「権限がない」ではなく「見つからない」を返すのが要点（COND-011）。
- * 書き分けると、団体 ID を総当たりして存在を確かめられてしまう。
+ * 見られないときは `NotVisible` を返す。利用者には「見つからない」と答える必要があるが（COND-011）、
+ * それは画面の側が行う。ここで `NotFound` に潰すと、ログで総当たりを見つけられなくなる。
  */
 export const ensureGroupIsVisible = (actor: Actor): ResultAsync<null, GroupError> =>
   canAct(groupPermissions, actor, GroupAction.View)
     ? okAsync<null, GroupError>(null)
-    : errAsync(groupNotFound());
+    : errAsync(groupNotVisible());
 
 /**
  * 組み立て済みの操作する人が、その操作を許されているかを確かめる。
  *
- * 判定は 2 段階になる。団体を見る権限が無ければ存在を秘匿し（COND-011）、
+ * 判定は 2 段階になる。団体を見る権限が無ければ `NotVisible` を返し（画面の側で秘匿する。COND-011）、
  * 見る権限はあるがその操作が許されていなければ、何が足りないかを伝える。
  * 表が答えるのは「できるか」だけなので、どちらのエラーを返すかはここが決める。
  */
@@ -109,8 +126,9 @@ export const ensureActorCan = (
     canAct(groupPermissions, actor, action)
       ? okAsync<null, GroupError>(null)
       : errAsync<null, GroupError>({
-          code: GroupErrorCode.GroupForbidden,
-          message: groupForbiddenMessages[action],
+          code: GroupErrorCode.Forbidden,
+          message: `許されていない操作 (${action}) を拒否した。`,
+          userMessage: groupForbiddenMessages[action],
         }),
   );
 

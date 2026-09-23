@@ -226,6 +226,13 @@ COND-011 の表明になる。
 これでサーバーのログには `GROUP_NOT_VISIBLE` が `warn` として残り (決定 9)、
 外部への応答は 404 のまま変わらない。
 
+**`NotVisible` が表すのは「所属が無い」ことまでで、団体が存在するかは確かめない。**
+確かめると、存在する団体のときだけ D1 への往復が 1 回増え、応答時間の差から存在が漏れる
+(`get-group-management.ts` がすでに避けている)。そのため一般の利用者が打ち間違えた URL も `NotVisible` になり、
+`NotFound` になるのは事務局が引いたときと ID が空のときだけである (Phase 1 で確認)。
+コンテキストの 5 で挙げた打ち間違いと総当たりの区別は、1 行ずつではできず、決定 9 のとおり利用者ごとの件数で行う。
+1 行ずつ区別できるようになるのは「所属の無い団体 ID を開こうとした」と「本当に無い」の 2 つである。
+
 **表で上書きするのは status と文言だけで、ログのレベルは上書きしない。**
 秘匿が要るのは外部への応答であって、サーバーのログではない。
 `NotVisible` のレベルを `NotFound` に合わせて `info` へ落とすと、秘匿をログにまで持ち込むことになり、
@@ -280,11 +287,11 @@ export interface GroupError extends BaseError {
 画面側は、ドメインの語彙を自分の欄名に対応づける小さな表を持つ。
 
 ```ts
-// app/routes/groups/$groupId/invitation-form-errors.ts
-const fieldOf: Partial<Record<GroupField, keyof GroupInviteFormErrors>> = {
+// app/routes/groups/$groupId/route.tsx (招待の送信)
+...groupActionErrors(contextOf("invite-member"), result.error, {
   [GroupField.InviteeEmail]: "emailError",
   // MemberRole はこの画面では Select。欄の下に出す先が無いので、書かずに Alert へ落とす
-};
+}),
 ```
 
 **この表だけ `Partial` にする。** 決定 5 の表は書き忘れると秘匿が破れるため網羅を強制するが、
@@ -311,6 +318,16 @@ if (result.isErr()) {
 そのため、コンテキストの 6 に挙げた 3 か所の取りこぼしも同時に埋まる。
 
 `userId` を必須の引数にするのは、決定 9 のとおり、誰の操作かが無いとログから傾向を読めないためである。
+
+**action のグルーは、status が 404 になるエラーだけは返さずに投げる。**
+404 はその URL が指すもの (画面そのもの) が無いことを表し、誤りを出す先のフォームが無い。
+また loader が 404 を返す状況で action だけ 200 を返すと、応答の違いから存在を推測できる (COND-011)。
+そのため、URL ではなくフォームで指したものが無いとき (`MemberNotFound`・`InvitationNotFound`) は、
+表で status を 409 に上書きする。URL の団体はあり、画面を開いた後に状態が変わっただけだからである。
+
+**投げる応答の文言は表のものだけを使い、`userMessage` は使わない。**
+画面ごと差し替える応答なのでフォームに向けた文言の出番が無く、
+また `NotVisible` に誰かが `userMessage` を付けても秘匿が崩れないようにするためである。
 
 ### 8. Infra と UseCase でエラー型は分けない
 
@@ -356,8 +373,10 @@ infra が構築しているエラーコードを全件数えたところ、`Data
   Workers Logs の説明に書かれていない。項目にしておけば、それに頼らずに済む。
 - **`userId` を必ず入れる。** 無いと「1 人が ID を 1,000 回試した」と「1,000 人が 1 回ずつ打ち間違えた」が
   ログ上で同じに見える。偵察を見分けるには、誰の操作かが要る。
-- `cause` は今と同じく残す。`Error` を含むオブジェクトを渡したときに stack が落ちないかは、
-  Phase 1 で `log.server.ts` を直すときに確かめる。
+- `cause` は今と同じく残す。Workers Logs がオブジェクトの中の `Error` をどう直すかは説明に書かれておらず、
+  `JSON.stringify` では `Error` の name・message・stack が列挙されないため `{}` になる。
+  そのため `log.server.ts` が `cause` をたどり、`Error` を `{ name, message, stack, cause }` に直してから渡す
+  (Phase 1 で確認)。
 
 **入力値は残さない。** `message` にも、どの項目にも、利用者が入力した値を埋め込まない。
 とくに招待相手のメールアドレスは、まだ団体に加わっていない第三者の個人情報である。
@@ -432,13 +451,13 @@ DB マイグレーションは発生しない。
 
 ## 適用の順序
 
-| 段階    | 内容                                                                                                                                       |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Phase 0 | 設計変更に依存しない後始末。ログ漏れ 3 か所、`toGroupDatabaseError` の重複、`DataBaseError` の綴り、`ReservationError` の `BaseError` 継承 |
-| Phase 1 | group ドメインで縦に 1 本通す (決定 1〜7・9)。`lib/group-error-message.ts` と `$groupId/action-error.ts` が消える                          |
-| Phase 2 | reservation へ展開。コンテキストの 3 と `default:` の握りつぶしが解消する                                                                  |
-| Phase 3 | invitation / facility / user / query。固定文字列を表へ寄せる                                                                               |
-| Phase 4 | この ADR を承認に更新し、`AGENTS.md` に反映                                                                                                |
+| 段階    | 内容                                                                                                                                                                                                   |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Phase 0 | 設計変更に依存しない後始末。ログ漏れ 3 か所、`toGroupDatabaseError` の重複、`DataBaseError` の綴り、`ReservationError` の `BaseError` 継承                                                             |
+| Phase 1 | group ドメインで縦に 1 本通す (決定 1〜7・9)。`lib/group-error-message.ts` と `$groupId/action-error.ts` が消える。移行の済んでいないルートのために `logServerError` を残す                            |
+| Phase 2 | reservation へ展開。コンテキストの 3 と `default:` の握りつぶしが解消する                                                                                                                              |
+| Phase 3 | invitation / facility / user / query。固定文字列を表へ寄せる。`logServerError` を消す。招待の承諾画面 (SCR-016) は招待が URL の指すものなので、団体の表 (`InvitationNotFound` を 409) とは別の表を持つ |
+| Phase 4 | この ADR を承認に更新し、`AGENTS.md` に反映                                                                                                                                                            |
 
 Phase 1 だけやや大きいが、group で形が決まらないと Phase 2 以降の差分をレビューできないため分割しない。
 

@@ -170,7 +170,7 @@ describe("removeMemberUseCase", () => {
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.LastAdminRequired);
-    expect(error.message).toBe(
+    expect(error.userMessage).toBe(
       "管理者が 0 人になるため、最後の管理者は削除できません。先に別のメンバーを管理者にしてください。",
     );
     expect(fake.countAdminsCallCount()).toBe(1);
@@ -216,8 +216,8 @@ describe("removeMemberUseCase", () => {
     expect(fake.removeCallCount()).toBe(1);
   });
 
-  // 7. 一般メンバーが操作すると GroupForbidden になり、remove が 1 度も呼ばれない
-  it("一般メンバーが操作すると GroupForbidden になり、remove は呼ばれない", async () => {
+  // 7. 一般メンバーが操作すると Forbidden になり、remove が 1 度も呼ばれない
+  it("一般メンバーが操作すると Forbidden になり、remove は呼ばれない", async () => {
     const fake = createFakeMembershipRepository([regularMember, adminMembership1]);
 
     const result = await removeMemberUseCase(
@@ -232,13 +232,13 @@ describe("removeMemberUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
-    expect(error.code).toBe(GroupErrorCode.GroupForbidden);
-    expect(error.message).toBe("メンバーを削除できるのは管理者と事務局だけです。");
+    expect(error.code).toBe(GroupErrorCode.Forbidden);
+    expect(error.userMessage).toBe("メンバーを削除できるのは管理者と事務局だけです。");
     expect(fake.removeCallCount()).toBe(0);
   });
 
-  // 8. 所属していない人が操作すると GroupNotFound になり、存在しない団体のときと message まで一致する
-  it("所属していない人が操作すると GroupNotFound になり、存在しない団体のときと message まで一致する（COND-011）", async () => {
+  // 8. 所属していない人には、団体が存在するかに関わらず同じエラーを返す（団体を引きに行かない）
+  it("所属していない人には、団体が存在するかに関わらず同じエラーを返す（COND-011）", async () => {
     const fake = createFakeMembershipRepository([]);
 
     const notMemberResult = await removeMemberUseCase(
@@ -304,24 +304,21 @@ describe("removeMemberUseCase", () => {
     expect(fake.removeCallCount()).toBe(1);
   });
 
-  it.each(["", "   "])(
-    "targetUserId が %o のときは GroupInvalidInput になる",
-    async (targetUserId) => {
-      const fake = createFakeMembershipRepository([adminMembership1]);
+  it.each(["", "   "])("targetUserId が %o のときは InvalidInput になる", async (targetUserId) => {
+    const fake = createFakeMembershipRepository([adminMembership1]);
 
-      const result = await removeMemberUseCase(
-        { membershipRepository: fake.repository },
-        {
-          groupId: testGroupId,
-          actorUserId: adminMembership1.userId,
-          isStaff: false,
-          targetUserId,
-        },
-      );
+    const result = await removeMemberUseCase(
+      { membershipRepository: fake.repository },
+      {
+        groupId: testGroupId,
+        actorUserId: adminMembership1.userId,
+        isStaff: false,
+        targetUserId,
+      },
+    );
 
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupInvalidInput);
-      expect(fake.removeCallCount()).toBe(0);
-    },
-  );
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
+    expect(fake.removeCallCount()).toBe(0);
+  });
 });

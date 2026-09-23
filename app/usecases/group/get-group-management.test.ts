@@ -70,7 +70,7 @@ const createFakeGroupRepository = (groups: readonly Group[]) => {
 
       if (found === undefined) {
         return errAsync({
-          code: GroupErrorCode.GroupNotFound,
+          code: GroupErrorCode.NotFound,
           message: "Group not found",
         });
       }
@@ -267,7 +267,7 @@ describe("getGroupManagementUseCase", () => {
     expect(groups.findByIdCallCount()).toBe(1);
   });
 
-  it("所属していない人は GROUP_NOT_FOUND になり、団体を取りに行かない（呼び出し回数が 0）", async () => {
+  it("所属していない人は NotVisible になり、団体を取りに行かない（呼び出し回数が 0）", async () => {
     const groups = createFakeGroupRepository([testGroup]);
     const memberships = createFakeMembershipRepository([]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
@@ -289,7 +289,7 @@ describe("getGroupManagementUseCase", () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupNotFound);
+    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotVisible);
     // 存在の有無が問い合わせ回数に現れないよう、団体リポジトリは呼ばれない
     expect(groups.findByIdCallCount()).toBe(0);
     expect(memberListQuery.callCount()).toBe(0);
@@ -479,7 +479,7 @@ describe("getGroupManagementUseCase", () => {
       );
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupNotFound);
+      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotFound);
       expect(memberships.callCount()).toBe(0);
       expect(groups.findByIdCallCount()).toBe(0);
       expect(memberListQuery.callCount()).toBe(0);

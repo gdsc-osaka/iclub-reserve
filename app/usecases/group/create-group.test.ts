@@ -52,9 +52,9 @@ describe("createGroupUseCase", () => {
   const baseNow = new Date("2026-09-22T10:00:00.000Z");
   const actorUserId = "usr_creator";
 
-  // 1. 団体名が空文字・空白のみのときは GroupInvalidInput になり、create は 1 回も呼ばれない
+  // 1. 団体名が空文字・空白のみのときは InvalidInput になり、create は 1 回も呼ばれない
   it.each(["", "   ", "　"])(
-    "団体名が %o のときは GroupInvalidInput になり、create は呼ばれない",
+    "団体名が %o のときは InvalidInput になり、create は呼ばれない",
     async (name) => {
       const groups = createFakeGroupRepository();
 
@@ -64,13 +64,13 @@ describe("createGroupUseCase", () => {
       );
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
       expect(groups.createCallCount()).toBe(0);
     },
   );
 
-  // 2. 団体名が 64 文字を超えるときは GroupInvalidInput になり、create は呼ばれない
-  it("団体名が 64 文字を超えるときは GroupInvalidInput になり、create は呼ばれない", async () => {
+  // 2. 団体名が 64 文字を超えるときは InvalidInput になり、create は呼ばれない
+  it("団体名が 64 文字を超えるときは InvalidInput になり、create は呼ばれない", async () => {
     const groups = createFakeGroupRepository();
 
     const result = await createGroupUseCase(
@@ -79,13 +79,13 @@ describe("createGroupUseCase", () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupInvalidInput);
+    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
     expect(groups.createCallCount()).toBe(0);
   });
 
-  // 3. 団体名に改行を含むときは GroupInvalidInput になり、create は呼ばれない
+  // 3. 団体名に改行を含むときは InvalidInput になり、create は呼ばれない
   it.each(["ロボティクス\nプロジェクト", "ロボティクス\r\nプロジェクト"])(
-    "団体名に改行を含むときは GroupInvalidInput になり、create は呼ばれない",
+    "団体名に改行を含むときは InvalidInput になり、create は呼ばれない",
     async (name) => {
       const groups = createFakeGroupRepository();
 
@@ -95,7 +95,7 @@ describe("createGroupUseCase", () => {
       );
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
       expect(groups.createCallCount()).toBe(0);
     },
   );

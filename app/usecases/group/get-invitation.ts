@@ -46,7 +46,7 @@ export interface InvitationView {
  *    ※宛先照合を団体取得より先に行う理由: 宛先が違う人に対して団体を引きに行くと、
  *    存在する団体のときだけ DB 往復が 1 回増え、応答時間の差から団体の存在を推測されてしまうため（COND-011 存在の秘匿）。
  * 6. ここまで通った人だけが COND-011 の例外（招待を提示した正規の受信者）にあたる。groupRepository.findById で団体名を取得する。
- * 7. 団体の取得が GroupNotFound だったときは invitationNotFound() に畳む。
+ * 7. 団体の取得が NotFound だったときは invitationNotFound() に畳む。
  *    DatabaseError はそのまま返す（システム障害を 404 に潰すと監視に出ず、原因追跡ができなくなるため）。
  */
 export const getInvitationUseCase = (
@@ -85,8 +85,8 @@ export const getInvitationUseCase = (
     return deps.groupRepository
       .findById(invitation.groupId)
       .mapErr((error) => {
-        // 7. GroupNotFound の場合は存在秘匿のため invitationNotFound に畳む。DatabaseError はそのまま返す
-        if (error.code === GroupErrorCode.GroupNotFound) {
+        // 7. NotFound の場合は存在秘匿のため invitationNotFound に畳む。DatabaseError はそのまま返す
+        if (error.code === GroupErrorCode.NotFound) {
           return invitationNotFound();
         }
         return error;

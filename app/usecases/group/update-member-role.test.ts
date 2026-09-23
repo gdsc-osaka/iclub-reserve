@@ -188,7 +188,7 @@ describe("updateMemberRoleUseCase", () => {
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.LastAdminRequired);
-    expect(error.message).toBe(
+    expect(error.userMessage).toBe(
       "管理者が 0 人になるため、最後の管理者は降格できません。先に別のメンバーを管理者にしてください。",
     );
     expect(fake.countAdminsCallCount()).toBe(1);
@@ -259,8 +259,8 @@ describe("updateMemberRoleUseCase", () => {
     expect(fake.updateRoleCallCount()).toBe(1);
   });
 
-  // 8. 一般メンバーが操作すると GroupForbidden になり、updateRole が 1 度も呼ばれない
-  it("一般メンバーが操作すると GroupForbidden になり、updateRole は呼ばれない", async () => {
+  // 8. 一般メンバーが操作すると Forbidden になり、updateRole が 1 度も呼ばれない
+  it("一般メンバーが操作すると Forbidden になり、updateRole は呼ばれない", async () => {
     const fake = createFakeMembershipRepository([regularMember, adminMembership1]);
 
     const result = await updateMemberRoleUseCase(
@@ -277,13 +277,13 @@ describe("updateMemberRoleUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
-    expect(error.code).toBe(GroupErrorCode.GroupForbidden);
-    expect(error.message).toBe("メンバーの役割を変更できるのは管理者と事務局だけです。");
+    expect(error.code).toBe(GroupErrorCode.Forbidden);
+    expect(error.userMessage).toBe("メンバーの役割を変更できるのは管理者と事務局だけです。");
     expect(fake.updateRoleCallCount()).toBe(0);
   });
 
-  // 9. 所属していない人が操作すると GroupNotFound になり、updateRole が 1 度も呼ばれない
-  it("所属していない人が操作すると GroupNotFound になり、updateRole は呼ばれない", async () => {
+  // 9. 所属していない人が操作すると NotVisible になり、updateRole が 1 度も呼ばれない
+  it("所属していない人が操作すると NotVisible になり、updateRole は呼ばれない", async () => {
     const fake = createFakeMembershipRepository([adminMembership1]);
 
     const result = await updateMemberRoleUseCase(
@@ -299,11 +299,11 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupNotFound);
+    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotVisible);
     expect(fake.updateRoleCallCount()).toBe(0);
   });
 
-  // 10. 9 のエラーが、存在しない団体を指定したときのエラーと message まで含めて完全に一致する（COND-011）
+  // 10. 所属していない人には、団体が存在するかに関わらず同じエラーを返す（団体を引きに行かない。COND-011）
   it("所属していない団体と存在しない団体で、返るエラーが message まで含めて完全に一致する（COND-011）", async () => {
     const fake = createFakeMembershipRepository([]);
 
@@ -335,9 +335,9 @@ describe("updateMemberRoleUseCase", () => {
     expect(fake.updateRoleCallCount()).toBe(0);
   });
 
-  // 11. it.each(["owner", "ADMIN", "admin,member", "", "  "]) で、不正な役割は GroupInvalidInput になり、リポジトリが 1 つも呼ばれない（COND-007）
+  // 11. it.each(["owner", "ADMIN", "admin,member", "", "  "]) で、不正な役割は InvalidInput になり、リポジトリが 1 つも呼ばれない（COND-007）
   it.each(["owner", "ADMIN", "admin,member", "", "  "])(
-    "不正な役割 %o は GroupInvalidInput になり、リポジトリは 1 つも呼ばれない",
+    "不正な役割 %o は InvalidInput になり、リポジトリは 1 つも呼ばれない",
     async (invalidRole) => {
       const fake = createFakeMembershipRepository([adminMembership1]);
 
@@ -355,8 +355,8 @@ describe("updateMemberRoleUseCase", () => {
 
       expect(result.isErr()).toBe(true);
       const error = result._unsafeUnwrapErr();
-      expect(error.code).toBe(GroupErrorCode.GroupInvalidInput);
-      expect(error.message).toBe("指定できない役割です。");
+      expect(error.code).toBe(GroupErrorCode.InvalidInput);
+      expect(error.userMessage).toBe("指定できない役割です。");
       expect(fake.findByGroupAndUserCallCount()).toBe(0);
       expect(fake.countAdminsCallCount()).toBe(0);
       expect(fake.updateRoleCallCount()).toBe(0);
@@ -411,7 +411,7 @@ describe("updateMemberRoleUseCase", () => {
     expect(fake.updateRoleCallCount()).toBe(1);
   });
 
-  // 14. findByGroupAndUser が DB エラーを返したときは DatabaseError になる（GroupNotFound に潰れていないこと）
+  // 14. findByGroupAndUser が DB エラーを返したときは DatabaseError になる（NotFound に潰れていないこと）
   it("findByGroupAndUser が DB エラーを返したときは DatabaseError になる", async () => {
     const failingRepo: MembershipRepository = {
       findByGroupAndUser: () =>

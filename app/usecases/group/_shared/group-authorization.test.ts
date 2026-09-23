@@ -18,11 +18,11 @@ const actors = {
 } as const satisfies Record<string, Actor>;
 
 describe("ensureGroupIsVisible", () => {
-  it("所属していなければ、権限ではなく見つからないことを返す（COND-011）", async () => {
+  it("所属していなければ NotVisible を返す（利用者への応答を 404 に揃えるのは画面の側。COND-011）", async () => {
     const result = await ensureGroupIsVisible(actors["所属なし"]);
 
-    // 「権限がない」と返すと、団体 ID を総当たりして存在を確かめられてしまう
-    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupNotFound);
+    // NotFound に潰さずに返す。ログで権限の無いアクセスとして残すため（ADR-004 決定 4）
+    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotVisible);
   });
 
   it.each(["メンバー", "管理者", "事務局"] as const)("%s は団体を見られる", async (name) => {
@@ -33,18 +33,18 @@ describe("ensureGroupIsVisible", () => {
 });
 
 describe("ensureActorCan", () => {
-  it("所属していなければ、操作の種類に関わらず見つからないことを返す（COND-011）", async () => {
+  it("所属していなければ、操作の種類に関わらず NotVisible を返す（COND-011）", async () => {
     const result = await ensureActorCan(actors["所属なし"], GroupAction.InviteMember);
 
-    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupNotFound);
+    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotVisible);
   });
 
   it("団体は見られるが操作が許されていなければ、何が足りないかを伝える", async () => {
     const result = await ensureActorCan(actors["メンバー"], GroupAction.InviteMember);
     const error = result._unsafeUnwrapErr();
 
-    expect(error.code).toBe(GroupErrorCode.GroupForbidden);
-    expect(error.message).toBe("メンバーを招待できるのは管理者と事務局だけです。");
+    expect(error.code).toBe(GroupErrorCode.Forbidden);
+    expect(error.userMessage).toBe("メンバーを招待できるのは管理者と事務局だけです。");
   });
 
   it.each(["管理者", "事務局"] as const)("%s はメンバーを招待できる", async (name) => {

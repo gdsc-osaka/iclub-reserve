@@ -8,13 +8,12 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { GroupErrorCode } from "~/domain/group";
+import { GroupField } from "~/domain/group";
 import { GROUP_NAME_MAX_LENGTH } from "~/domain/group/group-name";
 import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { toGroupErrorMessage } from "~/lib/group-error-message";
-import { logServerError } from "~/lib/log.server";
+import { groupActionErrors } from "~/routes/_shared/group-error.server";
 import { createGroupUseCase } from "~/usecases/group/create-group";
 
 import type { Route } from "./+types/route";
@@ -62,19 +61,11 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
 
   if (result.isErr()) {
-    const error = result.error;
-
-    // 入力の誤りは利用者の操作に起因する想定内の事象であるためログには残さない。DB エラーのみログに記録する。
-    if (error.code === GroupErrorCode.DatabaseError) {
-      logServerError("groups.new.action", error);
-    }
-
-    const message = toGroupErrorMessage(error);
-
     return {
       submittedName,
-      nameError: error.code === GroupErrorCode.GroupInvalidInput ? message : null,
-      formError: error.code === GroupErrorCode.GroupInvalidInput ? null : message,
+      ...groupActionErrors({ where: "groups.new.action", userId: user.id }, result.error, {
+        [GroupField.Name]: "nameError",
+      }),
     } satisfies CreateGroupActionData;
   }
 

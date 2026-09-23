@@ -68,7 +68,8 @@ export type GroupManagementView =
  *    閲覧権限（GroupAction.View）が無ければ団体本体を取りに行かずに存在を秘匿する（COND-011）。
  *    先に団体を取りに行くと、存在する団体のときだけ DB クエリが 1 回増え、
  *    応答時間の差から団体の存在を推測できてしまう。
- *    DB エラーは GroupNotFound に潰さず DatabaseError として返す
+ *    見られないときは NotVisible を返す。利用者への応答を 404 に揃えるのは画面の側である（ADR-004 決定 4）。
+ *    DB エラーは NotFound に潰さず DatabaseError として返す
  *    （潰すとシステム障害が 404 として誤認され、監視や対応が遅れるため）。
  * 3. 管理権限（canManage）の判定には `GroupAction.Update` で代表させる。
  *    SCR-007 の各操作（編集・招待・昇格/降格・削除）は `groupPermissions` 上すべて同じ管理者（admin）にのみ

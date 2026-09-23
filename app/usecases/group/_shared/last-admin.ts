@@ -25,7 +25,7 @@ export interface LastAdminTarget {
  * wouldRemoveLastAdmin も同じ条件を持っているが、こちらは DB を引く前の足切りで、
  * 昇格や変更なしのときに無駄な往復を作らないために置いている。
  *
- * 拒否したときのメッセージを引数で受け取るのは、操作によって言い方が変わるため
+ * 拒否したときに利用者へ出す文言を引数で受け取るのは、操作によって言い方が変わるため
  * （降格できません／削除できません）。利用者にどちらの操作を止めたのかが伝わらないと、
  * 何をすれば先へ進めるのかが分からない。
  */
@@ -33,7 +33,7 @@ export const ensureNotLastAdmin = (
   deps: LastAdminDeps,
   groupId: string,
   target: LastAdminTarget,
-  forbiddenMessage: string,
+  userMessage: string,
 ): ResultAsync<null, GroupError> => {
   if (!target.targetIsAdmin || target.targetStaysAdmin) {
     return okAsync<null, GroupError>(null);
@@ -51,7 +51,8 @@ export const ensureNotLastAdmin = (
       wouldRemoveLastAdmin({ adminCount, ...target })
         ? errAsync<null, GroupError>({
             code: GroupErrorCode.LastAdminRequired,
-            message: forbiddenMessage,
+            message: "最後の管理者を外す操作を拒否した。",
+            userMessage,
           })
         : okAsync<null, GroupError>(null),
     );

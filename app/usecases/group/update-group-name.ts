@@ -36,13 +36,14 @@ export interface UpdateGroupNameArgs {
  *    事務局は所属の有無に関わらず全団体の管理権限を持つため（COND-009）、
  *    membershipRepository を問い合わせずに直接 updateName を実行する。
  *    事務局に対しては存在秘匿（COND-011）の対象外であるため、団体が存在しない場合は
- *    素直に GroupNotFound が返る。
+ *    素直に NotFound が返る。
  * 4. 一般利用者の場合（所属と認可判定）:
- *    先に membershipRepository で所属を確認する。DB エラーは GroupNotFound に潰さず
+ *    先に membershipRepository で所属を確認する。DB エラーは NotFound に潰さず
  *    DatabaseError として返す（潰すとインフラ障害が 404 として誤認され、監視や対応が遅れるため）。
- *    - 閲覧権限（GroupAction.View）がない場合: 団体の存在ごと秘匿するため groupNotFound() を返す（COND-011）。
+ *    - 閲覧権限（GroupAction.View）がない場合: NotVisible を返す。
+ *      利用者への応答を NotFound と同じにして存在を秘匿するのは画面の側である（COND-011 / ADR-004 決定 4）。
  *    - View は通るが Update 権限がない場合（一般メンバー）:
- *      GroupForbidden「団体情報を編集できるのは管理者と事務局だけです。」を返す。
+ *      Forbidden「団体情報を編集できるのは管理者と事務局だけです。」を返す。
  *      この利用者は既に画面を開いており、団体の存在を知っているため、ここで 404 を装っても
  *      秘匿上の意味がなく、単に「なぜ保存できないのか分からない不親切な画面」になってしまうため。
  *    - 権限確認が通った場合: 検証済みの名前で groupRepository.updateName を呼び出す。
