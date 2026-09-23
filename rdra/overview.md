@@ -5,7 +5,7 @@ actors:
   - id: "ACTOR-001"
     name: "事務局"
     type: human
-    description: "Innovators' Club事務局。予約の承認・却下・管理、団体・施設の管理を担う。全予約を承認フローなしで直接作成・変更・削除できる。"
+    description: "Innovators' Club事務局。予約の承認・却下・管理、団体・施設の管理を担う。全予約を承認フローなしで直接作成・変更できる（削除はしない）。事務局権限の付与・剥奪と、操作履歴の確認も担う。"
   - id: "ACTOR-002"
     name: "団体"
     type: human
@@ -40,6 +40,10 @@ goals:
     name: "予約単位のコミュニケーション"
     description: "予約単位で事務局と団体がメッセージをやり取りでき、解錠手続きなどの調整を一元化できる。"
     actors: ["ACTOR-001", "ACTOR-002"]
+  - id: "GOAL-007"
+    name: "操作の追跡"
+    description: "予約・団体（メンバー・招待を含む）・施設・事務局権限への操作について、誰が・いつ・何を・どう変えたかを後から確かめられる。事務局は全件を、団体は自団体に関わる分を見られる。GOAL-001 の「誰がいつ利用したか」が利用の記録であるのに対し、こちらは操作の記録である。ログイン・メールアドレス変更などの認証・アカウントまわりの記録（不正利用の調査）は対象外とするが、事務局権限の付与・剥奪は対象に含む。"
+    actors: ["ACTOR-001", "ACTOR-002"]
 
 contexts:
   - id: "BIZ-001"
@@ -51,7 +55,7 @@ contexts:
   - id: "BIZ-002"
     name: "reservation-approval"
     display_name: "予約承認"
-    description: "事務局による仮予約の承認・却下、直接予約の作成・変更・削除、メッセージ送受信。"
+    description: "事務局による仮予約の承認・却下、直接予約の作成・変更、メッセージ送受信。"
     primary_actors: ["ACTOR-001"]
     goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005"]
   - id: "BIZ-003"
@@ -74,10 +78,16 @@ contexts:
     goals: ["GOAL-004"]
   - id: "BIZ-006"
     name: "user-authentication"
-    display_name: "ユーザー認証"
-    description: "阪大関係者のみに利用を限定するアカウント登録（メール認証コード）と、認証コード・パスキーによるログイン。パスワードは扱わない。将来的にSSO連携を想定。"
+    display_name: "ユーザー認証・権限"
+    description: "阪大関係者のみに利用を限定するアカウント登録（メール認証コード）と、認証コード・パスキーによるログイン。パスワードは扱わない。将来的にSSO連携を想定。事務局による事務局権限の付与（招待と承諾）・剥奪を含む。"
     primary_actors: ["ACTOR-001", "ACTOR-002"]
-    goals: ["GOAL-006"]
+    goals: ["GOAL-006", "GOAL-002", "GOAL-007"]
+  - id: "BIZ-007"
+    name: "audit-log"
+    display_name: "操作履歴"
+    description: "予約・団体・メンバーシップ・招待・施設・事務局権限への変更の記録と、その閲覧。記録は各コンテキストの操作が業務データと同時に書き込み、本コンテキストは事務局（全件）と団体（自団体分）による閲覧を担う。"
+    primary_actors: ["ACTOR-001", "ACTOR-002"]
+    goals: ["GOAL-007"]
 ---
 
 # iclub-reserve 全体概観
@@ -107,7 +117,8 @@ graph LR
     BIZ003["BIZ-003: 団体管理"]
     BIZ004["BIZ-004: 施設管理"]
     BIZ005["BIZ-005: カレンダー連携"]
-    BIZ006["BIZ-006: ユーザー認証"]
+    BIZ006["BIZ-006: ユーザー認証・権限"]
+    BIZ007["BIZ-007: 操作履歴"]
 
     BIZ001 --> BIZ002
     BIZ002 --> BIZ005
@@ -118,4 +129,12 @@ graph LR
     BIZ006 --> BIZ003
     BIZ006 --> BIZ004
     BIZ006 --> BIZ005
+    BIZ006 --> BIZ007
+    BIZ001 -. 記録 .-> BIZ007
+    BIZ002 -. 記録 .-> BIZ007
+    BIZ003 -. 記録 .-> BIZ007
+    BIZ004 -. 記録 .-> BIZ007
+    BIZ006 -. 記録 .-> BIZ007
 ```
+
+点線は、各コンテキストの操作が操作履歴（INFO-008）に記録されることを表す（COND-013）。

@@ -1,5 +1,5 @@
 version: "1.0"
-generated_at: "2026-09-09T00:00:00Z"
+generated_at: "2026-09-23T00:00:00Z"
 
 elements:
   # ゴール
@@ -36,6 +36,12 @@ elements:
   - id: "GOAL-006"
     type: goal
     name: "阪大関係者のみに利用を限定する"
+    defined_in: "rdra/overview.md"
+    traces_to: []
+
+  - id: "GOAL-007"
+    type: goal
+    name: "操作の追跡"
     defined_in: "rdra/overview.md"
     traces_to: []
 
@@ -120,9 +126,9 @@ elements:
 
   - id: "REQ-014"
     type: requirement
-    name: "事務局による予約の直接作成・変更・削除"
+    name: "事務局による予約の直接作成・変更"
     defined_in: "rdra/contexts/reservation-approval.md"
-    traces_to: ["GOAL-002"]
+    traces_to: ["GOAL-002", "GOAL-007"]
 
   - id: "REQ-015"
     type: requirement
@@ -250,6 +256,42 @@ elements:
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["GOAL-006"]
 
+  - id: "REQ-036"
+    type: requirement
+    name: "変更操作の記録"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["GOAL-007"]
+
+  - id: "REQ-037"
+    type: requirement
+    name: "変更前後の値の記録"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["GOAL-007"]
+
+  - id: "REQ-038"
+    type: requirement
+    name: "記録の追記のみ・無期限保持"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["GOAL-007"]
+
+  - id: "REQ-039"
+    type: requirement
+    name: "事務局による操作履歴の閲覧"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["GOAL-007"]
+
+  - id: "REQ-040"
+    type: requirement
+    name: "団体による自団体の操作履歴の閲覧"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["GOAL-007"]
+
+  - id: "REQ-041"
+    type: requirement
+    name: "事務局権限の付与・剥奪"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["GOAL-002", "GOAL-007"]
+
   # ビジネスユースケース
   - id: "BUC-001"
     type: business_usecase
@@ -295,7 +337,7 @@ elements:
 
   - id: "BUC-008"
     type: business_usecase
-    name: "事務局による予約の直接作成・変更・削除"
+    name: "事務局による予約の直接作成・変更"
     defined_in: "rdra/contexts/reservation-approval.md"
     traces_to: ["REQ-014"]
 
@@ -385,7 +427,7 @@ elements:
 
   - id: "BUC-023"
     type: business_usecase
-    name: "招待の承諾"
+    name: "招待の承諾・辞退"
     defined_in: "rdra/contexts/group-management.md"
     traces_to: ["REQ-017"]
 
@@ -394,6 +436,24 @@ elements:
     name: "メールアドレスの変更"
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["REQ-035"]
+
+  - id: "BUC-025"
+    type: business_usecase
+    name: "操作の経緯を確かめる（事務局）"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["REQ-036", "REQ-037", "REQ-038", "REQ-039"]
+
+  - id: "BUC-026"
+    type: business_usecase
+    name: "自団体の操作の経緯を確かめる"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["REQ-036", "REQ-037", "REQ-040"]
+
+  - id: "BUC-027"
+    type: business_usecase
+    name: "事務局権限の付与・剥奪"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["REQ-041"]
 
   # ユースケース
   - id: "UC-001"
@@ -440,7 +500,7 @@ elements:
 
   - id: "UC-008"
     type: usecase
-    name: "予約を直接作成・変更・削除する"
+    name: "予約を直接作成・変更する"
     defined_in: "rdra/contexts/reservation-approval.md"
     traces_to: ["BUC-008"]
 
@@ -524,7 +584,7 @@ elements:
 
   - id: "UC-022"
     type: usecase
-    name: "招待を承諾する"
+    name: "招待を承諾・辞退する"
     defined_in: "rdra/contexts/group-management.md"
     traces_to: ["BUC-023"]
 
@@ -534,15 +594,46 @@ elements:
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["BUC-024"]
 
+  - id: "UC-024"
+    type: usecase
+    name: "操作履歴を閲覧する（事務局）"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["BUC-025"]
+
+  - id: "UC-025"
+    type: usecase
+    name: "自団体の操作履歴を閲覧する"
+    defined_in: "rdra/contexts/audit-log.md"
+    traces_to: ["BUC-026"]
+
+  - id: "UC-026"
+    type: usecase
+    name: "事務局に招待する・招待を取り消す"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["BUC-027"]
+
+  - id: "UC-027"
+    type: usecase
+    name: "事務局招待を承諾・辞退する"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["BUC-027"]
+
+  - id: "UC-028"
+    type: usecase
+    name: "事務局権限を剥奪する"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["BUC-027"]
+
 coverage:
-  total_goals: 6
-  goals_with_requirements: 6
-  total_requirements: 35
-  requirements_with_bucs: 35
-  total_bucs: 24
-  bucs_with_ucs: 23
-  total_ucs: 23
+  total_goals: 7
+  goals_with_requirements: 7
+  total_requirements: 41
+  requirements_with_bucs: 41
+  total_bucs: 27
+  bucs_with_ucs: 26
+  total_ucs: 28
   orphaned_elements: []
   notes:
-    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=23）"
+    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=26）"
+    - "操作履歴への記録（REQ-036）は独立したUCを持たない。記録対象のUC（VAR-002）が業務データと同じ db.batch で書き込む（COND-013）"
     - "SCR-011（アカウント登録フォーム）は廃止。認証コード方式では登録とログインの処理が同一のため、SCR-012（ログイン・新規登録画面）に統合した。詳細は change-log.md を参照"
