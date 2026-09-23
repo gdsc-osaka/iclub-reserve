@@ -96,7 +96,7 @@ const createDeps = (
     findById: () =>
       overrides.created == null
         ? errAsync({
-            code: overrides.createdError ?? ReservationErrorCode.ReservationNotFound,
+            code: overrides.createdError ?? ReservationErrorCode.NotFound,
             message: "予約を読めませんでした",
           })
         : okAsync(overrides.created),

@@ -52,8 +52,8 @@ export const getReservationUseCase = (
     const id = args.reservationId.trim();
     if (id === "") {
       return errAsync<never, ReservationError>({
-        code: ReservationErrorCode.ReservationNotFound,
-        message: "予約 ID が指定されていません。",
+        code: ReservationErrorCode.NotFound,
+        message: "予約 ID が空である。",
       });
     }
 

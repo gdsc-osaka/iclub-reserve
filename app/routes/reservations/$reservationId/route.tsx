@@ -1,11 +1,10 @@
 import { env } from "cloudflare:workers";
-import { data } from "react-router";
 
-import { ReservationErrorCode } from "~/domain/reservation";
 import { createDb } from "~/infra/db";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { reservationErrorResponse } from "~/routes/_shared/reservation-error.server";
 import { getReservationUseCase } from "~/usecases/reservation/get-reservation";
 
 import type { Route } from "./+types/route";
@@ -36,10 +35,11 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    if (result.error.code === ReservationErrorCode.ReservationNotFound) {
-      throw data({ message: "Reservation Not Found." }, { status: 404 });
-    }
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 見られない予約も、無い予約と同じ 404 になる。揃えるのは表の側
+    throw reservationErrorResponse(
+      { where: "reservations.detail.loader", userId: user.id },
+      result.error,
+    );
   }
 
   return result.value;

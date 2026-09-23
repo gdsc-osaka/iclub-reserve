@@ -152,8 +152,9 @@ export const changeReservationStatusUseCase = (
 
     if (!outcome.applied) {
       return errAsync<never, ReservationError>({
-        code: ReservationErrorCode.ReservationConflict,
-        message:
+        code: ReservationErrorCode.Conflict,
+        message: `予約 ${reservation.id} は読んだ後に状態が変わっていたので、更新しなかった。`,
+        userMessage:
           "この予約には別の操作が先に反映されました。画面を読み込み直して、状態を確認してください。",
       });
     }

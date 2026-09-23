@@ -57,14 +57,14 @@ describe("canTransition", () => {
           ReservationTransition.Withdraw,
           rolelessActor,
         )._unsafeUnwrapErr().code,
-      ).toBe(ReservationErrorCode.ReservationForbidden);
+      ).toBe(ReservationErrorCode.Forbidden);
       expect(
         canTransition(
           { status: ReservationStatus.Approved },
           ReservationTransition.Cancel,
           rolelessActor,
         )._unsafeUnwrapErr().code,
-      ).toBe(ReservationErrorCode.ReservationForbidden);
+      ).toBe(ReservationErrorCode.Forbidden);
     });
   });
 
@@ -122,7 +122,7 @@ describe("canTransition", () => {
         ReservationTransition.Withdraw,
         nonMemberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("他団体（非メンバーかつ非スタッフ）はキャンセルできない", () => {
@@ -131,7 +131,7 @@ describe("canTransition", () => {
         ReservationTransition.Cancel,
         nonMemberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("一般メンバー（非スタッフ）は承認できない", () => {
@@ -140,7 +140,7 @@ describe("canTransition", () => {
         ReservationTransition.Approve,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("一般メンバー（非スタッフ）は却下できない", () => {
@@ -149,7 +149,7 @@ describe("canTransition", () => {
         ReservationTransition.Reject,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("一般メンバー（非スタッフ）は事務局キャンセルできない", () => {
@@ -158,7 +158,7 @@ describe("canTransition", () => {
         ReservationTransition.StaffCancel,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("非メンバーの事務局は取り消し（withdraw）ではなく却下（reject）を行う", () => {
@@ -167,7 +167,7 @@ describe("canTransition", () => {
         ReservationTransition.Withdraw,
         staffActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
   });
 
@@ -178,9 +178,7 @@ describe("canTransition", () => {
         ReservationTransition.Withdraw,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("仮予約に対して通常のキャンセルはできない", () => {
@@ -189,9 +187,7 @@ describe("canTransition", () => {
         ReservationTransition.Cancel,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("承認済み予約に対して承認はできない", () => {
@@ -200,9 +196,7 @@ describe("canTransition", () => {
         ReservationTransition.Approve,
         staffActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("承認済み予約に対して却下はできない", () => {
@@ -211,9 +205,7 @@ describe("canTransition", () => {
         ReservationTransition.Reject,
         staffActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("仮予約に対して事務局キャンセルはできない", () => {
@@ -222,9 +214,7 @@ describe("canTransition", () => {
         ReservationTransition.StaffCancel,
         staffActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     const endedStatuses = [
@@ -238,9 +228,7 @@ describe("canTransition", () => {
       for (const transition of Object.values(ReservationTransition)) {
         const actor = { isStaff: true, membership: membershipOf(MembershipRole.Admin) };
         const result = canTransition({ status }, transition, actor);
-        expect(result._unsafeUnwrapErr().code).toBe(
-          ReservationErrorCode.ReservationInvalidTransition,
-        );
+        expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
       }
     });
   });
@@ -256,17 +244,17 @@ describe("validateTransitionReason (COND-002)", () => {
 
     it("理由が null のときは弾く", () => {
       const result = validateTransitionReason(ReservationTransition.Reject, null);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
 
     it("空文字は弾く", () => {
       const result = validateTransitionReason(ReservationTransition.Reject, "");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
 
     it("空白のみは弾く", () => {
       const result = validateTransitionReason(ReservationTransition.Reject, "   \n\t  ");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
   });
 
@@ -279,12 +267,12 @@ describe("validateTransitionReason (COND-002)", () => {
 
     it("理由が無い場合は弾く", () => {
       const result = validateTransitionReason(ReservationTransition.StaffCancel, "");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
 
     it("空白のみは弾く", () => {
       const result = validateTransitionReason(ReservationTransition.StaffCancel, "   ");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
   });
 

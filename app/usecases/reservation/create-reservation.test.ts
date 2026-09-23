@@ -13,6 +13,7 @@ import {
 } from "~/domain/membership";
 import {
   ReservationErrorCode,
+  ReservationField,
   ReservationStatus,
   type Reservation,
   type ReservationRepository,
@@ -89,8 +90,7 @@ const createDeps = (
   );
 
   const reservationRepository: ReservationRepository = {
-    findById: () =>
-      errAsync({ code: ReservationErrorCode.ReservationNotFound, message: "not found" }),
+    findById: () => errAsync({ code: ReservationErrorCode.NotFound, message: "not found" }),
     create,
     existsApprovedOverlap: () => okAsync(overrides.hasApprovedOverlap ?? false),
     applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
@@ -199,7 +199,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -227,7 +227,11 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationGroupNotEligible);
+    // 申請フォームが団体の欄の下に出せるよう、どの項目についての失敗かを添える（ADR-004 決定 6）
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.GroupNotEligible,
+      field: ReservationField.Group,
+    });
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -239,7 +243,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, { ...args, isStaff: true });
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationGroupNotEligible);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.GroupNotEligible);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 
@@ -248,7 +252,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationGroupNotEligible);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.GroupNotEligible);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 
@@ -259,9 +263,10 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(
-      ReservationErrorCode.ReservationFacilityNotAvailable,
-    );
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.FacilityNotAvailable,
+      field: ReservationField.Facility,
+    });
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -273,9 +278,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, { ...args, isStaff: true });
 
-    expect(result._unsafeUnwrapErr().code).toBe(
-      ReservationErrorCode.ReservationFacilityNotAvailable,
-    );
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.FacilityNotAvailable);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 
@@ -284,9 +287,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(
-      ReservationErrorCode.ReservationFacilityNotAvailable,
-    );
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.FacilityNotAvailable);
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -297,7 +298,11 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
+    // 重なりは時間帯を選び直せば通るので、利用時間についての失敗として返す
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.Conflict,
+      field: ReservationField.Period,
+    });
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -314,7 +319,7 @@ describe("createProvisionalReservationUseCase", () => {
       },
     });
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidPeriod);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidPeriod);
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -327,7 +332,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 

@@ -10,6 +10,6 @@ import type { QueryError } from "~/query/error";
  */
 export const toRecipientsError = (error: QueryError): ReservationError => ({
   code: ReservationErrorCode.DatabaseError,
-  message: "通知先メールアドレスの取得に失敗しました。",
+  message: "通知先のメールアドレスを読み取れなかった。",
   cause: error,
 });

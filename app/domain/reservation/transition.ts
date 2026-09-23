@@ -4,6 +4,7 @@ import { canAct, type Actor } from "../membership";
 import {
   ReservationAction,
   ReservationErrorCode,
+  ReservationField,
   reservationPermissions,
   ReservationStatus,
   type Reservation,
@@ -145,8 +146,10 @@ export const validateTransitionReason = (
     case ReservationTransition.Reject:
       if (trimmed === "") {
         return err({
-          code: ReservationErrorCode.ReservationInvalidInput,
-          message: "却下理由を入力してください。",
+          code: ReservationErrorCode.InvalidInput,
+          field: ReservationField.StatusReason,
+          message: "却下理由が空である。",
+          userMessage: "却下理由を入力してください。",
         });
       }
       return ok(trimmed);
@@ -154,8 +157,10 @@ export const validateTransitionReason = (
     case ReservationTransition.StaffCancel:
       if (trimmed === "") {
         return err({
-          code: ReservationErrorCode.ReservationInvalidInput,
-          message: "キャンセル理由を入力してください。",
+          code: ReservationErrorCode.InvalidInput,
+          field: ReservationField.StatusReason,
+          message: "事務局キャンセルの理由が空である。",
+          userMessage: "キャンセル理由を入力してください。",
         });
       }
       return ok(trimmed);
@@ -170,7 +175,7 @@ export const validateTransitionReason = (
 };
 
 /**
- * 今の状態では操作できないことを伝える文言。
+ * 今の状態では操作できないことを、利用者に伝える文言（`userMessage`）。
  *
  * 「この操作はできません」だけでは、利用者は自分の画面が古いのか
  * そもそも許されない操作なのか分からない。今どの状態なのかを添える。
@@ -217,8 +222,9 @@ export const canTransition = (
   if (authority === "staff") {
     if (!actor.isStaff) {
       return err({
-        code: ReservationErrorCode.ReservationForbidden,
-        message: "この操作は事務局スタッフのみ実行できます。",
+        code: ReservationErrorCode.Forbidden,
+        message: `事務局だけの操作 (${transition}) を、事務局でない人が行おうとした。`,
+        userMessage: "この操作は事務局スタッフのみ実行できます。",
       });
     }
     /*
@@ -231,16 +237,18 @@ export const canTransition = (
      */
   } else if (!canAct(reservationPermissions, actor, authority)) {
     return err({
-      code: ReservationErrorCode.ReservationForbidden,
-      message: "所属している団体の予約のみ操作できます。",
+      code: ReservationErrorCode.Forbidden,
+      message: `許されていない操作 (${transition}) を拒否した。`,
+      userMessage: "所属している団体の予約のみ操作できます。",
     });
   }
 
   // 2. 現在のステータスからの遷移可否（STATE-001）
   if (reservation.status !== transitionSourceStatus[transition]) {
     return err({
-      code: ReservationErrorCode.ReservationInvalidTransition,
-      message: statusMismatchMessage(reservation.status),
+      code: ReservationErrorCode.InvalidTransition,
+      message: `${reservation.status} の予約に ${transition} はできない。`,
+      userMessage: statusMismatchMessage(reservation.status),
     });
   }
 

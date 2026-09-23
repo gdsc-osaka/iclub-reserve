@@ -1,13 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   RESERVATION_MIN_HEAD_COUNT,
   RESERVATION_NOTE_MAX_LENGTH,
   ReservationErrorCode,
+  ReservationField,
   type ReservationError,
 } from "~/domain/reservation";
+import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 
-import { parseReservation, readValues, toFormErrors, type FormValues } from "./form-values";
+import {
+  fieldKeyOf,
+  parseReservation,
+  readValues,
+  toFormErrors,
+  type FormValues,
+} from "./form-values";
 
 /** 2026 年 9 月 16 日（水）9:00。この時刻より前は「過ぎた日時」になる */
 const now = new Date("2026-09-16T09:00:00+09:00");
@@ -24,7 +32,24 @@ const values = (overrides: Partial<FormValues> = {}): FormValues => ({
   ...overrides,
 });
 
-const error = (code: ReservationErrorCode): ReservationError => ({ code, message: "元の文言" });
+const error = (
+  code: ReservationErrorCode,
+  extra: Partial<ReservationError> = {},
+): ReservationError => ({
+  code,
+  message: "ログ用の説明",
+  ...extra,
+});
+
+/** action と同じ道筋（グルー → この画面の欄の表 → この画面の形）で、エラーを画面の形にする */
+const formErrorsOf = (reservationError: ReservationError) =>
+  toFormErrors(
+    reservationActionErrors(
+      { where: "reservations.new.test", userId: "usr_01" },
+      reservationError,
+      fieldKeyOf,
+    ),
+  );
 
 describe("readValues", () => {
   it("フォームの name をそのまま読み取る", () => {
@@ -138,44 +163,100 @@ describe("parseReservation", () => {
   });
 });
 
-describe("toFormErrors", () => {
-  it("時間帯にまつわるエラーは、日時の欄に出す", () => {
-    expect(toFormErrors(error(ReservationErrorCode.ReservationInvalidPeriod))).toEqual({
-      fieldErrors: { period: "元の文言" },
+describe("申請のエラーを出す欄", () => {
+  beforeEach(() => {
+    // グルーはどの失敗もログに残す。ここでは出力を黙らせるだけ
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("利用時間の誤りと、承認済みの予約との重なりは、日時の欄に出す", () => {
+    expect(
+      formErrorsOf(
+        error(ReservationErrorCode.InvalidPeriod, {
+          field: ReservationField.Period,
+          userMessage: "過ぎた日時には申請できません。",
+        }),
+      ),
+    ).toEqual({ fieldErrors: { period: "過ぎた日時には申請できません。" }, formError: null });
+
+    expect(
+      formErrorsOf(
+        error(ReservationErrorCode.Conflict, {
+          field: ReservationField.Period,
+          userMessage: "選んだ時間帯には、すでに承認済みの予約が入っています。",
+        }),
+      ).fieldErrors.period,
+    ).toBe("選んだ時間帯には、すでに承認済みの予約が入っています。");
+  });
+
+  it("申請元の団体・施設が使えないときは、それぞれの欄に出す", () => {
+    expect(
+      formErrorsOf(
+        error(ReservationErrorCode.GroupNotEligible, {
+          field: ReservationField.Group,
+          userMessage: "予約を申請できるのは、事務局が有効にした団体だけです。",
+        }),
+      ).fieldErrors,
+    ).toEqual({ groupId: "予約を申請できるのは、事務局が有効にした団体だけです。" });
+
+    expect(
+      formErrorsOf(
+        error(ReservationErrorCode.FacilityNotAvailable, {
+          field: ReservationField.Facility,
+          userMessage: "選んだ施設・設備は、いま予約を受け付けていません。",
+        }),
+      ).fieldErrors,
+    ).toEqual({ facilityId: "選んだ施設・設備は、いま予約を受け付けていません。" });
+  });
+
+  it("使用人数と備考の誤りは、フォームの上ではなくそれぞれの欄に出す", () => {
+    // これまではコードから項目を見分けられず、どちらもフォームの上に出ていた
+    expect(
+      formErrorsOf(
+        error(ReservationErrorCode.InvalidInput, {
+          field: ReservationField.HeadCount,
+          userMessage: "使用人数は 1 以上の整数で入力してください。",
+        }),
+      ),
+    ).toEqual({
+      fieldErrors: { headCount: "使用人数は 1 以上の整数で入力してください。" },
       formError: null,
     });
-    expect(toFormErrors(error(ReservationErrorCode.ReservationConflict)).fieldErrors.period).toBe(
-      "元の文言",
-    );
-  });
 
-  it("申請元の団体にまつわるエラーは、団体の欄に出す", () => {
-    expect(toFormErrors(error(ReservationErrorCode.ReservationForbidden)).fieldErrors.groupId).toBe(
-      "元の文言",
-    );
     expect(
-      toFormErrors(error(ReservationErrorCode.ReservationGroupNotEligible)).fieldErrors.groupId,
-    ).toBe("元の文言");
+      formErrorsOf(
+        error(ReservationErrorCode.InvalidInput, {
+          field: ReservationField.Note,
+          userMessage: "備考は 500 文字以内で入力してください。",
+        }),
+      ).fieldErrors,
+    ).toEqual({ note: "備考は 500 文字以内で入力してください。" });
   });
 
-  it("施設にまつわるエラーは、施設の欄に出す", () => {
+  it("項目を持たない失敗は、フォームの上に出す", () => {
     expect(
-      toFormErrors(error(ReservationErrorCode.ReservationFacilityNotAvailable)).fieldErrors
-        .facilityId,
-    ).toBe("元の文言");
-  });
-
-  it("欄を特定できない入力のエラーは、フォーム全体のエラーにする", () => {
-    expect(toFormErrors(error(ReservationErrorCode.ReservationInvalidInput))).toEqual({
-      fieldErrors: {},
-      formError: "元の文言",
-    });
+      formErrorsOf(
+        error(ReservationErrorCode.Forbidden, {
+          userMessage: "この団体で予約を申請する権限がありません。",
+        }),
+      ),
+    ).toEqual({ fieldErrors: {}, formError: "この団体で予約を申請する権限がありません。" });
   });
 
   it("DB の失敗は中身を伝えず、共通の案内に置き換える", () => {
-    expect(toFormErrors(error(ReservationErrorCode.DatabaseError))).toEqual({
+    expect(
+      formErrorsOf(
+        error(ReservationErrorCode.DatabaseError, { userMessage: "D1 に接続できませんでした。" }),
+      ),
+    ).toEqual({
       fieldErrors: {},
-      formError: "申請できませんでした。時間をおいて、もう一度お試しください。",
+      formError: "操作できませんでした。時間をおいて、もう一度お試しください。",
     });
   });
 });

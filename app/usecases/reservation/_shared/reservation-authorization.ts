@@ -51,7 +51,7 @@ export const resolveReservationActor = (
     .findByGroupAndUser(groupId, request.actorUserId)
     .mapErr((error): ReservationError => ({
       code: ReservationErrorCode.DatabaseError,
-      message: "所属の確認に失敗しました。",
+      message: "所属を読み取れなかった。",
       cause: error,
     }))
     .map((membership): Actor => ({ isStaff: request.isStaff, membership }));
@@ -60,18 +60,19 @@ export const resolveReservationActor = (
 /**
  * 組み立て済みの操作する人が、その操作を許されているかを確かめる。
  *
- * 表が答えるのは「できるか」だけなので、断るときの文言は呼び出し側が渡す。
+ * 表が答えるのは「できるか」だけなので、断るときに利用者へ出す文言は呼び出し側が渡す。
  */
 export const ensureActorCan = (
   actor: Actor,
   action: ReservationAction,
-  forbiddenMessage: string,
+  userMessage: string,
 ): ResultAsync<null, ReservationError> =>
   canAct(reservationPermissions, actor, action)
     ? okAsync<null, ReservationError>(null)
     : errAsync<null, ReservationError>({
-        code: ReservationErrorCode.ReservationForbidden,
-        message: forbiddenMessage,
+        code: ReservationErrorCode.Forbidden,
+        message: `許されていない操作 (${action}) を拒否した。`,
+        userMessage,
       });
 
 /**
@@ -85,23 +86,26 @@ export const ensureReservationPermission = (
   groupId: string,
   request: ReservationAccessRequest,
   action: ReservationAction,
-  forbiddenMessage: string,
+  userMessage: string,
 ): ResultAsync<null, ReservationError> =>
   resolveReservationActor(deps, groupId, request, action).andThen((actor) =>
-    ensureActorCan(actor, action, forbiddenMessage),
+    ensureActorCan(actor, action, userMessage),
   );
 
 /**
  * その予約を開いてよいかを確かめる（COND-008 の 2 段目）。
  *
- * 見せられないときに「権限がない」ではなく「見つからない」を返す。
- * 書き分けると、予約 ID を総当たりして存在を確かめられてしまう。
- * 団体の存在秘匿（COND-011）と同じ考え方。
+ * 見せられないときは `NotVisible` を返す。利用者には「見つからない」と答える必要があるが
+ * （書き分けると、予約 ID を総当たりして存在を確かめられてしまう）、それは画面の側が行う。
+ * ここで `NotFound` に潰すと、ログで総当たりを見つけられなくなる（ADR-004 決定 4）。
+ *
+ * `userMessage` を持たせないこと。持たせても画面には出ないが、
+ * 「見られない理由」を書く場所があると、いつか誰かが書いてしまう。
  */
 export const ensureCanViewReservation = (actor: Actor): ResultAsync<null, ReservationError> =>
   canViewReservationSummary(actor)
     ? okAsync<null, ReservationError>(null)
     : errAsync<null, ReservationError>({
-        code: ReservationErrorCode.ReservationNotFound,
-        message: "予約が見つかりません。",
+        code: ReservationErrorCode.NotVisible,
+        message: "見る権限の無い予約を開こうとした。",
       });
