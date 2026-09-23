@@ -1,6 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 
 import type { PermissionTable } from "../authz";
+import type { BaseError } from "../error";
 import type { MailDraft } from "../mail/mail-outbox";
 import { MembershipRole, StaffRole, type ActorRole } from "../membership";
 
@@ -118,10 +119,8 @@ export const ReservationErrorCode = {
 } as const;
 export type ReservationErrorCode = (typeof ReservationErrorCode)[keyof typeof ReservationErrorCode];
 
-export interface ReservationError {
+export interface ReservationError extends BaseError {
   readonly code: ReservationErrorCode;
-  readonly message: string;
-  readonly cause?: unknown;
 }
 
 /** 重複の確認（COND-001）に渡す時間帯。 */
