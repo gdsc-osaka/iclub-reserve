@@ -528,7 +528,7 @@ entities:
 
   - id: "INFO-011"
     name: "ログインセッション"
-    description: "ログイン中の端末を表す。ログインのたびに1件作られ、ログアウト・有効期限切れ・ほかの端末からのログアウト（UC-031）・メールアドレスの変更（COND-018）で消える。認証基盤（Better Auth）が管理するが、利用者がアカウント設定（SCR-021）で一覧し、ログアウトさせるため本モデルに含める。セッションを識別するトークンは、ほかの端末のログインを乗っ取る手がかりになるため画面にも利用者のブラウザにも渡さず、一覧とログアウトはサーバー側で行う。"
+    description: "ログイン中の端末を表す。ログインのたびに1件作られ、ログアウト・有効期限切れ・ほかの端末からのログアウト（UC-031）・メールアドレスの変更（COND-018）で消える。認証基盤（Better Auth）が管理するが、利用者がアカウント設定（SCR-021）で一覧し、ログアウトさせるため本モデルに含める。ログインしたときの IP アドレスも Better Auth が保存するが、学内ネットワークではほぼ同じ値になり見分けに役立たず、画面にも判定にも使わないため載せない。セッションを識別するトークンは、ほかの端末のログインを乗っ取る手がかりになるため画面にも利用者のブラウザにも渡さず、一覧とログアウトはサーバー側で行う。"
     attributes:
       - name: "id"
         type: "string"
@@ -542,10 +542,6 @@ entities:
         type: "string"
         required: false
         description: "ログインした端末の User-Agent。端末名の組み立てに使う（COND-020）。"
-      - name: "ip_address"
-        type: "string"
-        required: false
-        description: "ログインしたときの IP アドレス。学内ネットワークではほぼ同じ値になり見分けに役立たないため、画面には表示しない。"
       - name: "created_at"
         type: "datetime"
         required: true
@@ -691,7 +687,6 @@ erDiagram
         string id PK
         string user_id FK
         string user_agent
-        string ip_address
         datetime created_at
         datetime updated_at
         datetime expires_at

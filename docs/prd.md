@@ -134,7 +134,7 @@ flowchart TD
     C --> D["招待先と同じアドレスでログインして開く（SCR-020）"]
     C -. 承諾前 .-> K["事務局が招待を取り消す（SCR-019）"]
     D --> E{"承諾待ち・期限内（48時間）・宛先一致\nCOND-015"}
-    E -- 満たさない --> Y["承諾できない旨を表示\n（期限切れ・取り消し済み・宛先違い・存在しない）"]
+    E -- 満たさない --> Y["承諾・辞退のどちらもできない旨を表示\n（期限切れ・取り消し済み・宛先違い・存在しない）"]
     E -- 承諾 --> F["事務局権限を付与"]
     E -- 辞退 --> G["付与しない"]
     H["事務局が事務局一覧から剥奪（SCR-019）"] --> I{"事務局が0人になるか\nCOND-014"}
@@ -486,7 +486,7 @@ graph LR
 | INFO-008 操作履歴           | id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes    |
 | INFO-009 事務局招待         | id, email, status（pending/accepted/rejected/canceled）, expires_at, inviter_id                 |
 | INFO-010 パスキー           | id, user_id, name, credential_id, aaguid, backed_up, created_at, last_used_at                   |
-| INFO-011 ログインセッション | id, user_id, user_agent, ip_address, created_at, updated_at, expires_at                         |
+| INFO-011 ログインセッション | id, user_id, user_agent, created_at, updated_at, expires_at                                     |
 
 > 認証基盤（Better Auth）が内部で管理するテーブルのうち、外部アカウント・認証コードは業務上の情報ではないため、情報モデルには含めない。パスキー（INFO-010）とログインセッション（INFO-011）は、利用者がアカウント設定で見て操作するため含める。その場合も、画面に出す・判定に使う属性だけを載せる（公開鍵やセッションのトークンなどは載せない）。
 
