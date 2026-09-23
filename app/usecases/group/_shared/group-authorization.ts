@@ -14,6 +14,7 @@ import {
   type MembershipError,
   type MembershipRepository,
 } from "~/domain/membership";
+import type { QueryError } from "~/query/error";
 
 /**
  * 団体が存在しないか、あるいは所属していない（存在秘匿）ときに返すエラー。
@@ -27,10 +28,20 @@ export const groupNotFound = (): GroupError => ({
   message: "グループが見つかりません。",
 });
 
-/** Membership の取得・更新で起きた DB エラーを GroupError に変換する */
-export const toGroupDatabaseError = (error: MembershipError): GroupError => ({
+/**
+ * 団体まわりの読み書きで起きた DB エラーを GroupError に変換する。
+ *
+ * 所属 (Membership) の読み書きと、団体管理画面の Query の両方をここで受ける。
+ * 失敗した場所ごとに文言を書き分けていないのは、この `message` がログにしか出ないため。
+ * 画面に出る文言は `DatabaseError` として一律に差し替えられる（`toGroupErrorMessage`）。
+ * どこで失敗したかは `logServerError` の `where` と、ここに詰めた `cause` が持っている。
+ *
+ * ユースケースごとに同じ変換を書き直さないこと。文言が増えるだけで、
+ * ログから読み取れることは変わらない。
+ */
+export const toGroupDatabaseError = (error: MembershipError | QueryError): GroupError => ({
   code: GroupErrorCode.DatabaseError,
-  message: "メンバー情報の処理に失敗しました。",
+  message: "団体の情報を読み書きできませんでした。",
   cause: error,
 });
 

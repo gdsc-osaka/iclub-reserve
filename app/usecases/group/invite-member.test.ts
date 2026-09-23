@@ -652,7 +652,15 @@ describe("inviteMemberUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.DatabaseError);
-      expect(result.error.message).toBe("メンバー情報の処理に失敗しました。");
+      /*
+       * 元の失敗を cause に残していることを確かめる。ここが落ちるとログに原因が残らない。
+       * message の文言そのものは突き合わせない。ログにしか出ない文字列なので、
+       * 書き換えるたびにこのテストが落ちても、守られたことは何も増えない。
+       */
+      expect(result.error.cause).toEqual({
+        code: MembershipErrorCode.DatabaseError,
+        message: "D1 connection failed",
+      });
     }
     expect(fakeGroup.findByIdCallCount()).toBe(0);
     expect(fakeInvitation.createCallCount()).toBe(0);
