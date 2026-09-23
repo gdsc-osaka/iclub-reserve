@@ -174,6 +174,9 @@ entities:
       - target: "INFO-007"
         type: "1:N"
         label: "招待"
+      - target: "INFO-008"
+        type: "1:N"
+        label: "操作履歴"
     traces_to: ["UC-010", "UC-013", "UC-014", "SCR-006", "SCR-007", "SCR-008"]
 
   - id: "INFO-004"
@@ -273,7 +276,7 @@ entities:
       - name: "is_staff"
         type: "boolean"
         required: true
-        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。"
+        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。true にするのは事務局招待の承諾（UC-027）、false に戻すのは事務局による剥奪（UC-028）である。最初の1人だけは DB またはシードで設定する。事務局が0人になる変更はできない（COND-014）。"
       - name: "created_at"
         type: "datetime"
         required: true
@@ -292,6 +295,12 @@ entities:
       - target: "INFO-007"
         type: "1:N"
         label: "送信した招待"
+      - target: "INFO-008"
+        type: "1:N"
+        label: "行った操作"
+      - target: "INFO-009"
+        type: "1:N"
+        label: "送信した事務局招待"
     traces_to:
       [
         "UC-010",
@@ -299,12 +308,16 @@ entities:
         "UC-019",
         "UC-020",
         "UC-021",
+        "UC-026",
+        "UC-027",
+        "UC-028",
         "SCR-006",
         "SCR-007",
         "SCR-012",
         "SCR-013",
         "SCR-014",
         "SCR-015",
+        "SCR-019",
       ]
 
   - id: "INFO-007"
@@ -334,7 +347,7 @@ entities:
       - name: "expires_at"
         type: "datetime"
         required: true
-        description: "招待の有効期限。期限を過ぎた招待は承諾できない。"
+        description: "招待の有効期限。送信から48時間。期限を過ぎた招待は承諾・辞退できない。"
       - name: "inviter_id"
         type: "string"
         required: true
@@ -351,6 +364,115 @@ entities:
         type: "N:1"
         label: "招待者"
     traces_to: ["UC-011", "UC-022", "SCR-007", "SCR-016"]
+
+  - id: "INFO-008"
+    name: "操作履歴"
+    description: "予約・団体・メンバーシップ・招待・施設・事務局権限に対して人が行った変更の記録。1回の操作につき1件を、業務データの変更と同じ db.batch で追記する（COND-013）。更新・削除はせず、無期限に保持する（REQ-038）。記録対象や操作者が後で削除されても（メンバーシップの削除など）記録は残るよう、他の情報への外部キー制約は張らず、論理的な参照とする。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "操作履歴ID（主キー）"
+      - name: "occurred_at"
+        type: "datetime"
+        required: true
+        description: "操作日時"
+      - name: "actor_id"
+        type: "string"
+        required: true
+        description: "操作者のユーザーID。画面には現在の氏名を表示する。"
+      - name: "acted_as_staff"
+        type: "boolean"
+        required: true
+        description: "事務局の横断権限（COND-009）によって初めて許された操作であれば true。記録時に固定する。団体側の表示で操作者を「事務局」とするかの判定に使う（COND-012）。"
+      - name: "action"
+        type: "enum"
+        required: true
+        description: "操作の種類（VAR-002）"
+      - name: "target_type"
+        type: "enum"
+        required: true
+        description: "記録対象の種類（VAR-003）"
+      - name: "target_id"
+        type: "string"
+        required: true
+        description: "記録対象のID。事務局権限の記録では、招待・招待の取り消し・辞退は事務局招待のID、承諾・剥奪は対象ユーザーのIDとする（承諾の changes には事務局招待のIDを含める）。これにより、あるユーザーへの付与と剥奪を同じ target_id でたどれる。"
+      - name: "group_id"
+        type: "string"
+        required: false
+        description: "記録対象が属する団体のID。予約・団体・メンバーシップ・招待の記録で設定し、施設/設備・事務局権限の記録では空。開示範囲の判定に使う（COND-012）。"
+      - name: "changes"
+        type: "json"
+        required: true
+        description: "変更のあった項目ごとの変更前・変更後の値。作成では変更前を空、状態の変更では理由（status_reason）を含める。削除された対象を後から特定できるよう、値が変わらなくても対象を特定する項目（メンバーシップなら user_id、招待なら email と role）を含める。招待先のメールアドレスは承諾されなかった招待でも残す。管理者は招待を送った時点でそのアドレスを知っており、SCR-007 でも開示済みのため、履歴で新たに開示する情報は無い。"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "操作者"
+      - target: "INFO-003"
+        type: "N:1"
+        label: "対象の団体"
+    traces_to:
+      [
+        "UC-002",
+        "UC-003",
+        "UC-004",
+        "UC-005",
+        "UC-006",
+        "UC-007",
+        "UC-008",
+        "UC-010",
+        "UC-011",
+        "UC-012",
+        "UC-013",
+        "UC-014",
+        "UC-015",
+        "UC-016",
+        "UC-017",
+        "UC-022",
+        "UC-024",
+        "UC-025",
+        "UC-026",
+        "UC-027",
+        "UC-028",
+        "SCR-005",
+        "SCR-007",
+        "SCR-018",
+      ]
+
+  - id: "INFO-009"
+    name: "事務局招待"
+    description: "事務局権限への招待。事務局が送り、招待された人が承諾すると INFO-006.is_staff が true になる。団体の招待（INFO-007）とは、団体を持たないこと・与えるものがロールではなく事務局権限であることが異なるため、別の情報として扱う。状態は STATE-003。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "事務局招待ID（主キー）"
+      - name: "email"
+        type: "string"
+        required: true
+        description: "招待先のメールアドレス"
+      - name: "status"
+        type: "enum"
+        required: true
+        description: "事務局招待の状態: pending（承諾待ち）/ accepted（承諾済み）/ rejected（辞退）/ canceled（取り消し）。既定は pending（STATE-003）。"
+      - name: "expires_at"
+        type: "datetime"
+        required: true
+        description: "有効期限。送信から48時間（団体の招待と同じ）。期限を過ぎた招待は承諾・辞退できない（COND-015）。"
+      - name: "inviter_id"
+        type: "string"
+        required: true
+        description: "招待を送った事務局のユーザーID（外部キー）"
+      - name: "created_at"
+        type: "datetime"
+        required: true
+        description: "作成日時"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "招待者"
+    traces_to: ["UC-026", "UC-027", "SCR-019", "SCR-020"]
 ---
 
 # 情報モデル（横断）
@@ -370,6 +492,9 @@ erDiagram
     INFO_006 ||--o{ INFO_001 : "作成する"
     INFO_003 ||--o{ INFO_007 : "招待する"
     INFO_006 ||--o{ INFO_007 : "招待を送る"
+    INFO_006 ||--o{ INFO_008 : "操作する"
+    INFO_003 |o--o{ INFO_008 : "対象になる"
+    INFO_006 ||--o{ INFO_009 : "事務局に招待する"
 
     INFO_006["INFO-006: ユーザー"] {
         string id PK
@@ -441,7 +566,28 @@ erDiagram
         string body
         datetime sent_at
     }
+    INFO_008["INFO-008: 操作履歴"] {
+        string id PK
+        datetime occurred_at
+        string actor_id
+        boolean acted_as_staff
+        enum action "VAR-002"
+        enum target_type "VAR-003"
+        string target_id
+        string group_id
+        json changes
+    }
+    INFO_009["INFO-009: 事務局招待"] {
+        string id PK
+        string email
+        enum status "pending/accepted/rejected/canceled"
+        datetime expires_at
+        string inviter_id FK
+        datetime created_at
+    }
 ```
+
+INFO-008 の actor_id・group_id・target_id は論理的な参照であり、外部キー制約を張らない。記録の対象や操作者が後から消えても、記録は残す必要があるためである。
 
 ## 予約の開示範囲（COND-008）
 
@@ -460,3 +606,18 @@ INFO-001 の属性は、見る人によって次の3段階で開示する。
 | INFO-004 メッセージ   |       ○        |           ×            |            ×            |
 
 Google Calendar に載せるのは承認済みの予約のみ。他団体のログイン済みユーザーには、仮予約もステータス付きで表示する。
+
+## 操作履歴の開示範囲（COND-012）
+
+INFO-008 は、記録対象の種類（VAR-003）と見る人によって開示する。範囲は COND-008 と SCR-007 の既存の開示範囲にそろえる。
+
+| 記録対象の種類 | 事務局 | 自団体の管理者 | 自団体のメンバー | 他団体 |
+| -------------- | :----: | :------------: | :--------------: | :----: |
+| 予約           |   ○    |       ○        |        ○         |   ×    |
+| 団体           |   ○    |       ○        |        ×         |   ×    |
+| メンバーシップ |   ○    |       ○        |        ×         |   ×    |
+| 招待           |   ○    |       ○        |        ×         |   ×    |
+| 施設/設備      |   ○    |       ×        |        ×         |   ×    |
+| 事務局権限     |   ○    |       ×        |        ×         |   ×    |
+
+団体側（管理者・メンバー）には、acted_as_staff が true の記録の操作者を「事務局」とだけ表示する。

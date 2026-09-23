@@ -59,7 +59,7 @@ boundary:
   events: []
 
 system:
-  information: ["INFO-002"]
+  information: ["INFO-002", "INFO-008"]
   states: []
   conditions:
     - id: "COND-003"
