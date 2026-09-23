@@ -33,7 +33,11 @@ export async function loader({ params }: Route.LoaderArgs) {
   if (facilityResult.isErr()) {
     const error = facilityResult.error;
 
-    // 無い施設を開いたのは想定内の応答なので、ログには残さない
+    /*
+     * 無い施設を開いたことは、今はログに残さない。今の `logServerError` は error の 1 段しか無く、
+     * ここで残すと本当の障害と見分けがつかなくなる。
+     * ログのレベルを分けたあと (ADR-004 決定 9)、段階 3 で info として残す。
+     */
     if (error.code === FacilityErrorCode.FacilityNotFound) {
       throw data({ message: "Facility Not Found." }, { status: 404 });
     }

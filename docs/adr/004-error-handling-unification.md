@@ -81,6 +81,16 @@ URL の打ち間違いと、団体 ID の総当たりによる偵察が、ログ
 
 本番で D1 の障害が起きても、これらの画面からは手がかりが残らない。
 
+残している側も、残す範囲が狭い。`groups/$groupId/route.tsx`・`reservations/list/route.tsx`・
+`reservations/staff/route.tsx` はいずれも「想定内なのでログに残さない」とコメントし、
+入力の誤り・権限・不在を残していない。`logServerError` (`app/lib/log.server.ts`) は
+`console.error` の 1 段しか持たないので、想定内のものまで混ぜれば本当の障害が埋もれる。
+その判断自体は筋が通っているが、結果として、権限の無い操作の試行も、ID の総当たりも、
+画面側の権限表示のバグも、起きた跡が残らない。
+
+加えて、出力は `[where] code: message` という文字列で、誰の操作かを持たない。
+残した分についても、コードごと・利用者ごとに数えることができない。
+
 ### 7. 列挙子の名前が型名を繰り返している
 
 `ReservationErrorCode.ReservationNotFound` のように、列挙子の名前に型名が入っている。
@@ -170,8 +180,17 @@ const statusOf: Record<ErrorKind, number> = {
   conflict: 409,
   internal: 500,
 };
-const shouldLog = (kind: ErrorKind) => kind === ErrorKind.Internal;
+const logLevelOf: Record<ErrorKind, LogLevel> = {
+  not_found: "info",
+  forbidden: "warn",
+  invalid_input: "info",
+  conflict: "info",
+  internal: "error",
+};
 ```
+
+ログは「残すか残さないか」ではなく「どのレベルで残すか」だけを決める。
+レベルの選び方と、ログに何を残すかは決定 9 で述べる。
 
 さらに、内部事情の漏洩を分岐で塞げる。
 
@@ -204,7 +223,13 @@ COND-011 の表明になる。
 2 行が同一であることはテストで固定する。
 `status` が明示されている行が「ここは既定どおりではない」という印になる。
 
-これでサーバーのログには `GROUP_NOT_VISIBLE` が残り、外部への応答は 404 のまま変わらない。
+これでサーバーのログには `GROUP_NOT_VISIBLE` が `warn` として残り (決定 9)、
+外部への応答は 404 のまま変わらない。
+
+**表で上書きするのは status と文言だけで、ログのレベルは上書きしない。**
+秘匿が要るのは外部への応答であって、サーバーのログではない。
+`NotVisible` のレベルを `NotFound` に合わせて `info` へ落とすと、秘匿をログにまで持ち込むことになり、
+正直なコードを返すようにしたこの決定の意味が無くなる。
 
 ### 5. 利用者に見せる文言は、ドメインごとの表 1 枚に集める
 
@@ -219,6 +244,9 @@ interface ErrorView {
 }
 const groupErrorView: Record<GroupErrorCode, ErrorView> = {/* … */};
 ```
+
+`ErrorView` にはログのレベルを持たせない。この表が決めるのは外部に何を見せるかだけで、
+何をどのレベルで残すかは `kind` だけで決まる (決定 4・9)。
 
 `Record<GroupErrorCode, ErrorView>` にするのは、コードを増やしたときに型エラーで気づくためである。
 現在の `toFormErrors` の `default:` のような握りつぶしが構造的に起きなくなる。
@@ -267,13 +295,22 @@ const fieldOf: Partial<Record<GroupField, keyof GroupInviteFormErrors>> = {
 
 ```ts
 // loader
-if (result.isErr()) throw groupErrorResponse("groups.detail.loader", result.error);
+if (result.isErr()) {
+  throw groupErrorResponse({ where: "groups.detail.loader", userId: user.id }, result.error);
+}
 
 // action
-if (result.isErr()) return groupActionErrors("groups.detail.action", result.error, {/* … */});
+if (result.isErr()) {
+  return groupActionErrors({ where: "groups.detail.action", userId: user.id }, result.error, {
+    /* … */
+  });
+}
 ```
 
-ログを残すかどうかは `kind` から決まるので、コンテキストの 6 に挙げた 3 か所の取りこぼしも同時に埋まる。
+どのレベルで残すかは `kind` から決まり、グルーには「残さない」という選択肢が無い。
+そのため、コンテキストの 6 に挙げた 3 か所の取りこぼしも同時に埋まる。
+
+`userId` を必須の引数にするのは、決定 9 のとおり、誰の操作かが無いとログから傾向を読めないためである。
 
 ### 8. Infra と UseCase でエラー型は分けない
 
@@ -284,6 +321,49 @@ infra が構築しているエラーコードを全件数えたところ、`Data
 型を 2 本に割っても表現できる情報は増えず、増えるのは `InfraError → DomainError` の変換が
 現在の 15 か所から全リポジトリ呼び出しへ膨らむ費用だけである。
 必要な区別は決定 3 の `kind` で足りる (`internal` は原理的に infra 由来)。
+
+### 9. ログは `kind` に応じたレベルで、すべて残す
+
+**`internal` 以外も残す。** 想定内の差し戻しも、バグと偵察を見つける手がかりになる。
+
+| `kind`          | レベル  | 残す理由                                                                                                                                             |
+| --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal`      | `error` | 障害。人が対応する                                                                                                                                   |
+| `forbidden`     | `warn`  | 通常の操作では起きない (権限の無い操作は画面に出していない)。起きたなら、古いタブ・改ざん・画面側の権限表示のバグのどれか。`NotVisible` もここに入る |
+| `not_found`     | `info`  | 打ち間違いと、ID の総当たり。1 件ずつでは区別できないが、同じ利用者からの件数で区別できる                                                            |
+| `invalid_input` | `info`  | ほとんどは入力の誤り。ただし画面側で防いでいるはずの誤り (Select の値の改ざんなど) はここにしか出ない                                                |
+| `conflict`      | `info`  | 予約の重なりなど。どれだけ起きているかは運用の判断材料になる                                                                                         |
+
+コンテキストの 6 で見たとおり、これまでは想定内のものを残さないことで障害が埋もれるのを防いでいた。
+レベルで分ければ、障害は `error` で絞るだけで取り出せる。**残さない理由の方が無くなる。**
+
+**残す形は、次の項目を持つオブジェクトにする。**
+
+```ts
+{
+  level: "warn",
+  where: "groups.detail.loader",
+  code: "GROUP_NOT_VISIBLE",
+  kind: "forbidden",
+  userId: "…",
+  message: "…",
+}
+```
+
+- **オブジェクトで出す。** Workers Logs はオブジェクトで出したログの項目を索引し、絞り込みに使えるようにする。
+  文字列の `[where] code: message` では、コードごと・利用者ごとに数えられない。
+- **`level` を項目にも入れる。** `console.warn` と `console.info` の違いで絞り込めるかは、
+  Workers Logs の説明に書かれていない。項目にしておけば、それに頼らずに済む。
+- **`userId` を必ず入れる。** 無いと「1 人が ID を 1,000 回試した」と「1,000 人が 1 回ずつ打ち間違えた」が
+  ログ上で同じに見える。偵察を見分けるには、誰の操作かが要る。
+- `cause` は今と同じく残す。`Error` を含むオブジェクトを渡したときに stack が落ちないかは、
+  Phase 1 で `log.server.ts` を直すときに確かめる。
+
+**入力値は残さない。** `message` にも、どの項目にも、利用者が入力した値を埋め込まない。
+とくに招待相手のメールアドレスは、まだ団体に加わっていない第三者の個人情報である。
+`internal` 以外も残すようになると、入力の誤りを説明しようとして値を埋め込みたくなる場面が増えるため、
+ここで禁止しておく。ID (団体・予約・利用者など) は埋め込んでよい。
+今の `message` が埋め込んでいるのも ID だけである (`infra/user/user-repo.ts` など)。
 
 ## 理由
 
@@ -307,11 +387,12 @@ infra が構築しているエラーコードを全件数えたところ、`Data
 
 決めることを 3 つに分け、それぞれを決められる場所に置く。
 
-| 決めること          | 決める人                         | 置き場所              |
-| ------------------- | -------------------------------- | --------------------- |
-| status / ログの要否 | `kind` (既定) + 表の上書き       | `app/domain/`         |
-| 画面に出す文言      | ドメインごとの表 + `userMessage` | `app/routes/_shared/` |
-| どの入力欄に出すか  | `field` + 画面ごとの表           | `app/routes/<画面>/`  |
+| 決めること         | 決める人                         | 置き場所              |
+| ------------------ | -------------------------------- | --------------------- |
+| status             | `kind` (既定) + 表の上書き       | `app/domain/`         |
+| ログのレベル       | `kind` のみ (上書きしない)       | `app/domain/`         |
+| 画面に出す文言     | ドメインごとの表 + `userMessage` | `app/routes/_shared/` |
+| どの入力欄に出すか | `field` + 画面ごとの表           | `app/routes/<画面>/`  |
 
 共有できるもの (方針) と共有できないもの (欄の名前) の間に線を引ける唯一の案である。
 
@@ -328,6 +409,11 @@ infra が構築しているエラーコードを全件数えたところ、`Data
   forbidden とも invalid_input とも読める。ただしこの 2 つは申請フォームのアクションからしか
   表に出ず、アクションの応答は常に 200 で status を使わないため、実害は無い。
   ローダーに出る経路ができたときに決め直す。
+- **ログの件数が増える。** 差し戻しもすべて残すためである。ただし Workers Logs の上限
+  (無料プランで 1 日 20 万件、有料プランで月 2,000 万件) に届く規模ではない。
+- **残すだけでは、偵察は見つからない。** `warn` を自動で知らせる仕組みは、この ADR では作らない。
+  また Workers Logs の保存期間は無料プランで 3 日、有料プランで 7 日であり、
+  それより長い期間の傾向を見るには別の保存先が要る。どちらも必要になったときに決める。
 
 ## 影響範囲
 
@@ -337,8 +423,8 @@ infra が構築しているエラーコードを全件数えたところ、`Data
 | `app/usecases/`       | 利用者向けの文言を `userMessage` へ移す。`ensureGroupIsVisible` が `NotVisible` を返す。`get-group-management.ts` が再定義している `toGroupDatabaseError` を共有版に寄せる       |
 | `app/infra/`          | 英語の文言を日本語に揃える。`facility-availability-calendar-query.ts` が書いている利用者向け文言を表へ移す                                                                       |
 | `app/routes/_shared/` | 新設。ドメインごとの表と、グルー 2 本                                                                                                                                            |
-| `app/routes/`         | 各ルートのエラー分岐をグルー呼び出しに置き換え。画面ごとの `field` の表を置く                                                                                                    |
-| `app/lib/`            | `group-error-message.ts` を削除                                                                                                                                                  |
+| `app/routes/`         | 各ルートのエラー分岐をグルー呼び出しに置き換え (想定内の差し戻しもログに残るようになる)。画面ごとの `field` の表を置く                                                           |
+| `app/lib/`            | `group-error-message.ts` を削除。`log.server.ts` をレベルとオブジェクト形式に対応させる                                                                                          |
 | `app/routes.ts`       | 規約コメントに `routes/_shared/` を追加                                                                                                                                          |
 | `AGENTS.md`           | 5 章にエラーの決まりを一段追加                                                                                                                                                   |
 
@@ -349,7 +435,7 @@ DB マイグレーションは発生しない。
 | 段階    | 内容                                                                                                                                       |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Phase 0 | 設計変更に依存しない後始末。ログ漏れ 3 か所、`toGroupDatabaseError` の重複、`DataBaseError` の綴り、`ReservationError` の `BaseError` 継承 |
-| Phase 1 | group ドメインで縦に 1 本通す (決定 1〜7)。`lib/group-error-message.ts` と `$groupId/action-error.ts` が消える                             |
+| Phase 1 | group ドメインで縦に 1 本通す (決定 1〜7・9)。`lib/group-error-message.ts` と `$groupId/action-error.ts` が消える                          |
 | Phase 2 | reservation へ展開。コンテキストの 3 と `default:` の握りつぶしが解消する                                                                  |
 | Phase 3 | invitation / facility / user / query。固定文字列を表へ寄せる                                                                               |
 | Phase 4 | この ADR を承認に更新し、`AGENTS.md` に反映                                                                                                |
