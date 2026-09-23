@@ -1,5 +1,5 @@
 version: "1.0"
-generated_at: "2026-09-24T00:00:00Z"
+generated_at: "2026-09-24T03:00:00Z"
 
 elements:
   # ゴール
@@ -186,7 +186,7 @@ elements:
 
   - id: "REQ-024"
     type: requirement
-    name: "施設・設備の無効化"
+    name: "施設・設備の無効化・再有効化"
     defined_in: "rdra/contexts/facility-management.md"
     traces_to: ["GOAL-002"]
 
@@ -310,6 +310,12 @@ elements:
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["GOAL-006"]
 
+  - id: "REQ-045"
+    type: requirement
+    name: "所属団体の確認"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["GOAL-001"]
+
   # ビジネスユースケース
   - id: "BUC-001"
     type: business_usecase
@@ -403,7 +409,7 @@ elements:
 
   - id: "BUC-016"
     type: business_usecase
-    name: "施設・設備の無効化"
+    name: "施設・設備の無効化・再有効化"
     defined_in: "rdra/contexts/facility-management.md"
     traces_to: ["REQ-024"]
 
@@ -433,7 +439,7 @@ elements:
 
   - id: "BUC-021"
     type: business_usecase
-    name: "ログイン"
+    name: "ログイン・ログアウト"
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["REQ-032"]
 
@@ -490,6 +496,12 @@ elements:
     name: "ログイン中の端末の管理"
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["REQ-044"]
+
+  - id: "BUC-031"
+    type: business_usecase
+    name: "所属団体の確認"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["REQ-045"]
 
   # ユースケース
   - id: "UC-001"
@@ -584,7 +596,7 @@ elements:
 
   - id: "UC-016"
     type: usecase
-    name: "施設・設備を無効化する"
+    name: "施設・設備を無効化・再有効化する"
     defined_in: "rdra/contexts/facility-management.md"
     traces_to: ["BUC-016"]
 
@@ -678,16 +690,47 @@ elements:
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["BUC-030"]
 
+  - id: "UC-032"
+    type: usecase
+    name: "自団体の予約一覧を確認する"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-001"]
+
+  - id: "UC-033"
+    type: usecase
+    name: "全団体の予約一覧を確認する（事務局）"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["BUC-006"]
+
+  - id: "UC-034"
+    type: usecase
+    name: "予約の詳細を確認する"
+    defined_in: "rdra/contexts/reservation-application.md"
+    traces_to: ["BUC-001", "BUC-006"]
+
+  - id: "UC-035"
+    type: usecase
+    name: "所属団体を確認する"
+    defined_in: "rdra/contexts/group-management.md"
+    traces_to: ["BUC-031"]
+
+  - id: "UC-036"
+    type: usecase
+    name: "ログアウトする"
+    defined_in: "rdra/contexts/user-authentication.md"
+    traces_to: ["BUC-021"]
+
 coverage:
   total_goals: 7
   goals_with_requirements: 7
-  total_requirements: 44
-  requirements_with_bucs: 44
-  total_bucs: 30
-  bucs_with_ucs: 29
-  total_ucs: 31
+  total_requirements: 45
+  requirements_with_bucs: 45
+  total_bucs: 31
+  bucs_with_ucs: 30
+  total_ucs: 36
   orphaned_elements: []
   notes:
-    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=29）"
+    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=30）"
     - "操作履歴への記録（REQ-036）は独立したUCを持たない。記録対象のUC（VAR-002）が業務データと同じ db.batch で書き込む（COND-013）"
     - "SCR-011（アカウント登録フォーム）は廃止。認証コード方式では登録とログインの処理が同一のため、SCR-012（ログイン・新規登録画面）に統合した。詳細は change-log.md を参照"
+    - "UC-036（ログアウトする）は画面を持たない。ログイン後の全画面に共通するアカウントメニューから行い、アカウントメニューは画面として定義していないため"

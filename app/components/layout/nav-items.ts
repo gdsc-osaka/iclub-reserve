@@ -40,7 +40,7 @@ export interface NavItem {
   /**
    * 対応する RDRA の画面 ID（`docs/implementation-status.md` の画面一覧）。
    *
-   * ダッシュボードのように要件側に対応する画面が無いものは undefined。
+   * 要件側に対応する画面が無いものは undefined。
    */
   readonly screen?: string;
 }
@@ -58,6 +58,7 @@ export const commonNavItems: readonly NavItem[] = [
     to: "/",
     icon: LayoutDashboard,
     enabled: true,
+    screen: "SCR-022",
   },
   {
     id: "availability",
