@@ -119,18 +119,19 @@ pnpm run db:seed --remote
 
 Cloudflare 上には本番とプレビューの 2 つの環境があり、Worker も D1 データベースも完全に別物です。プレビュー側で DB を壊しても本番には影響しません。
 
-| 環境       | ブランチ             | Worker                  | D1                         | URL                                                    |
-| ---------- | -------------------- | ----------------------- | -------------------------- | ------------------------------------------------------ |
-| 本番       | `main`               | `iclub-reserve`         | `iclub-reserve-db`         | 本番ドメイン                                           |
-| プレビュー | `develop` とその派生 | `iclub-reserve-preview` | `iclub-reserve-preview-db` | `https://iclub-reserve-preview.gdsc-osaka.workers.dev` |
-| ローカル   | —                    | （デプロイしない）      | ローカルの SQLite          | `http://localhost:5173`                                |
+| 環境       | ブランチ             | Worker                  | D1                         | URL                                    |
+| ---------- | -------------------- | ----------------------- | -------------------------- | -------------------------------------- |
+| 本番       | `main`               | `iclub-reserve`         | `iclub-reserve-db`         | 本番ドメイン                           |
+| プレビュー | `develop` とその派生 | `iclub-reserve-preview` | `iclub-reserve-preview-db` | `https://iclub-preview.gdgoc-osaka.jp` |
+| ローカル   | —                    | （デプロイしない）      | ローカルの SQLite          | `http://localhost:5173`                |
 
 デプロイは Cloudflare Workers Builds が自動で行うため、通常は手元から実行する必要はありません。
 
 > [!NOTE]
-> `develop` の派生ブランチは `https://<ブランチ名>-iclub-reserve-preview.gdsc-osaka.workers.dev` でも公開されます（PR ごとのプレビュー）。
-> この URL からでもログインできるよう、Better Auth が信頼する origin（`trustedOrigins`）にこの形の URL を追加してあります。
-> ただし**パスキーはこの URL では使えません**。パスキーは登録したときのドメインに紐づいており、ブランチごとの URL は別のドメインとして扱われるためです。認証コードでログインしてください。
+> `develop` の派生ブランチは、Cloudflare の [Worker Previews](https://developers.cloudflare.com/workers/previews/) で `https://<ブランチ名>.iclub-preview.gdgoc-osaka.jp` に公開されます（PR ごとのプレビュー）。
+> すべてのプレビューが `iclub-preview.gdgoc-osaka.jp` の配下にあるので、**develop で登録したパスキーがどのブランチでもそのまま使えます**。
+> Preview は D1・R2・メールのキューを develop と共有します。予約や招待のメールは、Preview が積んだものを develop の Worker が送ります（Preview ではキューの受け取りと Cron が動かないため）。
+> 詳しくは [ADR-006](docs/adr/006-preview-environments.md) を参照してください。
 
 ### `--env` の指定について
 
@@ -145,6 +146,20 @@ pnpm run deploy
 ```bash
 pnpm run deploy:preview
 ```
+
+派生ブランチの Preview を手元から作るとき（名前は今のブランチ名になる）:
+
+```bash
+pnpm run deploy:preview-branch
+```
+
+Preview は `develop` の Worker の設定を引き継がず、`wrangler.jsonc` の `env.preview.previews` の設定で動きます。secret も別に管理されるため、新しく作る Preview の初期値として登録しておいてください（すでにある Preview には反映されません）。
+
+```bash
+pnpm exec wrangler preview base-config secret put BETTER_AUTH_SECRET --env preview
+```
+
+`BETTER_AUTH_URL`（`https://iclub-preview.gdgoc-osaka.jp`）、`DISCORD_OTP_WEBHOOK_URL`、`DISCORD_OTP_THREAD_ID` も同じように登録します。不要になった Preview は `pnpm exec wrangler preview delete --env preview --name <ブランチ名>` で消せます。
 
 ### マイグレーションの適用
 

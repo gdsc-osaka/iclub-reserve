@@ -10,6 +10,7 @@
     "typecheck": "wrangler types && react-router typegen && tsc -b",
     "deploy": "pnpm run build:production && wrangler deploy --env production",
     "deploy:preview": "pnpm run build:preview && wrangler deploy --env preview",
+    "deploy:preview-branch": "pnpm run build:preview && wrangler preview --env preview",
     "preview": "pnpm run build && vite preview",
     "cf-typegen": "wrangler types",
     "postinstall": "wrangler types",
