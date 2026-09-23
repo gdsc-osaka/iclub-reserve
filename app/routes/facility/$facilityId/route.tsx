@@ -4,6 +4,7 @@ import { data } from "react-router";
 import { FacilityErrorCode } from "~/domain/facility";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
+import { logServerError } from "~/lib/log.server";
 import {
   getFacilityUseCase,
   type GetFacilityArgs,
@@ -32,9 +33,16 @@ export async function loader({ params }: Route.LoaderArgs) {
   if (facilityResult.isErr()) {
     const error = facilityResult.error;
 
+    // 無い施設を開いたのは想定内の応答なので、ログには残さない
     if (error.code === FacilityErrorCode.FacilityNotFound) {
       throw data({ message: "Facility Not Found." }, { status: 404 });
     }
+
+    /*
+     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
+     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
+     */
+    logServerError("facility.detail.loader", error);
     throw data({ message: "Internal server error." }, { status: 500 });
   }
 
