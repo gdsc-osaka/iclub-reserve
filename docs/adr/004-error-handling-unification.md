@@ -1,0 +1,369 @@
+# ADR-004: エラーの分類と、利用者に見せる文言への変換を一本化する
+
+## ステータス
+
+提案 (2026-09-22)
+
+ADR-001 が定めた 4 層構成 (routes / usecases / domain / infra) の上に立つ。
+層の切り方は変えない。この ADR が決めるのは
+**層をまたぐときにエラーが何を運ぶか**と、**それを誰が画面の言葉に直すか**だけである。
+ADR-002 (Transactional Outbox) と ADR-003 (団体テーブルの自前化) には影響しない。
+
+## コンテキスト
+
+団体作成 (SCR-006) まで実装した時点で、エラーの扱いが画面ごとに分かれていることが分かった。
+以下はすべて現状のコードを数えた結果である。
+
+### 1. `message` が 2 つの役割を兼ねている
+
+`BaseError.message` (`app/domain/error.ts`) には、性質の違う 2 種類の文字列が混ざっている。
+
+| 文言                                     | 実際の役割       | 場所                                    |
+| ---------------------------------------- | ---------------- | --------------------------------------- |
+| `"Failed to query the database"`         | 開発者向け・ログ | `infra/facility/facility-repo.ts`       |
+| `"Reservation not Found"`                | 開発者向け・ログ | `infra/reservation/reservation-repo.ts` |
+| `"メンバーシップの取得に失敗しました。"` | どちらとも取れる | `infra/membership/membership-repo.ts`   |
+| `"指定できない役割です。"`               | 利用者向け・画面 | `usecases/group/_shared/member-role.ts` |
+
+そのため「このコードなら `message` をそのまま画面に出してよい」という判断を、
+変換する側が毎回下すことになっている。
+`app/lib/group-error-message.ts` の冒頭に置かれた長い JSDoc は、
+その判断基準を人間の注意力で管理するために書かれたものである。
+**型が語れていないことを、コメントが肩代わりしている。**
+
+### 2. 文言の変換が 4 か所にあり、方針が揃っていない
+
+| 場所                                             | やり方                                                      |
+| ------------------------------------------------ | ----------------------------------------------------------- |
+| `app/lib/group-error-message.ts`                 | `lib` に置いた共通関数                                      |
+| `app/routes/reservations/list/action-error.ts`   | 画面フォルダ内の関数                                        |
+| `app/routes/reservations/new/form-values.ts`     | 画面フォルダ内の関数。`default:` で未知のコードを握りつぶす |
+| `app/routes/invitations/$invitationId/route.tsx` | エラーコードを見ずに固定文字列を返す                        |
+
+`group-error-message.ts` が `lib` にあるのは、`app/routes.ts` の
+「複数の画面で使うものは `app/components/`・`app/lib/` へ出す」という規約に従った結果である。
+SCR-006 と SCR-007 の両方から使うため、置き場所が `lib` しか無かった。
+だが `lib` は `date.ts` や `app-url.ts` のような**画面を知らない道具**の場所であり、
+表示の方針が混ざると浮く。規約の側に穴がある。
+
+### 3. 同じエラーが、画面によって別の文言で出る
+
+`ReservationForbidden` は、予約一覧では固定文言
+(`"この予約を操作する権限がありません。"`)、申請画面では `error.message` の素通しになっている。
+同じ失敗が場所によって違う言い方で出る。
+
+### 4. ある入力の誤りが、別の入力欄の下に出る
+
+`validateMembershipRole` は役割の誤りに `GroupInvalidInput` を返すが
+(`"指定できない役割です。"`)、`toInviteFormErrors` は `GroupInvalidInput` を
+**すべて** `emailError` へ流している。役割の誤りがメールアドレス欄の下に出る。
+現在は役割が Select なので通常の操作では踏めないが、
+`GroupInvalidInput` という 1 つのコードから「どの欄の話か」を復元できないことが原因であり、
+入力欄の形が変われば表面化する。
+
+### 5. 存在秘匿が、真実と同じ値に潰れている
+
+`groupNotFound()` (`usecases/group/_shared/group-authorization.ts`) は、
+「本当に存在しない」ときと「所属しておらず見えない」ときの両方で同じ値を返す。
+外部への応答としては正しい (COND-011) が、
+**サーバーのログでも両者が区別できない。**
+URL の打ち間違いと、団体 ID の総当たりによる偵察が、ログ上で同じ行になる。
+
+### 6. status への変換とログの要否が、各ルートに書き写されている
+
+`app/routes/groups/$groupId/route.tsx` には
+「`GroupNotFound` なら 404 を throw し、`DatabaseError` ならログに残す」が 5 回書かれている。
+書き写しであるため基準が揃っておらず、次の 3 か所では**失敗が握りつぶされてログにも残らない**。
+
+- `app/routes/home/route.tsx` — `isGroupsUnavailable: true` を返すだけ
+- `app/routes/reservations/new/route.tsx` — 500 を throw するだけ
+- `app/routes/facility/$facilityId/route.tsx` — 500 を throw するだけ
+
+本番で D1 の障害が起きても、これらの画面からは手がかりが残らない。
+
+### 7. 列挙子の名前が型名を繰り返している
+
+`ReservationErrorCode.ReservationNotFound` のように、列挙子の名前に型名が入っている。
+`app/query/error.ts` の `QueryErrorCode` だけは
+`NotFound` / `Forbidden` / `DatabaseError` になっており、すでに揃っていない。
+
+### 8. 分類をドメインに置く先例が、すでに 2 つある
+
+- `app/domain/mail/mail-sender.ts` の `isRetryable` — コードを分類する関数をドメインに置いている。
+  理由も明記されている。「ここを呼ぶ側が code を直接見に行くと、再試行の方針が呼び出し箇所の数だけ増えてしまう」
+- `app/query/error.ts` の `QueryErrorCode` — 集約をまたぐためドメイン固有のコードを持てず、
+  結果として分類 (`NotFound` / `Forbidden` / `DatabaseError`) だけが残っている
+
+この ADR がやることは、**2 つ目の語彙を書き込み側のエラーにも通し、
+1 つ目のやり方でそれを表現する**ことに尽きる。
+
+## 決定
+
+### 1. エラーコードの列挙子から、型名の繰り返しを外す
+
+**文字列の値は変えない。** 変えるのは TypeScript 側の名前だけである。
+
+```ts
+export const ReservationErrorCode = {
+  NotFound: "RESERVATION_NOT_FOUND",
+  Forbidden: "RESERVATION_FORBIDDEN",
+  InvalidPeriod: "RESERVATION_INVALID_PERIOD",
+  // …
+  DatabaseError: "DATABASE_ERROR",
+} as const;
+```
+
+値を据え置くのは、ログに出る文字列が変わると過去のログとの突き合わせができなくなるためである。
+
+**外すのは型名の繰り返しだけで、対象が違うものは残す。**
+`GroupErrorCode.MemberNotFound` と `InvitationNotFound` は
+「団体が無い」ではなく「メンバーが / 招待が無い」であり、`NotFound` に短縮すると意味が変わる。
+
+### 2. `message` を「ログ用」に固定し、利用者向けの文言を `userMessage` に分ける
+
+```ts
+export interface BaseError {
+  /** ログにだけ残す説明。画面には出さない */
+  readonly message: string;
+  /** ドメインが利用者に向けて書いた文言。画面にそのまま出してよい */
+  readonly userMessage?: string;
+  /** 元となった例外。ログ出力用で、クライアントには返さない */
+  readonly cause?: unknown;
+}
+```
+
+`message` の名前を据え置くのは、既存の約 40 か所の構築を触らずに済ませるためである。
+移すのは、利用者に向けて書かれていた側だけになる
+(`groupForbiddenMessages`、`validateGroupName`、`validateMembershipRole`、予約の各検証)。
+
+`userMessage` を付け忘れたエラーは、表 (決定 5) の既定文言に落ちる。
+`"Failed to query the database"` が画面に出る代わりに汎用文言が出る、という**安全側の劣化**になる。
+
+### 3. コードを分類する `kind` を、コードからの写像として持つ
+
+```ts
+// app/domain/error.ts
+export const ErrorKind = {
+  NotFound: "not_found",
+  Forbidden: "forbidden",
+  InvalidInput: "invalid_input",
+  Conflict: "conflict",
+  Internal: "internal",
+} as const;
+
+// app/domain/group/index.ts
+export const groupErrorKind: Record<GroupErrorCode, ErrorKind> = {/* … */};
+```
+
+**エラーオブジェクトのフィールドにはしない。** フィールドにすると構築箇所すべてに書き足すことになり、
+しかも `GroupErrorCode.NotFound` に `kind: "internal"` と書いても型が通ってしまう。
+コードから引く表にすれば、構築箇所の変更はゼロで、対応は常に 1 か所で決まる。
+`isRetryable` と同じ形である。
+
+これにより次の 2 つが全ドメインで 1 行になる。
+
+```ts
+const statusOf: Record<ErrorKind, number> = {
+  not_found: 404,
+  forbidden: 403,
+  invalid_input: 400,
+  conflict: 409,
+  internal: 500,
+};
+const shouldLog = (kind: ErrorKind) => kind === ErrorKind.Internal;
+```
+
+さらに、内部事情の漏洩を分岐で塞げる。
+
+```ts
+const userText = (error: BaseError, kind: ErrorKind, fallback: string) =>
+  kind === ErrorKind.Internal ? fallback : (error.userMessage ?? fallback);
+```
+
+`internal` のエラーは `userMessage` を持っていても通らない。
+ドメインを増やしても、この 1 か所が効き続ける。
+
+**`kind` を付けないものもある。** `MailSendError` と `MailOutboxError` は
+`app/routes/` にも `workers/app.ts` にも到達せず、利用者に提示されない。
+提示されないエラーに提示用の分類は要らない。メールにはすでに `isRetryable` という別の軸がある。
+
+### 4. 存在秘匿は、ユースケースではなく表現の側で行う
+
+ユースケースは正直なコードを返す。`GroupErrorCode.NotVisible` (`"GROUP_NOT_VISIBLE"`) を新設し、
+`ensureGroupIsVisible` はこれを返す。`kind` は `forbidden` である。
+
+秘匿は決定 5 の表で行う。`NotVisible` の行が `NotFound` の行と**同一であること**が、
+COND-011 の表明になる。
+
+```ts
+// COND-011: 見えないことを「無い」として答える。既定の 403 を意図的に破っている
+[GroupErrorCode.NotVisible]: { status: 404, message: GROUP_NOT_FOUND_TEXT },
+[GroupErrorCode.NotFound]:   { message: GROUP_NOT_FOUND_TEXT },
+```
+
+2 行が同一であることはテストで固定する。
+`status` が明示されている行が「ここは既定どおりではない」という印になる。
+
+これでサーバーのログには `GROUP_NOT_VISIBLE` が残り、外部への応答は 404 のまま変わらない。
+
+### 5. 利用者に見せる文言は、ドメインごとの表 1 枚に集める
+
+置き場所は `app/routes/_shared/` とする。`app/routes.ts` はルートを明示設定しているため、
+`_shared` フォルダがルートとして拾われることはない。`app/usecases/_shared/` と同じ言い回しになる。
+
+```ts
+interface ErrorView {
+  /** 省略時は kind から決まる。破るときだけ書く */
+  readonly status?: number;
+  readonly message: string;
+}
+const groupErrorView: Record<GroupErrorCode, ErrorView> = {/* … */};
+```
+
+`Record<GroupErrorCode, ErrorView>` にするのは、コードを増やしたときに型エラーで気づくためである。
+現在の `toFormErrors` の `default:` のような握りつぶしが構造的に起きなくなる。
+
+`app/lib/group-error-message.ts` は削除する。
+あわせて `app/routes.ts` の規約コメントに `routes/_shared/` を加える。
+
+### 6. どの入力欄に出すかは、ドメインの `field` と画面ごとの表で決める
+
+「どの項目の誤りか」はドメインが知っている。`validateGroupName` は名前について、
+`validateMembershipRole` は役割について検証している。その情報を捨てないようにする。
+
+```ts
+// app/domain/group/index.ts
+export const GroupField = {
+  Name: "group_name",
+  InviteeEmail: "invitee_email",
+  MemberRole: "member_role",
+} as const;
+
+export interface GroupError extends BaseError {
+  readonly code: GroupErrorCode;
+  /** 入力の誤りのとき、どの項目についての誤りか。画面が欄を決めるのに使う */
+  readonly field?: GroupField;
+}
+```
+
+`*Input` ではなく `*Field` としたのは、`UpdateGroupNameInput` など
+「ユースケースへの入力」を表す既存の命名と衝突させないためである。
+
+画面側は、ドメインの語彙を自分の欄名に対応づける小さな表を持つ。
+
+```ts
+// app/routes/groups/$groupId/invitation-form-errors.ts
+const fieldOf: Partial<Record<GroupField, keyof GroupInviteFormErrors>> = {
+  [GroupField.InviteeEmail]: "emailError",
+  // MemberRole はこの画面では Select。欄の下に出す先が無いので、書かずに Alert へ落とす
+};
+```
+
+**この表だけ `Partial` にする。** 決定 5 の表は書き忘れると秘匿が破れるため網羅を強制するが、
+こちらは書き忘れても文言がフォーム上部の Alert に出るだけで、安全側に劣化する。
+**忘れたときの被害の大きさに、強制の度合いを合わせる。**
+
+### 7. ルートのグルーを 2 本に畳む
+
+```ts
+// loader
+if (result.isErr()) throw groupErrorResponse("groups.detail.loader", result.error);
+
+// action
+if (result.isErr()) return groupActionErrors("groups.detail.action", result.error, {/* … */});
+```
+
+ログを残すかどうかは `kind` から決まるので、コンテキストの 6 に挙げた 3 か所の取りこぼしも同時に埋まる。
+
+### 8. Infra と UseCase でエラー型は分けない
+
+infra が構築しているエラーコードを全件数えたところ、`DatabaseError` と `*NotFound` の 2 種類しか無く、
+`ReservationInvalidPeriod` のような業務寄りのコードを infra が作っている箇所は無かった
+(メール送信を除く)。**分離は事実上すでにできている。**
+
+型を 2 本に割っても表現できる情報は増えず、増えるのは `InfraError → DomainError` の変換が
+現在の 15 か所から全リポジトリ呼び出しへ膨らむ費用だけである。
+必要な区別は決定 3 の `kind` で足りる (`internal` は原理的に infra 由来)。
+
+## 理由
+
+### 案 A: 現状のまま、気づいたところだけ直す (却下)
+
+変換が 4 か所に散っている構造が残るため、画面を足すたびに 5 か所目が増える。
+コンテキストの 3・4 のようなズレは、増えた箇所どうしの間で再び発生する。
+
+### 案 B: Infra 用と UseCase 用でエラー型を分ける (却下)
+
+層の責務としては筋が通るが、決定 8 のとおり infra が作るコードは 2 種類しか無く、
+分離によって得られる情報がほぼ無い。変換の記述量だけが増える。
+
+### 案 C: 全ドメイン共通の変換関数を 1 つ作る (却下)
+
+文言はドメインの語彙であり (「団体が見つかりません」「予約が見つかりません」)、
+1 つの関数に集めると分岐の中でドメインを見分けることになる。
+共通化してよいのは**表の形**と**表を読むグルー**だけで、表の中身は共通化できない。
+
+### 案 D: 分類 (`kind`) + ドメインごとの表 + 画面ごとの表 (採用)
+
+決めることを 3 つに分け、それぞれを決められる場所に置く。
+
+| 決めること          | 決める人                         | 置き場所              |
+| ------------------- | -------------------------------- | --------------------- |
+| status / ログの要否 | `kind` (既定) + 表の上書き       | `app/domain/`         |
+| 画面に出す文言      | ドメインごとの表 + `userMessage` | `app/routes/_shared/` |
+| どの入力欄に出すか  | `field` + 画面ごとの表           | `app/routes/<画面>/`  |
+
+共有できるもの (方針) と共有できないもの (欄の名前) の間に線を引ける唯一の案である。
+
+## トレードオフ
+
+- **短縮した列挙子は、ドメインをまたぐと見分けがつきにくい。**
+  `GroupErrorCode.NotFound` と `ReservationErrorCode.NotFound` は見た目が似る。
+  型が違うので取り違えはコンパイルで落ちるが、読むときは import 名に頼ることになる。
+- **`kind` から status が決まることに寄りかかりすぎると、秘匿を壊す。**
+  既定を破る行 (`NotVisible`) は必ず `status` を明示し、理由をコメントに書くこと。
+- **`userMessage` の付け忘れは型では防げない。** 付け忘れると汎用文言に落ちるだけで壊れないが、
+  利用者に対しては不親切になる。ドメインの検証関数を書くときの約束として `AGENTS.md` に残す。
+- **`ReservationGroupNotEligible` と `ReservationFacilityNotAvailable` の `kind` は決めきれていない。**
+  forbidden とも invalid_input とも読める。ただしこの 2 つは申請フォームのアクションからしか
+  表に出ず、アクションの応答は常に 200 で status を使わないため、実害は無い。
+  ローダーに出る経路ができたときに決め直す。
+
+## 影響範囲
+
+| 層                    | 変更                                                                                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/domain/`         | `ErrorKind` を追加。各ドメインに `*ErrorKind` の表と `*Field` を追加。列挙子を改名。`ReservationError` を `BaseError` 継承に直し、`FacilityErrorCode.DataBaseError` の綴りを直す |
+| `app/usecases/`       | 利用者向けの文言を `userMessage` へ移す。`ensureGroupIsVisible` が `NotVisible` を返す。`get-group-management.ts` が再定義している `toGroupDatabaseError` を共有版に寄せる       |
+| `app/infra/`          | 英語の文言を日本語に揃える。`facility-availability-calendar-query.ts` が書いている利用者向け文言を表へ移す                                                                       |
+| `app/routes/_shared/` | 新設。ドメインごとの表と、グルー 2 本                                                                                                                                            |
+| `app/routes/`         | 各ルートのエラー分岐をグルー呼び出しに置き換え。画面ごとの `field` の表を置く                                                                                                    |
+| `app/lib/`            | `group-error-message.ts` を削除                                                                                                                                                  |
+| `app/routes.ts`       | 規約コメントに `routes/_shared/` を追加                                                                                                                                          |
+| `AGENTS.md`           | 5 章にエラーの決まりを一段追加                                                                                                                                                   |
+
+DB マイグレーションは発生しない。
+
+## 適用の順序
+
+| 段階    | 内容                                                                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Phase 0 | 設計変更に依存しない後始末。ログ漏れ 3 か所、`toGroupDatabaseError` の重複、`DataBaseError` の綴り、`ReservationError` の `BaseError` 継承 |
+| Phase 1 | group ドメインで縦に 1 本通す (決定 1〜7)。`lib/group-error-message.ts` と `$groupId/action-error.ts` が消える                             |
+| Phase 2 | reservation へ展開。コンテキストの 3 と `default:` の握りつぶしが解消する                                                                  |
+| Phase 3 | invitation / facility / user / query。固定文字列を表へ寄せる                                                                               |
+| Phase 4 | この ADR を承認に更新し、`AGENTS.md` に反映                                                                                                |
+
+Phase 1 だけやや大きいが、group で形が決まらないと Phase 2 以降の差分をレビューできないため分割しない。
+
+## 適用範囲
+
+この ADR はエラーの分類と、利用者に見せる文言への変換についてのみ述べる。
+
+COND-001 (承認済み予約の重なり) の判定が `infra/reservation/reservation-repo.ts` の中で
+`noApprovedOverlap` と `existsApprovedOverlap` に二重に書かれている件は、
+エラーの扱いとは独立しているため、この ADR では扱わない。
+なお、ユースケース側の事前確認と UPDATE 側の条件は**意図的な二段構え**であり
+(D1 では確認と書き込みを 1 つのトランザクションに入れられない)、どちらも残すこと。
+
+ADR-001 の層構成、ADR-002 のメール配送、ADR-003 の団体テーブルは変更しない。
