@@ -13,6 +13,11 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   test: {
+    /*
+     * テストは app 配下にしか置かない。既定の include (リポジトリ全体) のままだと、
+     * .claude/worktrees/* や .worktree/* にある別の git worktree のテストまで拾ってしまう。
+     */
+    include: ["app/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
     server: {
       deps: {
         /*
