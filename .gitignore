@@ -4,6 +4,9 @@
 /node_modules/
 *.tsbuildinfo
 
+# ローカルに置く別の git worktree。oxfmt・oxlint もこの指定を見て対象から外す
+/.worktree/
+
 # React Router
 /.react-router/
 /build/
