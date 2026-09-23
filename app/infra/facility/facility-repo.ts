@@ -15,7 +15,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
       db.select().from(facilityTable).where(eq(facilityTable.id, id)).limit(1),
       (error): FacilityError => {
         return {
-          code: FacilityErrorCode.DataBaseError,
+          code: FacilityErrorCode.DatabaseError,
           message: "Failed to query the database",
           cause: error,
         };
