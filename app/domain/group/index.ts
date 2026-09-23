@@ -36,6 +36,8 @@ export const GroupAction = {
   UpdateMemberRole: "update_member_role",
   /** グループからのメンバー追放 */
   RemoveMember: "remove_member",
+  /** グループの有効化・無効化 */
+  ChangeStatus: "change_status",
 } as const;
 export type GroupAction = (typeof GroupAction)[keyof typeof GroupAction];
 
@@ -77,6 +79,7 @@ export const groupPermissions: PermissionTable<ActorRole, GroupAction> = {
       GroupAction.InviteMember,
       GroupAction.RemoveMember,
       GroupAction.UpdateMemberRole,
+      GroupAction.ChangeStatus,
     ],
   },
 };
@@ -104,6 +107,7 @@ export const groupForbiddenMessages: Record<GroupManageAction, string> = {
   [GroupAction.InviteMember]: "メンバーを招待できるのは管理者と事務局だけです。",
   [GroupAction.UpdateMemberRole]: "メンバーの役割を変更できるのは管理者と事務局だけです。",
   [GroupAction.RemoveMember]: "メンバーを削除できるのは管理者と事務局だけです。",
+  [GroupAction.ChangeStatus]: "団体の有効化・無効化は事務局だけが行えます。",
 };
 
 /**
@@ -147,6 +151,8 @@ export const GroupErrorCode = {
   InvitationNotVisible: "INVITATION_NOT_VISIBLE",
   /** その操作をすると団体の管理者が 0 人になってしまう */
   LastAdminRequired: "LAST_ADMIN_REQUIRED",
+  /** 団体のステータス遷移が許されていない（すでに別の状態に変わっている・無効な遷移など） */
+  InvalidTransition: "GROUP_INVALID_TRANSITION",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type GroupErrorCode = (typeof GroupErrorCode)[keyof typeof GroupErrorCode];
@@ -167,6 +173,7 @@ export const groupErrorKind: Record<GroupErrorCode, ErrorKind> = {
   [GroupErrorCode.InvitationNotFound]: ErrorKind.NotFound,
   [GroupErrorCode.InvitationNotVisible]: ErrorKind.Forbidden,
   [GroupErrorCode.LastAdminRequired]: ErrorKind.Conflict,
+  [GroupErrorCode.InvalidTransition]: ErrorKind.Conflict,
   [GroupErrorCode.DatabaseError]: ErrorKind.Internal,
 };
 
@@ -208,6 +215,16 @@ export interface UpdateGroupNameInput {
   readonly updatedAt: Date;
 }
 
+/** 団体の状態（有効・無効）の更新に必要な値 */
+export interface UpdateGroupStatusInput {
+  readonly id: string;
+  /** 更新前の期待される状態。楽観的ロックとして使用する */
+  readonly from: GroupStatus;
+  /** 更新後の状態 */
+  readonly to: GroupStatus;
+  readonly updatedAt: Date;
+}
+
 /**
  * 団体の新規作成に必要な値。
  *
@@ -230,6 +247,13 @@ export interface CreateGroupInput {
 export interface GroupRepository {
   findById(id: string): ResultAsync<Group, GroupError>;
   updateName(input: UpdateGroupNameInput): ResultAsync<Group, GroupError>;
+  /**
+   * 団体のステータスを変更する。
+   *
+   * 更新条件として `WHERE id = ? AND status = from` を付与し、
+   * 更新された行が 0 件の場合は InvalidTransition を返す。
+   */
+  updateStatus(input: UpdateGroupStatusInput): ResultAsync<Group, GroupError>;
   /**
    * 団体と初期メンバーを 1 つの `db.batch()` で作成する。
    *

@@ -178,6 +178,7 @@ describe("groupActionErrors", () => {
     GroupErrorCode.MemberNotFound,
     GroupErrorCode.InvitationNotFound,
     GroupErrorCode.InvitationNotVisible,
+    GroupErrorCode.InvalidTransition,
   ])("%s は画面ごと差し替えず、フォームの上に読み込み直しの案内を出す", (code) => {
     // URL が指す団体はあるので、404 にしてはいけない。フォームで指したものが無くなっただけ
     const errors = groupActionErrors(context, errorOf(code));
@@ -188,6 +189,7 @@ describe("groupActionErrors", () => {
   it.each([
     [GroupErrorCode.InvalidInput, "info"],
     [GroupErrorCode.LastAdminRequired, "info"],
+    [GroupErrorCode.InvalidTransition, "info"],
     [GroupErrorCode.MemberNotFound, "info"],
     [GroupErrorCode.Forbidden, "warn"],
     [GroupErrorCode.DatabaseError, "error"],
