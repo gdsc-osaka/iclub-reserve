@@ -34,6 +34,7 @@ const expected: Record<ActorName, Record<GroupAction, boolean>> = {
     [GroupAction.InviteMember]: false,
     [GroupAction.UpdateMemberRole]: false,
     [GroupAction.RemoveMember]: false,
+    [GroupAction.ChangeStatus]: false,
   },
   メンバー: {
     [GroupAction.View]: true,
@@ -41,6 +42,7 @@ const expected: Record<ActorName, Record<GroupAction, boolean>> = {
     [GroupAction.InviteMember]: false,
     [GroupAction.UpdateMemberRole]: false,
     [GroupAction.RemoveMember]: false,
+    [GroupAction.ChangeStatus]: false,
   },
   管理者: {
     [GroupAction.View]: true,
@@ -48,6 +50,7 @@ const expected: Record<ActorName, Record<GroupAction, boolean>> = {
     [GroupAction.InviteMember]: true,
     [GroupAction.UpdateMemberRole]: true,
     [GroupAction.RemoveMember]: true,
+    [GroupAction.ChangeStatus]: false,
   },
   // COND-009: 事務局は所属していない団体でも管理できる
   事務局: {
@@ -56,6 +59,7 @@ const expected: Record<ActorName, Record<GroupAction, boolean>> = {
     [GroupAction.InviteMember]: true,
     [GroupAction.UpdateMemberRole]: true,
     [GroupAction.RemoveMember]: true,
+    [GroupAction.ChangeStatus]: true,
   },
   // 事務局の権限と、団体での役割の権限の両方を持つ
   事務局かつメンバー: {
@@ -64,6 +68,7 @@ const expected: Record<ActorName, Record<GroupAction, boolean>> = {
     [GroupAction.InviteMember]: true,
     [GroupAction.UpdateMemberRole]: true,
     [GroupAction.RemoveMember]: true,
+    [GroupAction.ChangeStatus]: true,
   },
   事務局かつ管理者: {
     [GroupAction.View]: true,
@@ -71,6 +76,7 @@ const expected: Record<ActorName, Record<GroupAction, boolean>> = {
     [GroupAction.InviteMember]: true,
     [GroupAction.UpdateMemberRole]: true,
     [GroupAction.RemoveMember]: true,
+    [GroupAction.ChangeStatus]: true,
   },
 };
 

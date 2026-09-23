@@ -22,6 +22,13 @@ export default [
     route("availability", "routes/availability/route.tsx"),
     route("facility", "routes/facility/route.tsx"),
     /*
+     * 団体一覧（SCR-008）。
+     * 一般ユーザー向け（/groups）と事務局向け（/staff/groups）に分ける。
+     * /staff/reservations と同じく、事務局の画面は機能のフォルダの下に staff/ として置く。
+     */
+    route("groups", "routes/groups/list/route.tsx"),
+    route("staff/groups", "routes/groups/staff/route.tsx"),
+    /*
      * 団体登録（SCR-006）のルート。
      * `new` は `:groupId` より具体的なので先に選ばれるが、
      * 意図を明確にするため `groups/:groupId` より前に配置する。

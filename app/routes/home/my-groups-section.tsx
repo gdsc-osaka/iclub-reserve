@@ -1,13 +1,22 @@
-import { ChevronRight, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { Link } from "react-router";
 
-import { GroupStatusBadge } from "~/components/group/group-status-badge";
+import type { MyGroup } from "~/components/group/my-group";
+import { MyGroupCard, NoGroupsCard } from "~/components/group/my-group-card";
 import { Button } from "~/components/ui/button";
 
-import type { DashboardGroup } from "./dashboard-group";
+/**
+ * ダッシュボードに並べる団体の上限。
+ *
+ * ダッシュボードは要約と入口なので、PC で 2 列 × 2 行に収まる数にとどめる。
+ * すべての団体は所属団体一覧（/groups、SCR-008）で見る。
+ */
+const DASHBOARD_GROUP_LIMIT = 4;
 
 /**
- * 所属している団体を並べる区画。
+ * ダッシュボードの所属団体区画。
+ *
+ * 上限を超える分は出さず、見出しの「すべて見る（全 n 件）」から /groups へ案内する。
  *
  * 団体を読めなかったときは、この区画には何も出さない（`isUnavailable`）。
  * 読めなかっただけなのに「所属していません」と出すと、
@@ -16,7 +25,10 @@ import type { DashboardGroup } from "./dashboard-group";
 export function MyGroupsSection({
   groups,
   isUnavailable,
-}: Readonly<{ groups: readonly DashboardGroup[]; isUnavailable: boolean }>) {
+}: Readonly<{ groups: readonly MyGroup[]; isUnavailable: boolean }>) {
+  const displayedGroups = groups.slice(0, DASHBOARD_GROUP_LIMIT);
+  const hasMore = groups.length > DASHBOARD_GROUP_LIMIT;
+
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -26,7 +38,9 @@ export function MyGroupsSection({
         </h2>
         {groups.length > 0 && (
           <Button asChild variant="outline" size="sm">
-            <Link to="/groups/new">団体を登録</Link>
+            <Link to="/groups">
+              {hasMore ? `すべて見る（全 ${groups.length} 件）` : "すべて見る"}
+            </Link>
           </Button>
         )}
       </div>
@@ -35,51 +49,13 @@ export function MyGroupsSection({
         !isUnavailable && <NoGroupsCard />
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
-          {groups.map((group) => (
+          {displayedGroups.map((group) => (
             <li key={group.id}>
-              <GroupCard group={group} />
+              <MyGroupCard group={group} />
             </li>
           ))}
         </ul>
       )}
     </section>
-  );
-}
-
-/**
- * どの団体にも所属していない人に出す案内。
- */
-function NoGroupsCard() {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center">
-      <p className="text-sm font-medium">まだどの団体にも所属していません</p>
-      <p className="mt-1.5 text-sm text-muted-foreground">
-        団体に招待されると、ここに表示されます。
-      </p>
-      <div className="mt-4">
-        <Button asChild size="sm">
-          <Link to="/groups/new">団体を登録</Link>
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** 所属している団体 1 件分のカード。押すとその団体の画面へ移動する。 */
-function GroupCard({ group }: Readonly<{ group: DashboardGroup }>) {
-  return (
-    <Link
-      to={`/groups/${group.id}`}
-      className="flex h-full items-center gap-3 rounded-lg border p-4 transition-colors hover:bg-accent"
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span className="truncate font-medium">{group.name}</span>
-        <span className="flex items-center gap-2">
-          <GroupStatusBadge status={group.status} />
-          {group.isAdmin && <span className="text-xs text-muted-foreground">管理者</span>}
-        </span>
-      </div>
-      <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-    </Link>
   );
 }

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { groupMemberTable, groupTable } from "~/db/schema";
 import {
@@ -9,6 +9,7 @@ import {
   type GroupError,
   type GroupRepository,
   type UpdateGroupNameInput,
+  type UpdateGroupStatusInput,
 } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import type { Database } from "../db";
@@ -60,6 +61,37 @@ export const createGroupRepository = (db: Database): GroupRepository => {
        */
       if (row === undefined) {
         return err(groupNotFound(id));
+      }
+
+      return ok(toGroup(row));
+    });
+
+  const updateStatus = ({
+    id,
+    from,
+    to,
+    updatedAt,
+  }: UpdateGroupStatusInput): ResultAsync<Group, GroupError> =>
+    ResultAsync.fromPromise(
+      db
+        .update(groupTable)
+        .set({ status: to, updatedAt })
+        .where(and(eq(groupTable.id, id), eq(groupTable.status, from)))
+        .returning(),
+      databaseError,
+    ).andThen((rows) => {
+      const row = rows.at(0);
+
+      /*
+       * 更新件数が 0 件の場合は指定された ID の団体が存在しないか、
+       * または現在のステータスが from ではない（競合して既に変更された）ことを示す。
+       * 状態遷移の不整合として InvalidTransition を返す。
+       */
+      if (row === undefined) {
+        return err({
+          code: GroupErrorCode.InvalidTransition,
+          message: `団体 ${id} の状態更新（${from} -> ${to}）に失敗しました。`,
+        });
       }
 
       return ok(toGroup(row));
@@ -126,5 +158,5 @@ export const createGroupRepository = (db: Database): GroupRepository => {
     );
   };
 
-  return { findById, updateName, create };
+  return { findById, updateName, updateStatus, create };
 };

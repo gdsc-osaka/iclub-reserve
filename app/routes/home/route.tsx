@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
-import { CircleAlert, Clock } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 
+import { toMyGroup, type MyGroup } from "~/components/group/my-group";
+import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import { GroupStatus } from "~/domain/group";
 import { createDb } from "~/infra/db";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
@@ -10,7 +11,6 @@ import { logQueryError } from "~/routes/_shared/query-error.server";
 import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
 
 import type { Route } from "./+types/route";
-import { toDashboardGroup, type DashboardGroup } from "./dashboard-group";
 import { MyGroupsSection } from "./my-groups-section";
 
 export function meta() {
@@ -41,10 +41,10 @@ export async function loader({ context }: Route.LoaderArgs) {
      */
     logQueryError({ where: "home.loader", userId: user.id }, groupsResult.error);
 
-    return { groups: [] as readonly DashboardGroup[], isGroupsUnavailable: true };
+    return { groups: [] as readonly MyGroup[], isGroupsUnavailable: true };
   }
 
-  return { groups: groupsResult.value.map(toDashboardGroup), isGroupsUnavailable: false };
+  return { groups: groupsResult.value.map(toMyGroup), isGroupsUnavailable: false };
 }
 
 /**
@@ -60,13 +60,13 @@ export async function loader({ context }: Route.LoaderArgs) {
  */
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { groups, isGroupsUnavailable } = loaderData;
-  const pendingGroups = groups.filter((group) => group.status === GroupStatus.Pending);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6">
       {isGroupsUnavailable && <GroupsUnavailableAlert />}
 
-      {pendingGroups.length > 0 && <PendingGroupsNotice groups={pendingGroups} />}
+      {/* 承認待ちの団体がカードに出ていない 5 件目以降でも、ここには必ず名前が出る */}
+      <PendingGroupsNotice groups={groups} />
 
       <MyGroupsSection groups={groups} isUnavailable={isGroupsUnavailable} />
     </main>
@@ -82,29 +82,6 @@ function GroupsUnavailableAlert() {
       <AlertDescription>
         時間をおいて、画面を再読み込みしてください。
         繰り返し表示される場合は事務局にご連絡ください。
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-/**
- * 団体が承認待ちのあいだに出す案内。
- *
- * 承認待ちの団体からは予約を申請できない（COND-006）。
- * 理由を書かずに申請だけできない状態にすると、
- * 不具合だと思って何度も試すことになる。
- *
- * 画面全体ではなく団体ごとに出しているのは、
- * 複数の団体に所属していると団体ごとに状態が違うため。
- */
-function PendingGroupsNotice({ groups }: Readonly<{ groups: readonly DashboardGroup[] }>) {
-  return (
-    <Alert className="border-amber-500/30 bg-amber-500/5">
-      <Clock aria-hidden className="text-amber-600 dark:text-amber-400" />
-      <AlertTitle>承認待ちの団体があります</AlertTitle>
-      <AlertDescription>
-        {groups.map((group) => group.name).join("、")}
-        は事務局の承認を待っています。承認されるまで、この団体では予約を申請できません。
       </AlertDescription>
     </Alert>
   );

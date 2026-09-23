@@ -17,6 +17,8 @@ export interface UserGroupListItem {
   readonly status: GroupStatus;
   /** その団体でのこのユーザーの役割。管理者かどうかの判定に使う */
   readonly role: MembershipRole;
+  /** その団体のメンバー数（SCR-008） */
+  readonly memberCount: number;
 }
 
 /**
@@ -32,10 +34,6 @@ export type UserGroupList = readonly UserGroupListItem[];
  *
  * 返る型はドメインの不変条件を持たないので、
  * **この結果を使って更新してはいけない**。更新は必ず Repository を通すこと。
- *
- * NOTE: SCR-008 の団体一覧画面はここにメンバー数を足して使う想定。
- * 「自分が所属している団体を名前で並べる」という入口と出口が同じなので、
- * 別ファイルには分けず、この Query に列を足すこと。
  */
 export interface UserGroupListQuery {
   /**

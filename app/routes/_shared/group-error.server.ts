@@ -62,6 +62,10 @@ export const groupErrorView: Record<GroupErrorCode, ErrorView> = {
     message:
       "管理者が 0 人になるため、この操作はできません。先に別のメンバーを管理者にしてください。",
   },
+  [GroupErrorCode.InvalidTransition]: {
+    status: 409,
+    message: "団体の状態が変わっています。画面を読み込み直してください。",
+  },
   [GroupErrorCode.DatabaseError]: {
     message: "保存できませんでした。時間をおいて、もう一度お試しください。",
   },

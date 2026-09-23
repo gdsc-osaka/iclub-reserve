@@ -25,6 +25,11 @@ const createFakeGroupRepository = (options: FakeGroupRepositoryOptions = {}) => 
         code: GroupErrorCode.DatabaseError,
         message: "このテストでは updateName は使わない",
       }),
+    updateStatus: () =>
+      errAsync({
+        code: GroupErrorCode.DatabaseError,
+        message: "このテストでは updateStatus は使わない",
+      }),
     create: (input) => {
       createCallCount += 1;
       lastCreateInput = input;

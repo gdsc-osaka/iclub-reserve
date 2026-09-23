@@ -59,6 +59,11 @@ const createFakeGroupRepository = (options: FakeGroupRepositoryOptions = {}) => 
         updatedAt: input.updatedAt,
       });
     },
+    updateStatus: () =>
+      errAsync({
+        code: GroupErrorCode.DatabaseError,
+        message: "このテストでは updateStatus は使わない",
+      }),
     create: () =>
       errAsync({
         code: GroupErrorCode.DatabaseError,
