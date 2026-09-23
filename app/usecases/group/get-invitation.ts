@@ -5,7 +5,7 @@ import { GroupErrorCode } from "~/domain/group";
 import { InvitationStatus, type InvitationRepository } from "~/domain/invitation";
 import { normalizeInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { MembershipRole } from "~/domain/membership";
-import { invitationNotFound } from "./_shared/invitation-visibility";
+import { invitationNotFound, invitationNotVisible } from "./_shared/invitation-visibility";
 
 export interface GetInvitationDeps {
   readonly invitationRepository: InvitationRepository;
@@ -42,7 +42,8 @@ export interface InvitationView {
  * 2. findById で招待を引く。null なら invitationNotFound() を返す。
  * 3. status !== InvitationStatus.Pending なら invitationNotFound() を返す。
  * 4. expiresAt.getTime() <= now.getTime() なら invitationNotFound() を返す（期限ちょうどは切れている扱い）。
- * 5. invitation.email !== normalizeInvitationEmail(args.actorEmail) なら invitationNotFound() を返す。
+ * 5. invitation.email !== normalizeInvitationEmail(args.actorEmail) なら invitationNotVisible() を返す。
+ *    利用者への応答は 1〜4 と同じ 404 になるが、揃えるのは画面の側で、ここでは宛先違いとして正直に返す（ADR-004 決定 4）。
  *    ※宛先照合を団体取得より先に行う理由: 宛先が違う人に対して団体を引きに行くと、
  *    存在する団体のときだけ DB 往復が 1 回増え、応答時間の差から団体の存在を推測されてしまうため（COND-011 存在の秘匿）。
  * 6. ここまで通った人だけが COND-011 の例外（招待を提示した正規の受信者）にあたる。groupRepository.findById で団体名を取得する。
@@ -57,28 +58,30 @@ export const getInvitationUseCase = (
 
   // 1. 空文字なら DB を引かずに終了（存在秘匿）
   if (invitationId === "") {
-    return errAsync(invitationNotFound());
+    return errAsync(invitationNotFound("招待 ID が空である。"));
   }
 
   // 2. 招待を取得
   return deps.invitationRepository.findById(invitationId).andThen((invitation) => {
     if (invitation === null) {
-      return errAsync(invitationNotFound());
+      return errAsync(invitationNotFound(`招待 ${invitationId} が見つからない。`));
     }
 
     // 3. 承諾待ち以外の状態は不可
     if (invitation.status !== InvitationStatus.Pending) {
-      return errAsync(invitationNotFound());
+      return errAsync(
+        invitationNotFound(`招待 ${invitation.id} は承諾待ちではない (${invitation.status})。`),
+      );
     }
 
     // 4. 有効期限切れ（期限ちょうどは切れている扱い）
     if (invitation.expiresAt.getTime() <= args.now.getTime()) {
-      return errAsync(invitationNotFound());
+      return errAsync(invitationNotFound(`招待 ${invitation.id} は有効期限が切れている。`));
     }
 
     // 5. 宛先の突き合わせ（宛先が違う人には団体を引きに行かない）
     if (invitation.email !== normalizeInvitationEmail(args.actorEmail)) {
-      return errAsync(invitationNotFound());
+      return errAsync(invitationNotVisible());
     }
 
     // 6. 団体名を取得（正規の受信者のみ）
@@ -87,7 +90,7 @@ export const getInvitationUseCase = (
       .mapErr((error) => {
         // 7. NotFound の場合は存在秘匿のため invitationNotFound に畳む。DatabaseError はそのまま返す
         if (error.code === GroupErrorCode.NotFound) {
-          return invitationNotFound();
+          return invitationNotFound(`招待 ${invitation.id} の団体が見つからない。`);
         }
         return error;
       })

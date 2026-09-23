@@ -176,12 +176,13 @@ describe("getInvitationUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      // 扱えなかった理由はログ用の message にだけ書き、利用者に見せる理由は持たない
+      expect(result.error.userMessage).toBeUndefined();
     }
   });
 
-  // 3. status が canceled → InvitationNotFound（メッセージまで 2 と同じ文字列であることを確かめる）
-  it("status が canceled の場合は InvitationNotFound になり、メッセージが一致する", async () => {
+  // 3. status が canceled → InvitationNotFound
+  it("status が canceled の場合は InvitationNotFound になる", async () => {
     const canceledInvitation: Invitation = {
       ...validInvitation,
       status: InvitationStatus.Canceled,
@@ -200,7 +201,7 @@ describe("getInvitationUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      expect(result.error.userMessage).toBeUndefined();
     }
   });
 
@@ -224,7 +225,7 @@ describe("getInvitationUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      expect(result.error.userMessage).toBeUndefined();
     }
   });
 
@@ -248,7 +249,7 @@ describe("getInvitationUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      expect(result.error.userMessage).toBeUndefined();
     }
   });
 
@@ -272,12 +273,12 @@ describe("getInvitationUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      expect(result.error.userMessage).toBeUndefined();
     }
   });
 
-  // 7. 宛先が違う → InvitationNotFound、かつ groupRepository.findById が呼ばれない
-  it("宛先が違う場合は InvitationNotFound になり、groupRepository.findById が呼ばれない", async () => {
+  // 7. 宛先が違う → InvitationNotVisible、かつ groupRepository.findById が呼ばれない
+  it("宛先が違う場合は InvitationNotVisible になり、groupRepository.findById が呼ばれない", async () => {
     const fakeInvitation = createFakeInvitationRepository();
     const fakeGroup = createFakeGroupRepository();
 
@@ -294,8 +295,9 @@ describe("getInvitationUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      // 利用者への応答を InvitationNotFound と揃えるのは画面の表で、ここでは正直に返す（ADR-004 決定 4）
+      expect(result.error.code).toBe(GroupErrorCode.InvitationNotVisible);
+      expect(result.error.userMessage).toBeUndefined();
     }
     // 存在秘匿のため、団体を引きに行かないこと
     expect(fakeGroup.findByIdCallCount()).toBe(0);
@@ -368,7 +370,7 @@ describe("getInvitationUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
-      expect(result.error.message).toBe("招待が見つかりません。");
+      expect(result.error.userMessage).toBeUndefined();
     }
   });
 });

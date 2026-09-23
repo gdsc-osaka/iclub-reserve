@@ -64,6 +64,18 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 
   同じ判定を 2 つのユースケースに書き写さないこと。文言だけが違うなら、`ensureNotLastAdmin` や `ensureNoApprovedOverlap` のようにメッセージを引数で受け取る。
 
+- **エラーの扱い**（`docs/adr/004-error-handling-unification.md`）: ユースケースは起きたことを正直なコードで返し、利用者に何を見せるか（status・文言・存在の秘匿）は `app/routes/_shared/` のドメインごとの表が決める。見せない相手にも、ユースケースは `NotFound` に潰さず `NotVisible` を返す。
+
+  | 書くもの                 | 置き場所                                        | 決まり                                                                   |
+  | ------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------ |
+  | エラーコードと分類       | `app/domain/<ドメイン>/`（`*ErrorKind` の表）   | 列挙子に型名を繰り返さない（`NotFound`）。ログに出る文字列の値は変えない |
+  | ログ用の説明             | エラーの `message`                              | 利用者が入力した値を埋め込まない（ID は可）                              |
+  | 利用者に見せる文言       | エラーの `userMessage`                          | 検証・権限の拒否では必ず書く。付け忘れると表の汎用の文言に落ちる         |
+  | どの項目についての失敗か | エラーの `field`（`*Field`）                    | どの入力欄に出すかは、画面ごとの表で決める                               |
+  | status と既定の文言      | `app/routes/_shared/<ドメイン>-error.server.ts` | `Partial` にせず網羅する。既定の status を破る行には理由をコメントする   |
+
+  ルートは、loader では `throw <ドメイン>ErrorResponse(...)`、action では `return <ドメイン>ActionErrors(...)` を呼ぶだけにする。`error.code` で分岐して status や文言を自前で決めないこと。ユースケースが持っている判定（権限など）をルートに書き写して先に弾くこともしない。ログは分類に応じたレベルで必ず残るので、「ログに残さない」分岐は書けない。失敗しても画面を開く loader（ダッシュボード）だけは、`logQueryError` でログだけ残して続けてよい。
+
 ## 6. Bundled Skills
 
 - **`rdra`** — a requirement-analysis skill based on RDRA 3.0. The skill itself lives in `.agents/skills/rdra/`; `.claude/skills/rdra` is a symlink to it so that Claude Code picks it up. Use it for requirement analysis, PRD/ADR generation, requirement review, and requirement updates. Its outputs belong in `rdra/` and `docs/`.

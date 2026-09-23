@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { MembershipRole } from "../membership";
 import { ReservationErrorCode, ReservationStatus } from ".";
 import {
+  canPerformTransition,
   canTransition,
   isStaffTransition,
   parseReservationTransition,
@@ -348,5 +349,37 @@ describe("isStaffTransition", () => {
     expect(staffOnly.length + groupOnly.length).toBe(transitions.length);
     expect(staffOnly.length).toBeGreaterThan(0);
     expect(groupOnly.length).toBeGreaterThan(0);
+  });
+});
+
+describe("canPerformTransition", () => {
+  it("事務局だけの操作は、予約を見ずに事務局かどうかだけで決まる", () => {
+    // ユースケースが予約を引く前に呼ぶので、予約の状態を受け取らないこと
+    expect(
+      canPerformTransition(ReservationTransition.Approve, {
+        isStaff: false,
+        membership: null,
+      })._unsafeUnwrapErr().code,
+    ).toBe(ReservationErrorCode.Forbidden);
+    expect(
+      canPerformTransition(ReservationTransition.Approve, {
+        isStaff: true,
+        membership: null,
+      }).isOk(),
+    ).toBe(true);
+  });
+
+  it("canTransition の権限の判定と同じ結果になる", () => {
+    const nonMember = { isStaff: false, membership: null };
+
+    expect(
+      canPerformTransition(ReservationTransition.Withdraw, nonMember)._unsafeUnwrapErr(),
+    ).toEqual(
+      canTransition(
+        { status: ReservationStatus.Provisional },
+        ReservationTransition.Withdraw,
+        nonMember,
+      )._unsafeUnwrapErr(),
+    );
   });
 });

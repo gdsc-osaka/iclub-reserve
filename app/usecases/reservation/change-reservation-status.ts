@@ -10,6 +10,7 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 import {
+  canPerformTransition,
   canTransition,
   ReservationTransition,
   transitionAuthority,
@@ -65,6 +66,8 @@ export interface ChangeReservationStatusResult {
  * 権限と状態遷移（canTransition）を、理由の検証（validateTransitionReason）より先に置く。
  * 操作そのものが許されていない人に「理由を入力してください」と返しても、
  * 入力し直したところで結局は弾かれる。
+ * 事務局だけの操作では、事務局かどうかをさらに前、予約を引くより前に確かめる
+ * （予約の有無を事務局でない人に伝えないため。本文のコメントを参照）。
  *
  * 重複の確認と通知先の取得は同時に投げる。どちらも D1 への往復なので、
  * 順に待つとそのぶん利用者の待ち時間になる。
@@ -83,23 +86,33 @@ export const changeReservationStatusUseCase = (
   safeTry(async function* () {
     const now = args.now ?? new Date();
 
+    /*
+     * 事務局だけの操作（承認・却下・事務局キャンセル）は、予約を引く前に事務局かどうかを確かめる。
+     * 判定に予約も所属も要らないうえ、引いてから確かめると、予約が無い（NotFound）か
+     * 許されない（Forbidden）かの応答の違いから、事務局でない人に予約の有無が伝わってしまう。
+     * 下の canTransition でも同じ判定をもう一度通るが、同じ関数なので食い違うことはない。
+     */
+    const authority = transitionAuthority[args.transition];
+    const staffActor: ReservationActor = { isStaff: args.isStaff, membership: null };
+    if (authority === "staff") {
+      yield* canPerformTransition(args.transition, staffActor);
+    }
+
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
     /*
      * 操作する人を組み立てる。
      *
-     * 事務局だけの操作（承認・却下・事務局キャンセル）は、canTransition が
-     * isStaff しか見ないので所属を引きに行かない。引いても判定は変わらず、
-     * D1 への往復が 1 回増えるだけになる。
+     * 事務局だけの操作は、canTransition が isStaff しか見ないので所属を引きに行かない。
+     * 引いても判定は変わらず、D1 への往復が 1 回増えるだけになる。
      *
      * 取り消し・キャンセルは団体での役割で判定するので、事務局であっても所属を引く。
      * 事務局の人が自分の所属する団体の予約を取り消すときは、メンバーとしての
      * 役割が和集合で効くため、省くと取り消せなくなる。
      */
-    const authority = transitionAuthority[args.transition];
     const actor: ReservationActor =
       authority === "staff"
-        ? { isStaff: args.isStaff, membership: null }
+        ? staffActor
         : yield* resolveReservationActor(deps, reservation.groupId, args, authority);
 
     // 誰が・いまの状態から動かせるか（COND-009 / STATE-001）

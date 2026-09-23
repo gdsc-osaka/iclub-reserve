@@ -81,7 +81,7 @@ export const transitionSourceStatus: Record<ReservationTransition, ReservationSt
  * 事務局だけの操作は "staff" を持つ。事務局の権限は団体での役割とは別の軸にあり、
  * 団体に所属していない事務局の人にも成り立つため、役割の表では表せない。
  *
- * この表は 2 か所から読む。{@link canTransition} の権限判定と、画面（ルート）が
+ * この表は 2 か所から読む。{@link canPerformTransition} の権限判定と、画面（ルート）が
  * 受け付ける操作の絞り込み（{@link isStaffTransition}）である。どちらかが
  * 操作の一覧を自前で書き写すと、操作を増やしたときに片方だけ直して食い違う。
  */
@@ -210,10 +210,26 @@ export const canTransition = (
   reservation: Pick<Reservation, "status">,
   transition: ReservationTransition,
   actor: ReservationActor,
+): Result<void, ReservationError> =>
+  // 1. 誰が実行できるか（COND-009）→ 2. いまの状態から動かせるか（STATE-001）
+  canPerformTransition(transition, actor).andThen(() => canTransitionFrom(reservation, transition));
+
+/**
+ * その操作を、その人が実行してよいかだけを判定する（COND-009）。予約のいまの状態は見ない。
+ *
+ * 普段は {@link canTransition} から呼ばれる。単独で使うのは、予約を引く前に確かめたいとき。
+ * 事務局だけの操作は所属も予約も見ずに判定できるので、ユースケースは予約を引く前にこれで確かめる。
+ * 引いてから確かめると、予約が無い（NotFound）か許されない（Forbidden）かの応答の違いから、
+ * 事務局でない人に予約の有無が伝わってしまう。
+ *
+ * @param transition 実行したい操作
+ * @param actor 操作者（事務局かどうかと、その予約の団体での所属）
+ */
+export const canPerformTransition = (
+  transition: ReservationTransition,
+  actor: ReservationActor,
 ): Result<void, ReservationError> => {
   /*
-   * 1. 操作権限の確認（COND-009）
-   *
    * 「どの操作を誰に許すか」は transitionAuthority が持つ。ここで操作ごとに
    * 分岐を書き並べないのは、操作が増えたときに表とこの判定がずれないようにするため。
    */
@@ -243,7 +259,14 @@ export const canTransition = (
     });
   }
 
-  // 2. 現在のステータスからの遷移可否（STATE-001）
+  return ok(undefined);
+};
+
+/** 予約のいまの状態から、その操作で動かせるか（STATE-001） */
+const canTransitionFrom = (
+  reservation: Pick<Reservation, "status">,
+  transition: ReservationTransition,
+): Result<void, ReservationError> => {
   if (reservation.status !== transitionSourceStatus[transition]) {
     return err({
       code: ReservationErrorCode.InvalidTransition,

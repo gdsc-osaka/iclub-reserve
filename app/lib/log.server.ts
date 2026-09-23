@@ -76,29 +76,3 @@ export const logFailure = (log: FailureLog): void => {
   const { cause, ...rest } = log;
   console[log.level](cause === undefined ? rest : { ...rest, cause: toLoggable(cause) });
 };
-
-/** ログに残せる失敗の形。ドメイン・Query どちらのエラーもこの形を満たす。 */
-interface LoggableError {
-  readonly code: string;
-  readonly message: string;
-  /** 元となった例外。画面には出さず、ここでだけ残す */
-  readonly cause?: unknown;
-}
-
-/**
- * サーバー側にだけ失敗の中身を残す。
- *
- * ADR-004 への移行が済んでいないルートのためだけに残している。
- * 新しく書くルートでは使わず、`app/routes/_shared/` のグルーを通すこと。
- * すべてのルートが移ったら消す。
- *
- * @param where どの処理で起きたか（例: `"reservations.loader"`）。ログを絞り込む目印
- */
-export const logServerError = (where: string, error: LoggableError): void => {
-  if (error.cause !== undefined) {
-    console.error(`[${where}] ${error.code}: ${error.message}`, error.cause);
-    return;
-  }
-
-  console.error(`[${where}] ${error.code}: ${error.message}`);
-};

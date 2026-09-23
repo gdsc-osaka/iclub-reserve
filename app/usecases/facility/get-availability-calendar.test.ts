@@ -166,7 +166,7 @@ describe("getAvailabilityCalendarUseCase", () => {
         findByFacilityAndPeriod: () =>
           errAsync({
             code: QueryErrorCode.NotFound,
-            message: "ID が fac_unknown の施設・設備は見つかりませんでした。",
+            message: "施設・設備 fac_unknown が有効な施設の中に見つからない。",
           }),
       } as FacilityAvailabilityCalendarQuery,
     };

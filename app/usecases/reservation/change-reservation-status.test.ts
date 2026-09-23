@@ -573,6 +573,42 @@ describe("changeReservationStatusUseCase", () => {
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
+    it.each([
+      ReservationTransition.Approve,
+      ReservationTransition.Reject,
+      ReservationTransition.StaffCancel,
+    ])("非スタッフの %s は、予約を引く前に拒否される", async (transition) => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition,
+        reason: "理由",
+      });
+
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
+      expect(spies.findById).not.toHaveBeenCalled();
+    });
+
+    it("非スタッフの承認は、予約が無くても同じ Forbidden になる（予約の有無が伝わらない）", async () => {
+      // 予約を引いてから確かめると、無い予約だけ NotFound になり、応答の違いから有無が分かってしまう
+      const { deps: existing } = createMockDeps({ reservation: baseProvisionalReservation });
+      const { deps: missing } = createMockDeps({ reservation: null });
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition: ReservationTransition.Approve,
+      };
+
+      const fromExisting = await changeReservationStatusUseCase(existing, args);
+      const fromMissing = await changeReservationStatusUseCase(missing, args);
+
+      expect(fromMissing._unsafeUnwrapErr()).toEqual(fromExisting._unsafeUnwrapErr());
+    });
+
     it("承認時に同一施設・同一時間帯に承認済みの重複予約が存在する場合は拒否される（COND-001）", async () => {
       const { deps, spies } = createMockDeps({
         reservation: baseProvisionalReservation,

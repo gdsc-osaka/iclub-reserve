@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
-import { data, isRouteErrorResponse, Link, redirect } from "react-router";
+import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -22,8 +22,8 @@ import {
   startOfTokyoDay,
   toTokyoDateKey,
 } from "~/lib/date";
-import { logServerError } from "~/lib/log.server";
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { createProvisionalReservationUseCase } from "~/usecases/reservation/create-reservation";
 import { getReservationFormUseCase } from "~/usecases/reservation/get-reservation-form";
@@ -99,12 +99,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    /*
-     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
-     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
-     */
-    logServerError("reservations.new.loader", result.error);
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 失敗の中身は画面へ出さず、ログにだけ残す。決めているのは表の側
+    throw queryErrorResponse({ where: "reservations.new.loader", userId: user.id }, result.error);
   }
 
   const form = result.value;

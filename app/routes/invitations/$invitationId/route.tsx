@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, Form, isRouteErrorResponse, Link, redirect, useNavigation } from "react-router";
+import { Form, isRouteErrorResponse, Link, redirect, useNavigation } from "react-router";
 
 import { MembershipRoleBadge } from "~/components/group/membership-role-badge";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -12,13 +12,15 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { GroupErrorCode } from "~/domain/group";
 import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { formatDateTime } from "~/lib/date";
-import { logServerError } from "~/lib/log.server";
+import {
+  invitationActionErrors,
+  invitationErrorResponse,
+} from "~/routes/_shared/group-error.server";
 import { acceptInvitationUseCase } from "~/usecases/group/accept-invitation";
 import { getInvitationUseCase } from "~/usecases/group/get-invitation";
 import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
@@ -26,8 +28,9 @@ import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
 import type { Route } from "./+types/route";
 import { InvitationRejectDialog } from "./invitation-reject-dialog";
 
+/** この画面には入力欄が無いので、誤りはすべてフォームの上に出す */
 export interface InvitationActionData {
-  readonly error: string | null;
+  readonly formError: string | null;
 }
 
 export function meta(): Route.MetaDescriptors {
@@ -39,6 +42,7 @@ export function meta(): Route.MetaDescriptors {
  *
  * 招待メールのリンクから開いたユーザーに対して、招待元の団体名と役割、有効期限を表示する。
  * 宛先が一致しない場合や期限切れ・取り消し済みの場合は、存在秘匿のため 404 を返す（COND-011）。
+ * ユースケースは宛先違いを `InvitationNotVisible` として正直に返し、404 に揃えるのは表の側である（ADR-004 決定 4）。
  */
 export async function loader({ params, context }: Route.LoaderArgs) {
   // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
@@ -59,15 +63,11 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    const error = result.error;
-
-    if (error.code === GroupErrorCode.DatabaseError) {
-      logServerError("invitations.accept.loader", error);
-      throw data({ message: "Internal server error" }, { status: 500 });
-    }
-
-    // 存在しない・期限切れ・取り消し済み・宛先違いはすべて 404 に統一する（COND-011）
-    throw data({ message: "Invitation not found" }, { status: 404 });
+    // 存在しない・期限切れ・取り消し済み・宛先違いは、すべて同じ 404 になる（COND-011）
+    throw invitationErrorResponse(
+      { where: "invitations.accept.loader", userId: user.id },
+      result.error,
+    );
   }
 
   return { invitation: result.value };
@@ -100,24 +100,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
 
     if (result.isErr()) {
-      const error = result.error;
-
       /*
-       * 「見つからない」は GET と同じ応答（404）にそろえる（COND-011 存在の秘匿）。
+       * 「見つからない」は GET と同じ応答（404）を投げる（COND-011 存在の秘匿）。
        * ローダーが 404 を返す状況で action だけ 200 を返すと、
        * 応答ステータスの違いから招待の有無を外部から推測できてしまうため。
        */
-      if (error.code === GroupErrorCode.InvitationNotFound) {
-        throw data({ message: "Invitation not found" }, { status: 404 });
-      }
-
-      if (error.code === GroupErrorCode.DatabaseError) {
-        logServerError("invitations.accept.action", error);
-      }
-
-      return {
-        error: "招待の承諾に失敗しました。時間をおいて、もう一度お試しください。",
-      } satisfies InvitationActionData;
+      return invitationActionErrors(
+        { where: "invitations.accept.action", userId: user.id },
+        result.error,
+      ) satisfies InvitationActionData;
     }
 
     // 承諾成功時は、参加した団体の詳細画面へ案内する
@@ -138,19 +129,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     );
 
     if (result.isErr()) {
-      const error = result.error;
-
-      if (error.code === GroupErrorCode.InvitationNotFound) {
-        throw data({ message: "Invitation not found" }, { status: 404 });
-      }
-
-      if (error.code === GroupErrorCode.DatabaseError) {
-        logServerError("invitations.reject.action", error);
-      }
-
-      return {
-        error: "招待の辞退に失敗しました。時間をおいて、もう一度お試しください。",
-      } satisfies InvitationActionData;
+      // 承諾と同じく、「見つからない」は 404 を投げる
+      return invitationActionErrors(
+        { where: "invitations.reject.action", userId: user.id },
+        result.error,
+      ) satisfies InvitationActionData;
     }
 
     /*
@@ -160,7 +143,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return redirect("/");
   }
 
-  return { error: "不正な操作です。" } satisfies InvitationActionData;
+  return { formError: "不正な操作です。" } satisfies InvitationActionData;
 }
 
 /**
@@ -185,10 +168,10 @@ export default function AcceptInvitationRoute({ loaderData, actionData }: Route.
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {actionData?.error && (
+          {actionData?.formError && (
             <Alert variant="destructive">
               <AlertTitle>エラー</AlertTitle>
-              <AlertDescription>{actionData.error}</AlertDescription>
+              <AlertDescription>{actionData.formError}</AlertDescription>
             </Alert>
           )}
 

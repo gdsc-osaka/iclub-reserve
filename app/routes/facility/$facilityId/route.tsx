@@ -1,10 +1,9 @@
 import { env } from "cloudflare:workers";
-import { data } from "react-router";
 
-import { FacilityErrorCode } from "~/domain/facility";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
-import { logServerError } from "~/lib/log.server";
+import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { facilityErrorResponse } from "~/routes/_shared/facility-error.server";
 import {
   getFacilityUseCase,
   type GetFacilityArgs,
@@ -19,7 +18,9 @@ import type { Route } from "./+types/route";
  * `export default function Facility({ loaderData: facility }: Route.ComponentProps)`
  * として取得できる。
  */
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ params, context }: Route.LoaderArgs) {
+  // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
+  const user = requireRequestUser(context);
   const facilityId = params.facilityId;
 
   const db = createDb(env.DB);
@@ -31,23 +32,14 @@ export async function loader({ params }: Route.LoaderArgs) {
   };
   const facilityResult = await getFacilityUseCase(Deps, Args);
   if (facilityResult.isErr()) {
-    const error = facilityResult.error;
-
     /*
-     * 無い施設を開いたことは、今はログに残さない。今の `logServerError` は error の 1 段しか無く、
-     * ここで残すと本当の障害と見分けがつかなくなる。
-     * ログのレベルを分けたあと (ADR-004 決定 9)、段階 3 で info として残す。
+     * 無い施設は 404、DB の失敗は 500 になる。どちらもログに残り、
+     * 失敗の中身（DB のエラーなど）は画面へ出さない。決めているのは表の側
      */
-    if (error.code === FacilityErrorCode.FacilityNotFound) {
-      throw data({ message: "Facility Not Found." }, { status: 404 });
-    }
-
-    /*
-     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
-     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
-     */
-    logServerError("facility.detail.loader", error);
-    throw data({ message: "Internal server error." }, { status: 500 });
+    throw facilityErrorResponse(
+      { where: "facility.detail.loader", userId: user.id },
+      facilityResult.error,
+    );
   }
 
   return facilityResult.value;

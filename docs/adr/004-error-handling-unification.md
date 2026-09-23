@@ -2,7 +2,10 @@
 
 ## ステータス
 
-提案 (2026-09-22)
+承認 (2026-09-23)
+
+2026-09-22 に提案し、Phase 0〜3 で全ドメインへ適用し終えた時点で承認した。
+適用の途中で決めたことは、各決定の中に (Phase N) と付けて書き足してある。
 
 ADR-001 が定めた 4 層構成 (routes / usecases / domain / infra) の上に立つ。
 層の切り方は変えない。この ADR が決めるのは
@@ -206,6 +209,10 @@ const userText = (error: BaseError, kind: ErrorKind, fallback: string) =>
 `app/routes/` にも `workers/app.ts` にも到達せず、利用者に提示されない。
 提示されないエラーに提示用の分類は要らない。メールにはすでに `isRetryable` という別の軸がある。
 
+一方、ユーザー (`UserError`) には `userErrorKind` を付けた。いまはどの画面もユーザーのユースケースを
+使っていないが、利用者に返すために作ったユースケースのエラーであり、分類はコードの性質としてドメインに置ける。
+表 (決定 5) の方は画面の側の事情なので、画面から使うときに足す (Phase 3)。
+
 ### 4. 存在秘匿は、ユースケースではなく表現の側で行う
 
 ユースケースは正直なコードを返す。`GroupErrorCode.NotVisible` (`"GROUP_NOT_VISIBLE"`) を新設し、
@@ -238,6 +245,20 @@ COND-011 の表明になる。
 いまは権限表の `base` が予約の概要を全員に見せているので起きないが、`base` を狭めたときに
 秘匿がログにまで持ち込まれないよう、団体と同じく正直なコードを返しておく (Phase 2)。
 
+**招待にも同じ形で `GroupErrorCode.InvitationNotVisible` (`"INVITATION_NOT_VISIBLE"`) を置く (Phase 3)。**
+招待の承諾画面 (SCR-016) は、宛先が本人ではない招待を、無い・期限切れ・取り消し済みの招待と同じく
+「見つからない」と答えている (COND-011)。これまではユースケースの `invitationNotFound()` が 4 つを
+1 つの値に潰しており、コンテキストの 5 で見た `groupNotFound()` と同じく、ログでも区別できなかった。
+宛先違いだけを `InvitationNotVisible` (`forbidden`) として返し、応答を揃えるのは SCR-016 の表で行う。
+招待 ID は当て推量できないので、ここに来るのは転送されたリンクを開いたか、宛先と別のアカウントでログインしているかである。
+
+無い・期限切れ・承諾待ちでない、の 3 つは `InvitationNotFound` のままにし、どれに当たったかは `message` にだけ書く。
+利用者から見ればどれも「この招待ではもう参加できない」という同じ事実で、`kind` を分ける理由が無い。
+
+承諾と辞退は `InvitationNotFound` のままで、宛先違いを見分けない。判定を条件付き UPDATE に畳み込んでおり
+(事前に SELECT しないことで競合を防いでいる)、どの条件で外れたかが分からないためである。
+見分けるために SELECT を足すとその利点を失う。宛先違いは、承諾より前に画面を開いた時点で `InvitationNotVisible` として残る。
+
 **表で上書きするのは status と文言だけで、ログのレベルは上書きしない。**
 秘匿が要るのは外部への応答であって、サーバーのログではない。
 `NotVisible` のレベルを `NotFound` に合わせて `info` へ落とすと、秘匿をログにまで持ち込むことになり、
@@ -265,6 +286,11 @@ const groupErrorView: Record<GroupErrorCode, ErrorView> = {/* … */};
 
 `app/lib/group-error-message.ts` は削除する。
 あわせて `app/routes.ts` の規約コメントに `routes/_shared/` を加える。
+
+**Query の表は、何が無かったのかを名指しできない (Phase 3)。**
+Query は集約をまたぐので (ADR-001)、`QueryErrorCode.NotFound` が施設のことか予約のことかを表は知らない。
+文言は「表示する内容が見つかりません。」にとどめ、画面ごとの具体的な案内は各ルートの ErrorBoundary が status を見て出す。
+いまの ErrorBoundary はどれも status しか見ておらず、応答の文言を画面に出していないので、これで足りる。
 
 ### 6. どの入力欄に出すかは、ドメインの `field` と画面ごとの表で決める
 
@@ -349,9 +375,31 @@ if (result.isErr()) {
 action 用の表では 409 にする。いま予約を操作する action はどれも予約をフォームで指しているためで、
 予約詳細に action を足すときは、loader 用の表を使う action のグルーを足す (Phase 2)。
 
+招待も同じで、団体の画面 (SCR-007) ではフォームで指すので 409、承諾画面 (SCR-016) では URL が指すので 404 にする。
+SCR-016 の表 (`invitationErrorView`) は `groupErrorView` を広げて招待の 2 行だけを差し替えたもので、
+`InvitationNotVisible` の行は `InvitationNotFound` の行と同じ文言の 404 にしてある (Phase 3)。
+
 action 用の表では `NotFound` と `NotVisible` を投げずに返すので、上の理由で守られていた秘匿が `userMessage` で崩れうる。
 そこで `ErrorView` に `ignoreUserMessage` を足し、秘匿のために揃えたこの 2 行に付けた。
 付けた行は `userMessage` を持つエラーでも表の文言だけを出す。404 を投げる行には要らない。
+
+**失敗しても画面を開く loader のために、ログだけを残す関数を足す (Phase 3)。**
+ダッシュボードの loader は、団体の一覧が読めなくても画面を開く (ログイン後の行き先なので、500 にすると行き場が無くなる)。
+応答を作らないので 2 本のグルーのどちらも使えず、ルートから `logFailure` を直接呼ぶと、
+分類からレベルを引く処理をルートに書き写すことになる。そこで `error-response.server.ts` の `logDomainError` を公開し、
+Query 用に `logQueryError` を置いた。失敗を握って画面を続けるかどうかは画面が決めてよいが、
+ログに残すかどうかは画面に決めさせない、という線はこれでも変わらない。
+
+**ルートで先に弾く分岐も、ログを残さない分岐になる (Phase 3)。**
+事務局の予約画面 (`reservations/staff/route.tsx`) は、loader と action の冒頭で「事務局でなければ 403」を自前で投げていた。
+ユースケースにも同じ判定があり (`getReservationListUseCase` の `scope: "all"`、`canTransition` の事務局だけの操作)、
+ルートの分は判定の書き写しであるうえ、そこで弾いた分はログに残らなかった。
+ルートの判定を外し、ユースケースの `Forbidden` を表に通すようにした。loader は 403、action はフォームの上の誤りになり、どちらも warn で残る。
+ただし action では、ユースケースが予約を引いてから権限を確かめていたため、事務局でない人には
+予約が無い (409) か許されない (Forbidden) かの応答の違いから、予約の有無が伝わる経路ができていた (PR レビューで指摘)。
+事務局だけの操作の判定は予約も所属も要らないので、`canTransition` から「誰が」の判定を
+`canPerformTransition` として切り出し、ユースケースが予約を引く前に通すようにした。
+ルートで先に弾いていたときと同じく、事務局でない人の送信で D1 を引くことも無い。
 
 ### 8. Infra と UseCase でエラー型は分けない
 
@@ -456,34 +504,37 @@ infra が構築しているエラーコードを全件数えたところ、`Data
   書き換えた送信もここに `info` で混ざる。見分ける必要が出たら `forbidden` (`warn`) へ移すことを考える。
 - **ログの件数が増える。** 差し戻しもすべて残すためである。ただし Workers Logs の上限
   (無料プランで 1 日 20 万件、有料プランで月 2,000 万件) に届く規模ではない。
+- **ログだけ残して失敗を握る書き方ができるようになった (Phase 3)。** `logDomainError`・`logQueryError` を
+  公開したためである。使ってよいのは、失敗しても画面を開くと決めた loader (ダッシュボード) だけで、
+  応答を返す・投げる場面では 2 本のグルーを使うこと。ログは残るので、握ったことは後から追える。
 - **残すだけでは、偵察は見つからない。** `warn` を自動で知らせる仕組みは、この ADR では作らない。
   また Workers Logs の保存期間は無料プランで 3 日、有料プランで 7 日であり、
   それより長い期間の傾向を見るには別の保存先が要る。どちらも必要になったときに決める。
 
 ## 影響範囲
 
-| 層                    | 変更                                                                                                                                                                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/domain/`         | `ErrorKind` を追加。各ドメインに `*ErrorKind` の表と `*Field` を追加。列挙子を改名。`ReservationError` を `BaseError` 継承に直し、`FacilityErrorCode.DataBaseError` の綴りを直す |
-| `app/usecases/`       | 利用者向けの文言を `userMessage` へ移す。`ensureGroupIsVisible` が `NotVisible` を返す。`get-group-management.ts` が再定義している `toGroupDatabaseError` を共有版に寄せる       |
-| `app/infra/`          | 英語の文言を日本語に揃える。`facility-availability-calendar-query.ts` が書いている利用者向け文言を表へ移す                                                                       |
-| `app/routes/_shared/` | 新設。ドメインごとの表と、グルー 2 本                                                                                                                                            |
-| `app/routes/`         | 各ルートのエラー分岐をグルー呼び出しに置き換え (想定内の差し戻しもログに残るようになる)。画面ごとの `field` の表を置く                                                           |
-| `app/lib/`            | `group-error-message.ts` を削除。`log.server.ts` をレベルとオブジェクト形式に対応させる                                                                                          |
-| `app/routes.ts`       | 規約コメントに `routes/_shared/` を追加                                                                                                                                          |
-| `AGENTS.md`           | 5 章にエラーの決まりを一段追加                                                                                                                                                   |
+| 層                    | 変更                                                                                                                                                                                                                                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/domain/`         | `ErrorKind` を追加。各ドメインに `*ErrorKind` の表と `*Field` を追加。列挙子を改名。`ReservationError` を `BaseError` 継承に直し、`FacilityErrorCode.DataBaseError` の綴りを直す                                                       |
+| `app/usecases/`       | 利用者向けの文言を `userMessage` へ移す。`ensureGroupIsVisible` が `NotVisible`、`getInvitationUseCase` が宛先違いに `InvitationNotVisible` を返す。`get-group-management.ts` が再定義している `toGroupDatabaseError` を共有版に寄せる |
+| `app/infra/`          | 英語の文言を日本語に揃える。`facility-availability-calendar-query.ts` が書いている利用者向け文言を表へ移す                                                                                                                             |
+| `app/routes/_shared/` | 新設。ドメインごとの表と、グルー 2 本 (と、失敗しても画面を開く loader のためのログだけの関数)                                                                                                                                         |
+| `app/routes/`         | 各ルートのエラー分岐をグルー呼び出しに置き換え (想定内の差し戻しもログに残るようになる)。画面ごとの `field` の表を置く。事務局の予約画面で自前に書いていた事務局の確認を外す                                                           |
+| `app/lib/`            | `group-error-message.ts` を削除。`log.server.ts` をレベルとオブジェクト形式に対応させ、`logServerError` を削除                                                                                                                         |
+| `app/routes.ts`       | 規約コメントに `routes/_shared/` を追加                                                                                                                                                                                                |
+| `AGENTS.md`           | 5 章にエラーの決まりを一段追加                                                                                                                                                                                                         |
 
 DB マイグレーションは発生しない。
 
 ## 適用の順序
 
-| 段階    | 内容                                                                                                                                                                                                   |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Phase 0 | 設計変更に依存しない後始末。ログ漏れ 3 か所、`toGroupDatabaseError` の重複、`DataBaseError` の綴り、`ReservationError` の `BaseError` 継承                                                             |
-| Phase 1 | group ドメインで縦に 1 本通す (決定 1〜7・9)。`lib/group-error-message.ts` と `$groupId/action-error.ts` が消える。移行の済んでいないルートのために `logServerError` を残す                            |
-| Phase 2 | reservation へ展開。コンテキストの 3 と `default:` の握りつぶしが解消する。予約詳細 (SCR-005) の loader が DB の失敗をログに残さず 500 を返していた件も、グルーに置き換えて解消する                    |
-| Phase 3 | invitation / facility / user / query。固定文字列を表へ寄せる。`logServerError` を消す。招待の承諾画面 (SCR-016) は招待が URL の指すものなので、団体の表 (`InvitationNotFound` を 409) とは別の表を持つ |
-| Phase 4 | この ADR を承認に更新し、`AGENTS.md` に反映                                                                                                                                                            |
+| 段階    | 内容                                                                                                                                                                                                                                                                                                                       |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 0 | 設計変更に依存しない後始末。ログ漏れ 3 か所、`toGroupDatabaseError` の重複、`DataBaseError` の綴り、`ReservationError` の `BaseError` 継承                                                                                                                                                                                 |
+| Phase 1 | group ドメインで縦に 1 本通す (決定 1〜7・9)。`lib/group-error-message.ts` と `$groupId/action-error.ts` が消える。移行の済んでいないルートのために `logServerError` を残す                                                                                                                                                |
+| Phase 2 | reservation へ展開。コンテキストの 3 と `default:` の握りつぶしが解消する。予約詳細 (SCR-005) の loader が DB の失敗をログに残さず 500 を返していた件も、グルーに置き換えて解消する                                                                                                                                        |
+| Phase 3 | invitation / facility / user / query。固定文字列を表へ寄せる。`logServerError` を消す。招待の承諾画面 (SCR-016) は招待が URL の指すものなので、団体の表 (`InvitationNotFound` を 409) とは別の表を持つ。空き状況 (SCR-001) の loader が失敗をまったくログに残さずに 404 / 500 を返していた件も、グルーに置き換えて解消する |
+| Phase 4 | この ADR を承認に更新し、`AGENTS.md` に反映                                                                                                                                                                                                                                                                                |
 
 Phase 1 だけやや大きいが、group で形が決まらないと Phase 2 以降の差分をレビューできないため分割しない。
 
@@ -496,5 +547,9 @@ COND-001 (承認済み予約の重なり) の判定が `infra/reservation/reserv
 エラーの扱いとは独立しているため、この ADR では扱わない。
 なお、ユースケース側の事前確認と UPDATE 側の条件は**意図的な二段構え**であり
 (D1 では確認と書き込みを 1 つのトランザクションに入れられない)、どちらも残すこと。
+
+メール配送 (`usecases/mail/flush-mail-outbox.server.ts` など) のログも扱わない。
+利用者の操作ではなく cron と Queue から動くので `userId` が無く、決定 9 の形に載らない。
+エラーも画面に届かない (決定 3 で `kind` を付けないとしたもの) ため、文字列の `console.error` のままである。
 
 ADR-001 の層構成、ADR-002 のメール配送、ADR-003 の団体テーブルは変更しない。

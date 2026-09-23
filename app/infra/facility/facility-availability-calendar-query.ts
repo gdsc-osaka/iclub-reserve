@@ -96,7 +96,7 @@ const pickFacility = (
     return first === undefined
       ? err({
           code: QueryErrorCode.NotFound,
-          message: "表示できる施設・設備がありません。",
+          message: "有効な施設・設備が 1 件も無い。",
         })
       : ok(first);
   }
@@ -106,7 +106,7 @@ const pickFacility = (
   return found === undefined
     ? err({
         code: QueryErrorCode.NotFound,
-        message: `ID が ${facilityId} の施設・設備は見つかりませんでした。`,
+        message: `施設・設備 ${facilityId} が有効な施設の中に見つからない。`,
       })
     : ok(found);
 };

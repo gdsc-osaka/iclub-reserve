@@ -1,5 +1,5 @@
 import type { ResultAsync } from "neverthrow";
-import type { BaseError } from "../error";
+import { ErrorKind, type BaseError } from "../error";
 
 export interface Facility {
   id: string;
@@ -9,11 +9,29 @@ export interface Facility {
   updatedAt: Date;
   description: string | null;
 }
+
+/**
+ * 施設まわりのエラーコード。
+ *
+ * 列挙子の名前は型名を繰り返さないが、文字列の値は変えないこと（ADR-004 決定 1）。
+ * ログに出るのは値の方なので、変えると過去のログと突き合わせられなくなる。
+ */
 export const FacilityErrorCode = {
-  FacilityNotFound: "FACILITY_NOT_FOUND",
+  /** 施設・設備が存在しない */
+  NotFound: "FACILITY_NOT_FOUND",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type FacilityErrorCode = (typeof FacilityErrorCode)[keyof typeof FacilityErrorCode];
+
+/**
+ * 施設まわりのエラーコードの分類（ADR-004 決定 3）。
+ *
+ * HTTP の status とログのレベルは、この表から決まる。
+ */
+export const facilityErrorKind: Record<FacilityErrorCode, ErrorKind> = {
+  [FacilityErrorCode.NotFound]: ErrorKind.NotFound,
+  [FacilityErrorCode.DatabaseError]: ErrorKind.Internal,
+};
 
 export interface FacilityError extends BaseError {
   readonly code: FacilityErrorCode;

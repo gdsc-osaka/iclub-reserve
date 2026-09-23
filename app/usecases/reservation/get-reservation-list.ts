@@ -175,7 +175,7 @@ export const getReservationListUseCase = (
   if (args.scope === "all" && !args.isStaff) {
     return errAsync({
       code: QueryErrorCode.Forbidden,
-      message: "全団体の予約を閲覧する権限がありません。",
+      message: "事務局ではない人が、全団体の予約一覧を開こうとした。",
     });
   }
 

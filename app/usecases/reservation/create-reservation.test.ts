@@ -123,7 +123,7 @@ const createDeps = (
   const facilityRepository: FacilityRepository = {
     findById: () =>
       overrides.facilityNotFound === true
-        ? errAsync({ code: FacilityErrorCode.FacilityNotFound, message: "not found" })
+        ? errAsync({ code: FacilityErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.facility ?? activeFacility),
   };
 
