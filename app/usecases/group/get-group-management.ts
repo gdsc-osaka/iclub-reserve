@@ -1,15 +1,15 @@
 import { errAsync, ResultAsync } from "neverthrow";
 
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
-import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
-import type { MembershipError, MembershipRepository, MembershipRole } from "~/domain/membership";
+import { GroupAction, groupPermissions } from "~/domain/group";
+import type { MembershipRepository, MembershipRole } from "~/domain/membership";
 import { canAct } from "~/domain/membership";
 import {
   ensureGroupIsVisible,
   groupNotFound,
   resolveGroupActor,
+  toGroupDatabaseError,
 } from "./_shared/group-authorization";
-import type { QueryError } from "~/query/error";
 import type {
   GroupInvitationList,
   GroupInvitationListQuery,
@@ -57,13 +57,6 @@ export type GroupManagementView =
       readonly members: GroupMemberList;
       readonly invitations: GroupInvitationList;
     };
-
-/** Query や Membership 取得時の DB エラーを GroupError に変換する */
-const toGroupDatabaseError = (error: QueryError | MembershipError): GroupError => ({
-  code: GroupErrorCode.DatabaseError,
-  message: "グループ情報の取得に失敗しました。",
-  cause: error,
-});
 
 /**
  * 団体管理画面（SCR-007）の表示に必要なデータを取得するユースケース。

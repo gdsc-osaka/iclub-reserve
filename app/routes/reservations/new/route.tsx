@@ -22,6 +22,7 @@ import {
   startOfTokyoDay,
   toTokyoDateKey,
 } from "~/lib/date";
+import { logServerError } from "~/lib/log.server";
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
 import { createProvisionalReservationUseCase } from "~/usecases/reservation/create-reservation";
 import { getReservationFormUseCase } from "~/usecases/reservation/get-reservation-form";
@@ -97,6 +98,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
+    /*
+     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
+     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
+     */
+    logServerError("reservations.new.loader", result.error);
     throw data({ message: "Internal server error" }, { status: 500 });
   }
 

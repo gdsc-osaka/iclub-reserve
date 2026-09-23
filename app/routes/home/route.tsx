@@ -6,6 +6,7 @@ import { GroupStatus } from "~/domain/group";
 import { createDb } from "~/infra/db";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { logServerError } from "~/lib/log.server";
 import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
 
 import type { Route } from "./+types/route";
@@ -33,6 +34,13 @@ export async function loader({ context }: Route.LoaderArgs) {
   );
 
   if (groupsResult.isErr()) {
+    /*
+     * 画面は開けるようにするが、失敗そのものは残す。
+     * ここで握りつぶすと、D1 の障害で団体が読めていないのか、
+     * そもそも所属が無いのかを、あとから区別する手がかりが残らない。
+     */
+    logServerError("home.loader", groupsResult.error);
+
     return { groups: [] as readonly DashboardGroup[], isGroupsUnavailable: true };
   }
 

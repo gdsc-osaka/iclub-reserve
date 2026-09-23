@@ -11,7 +11,7 @@ export interface Facility {
 }
 export const FacilityErrorCode = {
   FacilityNotFound: "FACILITY_NOT_FOUND",
-  DataBaseError: "DATABASE_ERROR",
+  DatabaseError: "DATABASE_ERROR",
 } as const;
 export type FacilityErrorCode = (typeof FacilityErrorCode)[keyof typeof FacilityErrorCode];
 
