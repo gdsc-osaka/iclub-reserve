@@ -5,7 +5,7 @@ name: "reservation-approval"
 display_name: "予約承認"
 
 value:
-  goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005"]
+  goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005", "GOAL-007"]
   requirements:
     - id: "REQ-010"
       description: "仮予約の一覧を確認できる。"
