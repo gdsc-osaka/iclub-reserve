@@ -234,7 +234,7 @@ elements:
 
   - id: "REQ-032"
     type: requirement
-    name: "認証コード・パスキーによるログイン"
+    name: "認証コード・パスキーによるログイン・ログアウト"
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["GOAL-006"]
 
