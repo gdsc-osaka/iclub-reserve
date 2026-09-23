@@ -35,7 +35,7 @@ export const getUserUseCase = (
   // 空文字や空白だけの ID は DB へ問い合わせるまでもないので、ここで打ち切る
   if (id === "") {
     return errAsync({
-      code: UserErrorCode.UserNotFound,
+      code: UserErrorCode.NotFound,
       message: "ユーザー ID が指定されていません。",
     });
   }

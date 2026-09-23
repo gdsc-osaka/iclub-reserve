@@ -16,7 +16,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
       (error): FacilityError => {
         return {
           code: FacilityErrorCode.DatabaseError,
-          message: "Failed to query the database",
+          message: "施設テーブルを読み取れなかった。",
           cause: error,
         };
       },
@@ -25,8 +25,8 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
 
       if (row === undefined) {
         return err({
-          code: FacilityErrorCode.FacilityNotFound,
-          message: "Facility not found",
+          code: FacilityErrorCode.NotFound,
+          message: `施設 ${id} が見つからない。`,
         });
       }
 

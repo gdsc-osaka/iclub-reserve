@@ -38,7 +38,7 @@ export const createUserRepository = (db: Database): UserRepository => {
 
       if (row === undefined) {
         return err({
-          code: UserErrorCode.UserNotFound,
+          code: UserErrorCode.NotFound,
           message: `ID が ${id} のユーザーは見つかりませんでした。`,
         });
       }

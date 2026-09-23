@@ -109,7 +109,7 @@ const ensureFacilityIsAvailable = (
   deps.facilityRepository
     .findById(facilityId)
     .mapErr((error): ReservationError =>
-      error.code === FacilityErrorCode.FacilityNotFound
+      error.code === FacilityErrorCode.NotFound
         ? {
             code: ReservationErrorCode.FacilityNotAvailable,
             field: ReservationField.Facility,

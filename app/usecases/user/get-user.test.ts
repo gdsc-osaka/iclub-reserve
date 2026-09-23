@@ -21,7 +21,7 @@ const createFakeUserRepository = (users: User[]): UserRepository => ({
 
     if (found === undefined) {
       return errAsync({
-        code: UserErrorCode.UserNotFound,
+        code: UserErrorCode.NotFound,
         message: `ID が ${id} のユーザーは見つかりませんでした。`,
       });
     }
@@ -58,7 +58,7 @@ describe("getUserUseCase", () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(UserErrorCode.UserNotFound);
+    expect(result._unsafeUnwrapErr().code).toBe(UserErrorCode.NotFound);
   });
 
   it("DB アクセスに失敗した場合は DATABASE_ERROR がそのまま伝播する", async () => {
