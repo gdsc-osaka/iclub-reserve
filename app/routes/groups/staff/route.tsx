@@ -1,23 +1,14 @@
 import { env } from "cloudflare:workers";
 import { CheckCircle2, CircleAlert, Users } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { Form, isRouteErrorResponse, Link, useNavigation } from "react-router";
+import { useEffect } from "react";
+import { isRouteErrorResponse, Link } from "react-router";
+import { toast } from "sonner";
 
 import { GroupStatusBadge, groupStatusLabel } from "~/components/group/group-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "~/components/ui/alert-dialog";
-import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { GroupStatus } from "~/domain/group";
+import { allowedGroupStatusTransitions } from "~/domain/group/status-transition";
 import { createDb } from "~/infra/db";
 import { createGroupSearchQuery } from "~/infra/group/group-search-query";
 import { createGroupRepository } from "~/infra/group/group-repo";
@@ -32,6 +23,7 @@ import { changeGroupStatusUseCase } from "~/usecases/group/change-group-status";
 import { searchGroupsUseCase } from "~/usecases/group/search-groups";
 
 import type { Route } from "./+types/route";
+import { GroupStatusDialog } from "./group-status-dialog";
 import {
   parseStaffGroupParams,
   toDomainGroupStatus,
@@ -112,7 +104,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
 
   if (result.isErr()) {
-    // 一覧には入力欄が無いので、誤りはすべて一覧の上（formError）に出す
+    // 一覧には入力欄が無いので、誤りはすべて formError に入れ、画面で通知として出す
     return groupActionErrors(
       { where: "staff.groups.change-status", userId: user.id },
       result.error,
@@ -120,7 +112,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   /*
-   * /staff/reservations と違ってリダイレクト（PRG）せず、結果を返して一覧の上に出す。
+   * /staff/reservations と違ってリダイレクト（PRG）せず、結果を返して通知で知らせる。
    * 承認待ちの絞り込みでは、操作した団体が一覧から消えるだけなので、
    * 何をしたかを書いて見せないと、有効にしたのか無効にしたのかが分からなくなるため。
    * 同じ送信が繰り返されても、2 回目は状態が変わっているので InvalidTransition で止まる。
@@ -133,11 +125,74 @@ export async function action({ request, context }: Route.ActionArgs) {
   };
 }
 
+/** 操作の結果として知らせる内容 */
+interface ActionResultMessage {
+  readonly kind: "success" | "error";
+  readonly title: string;
+  readonly description: string;
+}
+
+/**
+ * 失敗の通知を出しておく時間（ミリ秒）。
+ *
+ * 成功は既定の長さ（4 秒）で消えてよいが、失敗は「画面を読み込み直してください」のように
+ * 次にすることが書いてあるので、読み終わる前に消えないよう長めにする。
+ */
+const ERROR_TOAST_DURATION_MS = 10_000;
+
+/** action の結果を、利用者に知らせる内容にする。知らせることが無ければ null */
+const toActionResultMessage = (
+  actionData: Route.ComponentProps["actionData"],
+): ActionResultMessage | null => {
+  if (actionData === undefined) {
+    return null;
+  }
+
+  if ("success" in actionData) {
+    const { groupName, status } = actionData.success;
+    return {
+      kind: "success",
+      title: "団体の状態を変更しました",
+      description: `${groupName} を「${groupStatusLabel[status]}」にしました。`,
+    };
+  }
+
+  if (actionData.formError !== null) {
+    return { kind: "error", title: "操作に失敗しました", description: actionData.formError };
+  }
+
+  return null;
+};
+
 /**
  * 事務局向け全団体管理画面のルートコンポーネント。
  */
 export default function StaffGroupsRoute({ loaderData, actionData }: Route.ComponentProps) {
   const { items, counts, params } = loaderData;
+  const resultMessage = toActionResultMessage(actionData);
+
+  /*
+   * 操作の結果は、画面上部に一時的に出す通知（トースト）で知らせる。
+   * 一覧の上に置く形だと、下の方の団体を操作したときに結果が画面の外に出て見えない。
+   *
+   * actionData は送信のたびに新しいオブジェクトになるので、それが変わったときに 1 回だけ出す。
+   * resultMessage は描画のたびに作り直されるので、依存には入れない。
+   */
+  useEffect(() => {
+    const message = toActionResultMessage(actionData);
+    if (message === null) {
+      return;
+    }
+
+    if (message.kind === "success") {
+      toast.success(message.title, { description: message.description });
+    } else {
+      toast.error(message.title, {
+        description: message.description,
+        duration: ERROR_TOAST_DURATION_MS,
+      });
+    }
+  }, [actionData]);
 
   const tabs: readonly {
     readonly key: StaffGroupStatusFilter;
@@ -160,22 +215,19 @@ export default function StaffGroupsRoute({ loaderData, actionData }: Route.Compo
         </p>
       </div>
 
-      {actionData && "success" in actionData && actionData.success && (
-        <Alert className="border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-300">
-          <CheckCircle2 className="size-4" />
-          <AlertTitle>団体の状態を変更しました</AlertTitle>
-          <AlertDescription>
-            {`${actionData.success.groupName} を「${groupStatusLabel[actionData.success.status]}」にしました。`}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {actionData && "formError" in actionData && actionData.formError && (
-        <Alert variant="destructive">
-          <CircleAlert className="size-4" />
-          <AlertTitle>操作に失敗しました</AlertTitle>
-          <AlertDescription>{actionData.formError}</AlertDescription>
-        </Alert>
+      {/* JavaScript が無効だと通知が出ないので、同じ内容を一覧の上に出す */}
+      {resultMessage !== null && (
+        <noscript>
+          <Alert variant={resultMessage.kind === "error" ? "destructive" : "default"}>
+            {resultMessage.kind === "error" ? (
+              <CircleAlert aria-hidden className="size-4" />
+            ) : (
+              <CheckCircle2 aria-hidden className="size-4" />
+            )}
+            <AlertTitle>{resultMessage.title}</AlertTitle>
+            <AlertDescription>{resultMessage.description}</AlertDescription>
+          </Alert>
+        </noscript>
       )}
 
       {/* 状態絞り込みピルタブ（/staff/reservations の絞り込みにそろえる） */}
@@ -258,112 +310,12 @@ function StaffGroupRow({ item }: Readonly<{ item: GroupSearchItem }>) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2 pt-2 sm:pt-0">
-        {item.status === GroupStatus.Pending && (
-          <>
-            <EnableGroupButton groupId={item.id} />
-            <DisableGroupDialog groupId={item.id} groupName={item.name} />
-          </>
-        )}
-        {item.status === GroupStatus.Enabled && (
-          <DisableGroupDialog groupId={item.id} groupName={item.name} />
-        )}
-        {item.status === GroupStatus.Disabled && <EnableGroupButton groupId={item.id} />}
+        {/* 出す操作は、ユースケースが許す遷移と同じ表から取る（書き写すと食い違う） */}
+        {allowedGroupStatusTransitions[item.status].map((status) => (
+          <GroupStatusDialog key={status} groupId={item.id} groupName={item.name} status={status} />
+        ))}
       </div>
     </div>
-  );
-}
-
-/**
- * この団体をこの状態へ変える送信が、いま進んでいるかどうか。
- *
- * 同じ画面に他の団体のボタンが並ぶので、団体 ID と変更先まで見て、押したボタンだけを「処理中」にする。
- */
-const useIsChangingStatus = (groupId: string, status: GroupStatus): boolean => {
-  const navigation = useNavigation();
-
-  return (
-    navigation.state === "submitting" &&
-    navigation.formData?.get("intent") === "change-status" &&
-    navigation.formData.get("groupId") === groupId &&
-    navigation.formData.get("status") === status
-  );
-};
-
-/** 有効化ボタン（確認なしで送信） */
-function EnableGroupButton({ groupId }: Readonly<{ groupId: string }>) {
-  const isSubmitting = useIsChangingStatus(groupId, GroupStatus.Enabled);
-
-  return (
-    <Form method="post">
-      <input type="hidden" name="intent" value="change-status" />
-      <input type="hidden" name="groupId" value={groupId} />
-      <input type="hidden" name="status" value={GroupStatus.Enabled} />
-      <Button type="submit" size="sm" disabled={isSubmitting}>
-        {isSubmitting ? "処理中…" : "有効化"}
-      </Button>
-    </Form>
-  );
-}
-
-/** 無効化ボタンと確認ダイアログ */
-function DisableGroupDialog({
-  groupId,
-  groupName,
-}: Readonly<{ groupId: string; groupName: string }>) {
-  const [open, setOpen] = useState(false);
-  const isSubmitting = useIsChangingStatus(groupId, GroupStatus.Disabled);
-
-  /*
-   * 送信が終わったら、このダイアログを自分で閉じる（member-action-dialog.tsx と同じ）。
-   *
-   * 開閉は open の state だけで決まるので、閉じる処理を書かないと送信後も開いたままになる。
-   * 失敗したとき（別の事務局が先に変えていた、など）は団体が一覧に残るため、
-   * 一覧の上に出した誤りがダイアログに隠れて読めなくなる。
-   */
-  const hasSubmittedRef = useRef(false);
-  useEffect(() => {
-    if (isSubmitting) {
-      hasSubmittedRef.current = true;
-      return;
-    }
-
-    if (hasSubmittedRef.current) {
-      hasSubmittedRef.current = false;
-      setOpen(false);
-    }
-  }, [isSubmitting]);
-
-  return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          無効化
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent className="max-w-md">
-        <Form method="post" className="flex flex-col gap-4">
-          <input type="hidden" name="intent" value="change-status" />
-          <input type="hidden" name="groupId" value={groupId} />
-          <input type="hidden" name="status" value={GroupStatus.Disabled} />
-
-          <AlertDialogHeader>
-            <AlertDialogTitle>{groupName} を無効にしますか？</AlertDialogTitle>
-            <AlertDialogDescription>
-              無効にすると、この団体では予約を申請できなくなります。すでにある予約はそのまま残ります。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel type="button" disabled={isSubmitting}>
-              キャンセル
-            </AlertDialogCancel>
-            <Button type="submit" variant="destructive" disabled={isSubmitting}>
-              {isSubmitting ? "処理中…" : "無効化する"}
-            </Button>
-          </AlertDialogFooter>
-        </Form>
-      </AlertDialogContent>
-    </AlertDialog>
   );
 }
 

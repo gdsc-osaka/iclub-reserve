@@ -1,5 +1,8 @@
 import { GroupStatus } from "./index";
 
+/** 事務局が変更先に選べる状態。pending へは戻せない（STATE-002） */
+export type GroupStatusChangeTarget = typeof GroupStatus.Enabled | typeof GroupStatus.Disabled;
+
 /**
  * 団体の状態ごとに、次に移ってよい状態（STATE-002 / UC-014）。
  *
@@ -13,8 +16,13 @@ import { GroupStatus } from "./index";
  *
  * 許す遷移を書き並べる形にしているのは、状態が増えたときに
  * 新しい遷移が黙って許されないようにするため（書き足さない限り拒否される）。
+ *
+ * 事務局の団体一覧（/staff/groups）は、この表の並びのとおりに操作のボタンを出す。
+ * 承認待ちで「有効化」を先に置いているのは、多くはそちらを選ぶため。
  */
-const allowedTransitions: Readonly<Record<GroupStatus, readonly GroupStatus[]>> = {
+export const allowedGroupStatusTransitions: Readonly<
+  Record<GroupStatus, readonly GroupStatusChangeTarget[]>
+> = {
   [GroupStatus.Pending]: [GroupStatus.Enabled, GroupStatus.Disabled],
   [GroupStatus.Enabled]: [GroupStatus.Disabled],
   [GroupStatus.Disabled]: [GroupStatus.Enabled],
@@ -22,4 +30,4 @@ const allowedTransitions: Readonly<Record<GroupStatus, readonly GroupStatus[]>> 
 
 /** 団体の状態を from から to へ変えてよいかどうか */
 export const canChangeGroupStatus = (from: GroupStatus, to: GroupStatus): boolean =>
-  allowedTransitions[from].includes(to);
+  allowedGroupStatusTransitions[from].some((allowed) => allowed === to);

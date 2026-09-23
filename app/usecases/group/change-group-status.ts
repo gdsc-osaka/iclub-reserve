@@ -8,7 +8,10 @@ import {
   type GroupError,
   type GroupRepository,
 } from "~/domain/group";
-import { canChangeGroupStatus } from "~/domain/group/status-transition";
+import {
+  canChangeGroupStatus,
+  type GroupStatusChangeTarget,
+} from "~/domain/group/status-transition";
 import type { MembershipRepository } from "~/domain/membership";
 import { ensureGroupPermission, groupNotFound } from "./_shared/group-authorization";
 
@@ -32,7 +35,7 @@ export interface ChangeGroupStatusArgs {
  *
  * 事務局が変更先として指定できるのは "enabled" または "disabled" のみ（STATE-002）。
  */
-const validateTargetStatus = (status: string): Result<GroupStatus, GroupError> => {
+const validateTargetStatus = (status: string): Result<GroupStatusChangeTarget, GroupError> => {
   if (status === GroupStatus.Enabled || status === GroupStatus.Disabled) {
     return ok(status);
   }
