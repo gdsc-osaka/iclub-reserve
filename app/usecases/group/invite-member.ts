@@ -2,7 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import type { GroupError, GroupRepository } from "~/domain/group";
-import { GroupAction, GroupErrorCode } from "~/domain/group";
+import { GroupAction, GroupErrorCode, GroupField } from "~/domain/group";
 import {
   invitationExpiresAt,
   type CreateInvitationInput,
@@ -80,8 +80,11 @@ export const inviteMemberUseCase = (
     const pending = yield* deps.invitationRepository.findPendingByGroupAndEmail(groupId, email);
     if (pending !== null && pending.expiresAt.getTime() > args.now.getTime()) {
       return errAsync<never, GroupError>({
-        code: GroupErrorCode.GroupInvalidInput,
-        message:
+        code: GroupErrorCode.InvalidInput,
+        field: GroupField.InviteeEmail,
+        // 宛先のアドレスは埋め込まない。まだ団体に加わっていない第三者の個人情報である（ADR-004 決定 9）
+        message: `承諾待ちの招待 ${pending.id} と宛先が重なっている。`,
+        userMessage:
           "このメールアドレスには、すでに招待を送っています。取り消してから送り直してください。",
       });
     }

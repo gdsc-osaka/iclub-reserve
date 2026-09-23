@@ -180,8 +180,8 @@ describe("cancelInvitationUseCase", () => {
     expect(fakeInvitation.cancelCallCount()).toBe(1);
   });
 
-  // 3. 一般メンバーは GroupForbidden
-  it("一般メンバーは GroupForbidden になる", async () => {
+  // 3. 一般メンバーは Forbidden
+  it("一般メンバーは Forbidden になる", async () => {
     const fakeMembership = createFakeMembershipRepository([regularMember]);
     const fakeInvitation = createFakeInvitationRepository();
 
@@ -198,14 +198,14 @@ describe("cancelInvitationUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.code).toBe(GroupErrorCode.GroupForbidden);
-      expect(result.error.message).toBe("メンバーを招待できるのは管理者と事務局だけです。");
+      expect(result.error.code).toBe(GroupErrorCode.Forbidden);
+      expect(result.error.userMessage).toBe("メンバーを招待できるのは管理者と事務局だけです。");
     }
     expect(fakeInvitation.cancelCallCount()).toBe(0);
   });
 
-  // 4. 所属していない人は GroupNotFound（メッセージまで同一）
-  it("所属していない人は GroupNotFound になる（メッセージまで同一）", async () => {
+  // 4. 所属していない人は NotVisible（利用者への応答を 404 に揃えるのは画面の側）
+  it("所属していない人は NotVisible になり、画面に出す文言を持たない", async () => {
     const fakeMembership = createFakeMembershipRepository([]);
     const fakeInvitation = createFakeInvitationRepository();
 
@@ -222,15 +222,15 @@ describe("cancelInvitationUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.code).toBe(GroupErrorCode.GroupNotFound);
-      expect(result.error.message).toBe("グループが見つかりません。");
+      expect(result.error.code).toBe(GroupErrorCode.NotVisible);
+      expect(result.error.userMessage).toBeUndefined();
     }
     expect(fakeInvitation.cancelCallCount()).toBe(0);
   });
 
-  // 5. groupId が空なら GroupNotFound でリポジトリが呼ばれない
+  // 5. groupId が空なら NotFound でリポジトリが呼ばれない
   it.each(["", "   "])(
-    "groupId が %j のときは GroupNotFound でリポジトリが呼ばれない",
+    "groupId が %j のときは NotFound でリポジトリが呼ばれない",
     async (emptyGroupId) => {
       const fakeMembership = createFakeMembershipRepository([adminMembership]);
       const fakeInvitation = createFakeInvitationRepository();
@@ -248,17 +248,16 @@ describe("cancelInvitationUseCase", () => {
 
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.code).toBe(GroupErrorCode.GroupNotFound);
-        expect(result.error.message).toBe("グループが見つかりません。");
+        expect(result.error.code).toBe(GroupErrorCode.NotFound);
       }
       expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
       expect(fakeInvitation.cancelCallCount()).toBe(0);
     },
   );
 
-  // 6. invitationId が空・空白のみなら GroupInvalidInput で cancel が呼ばれない
+  // 6. invitationId が空・空白のみなら InvalidInput で cancel が呼ばれない
   it.each(["", "   "])(
-    "invitationId が %j のときは GroupInvalidInput で cancel が呼ばれない",
+    "invitationId が %j のときは InvalidInput で cancel が呼ばれない",
     async (emptyInvitationId) => {
       const fakeMembership = createFakeMembershipRepository([adminMembership]);
       const fakeInvitation = createFakeInvitationRepository();
@@ -276,8 +275,8 @@ describe("cancelInvitationUseCase", () => {
 
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.code).toBe(GroupErrorCode.GroupInvalidInput);
-        expect(result.error.message).toBe("取り消す招待が指定されていません。");
+        expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
+        expect(result.error.userMessage).toBe("取り消す招待が指定されていません。");
       }
       expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
       expect(fakeInvitation.cancelCallCount()).toBe(0);

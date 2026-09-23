@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALLOWED_EMAIL_DOMAINS_LABEL } from "../authn/allowed-email-domain";
-import { GroupErrorCode } from "../group";
+import { GroupErrorCode, GroupField } from "../group";
 import { INVITATION_EMAIL_MAX_LENGTH, validateInvitationEmail } from "./invitation-email";
 
 describe("validateInvitationEmail", () => {
@@ -45,8 +45,8 @@ describe("validateInvitationEmail", () => {
 
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.code).toBe(GroupErrorCode.GroupInvalidInput);
-        expect(result.error.message).toBe("招待するメールアドレスを入力してください。");
+        expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
+        expect(result.error.userMessage).toBe("招待するメールアドレスを入力してください。");
       }
     },
   );
@@ -62,8 +62,8 @@ describe("validateInvitationEmail", () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.code).toBe(GroupErrorCode.GroupInvalidInput);
-      expect(result.error.message).toBe("メールアドレスに空白や改行は使えません。");
+      expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
+      expect(result.error.userMessage).toBe("メールアドレスに空白や改行は使えません。");
     }
   });
 
@@ -84,8 +84,8 @@ describe("validateInvitationEmail", () => {
     const invalidResult = validateInvitationEmail(invalid255);
     expect(invalidResult.isErr()).toBe(true);
     if (invalidResult.isErr()) {
-      expect(invalidResult.error.code).toBe(GroupErrorCode.GroupInvalidInput);
-      expect(invalidResult.error.message).toBe("メールアドレスが長すぎます。");
+      expect(invalidResult.error.code).toBe(GroupErrorCode.InvalidInput);
+      expect(invalidResult.error.userMessage).toBe("メールアドレスが長すぎます。");
     }
   });
 
@@ -97,9 +97,9 @@ describe("validateInvitationEmail", () => {
 
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.code).toBe(GroupErrorCode.GroupInvalidInput);
-        expect(result.error.message).toContain(ALLOWED_EMAIL_DOMAINS_LABEL);
-        expect(result.error.message).toBe(
+        expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
+        expect(result.error.userMessage).toContain(ALLOWED_EMAIL_DOMAINS_LABEL);
+        expect(result.error.userMessage).toBe(
           `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスにのみ招待を送れます。`,
         );
       }
@@ -114,8 +114,8 @@ describe("validateInvitationEmail", () => {
 
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.code).toBe(GroupErrorCode.GroupInvalidInput);
-        expect(result.error.message).toBe("メールアドレスの形式が正しくありません。");
+        expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
+        expect(result.error.userMessage).toBe("メールアドレスの形式が正しくありません。");
       }
     },
   );
@@ -131,8 +131,8 @@ describe("validateInvitationEmail", () => {
     }
   });
 
-  // 10. エラーの code はすべて GroupErrorCode.GroupInvalidInput
-  it("すべてのエラーケースで code が GroupErrorCode.GroupInvalidInput である", () => {
+  // 10. エラーの code はすべて GroupErrorCode.InvalidInput で、項目は招待先のメールアドレス
+  it("すべてのエラーケースで code が InvalidInput、field が InviteeEmail である", () => {
     const cases = [
       null,
       "",
@@ -145,7 +145,22 @@ describe("validateInvitationEmail", () => {
       const result = validateInvitationEmail(testCase);
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.code).toBe(GroupErrorCode.GroupInvalidInput);
+        expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
+        // 画面がメールアドレス欄の下に出せるよう、どの項目の誤りかを持っている
+        expect(result.error.field).toBe(GroupField.InviteeEmail);
+      }
+    }
+  });
+
+  it("ログに残る message には、入力されたアドレスを埋め込まない（ADR-004 決定 9）", () => {
+    // 招待の相手はまだ団体に加わっていない第三者で、そのアドレスは個人情報にあたる
+    const cases = ["taro taro@osaka-u.ac.jp", "taro@example.com", "taro@@osaka-u.ac.jp"];
+
+    for (const testCase of cases) {
+      const result = validateInvitationEmail(testCase);
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error.message).not.toContain("taro");
       }
     }
   });

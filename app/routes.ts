@@ -6,7 +6,11 @@ import { type RouteConfig, index, layout, route } from "@react-router/dev/routes
  * こうしておくと、URL から画面のファイルを探せる。
  *
  * 画面だけで使う部品や計算は、その画面のフォルダに入れる（例: `routes/reservations/new/`）。
- * 複数の画面で使うものは `app/components/`・`app/lib/` へ出す。
+ * 複数の画面で使うものは、種類に応じて次へ出す。
+ * - 画面の部品は `app/components/`
+ * - 画面を知らない道具（日付・URL など）は `app/lib/`
+ * - 画面への出し方の方針（エラーの文言・status など）は `app/routes/_shared/`
+ *   ルートはこのファイルで明示しているので、`_shared` がルートとして拾われることはない。
  */
 export default [
   /*

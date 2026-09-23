@@ -1,6 +1,6 @@
 import { err, ok, type Result } from "neverthrow";
 
-import { GroupErrorCode, type GroupError } from "~/domain/group";
+import { GroupErrorCode, GroupField, type GroupError } from "~/domain/group";
 import { isMembershipRole, type MembershipRole } from "~/domain/membership";
 
 /**
@@ -12,11 +12,16 @@ import { isMembershipRole, type MembershipRole } from "~/domain/membership";
  * 通した値がそのまま `group_member.role` に保存される。事務局（StaffRole）が
  * この入口を通ると団体の管理者が事務局を作れてしまうため、
  * 役割の検証はこの 1 本を通すこと。
+ *
+ * 画面では役割を選択肢から選ばせているので、通常の操作ではここで弾かれない。
+ * 弾かれたなら値が書き換えられているので、ログに残る `invalid_input` が手がかりになる。
  */
 export const validateMembershipRole = (role: string): Result<MembershipRole, GroupError> =>
   isMembershipRole(role)
     ? ok(role)
     : err({
-        code: GroupErrorCode.GroupInvalidInput,
-        message: "指定できない役割です。",
+        code: GroupErrorCode.InvalidInput,
+        field: GroupField.MemberRole,
+        message: "指定できない役割が送られてきた。",
+        userMessage: "指定できない役割です。",
       });

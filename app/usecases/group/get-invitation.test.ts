@@ -346,14 +346,14 @@ describe("getInvitationUseCase", () => {
     }
   });
 
-  // 10. 団体が GroupNotFound → InvitationNotFound に畳まれる
-  it("団体が GroupNotFound の場合は InvitationNotFound に畳まれる", async () => {
+  // 10. 団体が NotFound → InvitationNotFound に畳まれる
+  it("団体が NotFound の場合は InvitationNotFound に畳まれる", async () => {
     const fakeInvitation = createFakeInvitationRepository();
     const fakeGroup = createFakeGroupRepository(validGroup, {
       findByIdResult: () =>
         errAsync({
-          code: GroupErrorCode.GroupNotFound,
-          message: "グループが見つかりません。",
+          code: GroupErrorCode.NotFound,
+          message: "団体が見つからない。",
         }),
     });
 

@@ -13,6 +13,6 @@ import type { GroupInviteFormState } from "./invitation-form";
  */
 export type GroupActionData =
   | ({ readonly section: "name" } & GroupNameFormState)
-  | { readonly section: "members"; readonly error: string }
+  | { readonly section: "members"; readonly formError: string | null }
   | ({ readonly section: "invite" } & GroupInviteFormState)
-  | { readonly section: "invitations"; readonly error: string };
+  | { readonly section: "invitations"; readonly formError: string | null };

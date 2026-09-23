@@ -1,6 +1,6 @@
 import { err, ok, type Result } from "neverthrow";
 import { ALLOWED_EMAIL_DOMAINS_LABEL, isAllowedEmailAddress } from "../authn/allowed-email-domain";
-import { GroupErrorCode, type GroupError } from "../group";
+import { GroupErrorCode, GroupField, type GroupError } from "../group";
 import { createEmailAddress, EMAIL_ADDRESS_MAX_LENGTH } from "../mail/email-address";
 
 /**
@@ -11,9 +11,18 @@ import { createEmailAddress, EMAIL_ADDRESS_MAX_LENGTH } from "../mail/email-addr
  */
 export const INVITATION_EMAIL_MAX_LENGTH = EMAIL_ADDRESS_MAX_LENGTH;
 
-const invalidInput = (message: string): GroupError => ({
-  code: GroupErrorCode.GroupInvalidInput,
+/**
+ * 招待先メールアドレスの誤りを表すエラーを作る。
+ *
+ * @param message ログに残す説明。入力されたアドレスは埋め込まない。
+ *   招待の相手はまだ団体に加わっていない第三者で、そのアドレスは個人情報にあたる（ADR-004 決定 9）
+ * @param userMessage 入力欄の下に出す、直し方の分かる文言
+ */
+const invalidEmail = (message: string, userMessage: string): GroupError => ({
+  code: GroupErrorCode.InvalidInput,
+  field: GroupField.InviteeEmail,
   message,
+  userMessage,
 });
 
 /**
@@ -58,32 +67,60 @@ export const validateInvitationEmail = (
   raw: string | null | undefined,
 ): Result<string, GroupError> => {
   if (raw === null || raw === undefined) {
-    return err(invalidInput("招待するメールアドレスを入力してください。"));
+    return err(
+      invalidEmail(
+        "招待先のメールアドレスが送られていない。",
+        "招待するメールアドレスを入力してください。",
+      ),
+    );
   }
 
   const trimmed = raw.trim();
 
   if (trimmed === "") {
-    return err(invalidInput("招待するメールアドレスを入力してください。"));
+    return err(
+      invalidEmail(
+        "招待先のメールアドレスが空である。",
+        "招待するメールアドレスを入力してください。",
+      ),
+    );
   }
 
   // trim 後に空白や改行・タブが残っている場合は、打ち間違いや複数入力の可能性があるため禁止する
   if (/\s/.test(trimmed)) {
-    return err(invalidInput("メールアドレスに空白や改行は使えません。"));
+    return err(
+      invalidEmail(
+        "招待先のメールアドレスに空白か改行が含まれている。",
+        "メールアドレスに空白や改行は使えません。",
+      ),
+    );
   }
 
   // 文字数の数え方は GROUP_NAME_MAX_LENGTH とそろえて String.prototype.length を使用
   if (trimmed.length > INVITATION_EMAIL_MAX_LENGTH) {
-    return err(invalidInput("メールアドレスが長すぎます。"));
+    return err(
+      invalidEmail(
+        `招待先のメールアドレスが ${INVITATION_EMAIL_MAX_LENGTH} 文字を超えている。`,
+        "メールアドレスが長すぎます。",
+      ),
+    );
   }
 
   if (createEmailAddress(trimmed).isErr()) {
-    return err(invalidInput("メールアドレスの形式が正しくありません。"));
+    return err(
+      invalidEmail(
+        "招待先のメールアドレスの形式が正しくない。",
+        "メールアドレスの形式が正しくありません。",
+      ),
+    );
   }
 
   if (!isAllowedEmailAddress(trimmed)) {
     return err(
-      invalidInput(`${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスにのみ招待を送れます。`),
+      invalidEmail(
+        "招待先のメールアドレスが許可されたドメインではない。",
+        `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスにのみ招待を送れます。`,
+      ),
     );
   }
 

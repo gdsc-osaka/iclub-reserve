@@ -26,7 +26,7 @@ export interface CancelInvitationArgs {
  * 1. groupId のトリム検証:
  *    空文字または空白のみの場合は DB 問い合わせを行わず、即座に groupNotFound() を返す。
  * 2. invitationId のトリム検証:
- *    空文字または空白のみの場合は無効な入力として GroupInvalidInput を返す。
+ *    空文字または空白のみの場合は無効な入力として InvalidInput を返す。
  * 3. 認可判定（COND-009 / COND-011）:
  *    ensureGroupPermission に任せる。事務局は所属を問わず通し、団体を見られない人には
  *    存在を秘匿し、見られるが招待できない人には足りない権限を伝える。
@@ -54,8 +54,9 @@ export const cancelInvitationUseCase = (
   const invitationId = args.invitationId.trim();
   if (invitationId === "") {
     return errAsync({
-      code: GroupErrorCode.GroupInvalidInput,
-      message: "取り消す招待が指定されていません。",
+      code: GroupErrorCode.InvalidInput,
+      message: "取り消す招待の ID が空である。",
+      userMessage: "取り消す招待が指定されていません。",
     });
   }
 

@@ -17,8 +17,14 @@ import { toGroup } from "./group-converter";
 /** DB アクセスの失敗を、この層のエラーに包む。文言を 1 か所にまとめるためのもの。 */
 const databaseError = (error: unknown): GroupError => ({
   code: GroupErrorCode.DatabaseError,
-  message: "Failed to query the database",
+  message: "団体テーブルを読み書きできなかった。",
   cause: error,
+});
+
+/** 指定された ID の団体が無かったときのエラー */
+const groupNotFound = (id: string): GroupError => ({
+  code: GroupErrorCode.NotFound,
+  message: `団体 ${id} が見つからない。`,
 });
 
 export const createGroupRepository = (db: Database): GroupRepository => {
@@ -30,10 +36,7 @@ export const createGroupRepository = (db: Database): GroupRepository => {
       const row = rows.at(0);
 
       if (row === undefined) {
-        return err({
-          code: GroupErrorCode.GroupNotFound,
-          message: "Group not found",
-        });
+        return err(groupNotFound(id));
       }
 
       return ok(toGroup(row));
@@ -56,10 +59,7 @@ export const createGroupRepository = (db: Database): GroupRepository => {
        * D1 との往復を 1 回で済ませている（Edge 環境でのネットワーク遅延削減）。
        */
       if (row === undefined) {
-        return err({
-          code: GroupErrorCode.GroupNotFound,
-          message: "Group not found",
-        });
+        return err(groupNotFound(id));
       }
 
       return ok(toGroup(row));

@@ -67,7 +67,7 @@ const ensureGroupIsEnabled = (
   deps.groupRepository
     .findById(groupId)
     .mapErr((error): ReservationError =>
-      error.code === GroupErrorCode.GroupNotFound
+      error.code === GroupErrorCode.NotFound
         ? {
             code: ReservationErrorCode.ReservationGroupNotEligible,
             message: "選んだ団体が見つかりません。",
