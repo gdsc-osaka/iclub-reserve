@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, Link, redirect } from "react-router";
+import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -26,15 +26,14 @@ export function meta() {
 /**
  * 事務局向け予約承認・管理画面（SCR-003）のローダー。
  *
- * 事務局スタッフのみがアクセス可能。非スタッフは 403 をスローする（COND-009）。
+ * 事務局スタッフのみがアクセス可能。非スタッフには 403 を返す（COND-009）。
+ *
+ * 事務局かどうかはここでは確かめず、ユースケースに任せる。ユースケースが同じ判定を持っており、
+ * ここにも書くと判定が 2 か所に分かれるうえ、ルートで先に弾いた分はログに残らない。
+ * ユースケースが返した `Forbidden` は、表を通して 403 になり、warn でログに残る（ADR-004 決定 9）。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
-
-  // 事務局スタッフ以外はアクセス不可
-  if (!user.is_staff) {
-    throw data({ message: "Forbidden" }, { status: 403 });
-  }
 
   const now = new Date();
   const url = new URL(request.url);
@@ -75,11 +74,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
  */
 export async function action({ request, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
-
-  if (!user.is_staff) {
-    throw data({ message: "Forbidden" }, { status: 403 });
-  }
-
   const formData = await request.formData();
   const intent = formData.get("intent");
   const reservationId = formData.get("reservationId");
@@ -92,7 +86,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   /*
    * この画面が出している操作（事務局のもの）だけを受け付ける。どれが事務局の操作かは
    * ドメインの表（transitionAuthority）が決めるので、ここに操作名を書き並べない。
-   * 操作そのものの可否（今の状態・理由）はユースケースの canTransition が見る。
+   * 操作そのものの可否（事務局かどうか・今の状態・理由）はユースケースの canTransition が見る。
+   * 事務局でない人の送信も canTransition が `Forbidden` で止め、warn でログに残る。
+   * ここで先に弾くと、判定が 2 か所に分かれるうえログに残らない（loader と同じ）。
    */
   const transition = parseReservationTransition(intent);
 
