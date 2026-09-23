@@ -80,6 +80,7 @@ entities:
         "SCR-002",
         "SCR-003",
         "SCR-005",
+        "SCR-018",
       ]
 
   - id: "INFO-002"
@@ -126,7 +127,19 @@ entities:
       - target: "INFO-001"
         type: "1:N"
         label: "予約"
-    traces_to: ["UC-015", "UC-016", "UC-018", "SCR-001", "SCR-009", "SCR-010"]
+    traces_to:
+      [
+        "UC-015",
+        "UC-016",
+        "UC-018",
+        "SCR-001",
+        "SCR-002",
+        "SCR-003",
+        "SCR-005",
+        "SCR-009",
+        "SCR-010",
+        "SCR-018",
+      ]
 
   - id: "INFO-003"
     name: "団体"
@@ -177,7 +190,21 @@ entities:
       - target: "INFO-008"
         type: "1:N"
         label: "操作履歴"
-    traces_to: ["UC-010", "UC-013", "UC-014", "SCR-006", "SCR-007", "SCR-008"]
+    traces_to:
+      [
+        "UC-010",
+        "UC-013",
+        "UC-014",
+        "SCR-001",
+        "SCR-002",
+        "SCR-003",
+        "SCR-005",
+        "SCR-006",
+        "SCR-007",
+        "SCR-008",
+        "SCR-016",
+        "SCR-018",
+      ]
 
   - id: "INFO-004"
     name: "メッセージ"
@@ -195,6 +222,10 @@ entities:
         type: "string"
         required: true
         description: "送信者のユーザーID"
+      - name: "sent_as_staff"
+        type: "boolean"
+        required: true
+        description: "事務局の横断権限（COND-009）によって初めて許された送信であれば true。送信者がその予約の団体に所属していない事務局である場合にあたる。送信時に固定し、後から所属や事務局権限が変わっても表示は変わらない。団体側の表示で送信者を「事務局」とするかの判定に使う（COND-008）。考え方は INFO-008.acted_as_staff と同じ。"
       - name: "body"
         type: "string"
         required: true
@@ -319,13 +350,13 @@ entities:
         "UC-027",
         "UC-028",
         "UC-029",
-        "SCR-006",
+        "SCR-005",
         "SCR-007",
         "SCR-012",
-        "SCR-013",
         "SCR-014",
         "SCR-015",
         "SCR-017",
+        "SCR-018",
         "SCR-019",
         "SCR-021",
       ]
@@ -482,7 +513,7 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "招待者"
-    traces_to: ["UC-026", "UC-027", "SCR-019", "SCR-020"]
+    traces_to: ["UC-026", "UC-027", "SCR-018", "SCR-019", "SCR-020"]
 
   - id: "INFO-010"
     name: "パスキー"
@@ -564,6 +595,8 @@ entities:
 # 情報モデル（横断）
 
 認証基盤（Better Auth）が内部で管理するデータのうち、外部アカウント・認証コードは業務上の情報ではないため、本モデルには含めない。パスキー（INFO-010）とログインセッション（INFO-011）も同じく Better Auth が管理するが、利用者がアカウント設定（SCR-021）で見て操作するため含めている。その場合も、画面に出す・判定に使う属性だけを載せる。招待（INFO-007）は団体運営の業務そのものに現れる情報なので含めている。
+
+各情報の `traces_to` に並ぶ画面（`SCR-*`）は、その情報を `information` に載せている画面（各コンテキストの `boundary.screens`）を逆引きしたものである。両者が食い違ったときは画面側を正とする。画面の `information` には、その画面が表示する・入力を受けるものだけを載せ、ユースケースの結果として裏で作られる・変わるだけの情報は載せない（その関係は、ここの `traces_to` に並ぶユースケース（`UC-*`）で表す）。画面の `information` を変えたら、ここも合わせて直す。
 
 ## ER図
 
@@ -651,6 +684,7 @@ erDiagram
         string id PK
         string reservation_id FK
         string sender_id FK
+        boolean sent_as_staff
         string body
         datetime sent_at
     }
@@ -712,6 +746,8 @@ INFO-001 の属性は、見る人によって次の3段階で開示する。
 | INFO-004 メッセージ   |       ○        |           ×            |            ×            |
 
 Google Calendar に載せるのは承認済みの予約のみ。他団体のログイン済みユーザーには、仮予約もステータス付きで表示する。
+
+メッセージの送信者は氏名で表示する。ただし自団体のメンバーには、INFO-004.sent_as_staff が true のメッセージの送信者を「事務局」とだけ表示する（操作履歴の COND-012 と同じ考え方）。
 
 ## 操作履歴の開示範囲（COND-012）
 
