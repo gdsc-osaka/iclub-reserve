@@ -22,6 +22,12 @@ export interface FailureLog {
   readonly userId: string;
   /** ログ用の説明。利用者が入力した値は含めないこと */
   readonly message: string;
+  /**
+   * 事務局がログを見て手で対応するときに要る値（例: EVT-016 を積めなかったときの変更前のアドレス）。
+   *
+   * 使うのは、ログが唯一の手がかりになる場合に限る。利用者が入力した値は入れないこと（ADR-004 決定 9）。
+   */
+  readonly details?: Readonly<Record<string, string>>;
   /** 元となった例外。画面には出さず、ここでだけ残す */
   readonly cause?: unknown;
 }

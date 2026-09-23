@@ -18,6 +18,9 @@ export const DEV_FLUSH_MAIL_PATH = "/dev/flush-mail";
  */
 export const PASSKEY_SUGGEST_PATH = "/passkey/suggest";
 
+/** アカウント設定の画面。 */
+export const ACCOUNT_PATH = "/account";
+
 /** 遷移先の指定がないときに送るページ。 */
 const DEFAULT_REDIRECT_TO = "/";
 
