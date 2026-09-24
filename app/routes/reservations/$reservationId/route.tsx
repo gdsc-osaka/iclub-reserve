@@ -1,8 +1,17 @@
 import { env } from "cloudflare:workers";
-import { ChevronLeft, CircleAlert, MessageSquare } from "lucide-react";
-import type { ReactNode } from "react";
+import {
+  CalendarPlus,
+  ChevronLeft,
+  CircleAlert,
+  MessageSquare,
+  PersonStanding,
+  StickyNote,
+  User,
+  Users,
+} from "lucide-react";
 import { isRouteErrorResponse, Link, redirect } from "react-router";
 
+import { InfoItem } from "~/components/info-item";
 import { ReservationActionButtons } from "~/components/reservation/reservation-action-buttons";
 import {
   reservationOverlapNotice,
@@ -167,22 +176,28 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
           <CardTitle className="text-base font-semibold">予約内容</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-            <DetailItem label="団体">{reservation.groupName}</DetailItem>
+          <dl className="grid gap-5 sm:grid-cols-2">
+            <InfoItem icon={Users} label="団体">
+              {reservation.groupName}
+            </InfoItem>
             {view.canViewDetail && (
               <>
-                <DetailItem label="使用人数">{view.reservation.headCount}名</DetailItem>
-                <DetailItem label="申請者">{view.reservation.createdByName ?? "不明"}</DetailItem>
-                <DetailItem label="申請日時">
+                <InfoItem icon={PersonStanding} label="使用人数">
+                  {view.reservation.headCount}名
+                </InfoItem>
+                <InfoItem icon={User} label="申請者">
+                  {view.reservation.createdByName ?? "不明"}
+                </InfoItem>
+                <InfoItem icon={CalendarPlus} label="申請日時">
                   {formatDateTime(view.reservation.createdAt)}
-                </DetailItem>
-                <DetailItem label="備考" className="sm:col-span-2">
+                </InfoItem>
+                <InfoItem icon={StickyNote} label="備考" className="sm:col-span-2">
                   <span className="font-normal whitespace-pre-wrap">
                     {view.reservation.note !== null && view.reservation.note.trim() !== ""
                       ? view.reservation.note
                       : "なし"}
                   </span>
-                </DetailItem>
+                </InfoItem>
               </>
             )}
           </dl>
@@ -243,20 +258,6 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
         </>
       )}
     </main>
-  );
-}
-
-/** 予約内容の 1 項目（見出しと値） */
-function DetailItem({
-  label,
-  className,
-  children,
-}: Readonly<{ label: string; className?: string; children: ReactNode }>) {
-  return (
-    <div className={className}>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium">{children}</dd>
-    </div>
   );
 }
 
