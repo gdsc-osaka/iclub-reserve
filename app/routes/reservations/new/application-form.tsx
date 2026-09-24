@@ -3,6 +3,20 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { Form, useNavigation } from "react-router";
 
+import type { FieldErrors, FormValues } from "~/components/reservation/editor/form-values";
+import {
+  findOverlapping,
+  selectSlot,
+  toBlockedSlots,
+  toPastSlots,
+  toTimelineReservations,
+  type SlotRange,
+} from "~/components/reservation/editor/reservation-slots";
+import {
+  ReservationTimeline,
+  ReservationTimelineLegend,
+} from "~/components/reservation/editor/reservation-timeline";
+import { TimeRangeFields } from "~/components/reservation/editor/time-range-fields";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -32,18 +46,7 @@ import type {
 } from "~/query/reservation/reservation-form";
 
 import { DateField } from "./date-field";
-import type { FieldErrors, FormValues } from "./form-values";
-import {
-  findOverlapping,
-  selectSlot,
-  toBlockedSlots,
-  toPastSlots,
-  toTimelineReservations,
-  type SlotRange,
-} from "./reservation-slots";
-import { ReservationTimeline, ReservationTimelineLegend } from "./reservation-timeline";
 import { SummaryPanel } from "./summary-panel";
-import { TimeRangeFields } from "./time-range-fields";
 
 /** 入力欄をまとめた小さな枠。見出しと本体の間隔をそろえるために使う */
 function FormSection({

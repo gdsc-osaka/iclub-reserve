@@ -1,13 +1,12 @@
 import { CalendarCheck } from "lucide-react";
 import type { ReactNode } from "react";
 
+import type { SlotRange } from "~/components/reservation/editor/reservation-slots";
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
 import { ReservationStatus } from "~/domain/reservation";
 import { formatMonthDay, toTokyoTimeKey } from "~/lib/date";
-
-import type { SlotRange } from "./reservation-slots";
 
 /**
  * 申請内容の確認欄。

@@ -5,6 +5,12 @@ import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  fieldKeyOf,
+  parseReservation,
+  readValues,
+  toFormErrors,
+} from "~/components/reservation/editor/form-values";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { createGroupRepository } from "~/infra/group/group-repo";
@@ -31,7 +37,6 @@ import { getReservationFormUseCase } from "~/usecases/reservation/get-reservatio
 import type { Route } from "./+types/route";
 import { ApplicationForm } from "./application-form";
 import { CreatedPanel } from "./created-panel";
-import { fieldKeyOf, parseReservation, readValues, toFormErrors } from "./form-values";
 import { toCalendarPath } from "./paths";
 
 export function meta() {
