@@ -14,6 +14,8 @@ export interface ReservationFormFacility {
   readonly id: string;
   readonly name: string;
   readonly description: string | null;
+  /** 施設・設備の写真の URL（`/facility-photos/...`）。登録されていなければ null */
+  readonly photoUrl: string | null;
 }
 
 /**

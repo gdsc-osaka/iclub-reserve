@@ -3,6 +3,7 @@ import { CircleAlert } from "lucide-react";
 import { isRouteErrorResponse, Link } from "react-router";
 
 import { DAYS_IN_WEEK } from "~/components/reservation/availability-week";
+import { NoEnabledGroupReason } from "~/components/reservation/no-enabled-group-reason";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { createDb } from "~/infra/db";
@@ -125,7 +126,7 @@ function CannotApplyNotice() {
       <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
       <AlertTitle>まだ予約を申請できません</AlertTitle>
       <AlertDescription>
-        予約を申請できるのは、事務局が有効にした団体だけです。所属している団体が承認待ちの場合は、承認されるまでお待ちください。
+        <NoEnabledGroupReason />
         空き状況の確認はこのままご利用いただけます。
       </AlertDescription>
     </Alert>

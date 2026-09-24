@@ -1,11 +1,12 @@
 import { CLOSE_MINUTES, OPEN_MINUTES } from "~/components/reservation/availability-week";
 import { RESERVATION_STEP_MINUTES, ReservationStatus } from "~/domain/reservation";
-import { atTokyoMinutes, startOfTokyoDay } from "~/lib/date";
+import { atTokyoMinutes, startOfTokyoDay, toTokyoTimeKey } from "~/lib/date";
 import type { ReservationFormReservation } from "~/query/reservation/reservation-form";
 
 /**
- * 予約申請フォーム（SCR-002）のタイムラインで使う計算。
+ * 予約の日時を選ぶタイムラインで使う計算。
  *
+ * 仮予約の申請（SCR-002）で使っており、予約の編集（UC-017 / UC-005）でも同じものを使う想定。
  * 画面の都合しか持たない計算なので、React から切り離して純粋な関数にしてある。
  * 空き状況カレンダー（SCR-001）が 1 時間単位で枠を並べるのに対し、
  * こちらは 30 分単位（`RESERVATION_STEP_MINUTES`）で並べる。
@@ -211,3 +212,29 @@ export const dragRange = (
     endMinutes: Math.max(anchorSlot, reached) + RESERVATION_STEP_MINUTES,
   };
 };
+
+/**
+ * 選んだ長さを「2 時間」「1 時間 30 分」「30 分」のように書く。
+ *
+ * 小数（0.5 時間）にしないのは、30 分単位で選べることが読み取れないため。
+ */
+export const formatDuration = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+
+  if (hours === 0) return `${rest} 分`;
+  if (rest === 0) return `${hours} 時間`;
+
+  return `${hours} 時間 ${rest} 分`;
+};
+
+/**
+ * 選んだ時間帯を「13:00〜15:00（2 時間）」のように書く。
+ *
+ * 長さを添えるのは、終了時刻を 1 枠ずらしただけの選び間違い（14:30 と 15:00）に
+ * 時刻の見比べより先に気づけるようにするため。
+ */
+export const formatSlotRange = (range: SlotRange): string =>
+  `${toTokyoTimeKey(range.startMinutes)}〜${toTokyoTimeKey(range.endMinutes)}（${formatDuration(
+    range.endMinutes - range.startMinutes,
+  )}）`;
