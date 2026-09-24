@@ -105,9 +105,9 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     await openPage(page, `/reservations/new?facility=${facility.id}&date=${day}&start=10:00`);
     await page.getByLabel("使用人数").fill("4");
 
-    // 埋まっている理由が出て、申請のボタンは押せない（COND-001）
+    // 埋まっている理由が出て、確認へ進むボタンが押せない。確認のダイアログまで進めない（COND-001）
     await expect(page.getByText("この時間帯はすでに埋まっています")).toBeVisible();
-    await expect(page.getByRole("button", { name: "この内容で申請する" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "内容を確認する" })).toBeDisabled();
 
     // 予約は増えていない
     expect(await findReservationsOfFacility(db, facility.id)).toHaveLength(1);
