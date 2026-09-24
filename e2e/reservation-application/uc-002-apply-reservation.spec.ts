@@ -14,6 +14,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     // 前提: 有効な団体の一般メンバーと、ほかの予約が入っていない施設
     const member = await createUser(db);
@@ -25,11 +26,25 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     const day = toDateKey(nextWeekAt(Weekday.Wednesday, 0));
     await openPage(page, `/reservations/new?facility=${facility.id}&date=${day}&start=10:00`);
 
-    await expect(page.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
-    await page.getByRole("combobox", { name: "終了時刻" }).click();
+    /*
+     * 時刻の欄は、PC ではフォームの右側にあり、スマホでは「施設・日時」のカードから開く
+     * 全画面の選択の中にある。選択肢の一覧はどちらでもページの末尾に出るので、`page` から探す。
+     */
+    if (isMobile) await page.getByRole("button", { name: /施設・日時/ }).click();
+    const schedule = isMobile ? page.getByRole("dialog", { name: "施設・日時を選ぶ" }) : page;
+
+    await expect(schedule.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
+    await schedule.getByRole("combobox", { name: "終了時刻" }).click();
     await page.getByRole("option", { name: "12:00" }).click();
+    if (isMobile) await schedule.getByRole("button", { name: "決定" }).click();
+
     await page.getByLabel("使用人数").fill("4");
-    await page.getByRole("button", { name: "この内容で申請する" }).click();
+
+    // 申請のボタンはすぐには送らず、内容の確認を挟む
+    await page.getByRole("button", { name: "内容を確認する" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "この内容で申請しますか？" });
+    await expect(confirm.getByText("10:00〜12:00（2 時間）")).toBeVisible();
+    await confirm.getByRole("button", { name: "この内容で申請する" }).click();
 
     // 申請できたことと、仮予約になったことが画面に出る
     await expect(page.getByText("仮予約を申請しました")).toBeVisible();

@@ -1,6 +1,7 @@
 import { CircleCheck } from "lucide-react";
 import { Link } from "react-router";
 
+import { SummaryItem } from "~/components/reservation/editor/summary-item";
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -9,7 +10,6 @@ import { formatMonthDay, formatTimeRange } from "~/lib/date";
 import type { CreatedReservation } from "~/query/reservation/reservation-form";
 
 import { toCalendarPath, toFormPath } from "./paths";
-import { SummaryItem } from "./summary-panel";
 
 /**
  * 申請が終わったあとの控え。

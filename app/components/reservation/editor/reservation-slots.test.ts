@@ -6,6 +6,8 @@ import type { ReservationFormReservation } from "~/query/reservation/reservation
 import {
   dragRange,
   findOverlapping,
+  formatDuration,
+  formatSlotRange,
   selectSlot,
   toBlockedSlots,
   toPastSlots,
@@ -189,5 +191,25 @@ describe("dragRange", () => {
 
   it("上へなぞるときも、承認済みの予約の手前で止まる", () => {
     expect(dragRange(690, 600, new Set([630]))).toEqual({ startMinutes: 660, endMinutes: 720 });
+  });
+});
+
+describe("formatDuration", () => {
+  it("1 時間に満たなければ分だけで書く", () => {
+    expect(formatDuration(30)).toBe("30 分");
+  });
+
+  it("ちょうどの時間なら時間だけで書く", () => {
+    expect(formatDuration(120)).toBe("2 時間");
+  });
+
+  it("端数があれば時間と分を並べて書く", () => {
+    expect(formatDuration(90)).toBe("1 時間 30 分");
+  });
+});
+
+describe("formatSlotRange", () => {
+  it("開始〜終了に長さを添えて書く", () => {
+    expect(formatSlotRange({ startMinutes: 780, endMinutes: 900 })).toBe("13:00〜15:00（2 時間）");
   });
 });

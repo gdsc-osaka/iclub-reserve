@@ -27,16 +27,13 @@ import {
 } from "./reservation-slots";
 
 /**
- * 30 分枠 1 つ分の高さ（rem）。
+ * 30 分枠 1 つ分の高さ（rem）の既定値。
  *
  * 空き状況カレンダー（SCR-001）の 1 時間枠（2.75rem）より少し詰めている。
  * あちらは 7 日分を 1 画面に収める必要があるが、こちらは 1 日分だけなので、
  * 30 分枠でも予約の帯に時刻と団体名を 2 行で入れられる。
  */
-const SLOT_HEIGHT_REM = 1.5;
-
-/** タイムライン全体の高さ（rem）。利用可能時間と枠の刻みだけで決まる */
-const TIMELINE_HEIGHT_REM = startSlotMinutes.length * SLOT_HEIGHT_REM;
+const DEFAULT_SLOT_HEIGHT_REM = 1.5;
 
 /**
  * 1 日分のタイムライン（SCR-002 の日時選択）。
@@ -57,6 +54,7 @@ export function ReservationTimeline({
   pastSlots,
   range,
   disabled,
+  slotHeightRem = DEFAULT_SLOT_HEIGHT_REM,
   onSelectSlot,
   onSelectRange,
 }: Readonly<{
@@ -74,12 +72,21 @@ export function ReservationTimeline({
   range: SlotRange | null;
   /** 申請できない状態のときに、枠を押せなくする */
   disabled: boolean;
+  /**
+   * 30 分枠 1 つ分の高さ（rem）。
+   *
+   * スマホの全画面の選択では、指で押しやすいように高くする。
+   * 画面の高さを気にしなくてよい分、1 枠を指の幅に近づけられる。
+   */
+  slotHeightRem?: number;
   /** 枠を 1 つ押したとき。押した位置から、呼び出し側が時間帯を決め直す */
   onSelectSlot: (slotStartMinutes: number) => void;
   /** 枠をなぞって選んだとき。なぞっている間ずっと呼ばれる */
   onSelectRange: (range: SlotRange) => void;
 }>) {
   const placements = layoutTimelineItems(items);
+  /** タイムライン全体の高さ（rem）。利用可能時間と枠の刻みと、1 枠の高さだけで決まる */
+  const timelineHeightRem = startSlotMinutes.length * slotHeightRem;
   const isToday = isSameTokyoDay(day, now);
   const nowMinutes = tokyoMinutesOfDay(now);
 
@@ -124,7 +131,7 @@ export function ReservationTimeline({
 
   return (
     <div className="grid grid-cols-[3rem_minmax(0,1fr)]">
-      <div className="relative" style={{ height: `${TIMELINE_HEIGHT_REM}rem` }}>
+      <div className="relative" style={{ height: `${timelineHeightRem}rem` }}>
         {axisHours.map((hour) => {
           const isFirst = hour === axisHours.at(0);
           const isLast = hour === axisHours.at(-1);
@@ -147,7 +154,7 @@ export function ReservationTimeline({
 
       <div
         className="relative overflow-hidden rounded-md border bg-card"
-        style={{ height: `${TIMELINE_HEIGHT_REM}rem` }}
+        style={{ height: `${timelineHeightRem}rem` }}
       >
         <div
           ref={gridRef}
@@ -226,6 +233,7 @@ export function ReservationTimeline({
         {isToday && nowMinutes >= OPEN_MINUTES && nowMinutes <= CLOSE_MINUTES && (
           <div
             aria-hidden
+            data-slot="timeline-now"
             className="pointer-events-none absolute inset-x-0 border-t-2 border-destructive/70"
             style={{ top: `${toAxisPercent(nowMinutes - OPEN_MINUTES)}%` }}
           />
@@ -237,6 +245,7 @@ export function ReservationTimeline({
            * 受け取るようにすると、選び直したいときに一度選択を消す操作が要る。
            */
           <div
+            data-slot="timeline-selection"
             className="pointer-events-none absolute inset-x-0 z-10 rounded-md border-2 border-primary bg-primary/15 px-1.5 py-0.5"
             style={{
               top: `${toAxisPercent(range.startMinutes - OPEN_MINUTES)}%`,
