@@ -30,6 +30,9 @@ const MESSAGES: Record<string, string> = {
   INVALID_EMAIL: "メールアドレスの形式が正しくありません。",
   USER_NOT_FOUND: "このメールアドレスは登録されていません。",
   [EMAIL_DOMAIN_NOT_ALLOWED_CODE]: `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`,
+  INVALID_USER_NAME: "氏名の入力内容を確認してください。",
+  INVALID_PASSKEY_NAME: "パスキーの名前の入力内容を確認してください。",
+  SESSION_NOT_FRESH: "安全のため、もう一度ログインしてください。",
 
   // ここからパスキー。
   ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED:

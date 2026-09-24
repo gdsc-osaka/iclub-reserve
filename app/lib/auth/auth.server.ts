@@ -5,19 +5,33 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
-import { env } from "cloudflare:workers";
+import { env, waitUntil } from "cloudflare:workers";
 import { createDb } from "~/infra/db";
 import {
   ALLOWED_EMAIL_DOMAINS_LABEL,
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
   isAllowedEmailAddress,
 } from "~/domain/authn/allowed-email-domain";
+import { toPasskeyName } from "~/domain/authn/device-name";
+import { SESSION_FRESH_AGE_SECONDS } from "~/domain/authn/session-freshness";
+import { ErrorKind } from "~/domain/error";
+import { insertMailsAlone } from "~/infra/mail/mail-outbox-writes";
+import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
+import { recordPasskeyUse } from "~/infra/user/passkey-usage-repo";
+import { logFailure } from "~/lib/log.server";
 import { formatSendEmailError } from "~/usecases/mail/send-email.server";
 import {
   createSendVerificationOtpUseCase,
   OTP_EXPIRES_IN_SECONDS,
 } from "~/usecases/mail/send-verification-otp.server";
+import { createFinishEmailChangeUseCase } from "~/usecases/user/finish-email-change";
 import { passkey } from "@better-auth/passkey";
+import {
+  applyUpdatePasskeyRule,
+  applyUpdateUserRule,
+  applyVerifyRegistrationRule,
+  checkRequestEmailChangeRule,
+} from "./auth-hook-rules";
 import { buildPreviewTrustedOrigins } from "./preview-trusted-origins";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -103,6 +117,13 @@ const createAuth = () => {
         // ID を CUID2 で生成
         generateId: () => createId(),
       },
+      backgroundTasks: {
+        handler: (promise) => waitUntil(promise),
+      },
+    },
+
+    session: {
+      freshAge: SESSION_FRESH_AGE_SECONDS,
     },
 
     user: {
@@ -154,17 +175,124 @@ const createAuth = () => {
          * 既に登録済みの人を締め出すことではない。
          * そのため、アカウントが既にある場合はドメインを問わず通す。
          */
-        if (ctx.path !== "/email-otp/send-verification-otp") return;
+        if (ctx.path === "/email-otp/send-verification-otp") {
+          const email = (ctx.body as { email?: unknown } | undefined)?.email;
+          if (typeof email !== "string" || isAllowedEmailAddress(email)) return;
 
-        const email = (ctx.body as { email?: unknown } | undefined)?.email;
-        if (typeof email !== "string" || isAllowedEmailAddress(email)) return;
+          const existing = await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase());
+          if (existing) return;
 
-        const existing = await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase());
-        if (existing) return;
+          throw new APIError("FORBIDDEN", {
+            code: EMAIL_DOMAIN_NOT_ALLOWED_CODE,
+            message: NOT_ALLOWED_MESSAGE,
+          });
+        }
 
-        throw new APIError("FORBIDDEN", {
-          code: EMAIL_DOMAIN_NOT_ALLOWED_CODE,
-          message: NOT_ALLOWED_MESSAGE,
+        /*
+         * メールアドレス変更用のコード送信（COND-004 / COND-018）。
+         * 大阪大学のドメイン以外は拒否し、アカウントの有無による例外は適用しない。
+         */
+        if (ctx.path === "/email-otp/request-email-change") {
+          const newEmail = (ctx.body as { newEmail?: unknown } | undefined)?.newEmail;
+          const res = checkRequestEmailChangeRule(newEmail);
+          if (res.isErr()) {
+            throw new APIError("FORBIDDEN", {
+              code: res.error.code,
+              message: res.error.message,
+            });
+          }
+          return;
+        }
+
+        /*
+         * ユーザー名の更新（COND-017 / UC-029）。
+         */
+        if (ctx.path === "/update-user") {
+          const body = (ctx.body ?? {}) as { name?: unknown };
+          const res = applyUpdateUserRule(body);
+          if (res.isErr()) {
+            throw new APIError("BAD_REQUEST", {
+              code: res.error.code,
+              message: res.error.message,
+            });
+          }
+          return { context: { body: res.value.body } };
+        }
+
+        /*
+         * パスキーの登録検証（COND-020）。
+         * クライアントからの名前を消して空文字にし、サーバー側で命名した名前を採用させる。
+         */
+        if (ctx.path === "/passkey/verify-registration") {
+          const body = (ctx.body ?? {}) as Record<string, unknown>;
+          const { body: updatedBody } = applyVerifyRegistrationRule(body);
+          return { context: { body: updatedBody } };
+        }
+
+        /*
+         * パスキー名の更新（COND-020 / UC-030）。
+         */
+        if (ctx.path === "/passkey/update-passkey") {
+          const body = (ctx.body ?? {}) as { name?: unknown };
+          const res = applyUpdatePasskeyRule(body);
+          if (res.isErr()) {
+            throw new APIError("BAD_REQUEST", {
+              code: res.error.code,
+              message: res.error.message,
+            });
+          }
+          return { context: { body: res.value.body } };
+        }
+      }),
+
+      after: createAuthMiddleware(async (ctx) => {
+        /*
+         * メールアドレスの切り替えが済んだ後の処理（EVT-016 / COND-018）。
+         * 変更前のアドレスへの通知と、変更に使った端末以外のログアウトを行う。
+         *
+         * 失敗した切り替え（コードの誤りなど）では何もしない。
+         * 成否は、エンドポイントが返した値が APIError かどうかで分かる。
+         */
+        if (ctx.path !== "/email-otp/change-email") return;
+        if (ctx.context.returned instanceof APIError) return;
+
+        /*
+         * `ctx.context.session` は、エンドポイントの前に sensitiveSessionMiddleware が入れた
+         * **切り替え前の**セッション。だから `user.email` は変更前のアドレスになる。
+         * 切り替えの後に DB から読み直すと、もう新しいアドレスしか残っていない。
+         */
+        const session = ctx.context.session;
+        const newEmail = (ctx.body as { newEmail?: unknown } | undefined)?.newEmail;
+
+        if (!session || typeof newEmail !== "string") {
+          // 成功した切り替えでここに来ることは無いはず。来たら通知もログアウトもできていないので、必ず残す
+          logFailure({
+            level: "error",
+            where: "auth.change-email.after",
+            code: "EMAIL_CHANGE_AFTER_WITHOUT_SESSION",
+            kind: ErrorKind.Internal,
+            userId: session?.user.id ?? "",
+            message: "メールアドレスの切り替えの後処理で、切り替え前のセッションを読めなかった。",
+          });
+          return;
+        }
+
+        const db = createDb(env.DB);
+        const finishEmailChange = createFinishEmailChangeUseCase({
+          enqueueMails: (mails) => insertMailsAlone(db, mails),
+          mailOutboxNotifier: createQueueMailOutboxNotifier(),
+          sessionStore: ctx.context.internalAdapter,
+          staffContactEmail: env.STAFF_CONTACT_EMAIL,
+        });
+
+        // 失敗はユースケースの中でログに残すので、ここでは待つだけ（例外は投げてこない）
+        await finishEmailChange({
+          userId: session.user.id,
+          userName: session.user.name,
+          previousEmail: session.user.email,
+          newEmail: newEmail.toLowerCase(),
+          currentToken: session.session.token,
+          changedAt: new Date(),
         });
       }),
     },
@@ -180,9 +308,9 @@ const createAuth = () => {
         /**
          * 認証コードのメール送信。
          *
-         * Better Auth はこのコールバックをバックグラウンドで実行するため、
+         * advanced.backgroundTasks.handler により waitUntil でバックグラウンド実行されるため、
          * ここで例外を投げても HTTP レスポンスは 200 のまま。
-         * 送信の失敗は Workers のログ（ローカルではターミナル）に出る。
+         * 送信の失敗は Better Auth によりログに記録される。
          */
         async sendVerificationOTP({ email, otp, type }) {
           // メール送信の実装（worker-mailer）は `cloudflare:sockets` を読み込む。
@@ -236,6 +364,49 @@ const createAuth = () => {
 
           // 生体認証・PIN の要求。"required" だと毎回必ず求められて煩わしいので既定のまま。
           userVerification: "preferred",
+        },
+
+        /**
+         * パスキーの名前は、登録した人に入力させずにサーバーで付ける（COND-020）。
+         *
+         * ブラウザから届いた名前は `hooks.before` で空にしてあるので、ここで返した名前が保存される。
+         * ブラウザから名前を渡すと、OS のパスキー保存ダイアログに出るアカウント名まで置き換わってしまうため。
+         */
+        registration: {
+          afterVerification: ({ ctx, verification }) => ({
+            name: toPasskeyName({
+              aaguid: verification.registrationInfo?.aaguid,
+              userAgent: ctx.headers?.get("user-agent") ?? ctx.request?.headers.get("user-agent"),
+            }),
+          }),
+        },
+
+        /**
+         * パスキーでログインするたびに、そのパスキーを最後に使った日時を記録する（INFO-010）。
+         *
+         * 記録に失敗してもログインは止めない。一覧に出す日時が古くなるだけで、ログインの可否には関わらないため。
+         */
+        authentication: {
+          afterVerification: async ({ verification }) => {
+            try {
+              await recordPasskeyUse(
+                createDb(env.DB),
+                verification.authenticationInfo.credentialID,
+                new Date(),
+              );
+            } catch (cause) {
+              logFailure({
+                level: "error",
+                where: "auth.passkey.after-authentication",
+                code: "PASSKEY_LAST_USED_NOT_RECORDED",
+                kind: ErrorKind.Internal,
+                // ここではまだセッションが無く、誰のログインかはパスキーを引くまで分からない
+                userId: "",
+                message: "パスキーを最後に使った日時を記録できなかった。",
+                cause,
+              });
+            }
+          },
         },
       }),
     ],

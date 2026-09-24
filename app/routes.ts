@@ -53,6 +53,10 @@ export default [
     route("staff/reservations", "routes/reservations/staff/route.tsx"),
     route("reservations/new", "routes/reservations/new/route.tsx"),
     route("reservations/:reservationId", "routes/reservations/$reservationId/route.tsx"),
+    /*
+     * アカウント設定（SCR-021）。
+     */
+    route("account", "routes/account/route.tsx"),
   ]),
 
   /*

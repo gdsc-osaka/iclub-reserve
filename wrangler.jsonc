@@ -83,6 +83,7 @@
     "SMTP_PORT": "465",
     "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
     "MAIL_FROM_NAME": "i-Club 予約システム",
+    "STAFF_CONTACT_EMAIL": "iclub-reserve-support@gdgoc-osaka.jp",
   },
   "d1_databases": [
     {
@@ -153,6 +154,7 @@
         "SMTP_PORT": "465",
         "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
         "MAIL_FROM_NAME": "i-Club 予約システム",
+        "STAFF_CONTACT_EMAIL": "iclub-reserve-support@gdgoc-osaka.jp",
       },
       "d1_databases": [
         {
@@ -234,6 +236,7 @@
         "SMTP_PORT": "465",
         "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
         "MAIL_FROM_NAME": "i-Club 予約システム",
+        "STAFF_CONTACT_EMAIL": "iclub-reserve-support@gdgoc-osaka.jp",
       },
       "d1_databases": [
         {
@@ -287,6 +290,7 @@
           "SMTP_PORT": "465",
           "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
           "MAIL_FROM_NAME": "i-Club 予約システム",
+          "STAFF_CONTACT_EMAIL": "iclub-reserve-support@gdgoc-osaka.jp",
         },
         "d1_databases": [
           {

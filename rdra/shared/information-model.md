@@ -544,7 +544,7 @@ entities:
       - name: "aaguid"
         type: "string"
         required: false
-        description: "認証器の機種ID。名前を決めるのに使う（COND-020）。Appleの端末などは0埋めで届き、機種が分からない。"
+        description: "認証器の機種ID。名前と一覧に出すアイコンを決めるのに使う（COND-020）。Appleの端末などは0埋めで届き、機種が分からない。"
       - name: "backed_up"
         type: "boolean"
         required: true

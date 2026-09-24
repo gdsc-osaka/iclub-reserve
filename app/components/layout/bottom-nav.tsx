@@ -1,4 +1,4 @@
-import { LogOut, MoreHorizontal } from "lucide-react";
+import { LogOut, MoreHorizontal, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
 import { Button } from "~/components/ui/button";
@@ -125,6 +125,15 @@ function OverflowMenu({ user, items }: Readonly<{ user: ShellUser; items: readon
               <span className="truncate text-xs text-muted-foreground">{user.email}</span>
             </div>
           </div>
+
+          <SheetClose asChild>
+            <Button variant="outline" asChild>
+              <Link to="/account">
+                <Settings aria-hidden className="size-4" />
+                アカウント設定
+              </Link>
+            </Button>
+          </SheetClose>
 
           <Button
             type="button"
