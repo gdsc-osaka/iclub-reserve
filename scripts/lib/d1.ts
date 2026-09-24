@@ -20,7 +20,7 @@ export const DEFAULT_PERSIST_TO = ".wrangler/state";
  * Wrangler (Miniflare) が生成したローカル D1 の SQLite ファイルの絶対パスを取得する。
  *
  * @param persistTo 状態を置くフォルダ。wrangler の `--persist-to` に渡すのと同じ値を渡す。
- *   E2E テストは開発用の DB を壊さないよう、別のフォルダ（`e2e/support/paths.ts`）を使う。
+ *   E2E テストは開発用の DB を壊さないよう、別のフォルダ（`e2e/support/e2e-env.ts` の `E2E_PERSIST_TO`）を使う。
  */
 export function getLocalD1DBPath(persistTo: string = DEFAULT_PERSIST_TO): string {
   // wrangler も Vite のプラグインも、指定したフォルダの下に `v3` を足してから置く
