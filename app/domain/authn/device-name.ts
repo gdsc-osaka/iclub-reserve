@@ -28,7 +28,7 @@ const detectOs = (ua: string): string | undefined => {
  *
  * 判定の順序:
  * 1. Edge（UA に Chrome と Safari を含むため先頭で判定する）
- * 2. Opera（UA に Chrome と Safari を含むため先頭で判定する）
+ * 2. Opera（UA に Chrome と Safari を含むため先頭で判定する。iOS 版は OPT・Opera Mini は OPiOS）
  * 3. Samsung Internet（UA に Chrome と Safari を含むため Chrome より先に判定する）
  * 4. Firefox（iOS 版の FxiOS は Safari を含むため Safari より先に判定する）
  * 5. Chrome（iOS 版の CriOS は Safari を含むため Safari より先に判定する）
@@ -36,7 +36,8 @@ const detectOs = (ua: string): string | undefined => {
  */
 const detectBrowser = (ua: string): string | undefined => {
   if (/(?:Edg|Edge|EdgiOS)\//i.test(ua)) return "Edge";
-  if (/(?:OPR|Opera)\//i.test(ua)) return "Opera";
+  // OPT は短いので、ほかの語の一部（例: Adopt/）に当たらないよう語の頭に限る
+  if (/\b(?:OPR|Opera|OPiOS|OPT)\//i.test(ua)) return "Opera";
   if (/SamsungBrowser\//i.test(ua)) return "Samsung Internet";
   if (/(?:Firefox|FxiOS)\//i.test(ua)) return "Firefox";
   if (/(?:Chrome|CriOS)\//i.test(ua)) return "Chrome";
