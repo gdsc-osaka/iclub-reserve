@@ -1,6 +1,12 @@
 import { MembershipRole } from "~/domain/membership";
+import { ReservationStatus } from "~/domain/reservation";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
-import { createFacility, createGroup, createUser } from "../support/factories.js";
+import {
+  createFacility,
+  createGroup,
+  createReservation,
+  createUser,
+} from "../support/factories.js";
 import { expect, personas, test } from "../support/fixtures.js";
 import { findReservationsOfFacility } from "../support/lookups.js";
 import { findQueuedMails } from "../support/mail.js";
@@ -69,5 +75,41 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
           mail.bodyText.includes(reservation.id),
       ),
     ).toHaveLength(1);
+  });
+
+  test("承認済みの予約と重なる時間は申請できず、フォームに理由が出る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const member = await createUser(db);
+    await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
+    const facility = await createFacility(db);
+    // 前提: 他団体の承認済みの予約が、来週水曜の 10:00〜12:00 に入っている
+    const otherApplicant = await createUser(db);
+    const otherGroup = await createGroup(db, {
+      members: [{ userId: otherApplicant.id, role: MembershipRole.Member }],
+    });
+    await createReservation(db, {
+      groupId: otherGroup.id,
+      facilityId: facility.id,
+      createdBy: otherApplicant.id,
+      startAt: nextWeekAt(Weekday.Wednesday, 10),
+      endAt: nextWeekAt(Weekday.Wednesday, 12),
+      status: ReservationStatus.Approved,
+    });
+    await signInAs(member.id);
+
+    // その時間に重なる 10:00 から申請しようとする
+    const day = toDateKey(nextWeekAt(Weekday.Wednesday, 0));
+    await openPage(page, `/reservations/new?facility=${facility.id}&date=${day}&start=10:00`);
+    await page.getByLabel("使用人数").fill("4");
+
+    // 埋まっている理由が出て、申請のボタンは押せない（COND-001）
+    await expect(page.getByText("この時間帯はすでに埋まっています")).toBeVisible();
+    await expect(page.getByRole("button", { name: "この内容で申請する" })).toBeDisabled();
+
+    // 予約は増えていない
+    expect(await findReservationsOfFacility(db, facility.id)).toHaveLength(1);
   });
 });
