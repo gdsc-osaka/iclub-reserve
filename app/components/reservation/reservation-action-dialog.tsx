@@ -18,8 +18,19 @@ import { ReservationTransition } from "~/domain/reservation/transition";
 import { formatMonthDayParts, formatTime, toTokyoDateKey } from "~/lib/date";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
 
+/**
+ * 操作ダイアログで表示に必要な予約の項目。
+ *
+ * 一覧（ReservationListItem）と詳細（ReservationDetailFull）の両方から渡せるよう、
+ * 実際にダイアログ内で参照している最小限の項目に絞る。
+ */
+export type ReservationActionTarget = Pick<
+  ReservationListItem,
+  "id" | "facilityName" | "groupName" | "startAt" | "endAt" | "headCount"
+>;
+
 interface ReservationActionDialogProps {
-  readonly item: ReservationListItem;
+  readonly item: ReservationActionTarget;
   readonly transition: ReservationTransition;
   readonly showGroupName: boolean;
   readonly trigger: ReactNode;

@@ -1,11 +1,9 @@
-import { ChevronRight, CircleAlert } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { ReservationStatus } from "~/domain/reservation";
 import {
-  canTransition,
+  allowedTransitions,
   ReservationTransition,
   type ReservationActor,
 } from "~/domain/reservation/transition";
@@ -18,37 +16,14 @@ import {
 } from "~/lib/date";
 import { cn } from "~/lib/utils";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
-import { ReservationActionDialog } from "./reservation-action-dialog";
+import { ReservationActionButtons } from "./reservation-action-buttons";
+import {
+  isEndedReservationStatus,
+  reservationOverlapNotice,
+  ReservationOverlapNotice,
+  ReservationStatusReason,
+} from "./reservation-notices";
 import { ReservationStatusBadge } from "./reservation-status-badge";
-
-const isEndedStatus = (status: ReservationStatus): boolean =>
-  status === ReservationStatus.Withdrawn ||
-  status === ReservationStatus.Rejected ||
-  status === ReservationStatus.Cancelled ||
-  status === ReservationStatus.CancelledByStaff;
-
-const isDestructiveReason = (status: ReservationStatus): boolean =>
-  status === ReservationStatus.Rejected || status === ReservationStatus.CancelledByStaff;
-
-/**
- * 理由欄の見出し。
- *
- * 状態ごとに呼び名を変える。取り消し（団体が承認前に取り下げた）と
- * キャンセル（承認後に取りやめた）は別のことなので、同じ見出しにすると
- * どちらが起きたのか分からなくなる。
- */
-const reasonLabel = (status: ReservationStatus): string => {
-  switch (status) {
-    case ReservationStatus.Rejected:
-      return "却下理由: ";
-    case ReservationStatus.CancelledByStaff:
-      return "事務局キャンセル理由: ";
-    case ReservationStatus.Withdrawn:
-      return "取り消し理由: ";
-    default:
-      return "キャンセル理由: ";
-  }
-};
 
 /**
  * 予約一覧の 1 行分コンポーネント。
@@ -73,42 +48,23 @@ export function ReservationListRow({
   item: ReservationListItem;
   showGroupName: boolean;
   /**
-   * 見ている人。出す操作ボタンはこの人とドメインの判定（canTransition）だけで決まる。
+   * 見ている人。出す操作ボタンはこの人とドメインの判定（allowedTransitions）だけで決まる。
    * 画面側で status を見て分岐させないこと。サーバーが許す操作とすぐにずれる。
    */
   actor: ReservationActor;
   now: Date;
 }>) {
-  const isEnded = isEndedStatus(item.status);
+  const isEnded = isEndedReservationStatus(item.status);
   const isToday = isSameTokyoDay(item.startAt, now);
 
-  const canWithdraw = canTransition(item, ReservationTransition.Withdraw, actor).isOk();
-  const canCancel = canTransition(item, ReservationTransition.Cancel, actor).isOk();
-  const canApprove = canTransition(item, ReservationTransition.Approve, actor).isOk();
-  const canReject = canTransition(item, ReservationTransition.Reject, actor).isOk();
-  const canStaffCancel = canTransition(item, ReservationTransition.StaffCancel, actor).isOk();
+  const transitions = allowedTransitions(item, actor);
 
-  const hasActions = canWithdraw || canCancel || canApprove || canReject || canStaffCancel;
-
-  /*
-   * 重なりの案内は仮予約にだけ出す。承認するかどうかを決める場面と、
-   * 自分の申請が通るかどうかを気にする場面が、どちらも仮予約のときだから。
-   *
-   * 承認済みとの重なりは承認できない（COND-001）。他の仮予約との重なりは
-   * 承認を止めないが、先に承認された方だけが残るので、その旨を伝える。
-   */
-  const isProvisional = item.status === ReservationStatus.Provisional;
-  const overlapsApproved = isProvisional && (item.hasApprovedOverlap ?? false);
-  const overlapsProvisional = isProvisional && (item.hasProvisionalOverlap ?? false);
-  const isOverlapBlocked = canApprove && overlapsApproved;
-
-  const overlapNotice = overlapsApproved
-    ? canApprove
-      ? "同一時間帯に承認済みの予約があるため承認できません"
-      : "同じ時間帯に承認済みの予約があります。この申請は承認されない場合があります"
-    : overlapsProvisional
-      ? "同じ時間帯に他の仮予約があります。承認されるのはどちらか一方です"
-      : null;
+  const overlapNotice = reservationOverlapNotice({
+    status: item.status,
+    hasApprovedOverlap: item.hasApprovedOverlap,
+    hasProvisionalOverlap: item.hasProvisionalOverlap,
+    canApprove: transitions.includes(ReservationTransition.Approve),
+  });
 
   // 日本時間での月日 "9/24" と曜日 "(水)"
   const [_, month, day] = toTokyoDateKey(item.startAt).split("-");
@@ -179,112 +135,25 @@ export function ReservationListRow({
         )}
 
         {/* 予約の重なりの案内（COND-001 と、仮予約どうしの競合） */}
-        {overlapNotice !== null && (
-          <div className="mt-1 flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
-            <CircleAlert className="size-3.5 shrink-0" />
-            <span>{overlapNotice}</span>
-          </div>
-        )}
+        <ReservationOverlapNotice notice={overlapNotice} />
 
-        {/*
-         * 終了した予約の理由表示（取り消し・却下・キャンセル）。
-         *
-         * 終了していない予約では出さない。`statusReason` は却下・キャンセルの理由を入れる欄なので
-         * （INFO-001 / COND-002）、承認済みの予約に値が入っていても理由ではない。
-         * 状態を見ずに中身があるかどうかだけで出すと、承認済みの行に
-         * 「キャンセル理由」という見出しが付いてしまう。
-         */}
-        {isEnded && item.statusReason !== null && item.statusReason.trim() !== "" && (
-          <div
-            className={cn(
-              "mt-1 rounded-md border px-2.5 py-2 text-sm",
-              isDestructiveReason(item.status)
-                ? "border-destructive/30 bg-destructive/10 text-destructive"
-                : "border-border bg-muted/60 text-muted-foreground",
-            )}
-          >
-            <span className="font-medium">{reasonLabel(item.status)}</span>
-            {item.statusReason}
-          </div>
-        )}
+        {/* 終了した予約の理由（取り消し・却下・キャンセル） */}
+        <ReservationStatusReason status={item.status} reason={item.statusReason} />
       </div>
 
       {/*
        * 3. 操作ボタン群（前面に出すため relative z-10 を付与）
        */}
-      {hasActions && (
+      {transitions.length > 0 && (
         <div
           className="relative z-10 flex shrink-0 flex-wrap items-center gap-2"
           onClick={(e) => e.stopPropagation()}
         >
-          {canApprove && (
-            <ReservationActionDialog
-              item={item}
-              transition={ReservationTransition.Approve}
-              showGroupName={showGroupName}
-              disabled={isOverlapBlocked}
-              trigger={
-                <Button
-                  size="sm"
-                  variant="default"
-                  disabled={isOverlapBlocked}
-                  className="h-8 px-3 text-xs font-medium"
-                >
-                  承認
-                </Button>
-              }
-            />
-          )}
-          {canReject && (
-            <ReservationActionDialog
-              item={item}
-              transition={ReservationTransition.Reject}
-              showGroupName={showGroupName}
-              trigger={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-destructive/40 px-3 text-xs font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
-                >
-                  却下
-                </Button>
-              }
-            />
-          )}
-          {canWithdraw && (
-            <ReservationActionDialog
-              item={item}
-              transition={ReservationTransition.Withdraw}
-              showGroupName={showGroupName}
-              trigger={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-destructive/40 px-3 text-xs font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
-                >
-                  取り消し
-                </Button>
-              }
-            />
-          )}
-          {(canCancel || canStaffCancel) && (
-            <ReservationActionDialog
-              item={item}
-              transition={
-                canCancel ? ReservationTransition.Cancel : ReservationTransition.StaffCancel
-              }
-              showGroupName={showGroupName}
-              trigger={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 border-destructive/40 px-3 text-xs font-medium text-destructive hover:bg-destructive/10 hover:text-destructive"
-                >
-                  キャンセル
-                </Button>
-              }
-            />
-          )}
+          <ReservationActionButtons
+            item={item}
+            transitions={transitions}
+            showGroupName={showGroupName}
+          />
         </div>
       )}
 
