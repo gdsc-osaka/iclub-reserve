@@ -1,10 +1,13 @@
 import type { ResultAsync } from "neverthrow";
+import type { PasskeyProviderIcon } from "~/domain/authn/passkey-provider";
 import type { QueryError } from "../error";
 
 /** パスキー一覧に並ぶパスキー 1 件分のデータ */
 export interface AccountPasskeyItem {
   readonly id: string;
   readonly label: string;
+  /** 提供元のアイコン。AAGUID から提供元が分からなければ null */
+  readonly icon: PasskeyProviderIcon | null;
   readonly credentialID: string;
   readonly backedUp: boolean;
   readonly createdAt: Date | null;

@@ -83,6 +83,15 @@ describe("toPasskeyName", () => {
     expect(name).toBe("Google Password Manager");
   });
 
+  it("Better Auth の短い一覧に無い提供元でも、コミュニティの一覧にあればその名前になる", () => {
+    const name = toPasskeyName({
+      // KeePassXC
+      aaguid: "fdb141b2-5d84-443e-8a35-4698c205a502",
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
+    });
+    expect(name).toBe("KeePassXC");
+  });
+
   it("AAGUID が全桁 0 で UA があれば端末名になる", () => {
     const name = toPasskeyName({
       aaguid: "00000000-0000-0000-0000-000000000000",

@@ -202,6 +202,8 @@ describe("createAccountSettingsQuery.findByUserId", () => {
       ["pk_taro_mac", "Mac の Safari", false],
       ["pk_taro_google", "Google Password Manager", true],
     ]);
+    // 提供元が分かるものだけアイコンが付く。分からないものは画面が鍵のアイコンを出す
+    expect(passkeys.map((item) => item.icon !== null)).toEqual([false, true]);
     // まだパスキーでログインしていないので、最後に使った日時は無い
     expect(passkeys.map((item) => item.lastUsedAt)).toEqual([null, null]);
   });

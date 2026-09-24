@@ -684,59 +684,64 @@ function PasskeyCard({
                 key={pk.id}
                 className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="space-y-1">
-                  {renamingId === pk.id ? (
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <Input
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        disabled={pendingRename}
-                        className="h-8 max-w-xs text-sm"
-                        autoFocus
-                      />
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          className="h-8 px-2 text-xs"
+                <div className="flex items-start gap-3">
+                  <PasskeyIcon icon={pk.icon} />
+                  <div className="space-y-1">
+                    {renamingId === pk.id ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
                           disabled={pendingRename}
-                          onClick={() => void handleSaveRename(pk.id)}
-                        >
-                          保存
-                        </Button>
+                          className="h-8 max-w-xs text-sm"
+                          autoFocus
+                        />
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={pendingRename}
+                            onClick={() => void handleSaveRename(pk.id)}
+                          >
+                            保存
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={pendingRename}
+                            onClick={() => setRenamingId(null)}
+                          >
+                            キャンセル
+                          </Button>
+                        </div>
+                        {renameError && (
+                          <p className="text-xs font-medium text-destructive">{renameError}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{pk.label}</span>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-8 px-2 text-xs"
-                          disabled={pendingRename}
-                          onClick={() => setRenamingId(null)}
+                          className="h-6 px-1.5 text-xs text-muted-foreground"
+                          onClick={() => handleStartRename(pk)}
                         >
-                          キャンセル
+                          名前を変更
                         </Button>
                       </div>
-                      {renameError && (
-                        <p className="text-xs font-medium text-destructive">{renameError}</p>
-                      )}
+                    )}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>登録日時: {pk.createdAt ? formatDateTime(pk.createdAt) : "—"}</span>
+                      <span>
+                        最後に使った日時:{" "}
+                        {pk.lastUsedAt ? formatDateTime(pk.lastUsedAt) : "まだ使っていません"}
+                      </span>
+                      <span>
+                        {pk.backedUp ? "同期される" : "同期されない（登録した認証器だけ）"}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{pk.label}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-1.5 text-xs text-muted-foreground"
-                        onClick={() => handleStartRename(pk)}
-                      >
-                        名前を変更
-                      </Button>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>登録日時: {pk.createdAt ? formatDateTime(pk.createdAt) : "—"}</span>
-                    <span>
-                      最後に使った日時:{" "}
-                      {pk.lastUsedAt ? formatDateTime(pk.lastUsedAt) : "まだ使っていません"}
-                    </span>
-                    <span>{pk.backedUp ? "同期される" : "同期されない（登録した認証器だけ）"}</span>
                   </div>
                 </div>
 
@@ -941,5 +946,28 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * パスキーの提供元のアイコン（COND-020）。
+ *
+ * AAGUID から提供元が分かればそのアイコンを、分からなければ鍵のアイコンを出す。
+ * iPhone・Mac の iCloud キーチェーンは提供元を隠すので、鍵のアイコンになる。
+ * 名前が隣に並ぶので、アイコンは読み上げない。
+ */
+function PasskeyIcon({ icon }: Readonly<{ icon: AccountPasskeyItem["icon"] }>) {
+  return (
+    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-background">
+      {icon ? (
+        <>
+          {/* 提供元は明るい背景用と暗い背景用のアイコンを用意しているので、画面の配色に合わせる */}
+          <img src={icon.light} alt="" className="size-6 dark:hidden" />
+          <img src={icon.dark} alt="" className="hidden size-6 dark:block" />
+        </>
+      ) : (
+        <KeyRound aria-hidden className="size-5 text-muted-foreground" />
+      )}
+    </div>
   );
 }

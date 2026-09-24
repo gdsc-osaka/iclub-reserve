@@ -1,4 +1,4 @@
-import { getAuthenticatorName } from "@better-auth/passkey";
+import { findPasskeyProvider } from "./passkey-provider";
 
 /**
  * User-Agent 文字列から OS を判定する。
@@ -86,13 +86,7 @@ export const toPasskeyName = ({
 }: {
   readonly aaguid?: string | null | undefined;
   readonly userAgent?: string | null | undefined;
-}): string => {
-  const authenticatorName = getAuthenticatorName(aaguid);
-  if (authenticatorName) {
-    return authenticatorName;
-  }
-  return toDeviceName(userAgent);
-};
+}): string => findPasskeyProvider(aaguid)?.name ?? toDeviceName(userAgent);
 
 /**
  * 一覧に表示するパスキーの名前を決める（COND-020）。
@@ -111,9 +105,5 @@ export const toPasskeyLabel = ({
   if (name && name.trim() !== "") {
     return name;
   }
-  const authenticatorName = getAuthenticatorName(aaguid);
-  if (authenticatorName) {
-    return authenticatorName;
-  }
-  return "パスキー";
+  return findPasskeyProvider(aaguid)?.name ?? "パスキー";
 };
