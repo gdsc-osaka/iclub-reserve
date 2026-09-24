@@ -3,9 +3,18 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
 
+/**
+ * ローカルの D1・R2 などの状態を置くフォルダ。
+ *
+ * 普段は既定の `.wrangler/state` を使う。E2E テスト（`playwright.config.ts`）は
+ * `E2E_PERSIST_TO` で別のフォルダを渡し、開発中のデータを壊さずに毎回作り直す。
+ * wrangler の `--persist-to` と同じく、プラグインはこのフォルダの下に `v3` を足して置く。
+ */
+const persistState = process.env.E2E_PERSIST_TO ? { path: process.env.E2E_PERSIST_TO } : true;
+
 export default defineConfig({
   plugins: [
-    !process.env.VITEST && cloudflare({ viteEnvironment: { name: "ssr" } }),
+    !process.env.VITEST && cloudflare({ viteEnvironment: { name: "ssr" }, persistState }),
     tailwindcss(),
     reactRouter(),
   ],

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -48,6 +49,16 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  /*
+   * 画面が操作できる状態になった（ブラウザで React の読み込みが終わった）ことを、
+   * <html data-hydrated="true"> という印で知らせる。
+   * E2E テスト（`e2e/support/page.ts`）はこの印を待ってから操作する。
+   * 読み込みが終わる前にボタンを押しても、何も起きないことがあるため。
+   */
+  useEffect(() => {
+    document.documentElement.dataset.hydrated = "true";
+  }, []);
+
   return (
     <html lang="ja">
       <head>

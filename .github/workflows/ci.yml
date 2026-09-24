@@ -111,3 +111,48 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # E2E テスト (ADR-007)。ビルド済みのアプリを手元の Workers (miniflare) で動かし、Playwright で画面を操作する。
+  # 安定して通るのを見てから必須のチェックにする。
+  run_e2e:
+    name: E2E
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/setup@v2
+        with:
+          version: 11
+          runtime: node@24
+          cache: true
+
+      - name: Install node modules
+        run: pnpm i
+
+      # ブラウザはキャッシュしない。取り出す時間とダウンロードする時間がほぼ同じため (Playwright の推奨)
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm run build
+
+      # E2E 用の設定と DB は playwright.config.ts の webServer (e2e/prepare.ts) が用意する
+      - name: E2E
+        run: pnpm exec playwright test
+
+      # 落ちたときに、操作の記録 (trace) と画面の写真を見られるようにする
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

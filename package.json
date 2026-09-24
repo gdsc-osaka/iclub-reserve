@@ -19,6 +19,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "vitest run",
+    "test:e2e": "pnpm run build && playwright test",
     "db:auth:generate": "auth generate --output ./app/db/schema/auth.ts && oxfmt app/db/schema/auth.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply iclub-reserve-preview-db --local",
@@ -54,6 +55,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.56.0",
+    "@playwright/test": "^1.63.0",
     "@react-router/dev": "8.4.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/better-sqlite3": "^9.6.0",

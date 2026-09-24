@@ -24,6 +24,7 @@
 - [製品要件定義書 (PRD)](./docs/prd.md)
 - [RDRA成果物・要件定義](./rdra/)
 - [実装状況](./docs/implementation-status.md)
+- [設計判断の記録 (ADR)](./docs/adr/)
 - [要件変更履歴](./change-log.md)
 
 ## AI エージェント向けスキル
@@ -114,6 +115,22 @@ pnpm run db:seed --remote
 > ```bash
 > pnpm run db:studio
 > ```
+
+シードには、事務局・団体の管理者・一般メンバー・どの団体にも入っていない人・承認待ちの団体の管理者の 5 人が入っています（`scripts/seed/seed-data.ts` の `seedPersonas`）。E2E テストもこの 5 人を使うので、立場（所属する団体・役割・事務局かどうか）を変えたときは E2E も動かして確かめてください。
+
+### テスト
+
+```bash
+pnpm test          # 単体テスト（Vitest）
+pnpm run test:e2e  # E2E テスト（Playwright）。ビルドしてから画面を操作して確かめる
+```
+
+E2E テストは、ユースケース（UC）ごとに画面の主な流れと権限の境目を確かめます。方針は [ADR-007](docs/adr/007-e2e-testing.md) を参照してください。
+
+- 初めて動かす前に、ブラウザを入れておきます: `pnpm exec playwright install chromium`
+- E2E はビルド済みのアプリを `http://localhost:4173` で起動し、開発用とは別の DB（`.wrangler/e2e-state`）を毎回作り直して使います。開発サーバーを動かしたままでも実行でき、開発用のデータは消えません。
+- 特定の UC だけ動かすときは、タグで絞り込みます: `pnpm exec playwright test --grep @UC-002`（ビルド済みの場合）
+- 落ちたテストの操作の記録は `pnpm exec playwright show-report` で見られます。
 
 ## 環境とデプロイ
 
