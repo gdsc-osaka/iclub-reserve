@@ -169,10 +169,20 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
 
     // 申請フォーム（SCR-002）に、押した枠の施設・日付（パソコンでは開始時刻も）が入っている
     await expect(page).toHaveURL(/\/reservations\/new\?/);
-    await expect(page.getByRole("combobox", { name: "施設・設備" })).toHaveText(facility.name);
-    await expect(page.getByRole("button", { name: `日付 ${formatFullDate(day)}` })).toBeVisible();
+
+    /*
+     * 施設・日付の欄は、パソコンではフォームの左側にあり、スマホでは「施設・日時」のカードから開く
+     * 全画面の選択の中にある。
+     */
+    if (isMobile) await page.getByRole("button", { name: /施設・日時/ }).click();
+    const schedule = isMobile ? page.getByRole("dialog", { name: "施設・日時を選ぶ" }) : page;
+
+    await expect(schedule.getByRole("combobox", { name: "施設・設備" })).toHaveText(facility.name);
+    await expect(
+      schedule.getByRole("button", { name: `日付 ${formatFullDate(day)}` }),
+    ).toBeVisible();
     if (!isMobile) {
-      await expect(page.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
+      await expect(schedule.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
     }
   });
 
