@@ -45,11 +45,9 @@ export const test = base.extend<
    * 仮想の環境を有効にすると、ブラウザは本物の端末ではなく仮想の認証器だけを見るので、
    * どのパソコンでも「作れない」に揃う。
    *
-   * パスキーを使うテストは、この `webAuthn` に仮想の認証器を足す。
+   * パスキーを使うテストは、この `webAuthn` に仮想の認証器を足す（`e2e/support/passkey.ts`）。
    * @example
-   * await webAuthn.send("WebAuthn.addVirtualAuthenticator", {
-   *   options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true },
-   * });
+   * const authenticator = await addVirtualAuthenticator(webAuthn);
    */
   webAuthn: [
     async ({ context, page }, use) => {
