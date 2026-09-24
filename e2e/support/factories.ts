@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import * as schema from "~/db/schema";
 import { GroupStatus } from "~/domain/group";
+import { InvitationStatus } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import type { E2eDb } from "./db.js";
@@ -20,6 +21,7 @@ import type { E2eDb } from "./db.js";
 type UserRow = typeof schema.user.$inferSelect;
 type FacilityRow = typeof schema.facilityTable.$inferSelect;
 type GroupRow = typeof schema.groupTable.$inferSelect;
+type InvitationRow = typeof schema.groupInvitationTable.$inferSelect;
 type ReservationRow = typeof schema.reservationTable.$inferSelect;
 type SessionRow = typeof schema.session.$inferSelect;
 type PasskeyRow = typeof schema.passkey.$inferSelect;
@@ -108,6 +110,25 @@ export async function createGroup(
   }
 
   return group;
+}
+
+/** 団体への招待を作る。既定では、一般メンバーとしての承諾待ちで、1 週間後に期限が切れる */
+export async function createInvitation(
+  db: E2eDb,
+  values: Pick<typeof schema.groupInvitationTable.$inferInsert, "groupId" | "email" | "inviterId"> &
+    Partial<typeof schema.groupInvitationTable.$inferInsert>,
+): Promise<InvitationRow> {
+  const [row] = await db
+    .insert(schema.groupInvitationTable)
+    .values({
+      id: `inv_e2e_${uniqueSuffix()}`,
+      role: MembershipRole.Member,
+      status: InvitationStatus.Pending,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ...values,
+    })
+    .returning();
+  return row;
 }
 
 /** 予約を作る。既定では仮予約になる */
