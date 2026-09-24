@@ -284,19 +284,23 @@ export function ApplicationForm({
           <div className="flex flex-col gap-2">
             <Label htmlFor="head_count">使用人数</Label>
 
-            <Input
-              id="head_count"
-              name="head_count"
-              type="number"
-              inputMode="numeric"
-              required
-              min={RESERVATION_MIN_HEAD_COUNT}
-              value={headCount}
-              onChange={(event) => setHeadCount(event.target.value)}
-              aria-invalid={fieldErrors.headCount !== undefined}
-              aria-describedby={errorIdOf("headCount", ids.headCountError)}
-              className="sm:max-w-40"
-            />
+            {/* 単位を添えて、数だけを入れればよいことを見せる。確認・控えの「4 名」と同じ単位にする */}
+            <div className="flex items-center gap-2">
+              <Input
+                id="head_count"
+                name="head_count"
+                type="number"
+                inputMode="numeric"
+                required
+                min={RESERVATION_MIN_HEAD_COUNT}
+                value={headCount}
+                onChange={(event) => setHeadCount(event.target.value)}
+                aria-invalid={fieldErrors.headCount !== undefined}
+                aria-describedby={errorIdOf("headCount", ids.headCountError)}
+                className="w-28"
+              />
+              <span className="text-sm text-muted-foreground">名</span>
+            </div>
 
             <FieldError id={ids.headCountError} message={fieldErrors.headCount} />
           </div>
@@ -317,7 +321,7 @@ export function ApplicationForm({
               name="note"
               rows={3}
               maxLength={RESERVATION_NOTE_MAX_LENGTH}
-              placeholder="使い方や、事務局に伝えておきたいことがあれば書いてください。"
+              placeholder="利用目的や、事務局に伝えておきたいことがあれば書いてください。"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               aria-invalid={fieldErrors.note !== undefined}
@@ -325,7 +329,7 @@ export function ApplicationForm({
             />
 
             <p className="text-xs text-muted-foreground">
-              使用人数と備考は、申請した団体のメンバーと事務局だけが見られます。
+              使用人数と備考は、申請した団体のメンバーと事務局にだけ公開されます。
             </p>
 
             <FieldError id={ids.noteError} message={fieldErrors.note} />
@@ -356,7 +360,7 @@ export function ApplicationForm({
         formId={formId}
         isSubmitting={isSubmitting}
         title="この内容で申請しますか？"
-        description="申請すると仮予約として登録され、団体の管理者と事務局に通知が届きます。実際に使えるようになるのは、事務局が承認したあとです。"
+        description="申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
         submitLabel="この内容で申請する"
         submittingLabel="申請中…"
       >

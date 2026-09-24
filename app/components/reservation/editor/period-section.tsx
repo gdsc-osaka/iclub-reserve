@@ -43,7 +43,7 @@ export function PeriodSection({
 
         {draft.range === null && (
           <p className="text-sm text-muted-foreground">
-            左のカレンダーの枠を押すか、下の欄で時刻を選んでください。
+            左の時間の枠を押すか、下の欄で開始・終了の時刻を選んでください。
           </p>
         )}
       </div>

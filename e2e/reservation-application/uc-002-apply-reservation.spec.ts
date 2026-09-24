@@ -49,6 +49,10 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     // 申請できたことと、仮予約になったことが画面に出る
     await expect(page.getByText("仮予約を申請しました")).toBeVisible();
 
+    // 控えから、いま申請した予約の詳細へ進める
+    await page.getByRole("link", { name: "予約の詳細を見る" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: facility.name })).toBeVisible();
+
     // 自団体の予約一覧に、仮予約として並ぶ
     await openPage(page, "/reservations");
     const row = page.getByRole("listitem").filter({ hasText: facility.name });

@@ -175,7 +175,7 @@ export function ReservationTimeline({
                  * なぞるのはマウス・ペンだけにしている。指でも取れるようにするには
                  * この図の `touch-action` を切る必要があり、そうすると
                  * スマホでこの図の上から始めた縦スクロールが効かなくなる。
-                 * 指では、枠を押す・後ろの枠をもう一度押す、で同じことができる。
+                 * 指では、枠を押してから後ろの枠を押す、で同じことができる。
                  */
                 onPointerDown={(event) => {
                   if (event.pointerType === "touch" || event.button !== 0) return;
@@ -304,15 +304,19 @@ export function ReservationTimeline({
 /**
  * タイムラインの色の意味と、操作の仕方の説明。
  *
- * 「押すと選べる」「もう一度押すと伸びる」は見ただけでは分からないので、
+ * 「押すと選べる」「後ろの枠を押すと伸びる」は見ただけでは分からないので、
  * 凡例と同じ場所に書いている。
+ *
+ * 伸ばし方は、指でもマウスでもできる「後ろの枠を押す」を先に書く。
+ * なぞる操作はマウス・ペンだけで、スマホでは効かない（縦スクロールを優先している）。
+ * スマホの全画面の選択にも同じ説明が出るので、なぞれば伸びると読める書き方にしない。
  */
 export function ReservationTimelineLegend() {
   return (
     <ul className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
       <li className="flex items-center gap-1.5">
         <span aria-hidden className="size-3 rounded-sm border-2 border-primary bg-primary/15" />
-        選んでいる時間
+        選択中の時間帯
       </li>
       <li className="flex items-center gap-1.5">
         <span aria-hidden className="size-3 rounded-sm border border-primary/40 bg-primary/20" />
@@ -327,7 +331,7 @@ export function ReservationTimelineLegend() {
       </li>
       <li className="w-full sm:w-auto">
         枠を押すと {RESERVATION_STEP_MINUTES}{" "}
-        分選べます。そのままなぞるか、後ろの枠をもう一度押すと伸びます。
+        分選べます。続けて後ろの枠を押すと、その枠まで伸びます。マウスなら、なぞって選ぶこともできます。
       </li>
     </ul>
   );

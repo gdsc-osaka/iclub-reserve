@@ -9,14 +9,14 @@ import { ReservationStatus } from "~/domain/reservation";
 import { formatMonthDay, formatTimeRange } from "~/lib/date";
 import type { CreatedReservation } from "~/query/reservation/reservation-form";
 
-import { toCalendarPath, toFormPath } from "./paths";
+import { toCalendarPath, toDetailPath, toFormPath } from "./paths";
 
 /**
  * 申請が終わったあとの控え。
  *
- * NOTE: 申請・承認の通知メール（EVT-001）はまだ無いので、結果の確かめ方として
- * 空き状況カレンダーを案内している。届かないメールを待たせないため。
- * 通知を実装したら、ここをメールの案内に差し替えること。
+ * 結果の確かめ方として、承認・却下のメール（EVT-005・EVT-006）と予約の詳細（SCR-005）を案内する。
+ * 詳細へのボタンをいちばん目立たせるのは、申請した直後にいちばん見たいのが
+ * 「いま出した申請がどうなっているか」だから。
  */
 export function CreatedPanel({
   created,
@@ -31,7 +31,7 @@ export function CreatedPanel({
           仮予約を申請しました
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          事務局が承認するまでは、まだ利用できません。承認されたかどうかは、空き状況カレンダーで確認できます。
+          事務局が承認するまでは、まだ利用できません。承認・却下の結果はメールでお知らせします。申請の内容と状態は、予約の詳細からも確認できます。
         </p>
       </CardHeader>
 
@@ -43,7 +43,7 @@ export function CreatedPanel({
             {`${formatMonthDay(created.startAt)} ${formatTimeRange(created.startAt, created.endAt)}`}
           </SummaryItem>
           <SummaryItem label="使用人数">{`${created.headCount} 名`}</SummaryItem>
-          <SummaryItem label="備考">{created.note}</SummaryItem>
+          <SummaryItem label="備考">{created.note ?? "なし"}</SummaryItem>
 
           <div className="flex items-baseline gap-2">
             <dt className="w-20 shrink-0 text-xs text-muted-foreground">状態</dt>
@@ -55,11 +55,15 @@ export function CreatedPanel({
 
         <div className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link to={toCalendarPath(facilityId, dateKey)}>空き状況カレンダーへ戻る</Link>
+            <Link to={toDetailPath(created.id)}>予約の詳細を見る</Link>
           </Button>
 
           <Button asChild variant="outline">
             <Link to={toFormPath(facilityId, dateKey)}>続けて申請する</Link>
+          </Button>
+
+          <Button asChild variant="outline">
+            <Link to={toCalendarPath(facilityId, dateKey)}>空き状況カレンダーへ戻る</Link>
           </Button>
         </div>
       </CardContent>

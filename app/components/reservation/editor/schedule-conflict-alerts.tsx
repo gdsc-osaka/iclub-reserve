@@ -9,7 +9,7 @@ import type { ScheduleDraft } from "./use-schedule-draft";
  * 選んだ時間帯が、ほかの予約と重なっているときの案内。
  *
  * 承認済みと重なっていれば申請できない（COND-001）。
- * 仮予約とだけ重なっているなら申請はできるが、どちらを承認するかは事務局が決めるので、その旨を伝える。
+ * 仮予約とだけ重なっているなら申請はできるが、どれを承認するかは事務局が決めるので、その旨を伝える。
  *
  * 申請のボタンが押せない理由をボタンの近くで伝えるために、入力欄の側に置く。
  */
@@ -30,7 +30,7 @@ export function ScheduleConflictAlerts({
                 `${formatTimeRange(item.reservation.startAt, item.reservation.endAt)}（${item.reservation.groupName}）`,
             )
             .join("、")}
-          が承認済みです。重ねて申請することはできません（COND-001）。
+          が承認済みのため、この時間帯には申請できません。別の時間帯を選んでください。
         </AlertDescription>
       </Alert>
     );
@@ -53,9 +53,9 @@ export function ProvisionalConflictAlert() {
   return (
     <Alert className="border-amber-500/30 bg-amber-500/5">
       <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
-      <AlertTitle>同じ時間帯に、他の申請があります</AlertTitle>
+      <AlertTitle>同じ時間帯に、他の仮予約があります</AlertTitle>
       <AlertDescription>
-        まだどちらも承認されていないので、このまま申請できます。どちらを承認するかは事務局が決めます。
+        重なっている仮予約はまだ承認されていないので、このまま申請できます。どの申請を承認するかは、事務局が判断します。
       </AlertDescription>
     </Alert>
   );
