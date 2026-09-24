@@ -5,7 +5,12 @@ import { type LoginMethod, toLoginMethodOrder } from "~/domain/authn/login-metho
 import { isProfileCompleted } from "~/domain/authn/user-profile";
 import { authClient } from "~/lib/auth/auth-client";
 import { isPasskeyCancelledError, toAuthErrorMessage } from "~/lib/auth/auth-error-message";
-import { PASSKEY_SUGGEST_PATH, WELCOME_PATH, withRedirectTo } from "~/lib/auth/auth-redirect";
+import {
+  ACCOUNT_PATH,
+  PASSKEY_SUGGEST_PATH,
+  WELCOME_PATH,
+  withRedirectTo,
+} from "~/lib/auth/auth-redirect";
 import { rememberLastLoginMethod } from "~/lib/auth/last-login-method-cookie";
 import { shouldSuggestPasskeyOnThisDevice } from "~/lib/auth/passkey-prompt-storage";
 import { detectPasskeySupport, usePasskeySupport } from "~/lib/auth/passkey-support";
@@ -52,6 +57,40 @@ export interface LoginForm {
   /** 認証コードの入力をやめて、メールアドレスの入力へ戻る */
   readonly backToEmail: () => void;
 }
+
+/**
+ * ログイン完了後の遷移先パスを解決する純粋関数（テスト用・COND-019）。
+ */
+export const resolveLoginNextPath = async ({
+  user,
+  method,
+  redirectTo,
+  detectPasskeySupportFn = detectPasskeySupport,
+  shouldSuggestPasskeyFn = shouldSuggestPasskeyOnThisDevice,
+}: {
+  readonly user: { readonly name: string };
+  readonly method: LoginMethod;
+  readonly redirectTo: string;
+  readonly detectPasskeySupportFn?: () => Promise<{ canRegisterOnThisDevice: boolean }>;
+  readonly shouldSuggestPasskeyFn?: () => boolean;
+}): Promise<string> => {
+  if (!isProfileCompleted(user)) return withRedirectTo(WELCOME_PATH, redirectTo);
+
+  // パスキーでログインできた人は、当然すでにパスキーを持っている。
+  if (method === "passkey") return redirectTo;
+
+  // 戻り先のパスが /account のときは、パスキーを勧める画面（SCR-015）を挟まない（COND-019 再ログイン導線）
+  const redirectToPathname = redirectTo.split("?")[0];
+  if (redirectToPathname === ACCOUNT_PATH) return redirectTo;
+
+  const { canRegisterOnThisDevice } = await detectPasskeySupportFn();
+
+  if (canRegisterOnThisDevice && shouldSuggestPasskeyFn()) {
+    return withRedirectTo(PASSKEY_SUGGEST_PATH, redirectTo);
+  }
+
+  return redirectTo;
+};
 
 /**
  * ログインの段取り。
@@ -120,30 +159,16 @@ export const useLoginForm = ({
    *
    * 1. お名前がまだの人（アカウントができたばかりの人）はセットアップ画面へ。
    *    パスキーの登録もその画面が続けて勧めるので、ここでは何もしない。
-   * 2. この端末にパスキーを保存できて、勧める頃合いなら、勧める画面へ。
+   * 2. 戻り先のパスが /account のときは、パスキーを勧める画面（SCR-015）を挟まない（COND-019）。
+   * 3. この端末にパスキーを保存できて、勧める頃合いなら、勧める画面へ。
    *    すでにパスキーを持っているかどうかは、その画面のローダーが確かめる。
-   * 3. どちらでもなければ、元いたページへ。
+   * 4. どちらでもなければ、元いたページへ。
    *
    * 端末の判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
    * 判定が終わる前に認証を終えた人に、勧めそこねてしまう。
    */
-  const toNextPath = async (
-    user: { readonly name: string },
-    method: LoginMethod,
-  ): Promise<string> => {
-    if (!isProfileCompleted(user)) return withRedirectTo(WELCOME_PATH, redirectTo);
-
-    // パスキーでログインできた人は、当然すでにパスキーを持っている。
-    if (method === "passkey") return redirectTo;
-
-    const { canRegisterOnThisDevice } = await detectPasskeySupport();
-
-    if (canRegisterOnThisDevice && shouldSuggestPasskeyOnThisDevice()) {
-      return withRedirectTo(PASSKEY_SUGGEST_PATH, redirectTo);
-    }
-
-    return redirectTo;
-  };
+  const toNextPath = (user: { readonly name: string }, method: LoginMethod): Promise<string> =>
+    resolveLoginNextPath({ user, method, redirectTo });
 
   /**
    * ログインを終えて、次の画面へ進む。

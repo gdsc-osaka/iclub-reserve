@@ -19,26 +19,49 @@ type SessionResult = Awaited<ReturnType<ReturnType<typeof getAuth>["api"]["getSe
 export type SessionUser = NonNullable<SessionResult>["user"];
 
 /**
+ * 利用中のセッション情報。
+ * トークンはブラウザや画面コンポーネントへ渡さないため、含めない（COND-019 / 実装課題 8）。
+ */
+export type RequestSession = {
+  readonly id: string;
+  readonly createdAt: Date;
+};
+
+/**
  * ミドルウェアが調べたログイン状態を、同じリクエストのローダー・アクションへ渡す入れ物。
  *
  * React Router の「コンテキスト」はリクエストごとに独立しているため、
  * 別の人のログイン状態が混ざることはない。
  */
 const sessionUserContext = createContext<SessionUser | null>(null);
+const requestSessionContext = createContext<RequestSession | null>(null);
 
 /** ローダー・アクションが受け取る `context`。 */
 type LoaderContext = Readonly<RouterContextProvider>;
+
+type AuthSessionData = {
+  readonly user: SessionUser;
+  readonly session: RequestSession;
+} | null;
 
 /**
  * Better Auth にセッションを問い合わせる。
  *
  * 1 リクエストにつき 1 回で済ませたいので、画面側からは呼ばない。
- * 画面側は `getRequestUser` / `requireRequestUser` を使うこと。
+ * 画面側は `getRequestUser` / `requireRequestUser` および
+ * `getRequestSession` / `requireRequestSession` を使うこと。
  */
-const getSessionUser = async (request: Request): Promise<SessionUser | null> => {
-  const session = await getAuth().api.getSession({ headers: request.headers });
+const getAuthSession = async (request: Request): Promise<AuthSessionData> => {
+  const result = await getAuth().api.getSession({ headers: request.headers });
+  if (!result) return null;
 
-  return session?.user ?? null;
+  return {
+    user: result.user,
+    session: {
+      id: result.session.id,
+      createdAt: result.session.createdAt,
+    },
+  };
 };
 
 /**
@@ -48,15 +71,17 @@ const getSessionUser = async (request: Request): Promise<SessionUser | null> => 
  * 認証コードでのログインは未登録のメールアドレスならその場でアカウントを作るため、
  * 名前が空のままアプリに入れてしまうのを防いでいる。
  */
-const requireProfileCompletedUser = async (request: Request): Promise<SessionUser> => {
+const requireProfileCompletedSession = async (
+  request: Request,
+): Promise<NonNullable<AuthSessionData>> => {
   // ログイン・セットアップを終えたあとに戻すページ（＝今アクセスしようとしたページ）。
   const redirectTo = toCurrentPath(request);
 
-  const user = await getSessionUser(request);
-  if (!user) throw redirect(withRedirectTo(LOGIN_PATH, redirectTo));
-  if (!isProfileCompleted(user)) throw redirect(withRedirectTo(WELCOME_PATH, redirectTo));
+  const data = await getAuthSession(request);
+  if (!data) throw redirect(withRedirectTo(LOGIN_PATH, redirectTo));
+  if (!isProfileCompleted(data.user)) throw redirect(withRedirectTo(WELCOME_PATH, redirectTo));
 
-  return user;
+  return data;
 };
 
 /**
@@ -76,11 +101,12 @@ export const requireAuthentication: MiddlewareFunction<Response> = async (
   { request, context },
   next,
 ) => {
-  const user = isPublicPath(toCurrentPathname(request))
-    ? await getSessionUser(request)
-    : await requireProfileCompletedUser(request);
+  const authData = isPublicPath(toCurrentPathname(request))
+    ? await getAuthSession(request)
+    : await requireProfileCompletedSession(request);
 
-  context.set(sessionUserContext, user);
+  context.set(sessionUserContext, authData?.user ?? null);
+  context.set(requestSessionContext, authData?.session ?? null);
 
   return next();
 };
@@ -113,4 +139,28 @@ export const requireRequestUser = (context: LoaderContext): SessionUser => {
   }
 
   return user;
+};
+
+/**
+ * このリクエストの利用中セッションを取り出す。ログインしていなければ null。
+ *
+ * @param context ローダー・アクションが受け取る `context`
+ */
+export const getRequestSession = (context: LoaderContext): RequestSession | null =>
+  context.get(requestSessionContext);
+
+/**
+ * ログイン必須の画面で、利用中のセッション情報を取り出す。
+ *
+ * @param context ローダー・アクションが受け取る `context`
+ */
+export const requireRequestSession = (context: LoaderContext): RequestSession => {
+  const session = getRequestSession(context);
+  if (!session) {
+    throw new Error(
+      "ログインが必要な画面でセッションを取得できませんでした。isPublicPath の設定を確認してください。",
+    );
+  }
+
+  return session;
 };
