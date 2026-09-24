@@ -1,7 +1,6 @@
 import { CalendarPlus, RefreshCw } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
 
+import { InfoItem } from "~/components/info-item";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Separator } from "~/components/ui/separator";
 import type { Group } from "~/domain/group";
@@ -53,26 +52,5 @@ export function GroupInfoCard({
         </dl>
       </CardContent>
     </Card>
-  );
-}
-
-/** 「項目名 + 値」を 1 組だけ表示する。カード内の各情報はすべてこの形にそろえている。 */
-function InfoItem({
-  icon: Icon,
-  label,
-  children,
-}: Readonly<{
-  icon: LucideIcon;
-  label: string;
-  children: ReactNode;
-}>) {
-  return (
-    <div className="space-y-1">
-      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Icon aria-hidden className="size-3.5" />
-        {label}
-      </dt>
-      <dd className="text-sm font-medium">{children}</dd>
-    </div>
   );
 }

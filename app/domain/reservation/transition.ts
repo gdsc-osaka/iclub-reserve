@@ -215,6 +215,20 @@ export const canTransition = (
   canPerformTransition(transition, actor).andThen(() => canTransitionFrom(reservation, transition));
 
 /**
+ * その人がその予約に対して実行できる状態変更を、すべて挙げる。
+ *
+ * 画面に出す操作ボタンは、この結果だけで決める（予約一覧・予約詳細）。
+ * 並びは {@link ReservationTransition} の定義順で、画面のボタンの並びとは関係ない。
+ */
+export const allowedTransitions = (
+  reservation: Pick<Reservation, "status">,
+  actor: ReservationActor,
+): readonly ReservationTransition[] =>
+  Object.values(ReservationTransition).filter((transition) =>
+    canTransition(reservation, transition, actor).isOk(),
+  );
+
+/**
  * その操作を、その人が実行してよいかだけを判定する（COND-009）。予約のいまの状態は見ない。
  *
  * 普段は {@link canTransition} から呼ばれる。単独で使うのは、予約を引く前に確かめたいとき。
