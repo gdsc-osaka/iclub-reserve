@@ -27,5 +27,9 @@ export type Weekday = (typeof Weekday)[keyof typeof Weekday];
 export const nextWeekAt = (weekday: Weekday, hour: number, minute = 0): Date =>
   atTokyoTime(addDays(startOfTokyoWeek(new Date()), 7 + weekday), hour, minute);
 
+/** 先週の `weekday` の、日本時間 `hour` 時 `minute` 分。「過去の予約」を作るときに使う */
+export const lastWeekAt = (weekday: Weekday, hour: number, minute = 0): Date =>
+  atTokyoTime(addDays(startOfTokyoWeek(new Date()), -7 + weekday), hour, minute);
+
 /** 画面の URL に渡す日付（`2026-09-30` の形） */
 export const toDateKey = (date: Date): string => toTokyoDateKey(date);
