@@ -1,26 +1,16 @@
 import { env } from "cloudflare:workers";
-import { Calendar, CheckCircle2, CircleAlert, Plus, Wrench } from "lucide-react";
-import { useEffect } from "react";
+import { Calendar, CircleAlert, Plus, Wrench } from "lucide-react";
 import { isRouteErrorResponse, Link } from "react-router";
-import { toast } from "sonner";
 
-import {
-  FacilityStatusBadge,
-  facilityStatusLabel,
-} from "~/components/facility/facility-status-badge";
-import { FacilityStatusDialog } from "~/components/facility/facility-status-dialog";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { FacilityStatusBadge } from "~/components/facility/facility-status-badge";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
 import { createDb } from "~/infra/db";
 import { createFacilityManagementListQuery } from "~/infra/facility/facility-management-list-query";
-import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import type { FacilityManagementItem } from "~/query/facility/facility-management-list";
-import { facilityActionErrors } from "~/routes/_shared/facility-error.server";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
-import { changeFacilityStatusUseCase } from "~/usecases/facility/change-facility-status";
 import { listFacilitiesForManagementUseCase } from "~/usecases/facility/list-facilities-for-management";
 
 import type { Route } from "./+types/route";
@@ -57,111 +47,13 @@ export async function loader({ context }: Route.LoaderArgs) {
 }
 
 /**
- * 事務局による施設の有効化・無効化アクション（UC-016）。
+ * 施設・設備の一覧（SCR-009）。
+ *
+ * 有効・無効の切り替えはここには置かず、各施設・設備の編集画面（`/staff/facilities/:facilityId`）で行う（UC-016）。
+ * 滅多に行わない操作なので、毎回開く一覧に並べると押し間違えの元になるだけだから。
  */
-export async function action({ request, context }: Route.ActionArgs) {
-  const user = requireRequestUser(context);
-  const formData = await request.formData();
-
-  if (formData.get("intent") !== "change-status") {
-    return { formError: "不正な操作です。" };
-  }
-
-  const rawFacilityId = formData.get("facilityId");
-  const rawStatus = formData.get("status");
-  const facilityId = typeof rawFacilityId === "string" ? rawFacilityId : "";
-  const status = typeof rawStatus === "string" ? rawStatus : "";
-
-  const db = createDb(env.DB);
-  const result = await changeFacilityStatusUseCase(
-    { facilityRepository: createFacilityRepository(db) },
-    {
-      facilityId,
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-      status,
-      now: new Date(),
-    },
-  );
-
-  if (result.isErr()) {
-    return facilityActionErrors(
-      { where: "staff.facilities.change-status", userId: user.id },
-      result.error,
-    );
-  }
-
-  return {
-    success: {
-      facilityName: result.value.name,
-      isActive: result.value.isActive,
-    },
-  };
-}
-
-/** 操作の結果として知らせる内容 */
-interface ActionResultMessage {
-  readonly kind: "success" | "error";
-  readonly title: string;
-  readonly description: string;
-}
-
-const ERROR_TOAST_DURATION_MS = 10_000;
-
-const toActionResultMessage = (
-  actionData: Route.ComponentProps["actionData"],
-): ActionResultMessage | null => {
-  if (actionData === undefined) {
-    return null;
-  }
-
-  if ("formError" in actionData && actionData.formError) {
-    return {
-      kind: "error",
-      title: "状態を変更できませんでした",
-      description: actionData.formError,
-    };
-  }
-
-  if ("success" in actionData && actionData.success) {
-    const { facilityName, isActive } = actionData.success;
-    return {
-      kind: "success",
-      title: `${facilityName} を${facilityStatusLabel(isActive)}にしました`,
-      description: isActive
-        ? "利用者がこの施設・設備を予約できるようになりました。"
-        : "この施設・設備の新規予約受付を停止しました。",
-    };
-  }
-
-  return null;
-};
-
-export default function StaffFacilitiesPage({ loaderData, actionData }: Route.ComponentProps) {
+export default function StaffFacilitiesPage({ loaderData }: Route.ComponentProps) {
   const { items } = loaderData;
-  const resultMessage = toActionResultMessage(actionData);
-
-  /*
-   * 操作の結果は、画面上部に一時的に出す通知（トースト）で知らせる。
-   *
-   * actionData は送信のたびに新しいオブジェクトになるので、それが変わったときに 1 回だけ出す。
-   * resultMessage は描画のたびに作り直されるので、依存に入れると描画のたびに通知が出てしまう。
-   */
-  useEffect(() => {
-    const message = toActionResultMessage(actionData);
-    if (message === null) {
-      return;
-    }
-
-    if (message.kind === "success") {
-      toast.success(message.title, { description: message.description });
-    } else {
-      toast.error(message.title, {
-        description: message.description,
-        duration: ERROR_TOAST_DURATION_MS,
-      });
-    }
-  }, [actionData]);
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-8 max-w-7xl mx-auto w-full">
@@ -170,7 +62,7 @@ export default function StaffFacilitiesPage({ loaderData, actionData }: Route.Co
         <div>
           <h1 className="text-2xl font-bold tracking-tight">施設・設備の管理</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            事務局スタッフ向けに施設・設備の登録、編集、有効化・無効化を行います。
+            事務局スタッフ向けに施設・設備の登録と編集を行います。有効・無効の切り替えは各施設・設備の編集画面で行います。
           </p>
         </div>
         <Button asChild className="shrink-0">
@@ -180,21 +72,6 @@ export default function StaffFacilitiesPage({ loaderData, actionData }: Route.Co
           </Link>
         </Button>
       </div>
-
-      {/* JavaScript が無効な環境向けの通知バー */}
-      {resultMessage !== null && (
-        <noscript>
-          <Alert variant={resultMessage.kind === "error" ? "destructive" : "default"}>
-            {resultMessage.kind === "error" ? (
-              <CircleAlert className="size-4" />
-            ) : (
-              <CheckCircle2 className="size-4" />
-            )}
-            <AlertTitle>{resultMessage.title}</AlertTitle>
-            <AlertDescription>{resultMessage.description}</AlertDescription>
-          </Alert>
-        </noscript>
-      )}
 
       {/* 施設一覧 */}
       {items.length === 0 ? (
@@ -272,11 +149,6 @@ function FacilityCard({ facility }: Readonly<{ facility: FacilityManagementItem 
         <Button variant="outline" size="sm" asChild>
           <Link to={`/staff/facilities/${facility.id}`}>編集</Link>
         </Button>
-        <FacilityStatusDialog
-          facilityId={facility.id}
-          facilityName={facility.name}
-          targetStatus={facility.isActive ? "inactive" : "active"}
-        />
       </CardFooter>
     </Card>
   );

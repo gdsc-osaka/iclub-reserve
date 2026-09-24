@@ -76,6 +76,9 @@ entities:
         "UC-006",
         "UC-007",
         "UC-008",
+        "UC-032",
+        "UC-033",
+        "UC-034",
         "SCR-001",
         "SCR-002",
         "SCR-003",
@@ -195,6 +198,7 @@ entities:
         "UC-010",
         "UC-013",
         "UC-014",
+        "UC-035",
         "SCR-001",
         "SCR-002",
         "SCR-003",
@@ -204,6 +208,7 @@ entities:
         "SCR-008",
         "SCR-016",
         "SCR-018",
+        "SCR-022",
       ]
 
   - id: "INFO-004"
@@ -278,7 +283,7 @@ entities:
       - target: "INFO-003"
         type: "N:1"
         label: "団体"
-    traces_to: ["UC-011", "UC-012", "UC-022", "SCR-007"]
+    traces_to: ["UC-011", "UC-012", "UC-022", "UC-035", "SCR-007", "SCR-008", "SCR-022"]
 
   - id: "INFO-006"
     name: "ユーザー"
@@ -350,6 +355,7 @@ entities:
         "UC-027",
         "UC-028",
         "UC-029",
+        "UC-035",
         "SCR-005",
         "SCR-007",
         "SCR-012",
@@ -589,7 +595,7 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "ログインしているユーザー"
-    traces_to: ["UC-019", "UC-020", "UC-023", "UC-031", "SCR-021"]
+    traces_to: ["UC-019", "UC-020", "UC-023", "UC-031", "UC-036", "SCR-021"]
 ---
 
 # 情報モデル（横断）

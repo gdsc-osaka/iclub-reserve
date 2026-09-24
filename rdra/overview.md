@@ -49,19 +49,19 @@ contexts:
   - id: "BIZ-001"
     name: "reservation-application"
     display_name: "予約申請"
-    description: "団体による施設・設備の空き確認、仮予約申請・取り消し・キャンセル・変更。"
+    description: "団体による施設・設備の空き確認、仮予約申請・取り消し・キャンセル・変更、自団体の予約の一覧と予約の詳細の確認。"
     primary_actors: ["ACTOR-002"]
     goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005"]
   - id: "BIZ-002"
     name: "reservation-approval"
     display_name: "予約承認"
-    description: "事務局による仮予約の承認・却下、直接予約の作成・変更、メッセージ送受信。"
+    description: "事務局による全団体の予約の一覧確認、仮予約の承認・却下、直接予約の作成・変更、メッセージ送受信。"
     primary_actors: ["ACTOR-001"]
     goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005", "GOAL-007"]
   - id: "BIZ-003"
     name: "group-management"
     display_name: "団体管理"
-    description: "団体アカウントの作成、招待によるメンバー管理、管理者の昇格・降格、団体情報の編集、事務局による有効化・無効化。"
+    description: "団体アカウントの作成、所属団体の確認、招待によるメンバー管理、管理者の昇格・降格、団体情報の編集、事務局による有効化・無効化。"
     primary_actors: ["ACTOR-001", "ACTOR-002"]
     goals: ["GOAL-001"]
   - id: "BIZ-004"
@@ -79,7 +79,7 @@ contexts:
   - id: "BIZ-006"
     name: "user-authentication"
     display_name: "ユーザー認証・権限"
-    description: "阪大関係者のみに利用を限定するアカウント登録（メール認証コード）と、認証コード・パスキーによるログイン。パスワードは扱わない。将来的にSSO連携を想定。利用者自身が氏名・メールアドレス・パスキー・ログイン中の端末を管理するアカウント設定と、事務局による事務局権限の付与（招待と承諾）・剥奪を含む。"
+    description: "阪大関係者のみに利用を限定するアカウント登録（メール認証コード）と、認証コード・パスキーによるログイン・ログアウト。パスワードは扱わない。将来的にSSO連携を想定。利用者自身が氏名・メールアドレス・パスキー・ログイン中の端末を管理するアカウント設定と、事務局による事務局権限の付与（招待と承諾）・剥奪を含む。"
     primary_actors: ["ACTOR-001", "ACTOR-002"]
     goals: ["GOAL-006", "GOAL-001", "GOAL-002", "GOAL-007"]
   - id: "BIZ-007"
