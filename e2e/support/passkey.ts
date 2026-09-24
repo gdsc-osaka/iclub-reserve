@@ -63,3 +63,28 @@ export async function disablePasskeyAutofill(page: Page): Promise<void> {
     }
   });
 }
+
+/**
+ * 「この端末に組み込まれた認証器があるか」「自動入力に対応しているか」の答えを、どちらも「いいえ」に差し替える。
+ *
+ * Firefox と WebKit には Chromium の仮想の認証器（CDP）が無いので、代わりにこれで
+ * 「パスキーを作れない端末」に揃える（`e2e/support/fixtures.ts` の `virtualWebAuthn`）。
+ * テストから直接呼ぶことはない。
+ */
+export async function hidePlatformAuthenticator(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    // この関数はブラウザの中で動く。E2E の型にはブラウザの型が無いので、使う所だけ型を書く
+    const credential = (
+      globalThis as {
+        PublicKeyCredential?: {
+          isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
+          isConditionalMediationAvailable?: () => Promise<boolean>;
+        };
+      }
+    ).PublicKeyCredential;
+    if (credential) {
+      credential.isUserVerifyingPlatformAuthenticatorAvailable = () => Promise.resolve(false);
+      credential.isConditionalMediationAvailable = () => Promise.resolve(false);
+    }
+  });
+}

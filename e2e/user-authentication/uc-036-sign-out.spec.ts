@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { session } from "~/db/schema";
+import { signOutFromMenu } from "../support/account-menu.js";
 import { createUser } from "../support/factories.js";
 import { expect, test } from "../support/fixtures.js";
 import { openPage } from "../support/page.js";
@@ -12,14 +13,14 @@ test.describe("UC-036 ログアウトする", { tag: "@UC-036" }, () => {
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const user = await createUser(db);
     await signInAs(user.id);
 
-    // 画面の隅のアカウントのメニューからログアウトする
+    // アカウントのメニューからログアウトする
     await openPage(page, "/");
-    await page.getByRole("button", { name: new RegExp(user.email) }).click();
-    await page.getByRole("menuitem", { name: "ログアウト" }).click();
+    await signOutFromMenu(page, isMobile, user.email);
 
     await expect(page).toHaveURL("/login");
     const rows = await db.select().from(session).where(eq(session.userId, user.id));

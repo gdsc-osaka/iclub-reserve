@@ -114,10 +114,26 @@ jobs:
 
   # E2E テスト (ADR-007)。ビルド済みのアプリを手元の Workers (miniflare) で動かし、Playwright で画面を操作する。
   # 安定して通るのを見てから必須のチェックにする。
+  # ブラウザごとに別のジョブにして、並行して動かす (playwright.config.ts の projects)。
   run_e2e:
-    name: E2E
+    name: E2E (${{ matrix.project }})
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    strategy:
+      # 1 つのブラウザで落ちても、ほかのブラウザの結果は最後まで見る
+      fail-fast: false
+      matrix:
+        include:
+          - project: chromium
+            browser: chromium
+          - project: firefox
+            browser: firefox
+          - project: webkit
+            browser: webkit
+          - project: mobile-chrome
+            browser: chromium
+          - project: mobile-safari
+            browser: webkit
 
     steps:
       - name: Checkout repository
@@ -137,21 +153,21 @@ jobs:
 
       # ブラウザはキャッシュしない。取り出す時間とダウンロードする時間がほぼ同じため (Playwright の推奨)
       - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
 
       - name: Build
         run: pnpm run build
 
       # E2E 用の設定と DB は playwright.config.ts の webServer (e2e/prepare.ts) が用意する
       - name: E2E
-        run: pnpm exec playwright test
+        run: pnpm exec playwright test --project=${{ matrix.project }}
 
       # 落ちたときに、操作の記録 (trace) と画面の写真を見られるようにする
       - name: Upload Playwright report
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: |
             playwright-report/
             test-results/

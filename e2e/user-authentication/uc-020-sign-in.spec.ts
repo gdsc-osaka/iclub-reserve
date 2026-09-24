@@ -1,3 +1,4 @@
+import { expectSignedInAs } from "../support/account-menu.js";
 import { signInWithCode } from "../support/auth.js";
 import { createUser } from "../support/factories.js";
 import { expect, test } from "../support/fixtures.js";
@@ -11,15 +12,15 @@ import { addVirtualAuthenticator, disablePasskeyAutofill } from "../support/pass
  * 画面で認証コードやパスキーを使ってログインする。
  */
 test.describe("UC-020 ログインする", { tag: "@UC-020" }, () => {
-  test("登録済みの人が認証コードでログインできる", async ({ page, db }) => {
+  test("登録済みの人が認証コードでログインできる", async ({ page, db, isMobile }) => {
     const user = await createUser(db);
 
     await openPage(page, "/login");
     await signInWithCode(page, db, user.email);
 
-    // ダッシュボードに移り、画面の隅のアカウントのメニューに本人が出る
+    // ダッシュボードに移り、アカウントのメニューに本人が出る
     await expect(page).toHaveURL("/");
-    await expect(page.getByRole("button", { name: new RegExp(user.email) })).toBeVisible();
+    await expectSignedInAs(page, isMobile, user.email);
   });
 
   test("ログインが要る画面から来た人は、ログインの後に元の画面へ戻る", async ({ page, db }) => {
@@ -41,6 +42,7 @@ test.describe("UC-020 ログインする", { tag: "@UC-020" }, () => {
     db,
     signInAs,
     webAuthn,
+    isMobile,
   }) => {
     const user = await createUser(db);
     await addVirtualAuthenticator(webAuthn);
@@ -61,6 +63,6 @@ test.describe("UC-020 ログインする", { tag: "@UC-020" }, () => {
     await page.getByRole("button", { name: "パスキーでログイン" }).click();
 
     await expect(page).toHaveURL("/");
-    await expect(page.getByRole("button", { name: new RegExp(user.email) })).toBeVisible();
+    await expectSignedInAs(page, isMobile, user.email);
   });
 });
