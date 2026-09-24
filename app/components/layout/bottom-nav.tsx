@@ -127,7 +127,7 @@ function OverflowMenu({ user, items }: Readonly<{ user: ShellUser; items: readon
           </div>
 
           <SheetClose asChild>
-            <Button variant="outline" asChild className="justify-start">
+            <Button variant="outline" asChild>
               <Link to="/account">
                 <Settings aria-hidden className="size-4" />
                 アカウント設定

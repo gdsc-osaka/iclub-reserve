@@ -21,11 +21,13 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -425,21 +427,33 @@ function EmailChangeDialog({
     revalidator.revalidate();
   };
 
+  /*
+   * 途中でやめられるのは「キャンセル」と Esc だけにする。
+   *
+   * Dialog ではなく AlertDialog にしているのは、外側を押しただけで閉じて、
+   * 届いた認証コードを入れる前に最初からやり直しになるのを防ぐため。
+   * 通信中は Esc でも閉じない。閉じたあとに応答が返ると、次に開いたとき途中の段階から始まってしまう。
+   */
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent
+        className="data-[size=default]:max-w-[calc(100%-2rem)] data-[size=default]:sm:max-w-md"
+        onEscapeKeyDown={(e) => {
+          if (pending) e.preventDefault();
+        }}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>
             {step === 1 && "メールアドレスの変更 (1/3)"}
             {step === 2 && "現在のアドレスでの確認 (2/3)"}
             {step === 3 && "新しいアドレスでの確認 (3/3)"}
-          </DialogTitle>
-          <DialogDescription>
+          </AlertDialogTitle>
+          <AlertDialogDescription>
             {step === 1 && "新しく設定したい大阪大学のメールアドレスを入力してください。"}
             {step === 2 && "本人確認のため、現在のアドレスへ届いた認証コードを入力してください。"}
             {step === 3 && "新しいメールアドレスへ届いた認証コードを入力してください。"}
-          </DialogDescription>
-        </DialogHeader>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
 
         {errorText && (
           <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
@@ -464,19 +478,12 @@ function EmailChangeDialog({
                 {ALLOWED_EMAIL_DOMAINS_LABEL} のアドレスがご利用いただけます。
               </p>
             </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleOpenChange(false)}
-                disabled={pending}
-              >
-                キャンセル
-              </Button>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={pending}>キャンセル</AlertDialogCancel>
               <Button type="submit" disabled={pending || newEmail.trim() === ""}>
                 {pending ? "送信中…" : "次へ（認証コード送信）"}
               </Button>
-            </DialogFooter>
+            </AlertDialogFooter>
           </form>
         )}
 
@@ -506,6 +513,7 @@ function EmailChangeDialog({
                 setStep(1);
               }}
             />
+            <EmailChangeCancelFooter pending={pending} />
           </div>
         )}
 
@@ -541,14 +549,26 @@ function EmailChangeDialog({
                 setStep(2);
               }}
               onBack={() => {
+                // 打ち間違えた新しいアドレスを直すため、最初の段階へ戻す。
+                // 2 段階目のコードは使い切っているので、そこへ戻っても先へ進めない
                 setErrorText(null);
-                setStep(2);
+                setStep(1);
               }}
             />
+            <EmailChangeCancelFooter pending={pending} />
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/** 認証コードを入れる段階で、変更をやめるためのフッター */
+function EmailChangeCancelFooter({ pending }: Readonly<{ pending: boolean }>) {
+  return (
+    <AlertDialogFooter>
+      <AlertDialogCancel disabled={pending}>キャンセル</AlertDialogCancel>
+    </AlertDialogFooter>
   );
 }
 
@@ -873,41 +893,19 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
               </div>
 
               {!sess.isCurrent && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isRevoking}
-                      className="self-start text-destructive hover:bg-destructive/10 sm:self-center"
-                    >
-                      ログアウト
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>端末からログアウトしますか？</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        「{sess.deviceName}
-                        」をログアウトします。この端末で再度利用するにはログインが必要になります。
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                      <AlertDialogAction
-                        variant="destructive"
-                        onClick={() => {
-                          fetcher.submit(
-                            { intent: "revoke-session", sessionId: sess.id },
-                            { method: "post" },
-                          );
-                        }}
-                      >
-                        ログアウトする
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <RevokeConfirmDialog
+                  triggerLabel="ログアウト"
+                  triggerClassName="self-start text-destructive hover:bg-destructive/10 sm:self-center"
+                  title="端末からログアウトしますか？"
+                  description={`「${sess.deviceName}」をログアウトします。この端末で再度利用するにはログインが必要になります。`}
+                  disabled={isRevoking}
+                  onConfirm={() => {
+                    fetcher.submit(
+                      { intent: "revoke-session", sessionId: sess.id },
+                      { method: "post" },
+                    );
+                  }}
+                />
               )}
             </div>
           ))}
@@ -915,37 +913,67 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
 
         {otherSessions.length > 0 && (
           <div className="flex justify-end">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" disabled={isRevoking}>
-                  この端末以外をすべてログアウト
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>他のすべての端末からログアウトしますか？</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    現在利用中のこの端末以外の、他のすべての端末（{otherSessions.length}
-                    台）からログアウトします。
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                  <AlertDialogAction
-                    variant="destructive"
-                    onClick={() => {
-                      fetcher.submit({ intent: "revoke-other-sessions" }, { method: "post" });
-                    }}
-                  >
-                    ログアウトする
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <RevokeConfirmDialog
+              triggerLabel="この端末以外をすべてログアウト"
+              title="他のすべての端末からログアウトしますか？"
+              description={`現在利用中のこの端末以外の、他のすべての端末（${otherSessions.length} 台）からログアウトします。`}
+              disabled={isRevoking}
+              onConfirm={() => {
+                fetcher.submit({ intent: "revoke-other-sessions" }, { method: "post" });
+              }}
+            />
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * 端末をログアウトさせる前の確認（UC-031）。
+ *
+ * AlertDialog ではなく Dialog にしているのは、外側を押して閉じても「やめる」と同じで困らないため。
+ * ログアウトさせた端末も、ログインし直せばまた使える。
+ */
+function RevokeConfirmDialog({
+  triggerLabel,
+  triggerClassName,
+  title,
+  description,
+  disabled,
+  onConfirm,
+}: Readonly<{
+  triggerLabel: string;
+  triggerClassName?: string;
+  title: string;
+  description: string;
+  disabled: boolean;
+  onConfirm: () => void;
+}>) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={disabled} className={triggerClassName}>
+          {triggerLabel}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">キャンセル</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button variant="destructive" onClick={onConfirm}>
+              ログアウトする
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
