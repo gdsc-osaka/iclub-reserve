@@ -78,14 +78,32 @@ export function ReservationActionButtons({
           }
         />
       )}
-      {(canCancel || canStaffCancel) && (
+      {canCancel && (
         <ReservationActionDialog
           item={item}
-          transition={canCancel ? ReservationTransition.Cancel : ReservationTransition.StaffCancel}
+          transition={ReservationTransition.Cancel}
           showGroupName={showGroupName}
           trigger={
             <Button size="sm" variant="outline" className={destructiveOutlineClassName}>
               キャンセル
+            </Button>
+          }
+        />
+      )}
+      {/*
+       * 事務局キャンセルは、団体のキャンセルとは別のボタンにする。行き着く状態も、
+       * 理由が必須かどうか（COND-002）も違うので、片方にまとめると選べない方が出る。
+       * 両方が並ぶのは、事務局の人がその団体のメンバーを兼ねているとき（予約詳細）だけ。
+       * そのときだけ名前で見分けられるようにし、事務局の画面では「キャンセル」のままにする。
+       */}
+      {canStaffCancel && (
+        <ReservationActionDialog
+          item={item}
+          transition={ReservationTransition.StaffCancel}
+          showGroupName={showGroupName}
+          trigger={
+            <Button size="sm" variant="outline" className={destructiveOutlineClassName}>
+              {canCancel ? "事務局キャンセル" : "キャンセル"}
             </Button>
           }
         />
