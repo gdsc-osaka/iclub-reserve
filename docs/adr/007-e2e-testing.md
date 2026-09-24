@@ -44,7 +44,7 @@
 - テスト: `test.describe("UC-003 仮予約を取り消す", { tag: "@UC-003" }, ...)` の中に、操作ごとの `test` を書く
 - UC とテストの対応はタグで取る。別の表は持たない。`pnpm exec playwright test --grep @UC-003` で UC ごとに動かせる
 
-### 3. Playwright (Chromium) で、ビルド済みのアプリを手元の Workers で動かす
+### 3. Playwright で、ビルド済みのアプリを手元の Workers で動かす
 
 `pnpm run test:e2e` は、`react-router build` の後に Playwright を起動する。
 Playwright は `playwright.config.ts` の webServer で `e2e/prepare.ts` を実行してから、
@@ -55,6 +55,11 @@ Playwright は `playwright.config.ts` の webServer で `e2e/prepare.ts` を実�
   ほかの PR と同時に動くとデータがぶつかる。認証コードも Discord に流れる。
 - `wrangler.jsonc` に E2E 用の環境は足さない。トップレベル (`APP_ENV = "local"`) をそのまま使う。
 - ポートを開発サーバー (5173) と分けたので、開発サーバーを止めずに E2E を動かせる。
+- 同じテストを 5 種類のブラウザで動かす (`playwright.config.ts` の projects、2026-09-24 追加)。
+  パソコンの Chromium・Firefox・WebKit と、スマホの Chrome (Pixel 7)・Safari (iPhone 15)。
+  スマホの幅ではナビゲーションがボトムバーに、空き状況が日ごとの一覧に変わるので、
+  操作が変わるテストは Playwright の `isMobile` を見て分ける (アカウントのメニューは `e2e/support/account-menu.ts`)。
+  確かめたいことは同じにし、画面ごとに別のテストを書き足すことはしない。
 
 ### 4. E2E のアプリの設定は `build/server/.dev.vars` に E2E 用の値を書いて渡す
 
@@ -85,12 +90,19 @@ E2E 用の値 (`e2e/support/e2e-env.ts`) で上書きする。
   署名済みの Cookie をブラウザに渡す (`signInAs`)。画面を通らないので速く、ログインと関係のない所で落ちない。
 - UC-019・UC-020 は画面で認証コードを入れる。認証コードは DB の `verification` の行
   (`sign-in-otp-<メールアドレス>`、値は `<認証コード>:<試した回数>`) から読む。
+  メールアドレスの変更 (UC-023) の認証コードも、同じように使い道ごとの名前の行から読む (`otpIdentifier`)。
   Better Auth の `storeOTP` を平文 (既定) 以外に変えると読めなくなるので、そのときはこの方法を見直す。
 - パスキー (UC-020・UC-021) は Chromium の仮想認証器 (CDP の WebAuthn) で扱う。rpID は `localhost` になる。
 - 仮想の WebAuthn はすべてのテストで有効にし、認証器は置かない (fixture の `webAuthn`)。アプリは「この端末で
   パスキーを作れるか」でログイン後の行き先を変えるが、その答えは本物の端末に左右される (Windows Hello がある
   Windows では作れる、CI の Linux では作れない)。仮想の環境ではブラウザが仮想の認証器だけを見るので、どの OS でも
-  「作れない」に揃う。パスキーを使うテストは `webAuthn` に仮想の認証器を足す。
+  「作れない」に揃う。パスキーを使うテストは `webAuthn` に仮想の認証器を足す (`e2e/support/passkey.ts`)。
+- 仮想の認証器は Chromium の CDP でしか作れない。Firefox・WebKit では、ブラウザの「作れるか」「自動入力に対応しているか」の
+  答えを「いいえ」に差し替えて同じ状態に揃え (`hidePlatformAuthenticator`)、`webAuthn` を使うテストは飛ばす (結果には skipped と出る)。
+  パスキーの登録・ログインは Chromium (パソコンとスマホ) で確かめる。
+- 仮想の認証器は人の操作を待たずに答えるので、ログイン画面を開いただけで、パスキーの自動入力 (条件付き UI) で
+  ログインが終わることがある。「パスキーでログイン」のボタンを確かめるテストは、自動入力に対応していない
+  ブラウザとして画面を開く (`disablePasskeyAutofill`)。
 
 ### 7. 画面は、読み込みが終わってから操作する
 
@@ -107,7 +119,8 @@ E2E のアプリでも Queue が動くので、すぐに `sent` に変わるこ�
 
 ### 9. CI では独立したジョブにし、安定するまでは必須にしない
 
-`ci.yml` の `E2E` ジョブで、Chromium を入れてビルドし、テストを動かす。落ちたら trace と画面の写真を成果物に残す。
+`ci.yml` の `E2E` ジョブで、ブラウザを入れてビルドし、テストを動かす。落ちたら trace と画面の写真を成果物に残す。
+ブラウザごとに別のジョブ (`E2E (chromium)` など 5 つ) にして並行して動かし、1 つが落ちてもほかは最後まで動かす。
 テストは 1 つずつ順に動かし、落ちたテストはやり直さない (たまに落ちるテストはやり直しで隠さずに直す)。
 
 ### 10. UC を実装・変更する PR に、その UC の E2E を含める

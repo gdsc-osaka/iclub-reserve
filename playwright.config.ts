@@ -4,8 +4,9 @@ import { E2E_BASE_URL, E2E_PERSIST_TO, E2E_PORT } from "./e2e/support/e2e-env";
 /**
  * E2E テスト（Playwright）の設定。方針は ADR-007（`docs/adr/007-e2e-testing.md`）を参照。
  *
- * 動かし方: `pnpm run test:e2e`（ビルドしてから全テストを実行する）
+ * 動かし方: `pnpm run test:e2e`（ビルドしてから、下の 5 種類のブラウザで全テストを実行する）
  * ビルド済みなら `pnpm exec playwright test` だけでもよい。
+ * 1 種類だけで動かすときは `pnpm exec playwright test --project=chromium` のように選ぶ。
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -37,11 +38,22 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
 
+  /*
+   * 同じテストを、パソコンの 3 種類のブラウザと、スマホの 2 種類で動かす。
+   * スマホは画面の幅が狭く、ナビゲーションがボトムバーに、空き状況が日ごとの一覧に変わる。
+   * 画面によって操作が変わるテストは、Playwright の `isMobile` を見て分けている。
+   *
+   * パスキーの仮想の認証器は Chromium でしか使えないので、それを使うテストは
+   * Firefox・WebKit・スマホの Safari では飛ばされる（`e2e/support/fixtures.ts` の `webAuthn`）。
+   *
+   * CI では、ブラウザごとに別のジョブで並行して動かす（`.github/workflows/ci.yml`）。
+   */
   projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    { name: "mobile-chrome", use: { ...devices["Pixel 7"] } },
+    { name: "mobile-safari", use: { ...devices["iPhone 15"] } },
   ],
 
   /*
