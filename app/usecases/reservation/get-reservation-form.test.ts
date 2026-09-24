@@ -18,7 +18,12 @@ import type {
 import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
 import { getReservationFormUseCase } from "./get-reservation-form";
 
-const meetingRoomA = { id: "fac_meeting_a", name: "ミーティングルーム A", description: null };
+const meetingRoomA = {
+  id: "fac_meeting_a",
+  name: "ミーティングルーム A",
+  description: null,
+  photoUrl: null,
+};
 
 /** 自分が所属している団体の予約 */
 const ownRow: ReservationFormReservationRow = {

@@ -77,6 +77,7 @@ const selectFacilities = (db: Database): Promise<ReservationFormFacility[]> =>
       id: facilityTable.id,
       name: facilityTable.name,
       description: facilityTable.description,
+      photoUrl: facilityTable.photoUrl,
     })
     .from(facilityTable)
     .where(eq(facilityTable.isActive, true))

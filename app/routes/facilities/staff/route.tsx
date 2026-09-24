@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { Calendar, CircleAlert, Plus, Wrench } from "lucide-react";
 import { isRouteErrorResponse, Link } from "react-router";
 
+import { FacilityPhoto } from "~/components/facility/facility-photo";
 import { FacilityStatusBadge } from "~/components/facility/facility-status-badge";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -105,14 +106,8 @@ function FacilityCard({ facility }: Readonly<{ facility: FacilityManagementItem 
   return (
     <Card className="flex flex-col overflow-hidden">
       {/* サムネイル */}
-      <div className="h-44 w-full bg-muted overflow-hidden relative">
-        {facility.photoUrl ? (
-          <img src={facility.photoUrl} alt={facility.name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="h-full w-full flex items-center justify-center text-muted-foreground/60">
-            <Wrench className="size-12" />
-          </div>
-        )}
+      <div className="relative">
+        <FacilityPhoto photoUrl={facility.photoUrl} alt={facility.name} className="h-44 w-full" />
         <div className="absolute top-3 right-3 flex items-center gap-2">
           <FacilityStatusBadge isActive={facility.isActive} />
         </div>
