@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "../app/db/schema/index.js";
 import { createLocalDrizzleDb } from "./lib/d1.js";
+import { insertSeedData } from "./seed/insert-seed-data.js";
 import {
   seedFacilities,
   seedGroups,
@@ -43,24 +44,7 @@ async function seedLocal() {
   console.log(`接続先 DB: ${dbPath}`);
 
   try {
-    console.log("1/6 施設・備品データを投入中...");
-    await db.insert(schema.facilityTable).values(seedFacilities).onConflictDoNothing();
-
-    console.log("2/6 テストユーザーデータを投入中...");
-    await db.insert(schema.user).values(seedUsers).onConflictDoNothing();
-
-    console.log("3/6 団体データを投入中...");
-    await db.insert(schema.groupTable).values(seedGroups).onConflictDoNothing();
-
-    console.log("4/6 団体メンバーシップデータを投入中...");
-    await db.insert(schema.groupMemberTable).values(seedGroupMembers).onConflictDoNothing();
-
-    console.log("5/6 招待データを投入中...");
-    await db.insert(schema.groupInvitationTable).values(seedGroupInvitations).onConflictDoNothing();
-
-    console.log("6/6 サンプル予約データを投入中...");
-    await db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing();
-
+    await insertSeedData(db, console.log);
     console.log("🎉 ローカル D1 データベースへのシードが正常に完了しました！");
   } finally {
     sqlite.close();

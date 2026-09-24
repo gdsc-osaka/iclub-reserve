@@ -18,3 +18,8 @@
 worker-configuration.d.ts
 
 !.dev.vars.example
+
+# Playwright（E2E テスト）の結果
+/test-results/
+/playwright-report/
+/blob-report/

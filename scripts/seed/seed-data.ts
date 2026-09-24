@@ -57,11 +57,18 @@ export const seedFacilities: (typeof schema.facilityTable.$inferInsert)[] = [
 ];
 
 /**
- * テスト用ユーザーのシードデータ
- * 大阪大学の許可ドメイン（@osaka-u.ac.jp / @*.osaka-u.ac.jp）に準拠
+ * テスト用ユーザーのシードデータ。
+ * 大阪大学の許可ドメイン（@osaka-u.ac.jp / @*.osaka-u.ac.jp）に準拠。
+ *
+ * 1 人ずつ「どの立場の人か」を名前で引けるようにしている。
+ * E2E テスト（`e2e/`）は `seedPersonas.groupMember` のように立場で人を選ぶので、
+ * ID やメールアドレスを書き換えてもテストは直さなくてよい。
+ * 逆に、立場（所属する団体・役割・事務局かどうか）を変えるとテストが落ちるので、
+ * 変えるときは `e2e/` も合わせて確かめること。
  */
-export const seedUsers: (typeof schema.user.$inferInsert)[] = [
-  {
+export const seedPersonas = {
+  /** 事務局スタッフ。どの団体にも入っていない */
+  staff: {
     id: "usr_staff_01",
     name: "管理者スタッフ",
     email: "staff@osaka-u.ac.jp",
@@ -69,7 +76,8 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
     image: null,
     is_staff: true,
   },
-  {
+  /** 有効な団体「ロボティクス開発プロジェクト」の管理者。承認待ちの団体にも一般メンバーとして入っている */
+  groupAdmin: {
     id: "usr_student_01",
     name: "阪大 太郎 (学生オーナー)",
     email: "taro@ecs.osaka-u.ac.jp",
@@ -77,7 +85,8 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
     image: null,
     is_staff: false,
   },
-  {
+  /** 有効な団体「ロボティクス開発プロジェクト」の一般メンバー */
+  groupMember: {
     id: "usr_student_02",
     name: "阪大 花子 (学生メンバー)",
     email: "hanako@ecs.osaka-u.ac.jp",
@@ -85,7 +94,30 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
     image: null,
     is_staff: false,
   },
-];
+  /** どの団体にも入っていない人。ダッシュボードが空のときの見え方を確かめられる */
+  noGroupUser: {
+    id: "usr_student_03",
+    name: "阪大 次郎 (未所属)",
+    email: "jiro@ecs.osaka-u.ac.jp",
+    emailVerified: true,
+    image: null,
+    is_staff: false,
+  },
+  /**
+   * 承認待ちの団体「AI ハッカソンチーム」だけに入っている管理者。
+   * 承認待ちの団体は予約を申請できない（COND-006）ので、申請の導線が出ないことを確かめられる。
+   */
+  pendingGroupAdmin: {
+    id: "usr_student_04",
+    name: "阪大 三郎 (承認待ちの団体の管理者)",
+    email: "saburo@ecs.osaka-u.ac.jp",
+    emailVerified: true,
+    image: null,
+    is_staff: false,
+  },
+} as const satisfies Record<string, typeof schema.user.$inferInsert>;
+
+export const seedUsers: (typeof schema.user.$inferInsert)[] = Object.values(seedPersonas);
 
 /**
  * サンプル団体のシードデータ
@@ -142,6 +174,14 @@ export const seedGroupMembers: (typeof schema.groupMemberTable.$inferInsert)[] =
     createdAt: new Date(),
     updatedAt: new Date(),
   },
+  {
+    id: "mem_saburo_ai",
+    groupId: "grp_ai_hackers",
+    userId: "usr_student_04",
+    role: MembershipRole.Admin,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
 ];
 
 /**
@@ -161,7 +201,8 @@ export const seedGroupInvitations: (typeof schema.groupInvitationTable.$inferIns
     status: InvitationStatus.Pending,
     expiresAt: invitationExpiresAt(new Date()),
     createdAt: new Date(),
-    inviterId: "usr_student_01",
+    // 招待を送れるのは管理者だけなので、この団体の管理者（三郎）が送ったことにする
+    inviterId: "usr_student_04",
   },
 ];
 
