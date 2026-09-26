@@ -201,6 +201,12 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     await signInAs(member.id);
 
     await openPage(page, `/availability?facility=${facility.id}`);
+    /*
+     * 今週だと、土曜の夜などは枠がすべて過ぎていて、「過ぎている」ことが理由で押せなくなる。
+     * 承認待ちであることが理由で押せないのを確かめたいので、どの枠もまだ始まっていない来週で見る。
+     */
+    await page.getByRole("link", { name: "次の週" }).click();
+    await expect(page.getByText(formatFullDate(nextWeekAt(Weekday.Sunday, 0)))).toBeVisible();
 
     // 申請できない理由が出て、申請のボタンは無く、空いている枠からも申請できない（COND-006）
     await expect(page.getByText("まだ予約を申請できません")).toBeVisible();
