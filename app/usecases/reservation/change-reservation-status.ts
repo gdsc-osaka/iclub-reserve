@@ -142,6 +142,7 @@ export const changeReservationStatusUseCase = (
             startAt: reservation.startAt,
             endAt: reservation.endAt,
             statusReason,
+            updatedAt: now,
           },
           audience,
         ),

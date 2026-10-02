@@ -1,4 +1,5 @@
 import { and, eq, gt, lt, ne, notExists } from "drizzle-orm";
+import type { RunnableQuery } from "drizzle-orm/runnable-query";
 import { alias } from "drizzle-orm/sqlite-core";
 import { err, ok, ResultAsync } from "neverthrow";
 
@@ -50,6 +51,89 @@ export const createReservationRepository = (db: Database): ReservationRepository
         ),
       ),
   );
+
+  /**
+   * 変更**後**の施設・時間帯に、ほかの承認済みの予約が無いこと（COND-001）を確かめる条件。
+   *
+   * `noApprovedOverlap` は更新される行の列と突き合わせるが、UPDATE の WHERE が読むのは
+   * **更新前**の値である。施設や日時を変える更新にそちらを使うと、動かす前の時間帯を確かめることになり、
+   * 動かした先に承認済みの予約があっても通ってしまう。そこで、変更後の値を引数で受け取って突き合わせる。
+   *
+   * 自分自身は相手に数えない。承認済みの予約を少しずらすだけで、動かす前の自分と重なってしまうため。
+   */
+  const noApprovedOverlapAt = (
+    slot: Pick<ReservationOverlapArgs, "facilityId" | "startAt" | "endAt">,
+    selfId: string,
+  ) =>
+    notExists(
+      db
+        .select({ id: overlapping.id })
+        .from(overlapping)
+        .where(
+          and(
+            eq(overlapping.facilityId, slot.facilityId),
+            eq(overlapping.status, ReservationStatus.Approved),
+            ne(overlapping.id, selfId),
+            lt(overlapping.startAt, slot.endAt),
+            gt(overlapping.endAt, slot.startAt),
+          ),
+        ),
+    );
+
+  /**
+   * 条件付きの UPDATE を実行し、実際に更新できたときだけ通知を outbox に積む（ADR-002 決定 3 / 課題 2.2）。
+   *
+   * UPDATE は競合したとき 0 件しか更新しないので、メールは「直前の UPDATE が書いた行」が
+   * 実際にあるときだけ積ませる。同じ batch の中なので、条件には**更新後**の
+   * status と updatedAt を渡す。仕組みは guardedMailOutboxInserts の JSDoc を参照。
+   *
+   * @param updateQuery 更新した行の id を返す（`.returning({ id })` 付きの）条件付き UPDATE
+   * @param written 更新後の行を見分ける値
+   * @param subject エラーの説明に入れる、何を書き込もうとしたか
+   */
+  const runGuardedUpdate = (
+    updateQuery: RunnableQuery<{ id: string }[], "sqlite"> & PromiseLike<{ id: string }[]>,
+    written: { readonly id: string; readonly status: ReservationStatus; readonly updatedAt: Date },
+    mails: readonly MailDraft[],
+    subject: string,
+  ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
+    // メールが無い場合は batch を使わず UPDATE 単体で実行する（Drizzle の batch は空配列を受け付けないため）
+    if (mails.length === 0) {
+      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: `${subject}を書き込めなかった。`,
+        cause: error,
+      })).map((rows) => ({
+        applied: rows.length > 0,
+        enqueuedMailIds: [],
+      }));
+    }
+
+    const outbox = guardedMailOutboxInserts(db, mails, {
+      from: reservationTable,
+      where: and(
+        eq(reservationTable.id, written.id),
+        eq(reservationTable.status, written.status),
+        eq(reservationTable.updatedAt, written.updatedAt),
+      ),
+    });
+
+    return ResultAsync.fromPromise(
+      db.batch([updateQuery, ...outbox.statements]),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: `${subject}と通知の outbox を書き込めなかった。`,
+        cause: error,
+      }),
+    ).map((results) => {
+      const updateRows = results[0] as { id: string }[];
+      const applied = updateRows.length > 0;
+      return {
+        applied,
+        enqueuedMailIds: applied ? outbox.ids : [],
+      };
+    });
+  };
 
   const findById = (id: string): ResultAsync<Reservation, ReservationError> => {
     return ResultAsync.fromPromise(
@@ -126,6 +210,9 @@ export const createReservationRepository = (db: Database): ReservationRepository
           and(
             eq(reservationTable.facilityId, args.facilityId),
             eq(reservationTable.status, ReservationStatus.Approved),
+            args.excludeReservationId === undefined
+              ? undefined
+              : ne(reservationTable.id, args.excludeReservationId),
             // 終了時刻は予約に含まれないので、境界がぴったり接する予約は重なりに含めない
             lt(reservationTable.startAt, args.endAt),
             gt(reservationTable.endAt, args.startAt),
@@ -161,49 +248,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
       // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
       .returning({ id: reservationTable.id });
 
-    // メールが無い場合は batch を使わず UPDATE 単体で実行する（Drizzle の batch は空配列を受け付けないため）
-    if (mails.length === 0) {
-      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約のステータスを書き込めなかった。",
-        cause: error,
-      })).map((rows) => ({
-        applied: rows.length > 0,
-        enqueuedMailIds: [],
-      }));
-    }
-
-    /*
-     * 条件付き UPDATE と outbox への INSERT を原子的に行う（ADR-002 決定 3 / 課題 2.2）。
-     *
-     * UPDATE は競合したとき 0 件しか更新しないので、メールは「直前の UPDATE が書いた行」が
-     * 実際にあるときだけ積ませる。同じ batch の中なので、条件には**更新後**の
-     * status と updatedAt を渡す。仕組みは guardedMailOutboxInserts の JSDoc を参照。
-     */
-    const outbox = guardedMailOutboxInserts(db, mails, {
-      from: reservationTable,
-      where: and(
-        eq(reservationTable.id, args.id),
-        eq(reservationTable.status, args.status),
-        eq(reservationTable.updatedAt, args.updatedAt),
-      ),
-    });
-
-    return ResultAsync.fromPromise(
-      db.batch([updateQuery, ...outbox.statements]),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約のステータスと通知の outbox を書き込めなかった。",
-        cause: error,
-      }),
-    ).map((results) => {
-      const updateRows = results[0] as { id: string }[];
-      const applied = updateRows.length > 0;
-      return {
-        applied,
-        enqueuedMailIds: applied ? outbox.ids : [],
-      };
-    });
+    return runGuardedUpdate(updateQuery, args, mails, "予約のステータス");
   };
 
   const applyContentEdit = (
@@ -221,44 +266,19 @@ export const createReservationRepository = (db: Database): ReservationRepository
         status: args.status,
         updatedAt: args.updatedAt,
       })
-      .where(and(eq(reservationTable.id, args.id), noApprovedOverlap))
+      .where(
+        and(
+          eq(reservationTable.id, args.id),
+          // 読んだときから変わっていないことを、更新の条件に入れる（ApplyContentEditArgs を参照）
+          eq(reservationTable.status, args.expectedStatus),
+          eq(reservationTable.updatedAt, args.expectedUpdatedAt),
+          args.requireNoApprovedOverlap ? noApprovedOverlapAt(args, args.id) : undefined,
+        ),
+      )
+      // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
       .returning({ id: reservationTable.id });
 
-    if (mails.length === 0) {
-      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約ステータスの更新に失敗しました。",
-        cause: error,
-      })).map((rows) => ({
-        applied: rows.length > 0,
-        enqueuedMailIds: [],
-      }));
-    }
-
-    const outbox = guardedMailOutboxInserts(db, mails, {
-      from: reservationTable,
-      where: and(
-        eq(reservationTable.id, args.id),
-        eq(reservationTable.status, args.status),
-        eq(reservationTable.updatedAt, args.updatedAt),
-      ),
-    });
-
-    return ResultAsync.fromPromise(
-      db.batch([updateQuery, ...outbox.statements]),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約ステータスの更新および通知 outbox の作成に失敗しました。",
-        cause: error,
-      }),
-    ).map((results) => {
-      const updateRows = results[0] as { id: string }[];
-      const applied = updateRows.length > 0;
-      return {
-        applied,
-        enqueuedMailIds: applied ? outbox.ids : [],
-      };
-    });
+    return runGuardedUpdate(updateQuery, args, mails, "予約の内容");
   };
 
   return { findById, create, existsApprovedOverlap, applyStatusTransition, applyContentEdit };

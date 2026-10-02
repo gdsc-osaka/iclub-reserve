@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
-import { FacilityErrorCode, type FacilityRepository } from "~/domain/facility";
+import type { FacilityRepository } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type GroupRepository } from "~/domain/group";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createReservationMailDrafts, ReservationMailEvent } from "~/domain/mail/reservation-mail";
@@ -19,6 +19,7 @@ import { validateReservationDraft } from "~/domain/reservation/validation";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
+import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
 import { toRecipientsError } from "./_shared/mail-recipients";
 import { ensureReservationPermission } from "./_shared/reservation-authorization";
 
@@ -93,47 +94,6 @@ const ensureGroupIsEnabled = (
     );
 
 /**
- * 申請先の施設・設備が使えるかを確かめる。
- *
- * 画面（SCR-002）の選択肢は有効な施設だけに絞ってあるが、それとは別にここでも確かめる。
- * `facility_id` は POST を組み立てれば自由に送れるので、選択肢だけに頼ると
- * 無効化された施設の予約が作れてしまう。その予約は空き状況カレンダーにも
- * 申請フォームにも出ない（どちらも `is_active` で絞っている）ので、
- * 誰の画面にも現れないまま残り続ける。無効化の条件（COND-003: 将来の予約が
- * すべて終了していること）も、後から予約を足せるなら意味をなさない。
- */
-const ensureFacilityIsAvailable = (
-  deps: CreateProvisionalReservationDeps,
-  facilityId: string,
-): ResultAsync<null, ReservationError> =>
-  deps.facilityRepository
-    .findById(facilityId)
-    .mapErr((error): ReservationError =>
-      error.code === FacilityErrorCode.NotFound
-        ? {
-            code: ReservationErrorCode.FacilityNotAvailable,
-            field: ReservationField.Facility,
-            message: `申請先の施設 ${facilityId} が見つからない。`,
-            userMessage: "選んだ施設・設備が見つかりません。",
-          }
-        : {
-            code: ReservationErrorCode.DatabaseError,
-            message: "申請先の施設を読み取れなかった。",
-            cause: error,
-          },
-    )
-    .andThen((facility) =>
-      facility.isActive
-        ? okAsync(null)
-        : errAsync({
-            code: ReservationErrorCode.FacilityNotAvailable,
-            field: ReservationField.Facility,
-            message: `申請先の施設 ${facilityId} が無効になっている。`,
-            userMessage: "選んだ施設・設備は、いま予約を受け付けていません。",
-          } satisfies ReservationError),
-    );
-
-/**
  * 仮予約を申請するユースケース（UC-002 / SCR-002）。
  *
  * ステータスは必ず「仮予約」で作る（STATE-001）。引数に status を受け取っていないのは、
@@ -196,7 +156,13 @@ export const createProvisionalReservationUseCase = (
 
     const mails = createReservationMailDrafts(
       ReservationMailEvent.Applied,
-      { id, startAt: args.reservation.startAt, endAt: args.reservation.endAt, statusReason: null },
+      {
+        id,
+        startAt: args.reservation.startAt,
+        endAt: args.reservation.endAt,
+        statusReason: null,
+        updatedAt: now,
+      },
       audience,
     );
 

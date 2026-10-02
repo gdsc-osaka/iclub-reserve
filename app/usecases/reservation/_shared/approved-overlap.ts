@@ -31,10 +31,13 @@ export interface ApprovedOverlapDeps {
  * 重なりは時間帯の問題なので、`field` に利用時間を入れておく。
  * 時間帯の欄がある画面（申請フォーム）ではその下に出て、無い画面（一覧）ではフォームの上に出る。
  *
- * slot は 3 項目だけを取り出し直してからポートへ渡す。呼び出し側は予約そのものを
+ * slot はポートが受け取る項目だけを取り出し直してから渡す。呼び出し側は予約そのものを
  * 渡せばよいが、そのまま素通しすると、ポートが受け取ると宣言していない項目まで
  * リポジトリへ流れ込む。絞る場所を 1 か所に決めておかないと、呼び出しが増えるたびに
  * 絞り忘れが起きうる。
+ *
+ * 承認済みの予約の施設・日時を変えるとき（UC-005）は、`excludeReservationId` に変える予約自身を渡す。
+ * 渡さないと、動かす前の自分自身と重なって必ず拒まれる。
  */
 export const ensureNoApprovedOverlap = (
   deps: ApprovedOverlapDeps,
@@ -46,6 +49,7 @@ export const ensureNoApprovedOverlap = (
       facilityId: slot.facilityId,
       startAt: slot.startAt,
       endAt: slot.endAt,
+      excludeReservationId: slot.excludeReservationId,
     })
     .andThen((exists) =>
       exists

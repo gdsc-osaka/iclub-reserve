@@ -1,41 +1,47 @@
 import { err, ok, type Result } from "neverthrow";
 
-import { canPerform } from "../membership";
+import { canAct } from "../membership";
 import {
   ReservationAction,
   ReservationErrorCode,
   reservationPermissions,
   ReservationStatus,
   type Reservation,
+  type ReservationDraft,
   type ReservationError,
 } from ".";
 import type { ReservationActor } from "./transition";
 
 /*
- * 予約の内容編集（UC-005 / UC-017）の判定をまとめたファイル。
+ * 予約の内容の変更（UC-005 / UC-017）の判定をまとめたファイル。
  *
  * 状態変更（transition.ts）とは別にしている。あちらは「取り消す・承認する」といった
  * 操作そのものが遷移で、遷移先は操作で決まる。こちらは内容の変更が主で、
  * ステータスが動くかどうかは「どの項目を変えたか」の結果でしかない（COND-005）。
+ *
+ * 変えてよいか（誰が・いまの状態・開始前か）は canEditReservation に、
+ * 変えた項目から何が起きるかは resolveEditOutcome に集めてある。
+ * 入力そのものの検証（COND-021）は、申請と同じ validation.ts の validateReservationDraft を使う。
+ *
+ * transition.ts と同じく、このファイルは index.ts を参照するが、index.ts はこのファイルを参照しない。
+ * 逆向きの参照を足すと循環 import になる。
  */
 
-/** 編集できる項目（REQ-007 / REQ-029）。画面から届く値そのもの。 */
-export interface ReservationEditInput {
-  readonly facilityId: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
-  readonly headCount: number;
-  readonly note: string | null;
-}
+/**
+ * 予約の内容のうち、団体が変えられる項目（REQ-007 / REQ-029）。
+ *
+ * 団体（groupId）は含めない。予約を別の団体へ付け替える操作は要件に無く、
+ * 付け替えられると、所属していない団体の予約を作れてしまう。
+ */
+export type ReservationContent = ReservationDraft & { readonly facilityId: string };
 
-export type ReservationEditField = keyof ReservationEditInput;
+export type ReservationContentField = keyof ReservationContent;
 
 /**
- * 変更すると再承認が必要になる項目（COND-005）。
+ * 変えると再承認が要る項目（COND-005）。
  *
- * 真偽値の表にしているのは、編集できる項目を増やしたときに
+ * 真偽値の表にしているのは、変えられる項目を増やしたときに
  * 「再承認が要るか」を決めないと型エラーになるようにするため。
- * 団体（groupId）を編集対象に加えるなら、ここに 1 行足すことになる。
  */
 export const reapprovalRequiredFields = {
   facilityId: true,
@@ -43,29 +49,47 @@ export const reapprovalRequiredFields = {
   endAt: true,
   headCount: false,
   note: false,
-} as const satisfies Record<ReservationEditField, boolean>;
+} as const satisfies Record<ReservationContentField, boolean>;
 
-/** 編集の結果、予約に何が起きるか。 */
+/**
+ * 変えると、承認済みの予約との重なり（COND-001）を確かめ直す項目。
+ *
+ * いまは再承認が要る項目と同じだが、答えている問いが違うので表を分けてある。
+ * あちらは「事務局に見せ直すか」、こちらは「その時間帯が空いているか」を問う。
+ *
+ * 使用人数・備考だけの変更では確かめない。仮予約どうしは重なってよいので、
+ * 重なっていた別の仮予約が先に承認されると、残った仮予約は承認済みの予約と重なったままになる。
+ * そこで確かめてしまうと、時間帯を変えていないのに備考すら直せなくなる。
+ */
+export const overlapCheckFields = {
+  facilityId: true,
+  startAt: true,
+  endAt: true,
+  headCount: false,
+  note: false,
+} as const satisfies Record<ReservationContentField, boolean>;
+
+/** 変更の結果、予約に何が起きるか（COND-005） */
 export const ReservationEditOutcome = {
   /** 1 項目も変わっていない。書き込みも通知もしない */
   NoChange: "noChange",
-  /** 仮予約のまま内容だけ変わる（UC-017） */
+  /** 仮予約のまま内容だけ変わる（UC-017 / BUC-005） */
   KeepProvisional: "keepProvisional",
-  /** 承認済みのまま、使用人数・備考だけ変わる（BUC-004） */
+  /** 承認済みのまま、使用人数・備考だけ変わる（UC-005 / BUC-004） */
   KeepApproved: "keepApproved",
-  /** 承認済みの施設・日時が変わり、仮予約に戻る（BUC-018） */
+  /** 承認済みの予約の施設・日時が変わり、仮予約に戻る（UC-005 / BUC-018） */
   Reapproval: "reapproval",
 } as const;
 export type ReservationEditOutcome =
   (typeof ReservationEditOutcome)[keyof typeof ReservationEditOutcome];
 
-/** 実際に書き込みが起きる編集。以降の表はこれを網羅する */
+/** 実際に書き込みが起きる変更。以降の表はこれを網羅する */
 export type AppliedReservationEdit = Exclude<
   ReservationEditOutcome,
   typeof ReservationEditOutcome.NoChange
 >;
 
-/** 編集後の予約ステータス（STATE-001 / COND-005） */
+/** 変更後の予約ステータス（STATE-001 / COND-005） */
 export const editTargetStatus: Record<AppliedReservationEdit, ReservationStatus> = {
   [ReservationEditOutcome.KeepProvisional]: ReservationStatus.Provisional,
   [ReservationEditOutcome.KeepApproved]: ReservationStatus.Approved,
@@ -73,53 +97,60 @@ export const editTargetStatus: Record<AppliedReservationEdit, ReservationStatus>
 };
 
 /**
- * 承認済みの予約との重なり（COND-001）を確かめるか。
+ * 内容を変えられるステータス（STATE-001）。
  *
- * 使用人数・備考だけの変更では時間帯が動かないので確かめない。
- * 確かめてしまうと、更新前の自分自身と重なって必ず競合する。
+ * 終了した予約（取り消し済み・却下済み・キャンセル済み・事務局キャンセル済み）は変えられない。
+ * 変えられると、終わったはずの予約の時間帯が書き換わり、記録として残している意味がなくなる。
  */
-export const editRequiresOverlapCheck: Record<AppliedReservationEdit, boolean> = {
-  [ReservationEditOutcome.KeepProvisional]: true,
-  [ReservationEditOutcome.KeepApproved]: false,
-  [ReservationEditOutcome.Reapproval]: true,
-};
+export const editableStatuses: readonly ReservationStatus[] = [
+  ReservationStatus.Provisional,
+  ReservationStatus.Approved,
+];
 
 /**
- * 編集できる状態か・編集してよい人かを確かめる（STATE-001 / COND-009）。
+ * その人がその予約の内容を変えてよいかを判定する（STATE-001 / COND-009）。
  *
- * 開始日時を過ぎた予約は、項目を問わず編集できない。使用人数や備考だけなら
- * 直せてもよさそうに見えるが、終わった利用の記録を後から書き換えられることになり、
- * 「誰がいつ何人で使ったか」をたどるという目的（GOAL-001）が崩れる。
+ * 1. 誰が: 予約の団体のメンバー。役割は問わない（取り消し・キャンセルと同じ）。
+ *    事務局の権限だけでは変えられない。事務局の変更は直接変更（UC-008）として別に用意する
+ * 2. いまの状態: 仮予約か承認済み
+ * 3. いつ: 開始日時より前。開始日時を過ぎた予約は、項目を問わず変えられない
+ *
+ * 3 について。使用人数や備考だけなら直せてもよさそうに見えるが、終わった利用の記録を
+ * 後から書き換えられることになり、「誰がいつ何人で使ったか」をたどるという目的（GOAL-001）が崩れる。
+ * 開始前の予約を過ぎた日時へ動かすことも、申請と同じ入力の規則（COND-021）で拒む。
+ *
+ * ユースケースでは入力の検証より先に呼ぶこと。変えられない予約に「時間帯を選び直してください」と
+ * 返しても、選び直したところで結局は弾かれる。
+ * 画面が変更の入り口を出すかどうかも、この関数で決めること。
+ *
+ * @param now 「開始日時を過ぎたか」の基準になる現在時刻
  */
-export const canEdit = (
+export const canEditReservation = (
   reservation: Pick<Reservation, "status" | "startAt">,
   actor: ReservationActor,
   now: Date,
 ): Result<void, ReservationError> => {
-  if (
-    !actor.isStaff &&
-    !canPerform(reservationPermissions, actor.membership, ReservationAction.Edit)
-  ) {
+  if (!canAct(reservationPermissions, actor, ReservationAction.Edit)) {
     return err({
-      code: ReservationErrorCode.ReservationForbidden,
-      message: "所属している団体の予約のみ編集できます。",
+      code: ReservationErrorCode.Forbidden,
+      message: "予約の団体に所属していない人が、予約の内容を変えようとした。",
+      userMessage: "所属している団体の予約のみ変更できます。",
     });
   }
 
-  if (
-    reservation.status !== ReservationStatus.Provisional &&
-    reservation.status !== ReservationStatus.Approved
-  ) {
+  if (!editableStatuses.includes(reservation.status)) {
     return err({
-      code: ReservationErrorCode.ReservationInvalidTransition,
-      message: "終了した予約は編集できません。",
+      code: ReservationErrorCode.InvalidTransition,
+      message: `${reservation.status} の予約の内容は変えられない。`,
+      userMessage: "終了した予約は変更できません。",
     });
   }
 
-  if (reservation.startAt < now) {
+  if (reservation.startAt <= now) {
     return err({
-      code: ReservationErrorCode.ReservationInvalidPeriod,
-      message: "開始日時を過ぎた予約は編集できません。",
+      code: ReservationErrorCode.InvalidTransition,
+      message: "開始日時を過ぎた予約の内容を変えようとした。",
+      userMessage: "開始日時を過ぎた予約は変更できません。",
     });
   }
 
@@ -127,17 +158,17 @@ export const canEdit = (
 };
 
 /**
- * 変更された項目を取り出す。
+ * 変えた項目を取り出す。
  *
  * 日時は `===` だと同じ時刻でも別物と判定される（Date は参照で比べられる）。
  * ここを取り違えると、備考だけ直したつもりの保存が「日時の変更」と見なされ、
  * 承認済みの予約が毎回仮予約に戻ってしまう。
  */
-export const diffReservationEdit = (
-  before: ReservationEditInput,
-  after: ReservationEditInput,
-): ReadonlySet<ReservationEditField> => {
-  const fields = Object.keys(reapprovalRequiredFields) as readonly ReservationEditField[];
+export const changedContentFields = (
+  before: ReservationContent,
+  after: ReservationContent,
+): ReadonlySet<ReservationContentField> => {
+  const fields = Object.keys(reapprovalRequiredFields) as readonly ReservationContentField[];
 
   return new Set(
     fields.filter((field) => {
@@ -149,15 +180,16 @@ export const diffReservationEdit = (
 };
 
 /**
- * 今のステータスと変更された項目から、編集の結果を決める（COND-005）。
+ * いまのステータスと変えた項目から、変更の結果を決める（COND-005）。
  *
- * ご提示の 4 行の表は、ここでは 1 つの規則に畳んである。
- * 仮予約のときは「今のまま」と「仮予約」が同じ値になるためである。
+ * 仮予約は、どの項目を変えても仮予約のまま（UC-017）。
+ * 承認済みは、施設・日時を変えたときだけ仮予約に戻る（UC-005）。
+ *
+ * 終了した予約はここへ渡さないこと（canEditReservation が先に弾く）。
  */
 export const resolveEditOutcome = (
   currentStatus: ReservationStatus,
-  changed: ReadonlySet<ReservationEditField>,
-  isStaff: boolean,
+  changed: ReadonlySet<ReservationContentField>,
 ): ReservationEditOutcome => {
   if (changed.size === 0) return ReservationEditOutcome.NoChange;
 
@@ -165,9 +197,11 @@ export const resolveEditOutcome = (
     return ReservationEditOutcome.KeepProvisional;
   }
 
-  if (isStaff) return ReservationEditOutcome.KeepApproved;
-
   const needsReapproval = [...changed].some((field) => reapprovalRequiredFields[field]);
 
   return needsReapproval ? ReservationEditOutcome.Reapproval : ReservationEditOutcome.KeepApproved;
 };
+
+/** 変えた項目から、承認済みの予約との重なり（COND-001）を確かめ直すかを決める */
+export const requiresOverlapCheck = (changed: ReadonlySet<ReservationContentField>): boolean =>
+  [...changed].some((field) => overlapCheckFields[field]);

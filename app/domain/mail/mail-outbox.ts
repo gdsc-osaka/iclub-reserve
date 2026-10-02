@@ -25,10 +25,14 @@ export interface MailDraft {
   /**
    * 同じメールを二度積まないための鍵。
    * 「イベント種別 : 対象の ID : 宛先」から決まる文字列にすること。
-   * 例: "reservation:approved:clx0123:cly4567"
+   * 例: "invitation:created:clx0123:taro@ecs.osaka-u.ac.jp"
    *
    * ここに時刻や乱数を混ぜてはいけない。混ぜた瞬間に UNIQUE が意味を失い、
    * 操作をやり直しただけで同じ通知が 2 通飛ぶ。
+   *
+   * 例外は、同じイベントが同じ対象に何度も起き、かつ同じ操作が 2 度通らないことを
+   * 業務データの書き込みの側で保証できる場合だけ。いまは予約の通知（reservation-mail.ts）と
+   * メールアドレス変更の通知（email-changed-mail.ts）がこれに当たり、理由はそれぞれに書いてある。
    */
   readonly idempotencyKey: string;
   readonly to: { readonly address: string; readonly name?: string };

@@ -48,6 +48,11 @@ export const ReservationAction = {
   CreateProvisional: "create_provisional",
   Withdraw: "withdraw",
   Cancel: "cancel",
+  /**
+   * 団体として予約の内容（施設・日時・使用人数・備考）を変える（UC-005 / UC-017）。
+   *
+   * 変えられる状態か・開始前かは、この表ではなく edit.ts の canEditReservation が見る。
+   */
   Edit: "edit",
 } as const;
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
@@ -79,12 +84,14 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
       ReservationAction.CreateProvisional,
       ReservationAction.Withdraw,
       ReservationAction.Cancel,
+      ReservationAction.Edit,
     ],
     [MembershipRole.Member]: [
       ReservationAction.ViewDetail,
       ReservationAction.CreateProvisional,
       ReservationAction.Withdraw,
       ReservationAction.Cancel,
+      ReservationAction.Edit,
     ],
     /*
      * 事務局は所属していない団体でも予約を作れる (COND-009)。
@@ -93,6 +100,10 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
      * (却下・事務局キャンセル) が別にあり、理由の入力を必須にしてあるため (COND-002)。
      * 事務局の人が自分の所属する団体の予約を取り消すときは、
      * メンバーとしての役割が和集合で効くので、そちらから取り消せる。
+     *
+     * 変更（Edit）も入れていない。事務局の変更は承認フローを経ない直接変更（UC-008）で、
+     * 承認済みの予約を仮予約に戻さないなど規則が違うため、別の操作として用意する。
+     * ここに Edit を足すと、事務局の変更が団体の変更（UC-005）の規則で通ってしまう。
      */
     [StaffRole]: [ReservationAction.ViewDetail, ReservationAction.CreateProvisional],
   },
@@ -202,6 +213,13 @@ export interface ReservationOverlapArgs {
   readonly facilityId: string;
   readonly startAt: Date;
   readonly endAt: Date;
+  /**
+   * 重なりの相手から外す予約の ID。承認済みの予約の施設・日時を変えるとき（UC-005）に、変える予約自身を渡す。
+   *
+   * 外さないと、10:00〜12:00 の承認済みの予約を 11:00〜13:00 に動かすだけで、
+   * 動かす前の自分自身と重なって必ず拒まれる。
+   */
+  readonly excludeReservationId?: string;
 }
 
 /** 予約ステータスを条件付きで更新するときの引数 */
@@ -227,15 +245,40 @@ export interface ApplyStatusTransitionArgs {
   readonly requireNoApprovedOverlap: boolean;
 }
 
+/** 予約の内容を条件付きで変えるときの引数（UC-005 / UC-017） */
 export interface ApplyContentEditArgs {
-  id: string;
-  facilityId: string;
-  startAt: Date;
-  endAt: Date;
-  headCount: number;
-  note: string | null;
-  status: ReservationStatus;
-  updatedAt: Date;
+  readonly id: string;
+  /**
+   * 読んだときの予約ステータス。
+   *
+   * 更新日時（expectedUpdatedAt）と合わせて、DB が読んだときのままでなければ 1 件も更新しない。
+   * これが無いと、読んでから書くまでの間に事務局が承認・却下した予約を、
+   * 読んだときのステータスで書き戻してしまう（却下された予約が仮予約に戻る）。
+   */
+  readonly expectedStatus: ReservationStatus;
+  /**
+   * 読んだときの更新日時。
+   *
+   * ステータスだけでは、ステータスを動かさない別の変更（使用人数の変更など）が
+   * 間に入ったことに気づけず、相手の変更を黙って上書きしてしまう。
+   * 逆に更新日時だけにしないのは、ミリ秒単位で同じ時刻に入った状態変更を取りこぼさないため。
+   */
+  readonly expectedUpdatedAt: Date;
+  readonly facilityId: string;
+  readonly startAt: Date;
+  readonly endAt: Date;
+  readonly headCount: number;
+  readonly note: string | null;
+  /** 変更後の予約ステータス。承認済みの予約の施設・日時を変えたときだけ仮予約に変わる（COND-005） */
+  readonly status: ReservationStatus;
+  readonly updatedAt: Date;
+  /**
+   * 施設か日時を変えるときだけ true。
+   *
+   * 変更**後**の施設・時間帯に、ほかの承認済みの予約が無いこと（COND-001）を、
+   * 更新と同じ 1 文の中で確かめる。
+   */
+  readonly requireNoApprovedOverlap: boolean;
 }
 
 /** 予約作成の結果。予約の INSERT は条件付きではないので applied は持たない */
@@ -251,9 +294,8 @@ export interface ApplyStatusTransitionOutcome {
   readonly enqueuedMailIds: readonly string[];
 }
 
-export interface ApplyContentEditOutcome {
-  readonly enqueuedMailIds: readonly string[];
-}
+/** 内容の条件付き更新の結果。中身の意味はステータスの条件付き更新と同じ */
+export type ApplyContentEditOutcome = ApplyStatusTransitionOutcome;
 
 export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
@@ -269,6 +311,8 @@ export interface ReservationRepository {
    *
    * 時間帯が重なるかどうかは「開始 < 相手の終わり」かつ「終わり > 相手の開始」で見る。
    * 終了時刻は予約に含まれないので、10:00 に終わる予約と 10:00 に始まる予約は重ならない。
+   *
+   * `excludeReservationId` を渡すと、その予約は重なりの相手に数えない。
    */
   existsApprovedOverlap(args: ReservationOverlapArgs): ResultAsync<boolean, ReservationError>;
   /**
@@ -282,7 +326,14 @@ export interface ReservationRepository {
     args: ApplyStatusTransitionArgs,
     mails: readonly MailDraft[],
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError>;
-
+  /**
+   * 予約の内容（施設・日時・使用人数・備考）とステータス・更新日時を条件付きで更新し、
+   * 通知メールがあれば同じトランザクション（db.batch）で outbox に積む（UC-005 / UC-017）。
+   *
+   * @param args 更新の条件と値
+   * @param mails 同時に outbox に積むメール（EVT-004 / EVT-012）
+   * @returns 更新結果と積まれたメール ID の配列。条件に合わず 0 件だったら applied: false（競合）。
+   */
   applyContentEdit(
     args: ApplyContentEditArgs,
     mails: readonly MailDraft[],

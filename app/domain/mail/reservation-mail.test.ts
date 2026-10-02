@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   createReservationMailDrafts,
+  editMailEvent,
   notifiesStaff,
   ReservationMailEvent,
   transitionMailEvent,
   type ReservationMailAudience,
 } from "./reservation-mail";
+import { ReservationEditOutcome } from "~/domain/reservation/edit";
 import { ReservationTransition } from "~/domain/reservation/transition";
 
 describe("reservation-mail", () => {
@@ -14,6 +16,8 @@ describe("reservation-mail", () => {
     startAt: new Date("2026-09-25T10:00:00+09:00"),
     endAt: new Date("2026-09-25T12:00:00+09:00"),
     statusReason: null,
+    // 1789866000000 ミリ秒。idempotencyKey に入る
+    updatedAt: new Date("2026-09-20T10:00:00+09:00"),
   };
 
   const defaultAudience: ReservationMailAudience = {
@@ -24,7 +28,7 @@ describe("reservation-mail", () => {
     staff: [{ userId: "usr_staff", address: "staff@example.com", name: "事務局員" }],
   };
 
-  // --- 既存の承認通知のケース（文面・鍵を 1 バイトも変えずに残す） ---
+  // --- 承認通知のケース（文面を 1 バイトも変えずに残す。鍵は更新日時を入れる形に改めた） ---
   describe("EVT-005 承認通知（既存仕様の保護）", () => {
     it("件名に承認された旨が含まれる", () => {
       const drafts = createReservationMailDrafts(
@@ -75,7 +79,7 @@ describe("reservation-mail", () => {
       expect(drafts).toHaveLength(2);
 
       expect(drafts[0]).toEqual({
-        idempotencyKey: "reservation:approved:res_test_123:usr_student",
+        idempotencyKey: "reservation:approved:res_test_123:1789866000000:usr_student",
         to: {
           address: "student@example.com",
           name: "山田太郎",
@@ -85,7 +89,7 @@ describe("reservation-mail", () => {
       });
 
       expect(drafts[1]).toEqual({
-        idempotencyKey: "reservation:approved:res_test_123:usr_admin",
+        idempotencyKey: "reservation:approved:res_test_123:1789866000000:usr_admin",
         to: {
           address: "admin@example.com",
           name: "管理者花子",
@@ -107,50 +111,107 @@ describe("reservation-mail", () => {
       );
 
       expect(drafts[0]?.idempotencyKey).toBe(
-        "reservation:approved:res_test_123:student@example.com",
+        "reservation:approved:res_test_123:1789866000000:student@example.com",
+      );
+    });
+
+    /*
+     * 承認は、施設・日時の変更で仮予約に戻った（UC-005）あとにもう一度起きる。
+     * 鍵が同じだと、2 回目の承認通知は outbox の UNIQUE に弾かれて黙って捨てられる。
+     */
+    it("同じ予約でも、更新日時が違えば idempotencyKey が変わる（再承認の通知が捨てられない）", () => {
+      const first = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        baseReservation,
+        defaultAudience,
+      );
+      const second = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        { ...baseReservation, updatedAt: new Date("2026-09-22T10:00:00+09:00") },
+        defaultAudience,
+      );
+
+      expect(second[0]?.idempotencyKey).not.toBe(first[0]?.idempotencyKey);
+    });
+
+    it("同じ引数なら idempotencyKey は何度作っても同じ（乱数やいまの時刻が混ざっていない）", () => {
+      const first = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        baseReservation,
+        defaultAudience,
+      );
+      const second = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        { ...baseReservation },
+        defaultAudience,
+      );
+
+      expect(second.map((draft) => draft.idempotencyKey)).toEqual(
+        first.map((draft) => draft.idempotencyKey),
       );
     });
   });
 
-  // --- 6 つのイベントの文面と件名の網羅テスト ---
+  // --- 全イベントの文面と件名の網羅テスト ---
   describe("全イベントの件名・冒頭文・idempotencyKey", () => {
     const testCases = [
       {
         event: ReservationMailEvent.Applied,
         expectedSubject: "【i-Club予約システム】施設・設備の利用予約が申請されました",
         expectedOpening: "施設・設備の利用予約が申請されました。",
-        prefix: "reservation:applied:res_test_123:",
+        prefix: "reservation:applied:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Withdrawn,
         expectedSubject: "【i-Club予約システム】施設・設備の仮予約が取り消されました",
         expectedOpening: "申請されていた仮予約が取り消されました。",
-        prefix: "reservation:withdrawn:res_test_123:",
+        prefix: "reservation:withdrawn:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Cancelled,
         expectedSubject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
         expectedOpening: "承認済みの利用予約がキャンセルされました。",
-        prefix: "reservation:cancelled:res_test_123:",
+        prefix: "reservation:cancelled:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Approved,
         expectedSubject: "【i-Club予約システム】施設・設備の利用予約が承認されました",
         expectedOpening: "申請されていた利用予約が承認されました。",
-        prefix: "reservation:approved:res_test_123:",
+        prefix: "reservation:approved:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Rejected,
         expectedSubject: "【i-Club予約システム】施設・設備の利用予約が却下されました",
         expectedOpening: "申請されていた利用予約が却下されました。",
-        prefix: "reservation:rejected:res_test_123:",
+        prefix: "reservation:rejected:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.CancelledByStaff,
         expectedSubject:
           "【i-Club予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
         expectedOpening: "承認済みの利用予約が事務局によりキャンセルされました。",
-        prefix: "reservation:cancelledByStaff:res_test_123:",
+        prefix: "reservation:cancelledByStaff:res_test_123:1789866000000:",
+      },
+      {
+        event: ReservationMailEvent.ApprovedEdited,
+        expectedSubject: "【i-Club予約システム】施設・設備の利用予約の内容が変更されました",
+        expectedOpening:
+          "承認済みの利用予約の内容（使用人数・備考）が変更されました。承認済みのまま変わりません。",
+        prefix: "reservation:approvedEdited:res_test_123:1789866000000:",
+      },
+      {
+        event: ReservationMailEvent.ReapprovalRequested,
+        expectedSubject:
+          "【i-Club予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
+        expectedOpening:
+          "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。事務局が改めて承認するまで、施設・設備は利用できません。",
+        prefix: "reservation:reapprovalRequested:res_test_123:1789866000000:",
+      },
+      {
+        event: ReservationMailEvent.ProvisionalEdited,
+        expectedSubject: "【i-Club予約システム】施設・設備の仮予約の内容が変更されました",
+        expectedOpening: "申請されていた仮予約の内容が変更されました。",
+        prefix: "reservation:provisionalEdited:res_test_123:1789866000000:",
       },
     ] as const;
 
@@ -176,16 +237,28 @@ describe("reservation-mail", () => {
         [ReservationMailEvent.Approved]: false,
         [ReservationMailEvent.Rejected]: false,
         [ReservationMailEvent.CancelledByStaff]: false,
+        // 内容の変更は、操作するのが団体なので事務局にも知らせる（EVT-004 / EVT-012）
+        [ReservationMailEvent.ApprovedEdited]: true,
+        [ReservationMailEvent.ReapprovalRequested]: true,
+        [ReservationMailEvent.ProvisionalEdited]: true,
       });
     });
 
-    it("applied と cancelled では staff 宛の MailDraft が生成される", () => {
+    it("applied と cancelled と内容の変更では staff 宛の MailDraft が生成される", () => {
       const audience: ReservationMailAudience = {
         groupMembers: [{ userId: "usr_student", address: "student@example.com" }],
         staff: [{ userId: "usr_staff", address: "staff@example.com" }],
       };
 
-      for (const event of [ReservationMailEvent.Applied, ReservationMailEvent.Cancelled]) {
+      const staffEvents = [
+        ReservationMailEvent.Applied,
+        ReservationMailEvent.Cancelled,
+        ReservationMailEvent.ApprovedEdited,
+        ReservationMailEvent.ReapprovalRequested,
+        ReservationMailEvent.ProvisionalEdited,
+      ];
+
+      for (const event of staffEvents) {
         const drafts = createReservationMailDrafts(event, baseReservation, audience);
         expect(drafts).toHaveLength(2);
         expect(drafts.map((d) => d.to.address)).toEqual([
@@ -275,6 +348,29 @@ describe("reservation-mail", () => {
         defaultAudience,
       );
       expect(draftsApproved[0]?.text).not.toContain("理由:");
+    });
+  });
+
+  describe("内容の変更の通知", () => {
+    it("変更通知の本文には、変更後の日時が載り、理由の行は出ない", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.ReapprovalRequested,
+        { ...baseReservation, statusReason: "何らかの理由" },
+        defaultAudience,
+      );
+
+      expect(drafts[0]?.text).toContain("利用開始日時: 2026年9月25日 10:00");
+      expect(drafts[0]?.text).not.toContain("理由:");
+    });
+  });
+
+  describe("editMailEvent", () => {
+    it("書き込みが起きる変更の結果ごとに、通知イベントが定義されている", () => {
+      expect(editMailEvent).toEqual({
+        [ReservationEditOutcome.KeepProvisional]: ReservationMailEvent.ProvisionalEdited,
+        [ReservationEditOutcome.KeepApproved]: ReservationMailEvent.ApprovedEdited,
+        [ReservationEditOutcome.Reapproval]: ReservationMailEvent.ReapprovalRequested,
+      });
     });
   });
 

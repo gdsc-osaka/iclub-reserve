@@ -1,0 +1,347 @@
+/**
+ * 予約の内容の変更（UC-005 / UC-017）の更新文を、本物の SQLite に対して実行して確かめるテスト。
+ *
+ * 【なぜ実際に流すのか】
+ * ユースケースのテストは Repository を偽物に差し替えるので、更新文の条件の誤りは素通りする。
+ * ここでは「読んだときから変わっていないこと」（楽観的ロック）と、
+ * 「変更後の時間帯に承認済みの予約が無いこと」（COND-001）の条件を実際の DB で押さえる。
+ *
+ * 後者は、UPDATE の WHERE が**更新前**の行を読むことに気づかないと取り違える。
+ * 更新される行の列と突き合わせると、動かす前の時間帯を確かめてしまい、
+ * 動かした先に承認済みの予約があっても通ってしまう。
+ *
+ * 通知のメールを伴う書き込み（db.batch）は better-sqlite3 版の Drizzle に無いので、ここでは流さない。
+ * メールの積み方はステータスの更新と同じ関数（runGuardedUpdate）を通る。
+ *
+ * マイグレーションをそのまま流す理由は `invitation-accept-sqlite.test.ts` と同じ。
+ */
+import BetterSqlite3 from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+import * as schema from "~/db/schema";
+import { ReservationStatus, type ApplyContentEditArgs } from "~/domain/reservation";
+import type { Database } from "../db";
+import { createReservationRepository } from "./reservation-repo";
+
+const MIGRATIONS_DIR = join(process.cwd(), "drizzle", "migrations");
+
+/** 予約を読んだときの更新日時 */
+const READ_AT = new Date("2026-09-19T09:00:00+09:00");
+/** 変更を書き込む日時 */
+const EDITED_AT = new Date("2026-09-20T10:00:00+09:00");
+
+/** 2026-09-25（日本時間）の指定した時刻 */
+const at = (time: string) => new Date(`2026-09-25T${time}:00+09:00`);
+
+/** マイグレーションを流し、団体と施設を入れた DB を作る */
+const createTestDb = () => {
+  const sqlite = new BetterSqlite3(":memory:");
+  sqlite.pragma("foreign_keys = ON");
+
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  for (const file of files) {
+    const body = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+    // drizzle-kit は文の区切りにこの印を入れる
+    for (const statement of body.split("--> statement-breakpoint")) {
+      if (statement.trim() !== "") sqlite.exec(statement.trim());
+    }
+  }
+
+  sqlite
+    .prepare(
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+    )
+    .run("usr_taro", "太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
+  sqlite
+    .prepare(`INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`)
+    .run("grp_robotics", "ロボット部", "enabled", 0, 0);
+  const insertFacility = sqlite.prepare(
+    `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
+  );
+  insertFacility.run("fac_a", "会議室 A", 1, 0, 0);
+  insertFacility.run("fac_b", "会議室 B", 1, 0, 0);
+
+  // 型は D1 版に合わせる。better-sqlite3 版も同じ問い合わせを組み立て、await で結果を返す
+  const db = drizzle(sqlite, { schema }) as unknown as Database;
+  return { sqlite, db, repository: createReservationRepository(db) };
+};
+
+interface ReservationRow {
+  readonly id: string;
+  readonly facilityId?: string;
+  readonly status: ReservationStatus;
+  readonly startAt: Date;
+  readonly endAt: Date;
+  readonly headCount?: number;
+  readonly updatedAt?: Date;
+}
+
+const insertReservation = (sqlite: BetterSqlite3.Database, row: ReservationRow) =>
+  sqlite
+    .prepare(
+      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      row.id,
+      "grp_robotics",
+      row.facilityId ?? "fac_a",
+      row.startAt.getTime(),
+      row.endAt.getTime(),
+      row.headCount ?? 4,
+      row.status,
+      "usr_taro",
+      0,
+      (row.updatedAt ?? READ_AT).getTime(),
+    );
+
+const rowOf = (sqlite: BetterSqlite3.Database, id: string) =>
+  sqlite
+    .prepare(
+      `SELECT facility_id, start_at, end_at, head_count, note, status, updated_at FROM "reservation" WHERE id = ?`,
+    )
+    .get(id);
+
+/** 10:00〜12:00 の予約を、読んだときの値のまま変える引数。テストごとに上書きする */
+const editArgs = (overrides: Partial<ApplyContentEditArgs>): ApplyContentEditArgs => ({
+  id: "res_target",
+  expectedStatus: ReservationStatus.Provisional,
+  expectedUpdatedAt: READ_AT,
+  facilityId: "fac_a",
+  startAt: at("10:00"),
+  endAt: at("12:00"),
+  headCount: 4,
+  note: null,
+  status: ReservationStatus.Provisional,
+  updatedAt: EDITED_AT,
+  requireNoApprovedOverlap: false,
+  ...overrides,
+});
+
+describe("applyContentEdit を SQLite で実行する", () => {
+  describe("読んだときから変わっていないこと（楽観的ロック）", () => {
+    it("読んだときのままなら、内容・ステータス・更新日時をすべて書き換える", async () => {
+      const { sqlite, repository } = createTestDb();
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Approved,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+
+      const result = await repository.applyContentEdit(
+        editArgs({
+          expectedStatus: ReservationStatus.Approved,
+          facilityId: "fac_b",
+          startAt: at("13:00"),
+          endAt: at("15:30"),
+          headCount: 8,
+          note: "機材あり",
+          status: ReservationStatus.Provisional,
+        }),
+        [],
+      );
+
+      expect(result._unsafeUnwrap()).toEqual({ applied: true, enqueuedMailIds: [] });
+      expect(rowOf(sqlite, "res_target")).toEqual({
+        facility_id: "fac_b",
+        start_at: at("13:00").getTime(),
+        end_at: at("15:30").getTime(),
+        head_count: 8,
+        note: "機材あり",
+        status: ReservationStatus.Provisional,
+        updated_at: EDITED_AT.getTime(),
+      });
+    });
+
+    /*
+     * 退行テスト。ステータスを条件に入れていなかった時期は、読んでから書くまでに
+     * 事務局が却下した予約を、読んだときのステータス（仮予約）で書き戻していた。
+     */
+    it("読んだ後にステータスが変わっていたら（却下された等）、1 件も書き換えない", async () => {
+      const { sqlite, repository } = createTestDb();
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Rejected,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+
+      const result = await repository.applyContentEdit(editArgs({ headCount: 8 }), []);
+
+      expect(result._unsafeUnwrap().applied).toBe(false);
+      expect(rowOf(sqlite, "res_target")).toMatchObject({
+        status: ReservationStatus.Rejected,
+        head_count: 4,
+      });
+    });
+
+    it("読んだ後に別の変更が入っていたら（更新日時が違えば）、1 件も書き換えない", async () => {
+      const { sqlite, repository } = createTestDb();
+      // 誰かが先に使用人数を 6 にした。ステータスは仮予約のまま変わっていない
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Provisional,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+        headCount: 6,
+        updatedAt: new Date("2026-09-20T09:30:00+09:00"),
+      });
+
+      const result = await repository.applyContentEdit(editArgs({ note: "備考を追記" }), []);
+
+      expect(result._unsafeUnwrap().applied).toBe(false);
+      expect(rowOf(sqlite, "res_target")).toMatchObject({ head_count: 6, note: null });
+    });
+  });
+
+  describe("変更後の時間帯に承認済みの予約が無いこと（COND-001）", () => {
+    it("変更後の時間帯に承認済みの予約があれば、1 件も書き換えない", async () => {
+      const { sqlite, repository } = createTestDb();
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Provisional,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+      insertReservation(sqlite, {
+        id: "res_other",
+        status: ReservationStatus.Approved,
+        startAt: at("14:00"),
+        endAt: at("16:00"),
+      });
+
+      const result = await repository.applyContentEdit(
+        editArgs({ startAt: at("15:00"), endAt: at("17:00"), requireNoApprovedOverlap: true }),
+        [],
+      );
+
+      expect(result._unsafeUnwrap().applied).toBe(false);
+      expect(rowOf(sqlite, "res_target")).toMatchObject({ start_at: at("10:00").getTime() });
+    });
+
+    /*
+     * 退行テスト。更新される行の列と突き合わせていた時期は、動かす前の時間帯を確かめていたので、
+     * 承認済みの予約と重なっていた仮予約は、空いている時間帯へ動かすことすらできなかった。
+     */
+    it("動かす前の時間帯にだけ承認済みの予約があるなら、空いている時間帯へ動かせる", async () => {
+      const { sqlite, repository } = createTestDb();
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Provisional,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+      insertReservation(sqlite, {
+        id: "res_other",
+        status: ReservationStatus.Approved,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+
+      const result = await repository.applyContentEdit(
+        editArgs({ startAt: at("14:00"), endAt: at("16:00"), requireNoApprovedOverlap: true }),
+        [],
+      );
+
+      expect(result._unsafeUnwrap().applied).toBe(true);
+    });
+
+    it("承認済みの予約を少しずらすとき、動かす前の自分自身とは重なりと見なさない", async () => {
+      const { sqlite, repository } = createTestDb();
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Approved,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+
+      const result = await repository.applyContentEdit(
+        editArgs({
+          expectedStatus: ReservationStatus.Approved,
+          startAt: at("11:00"),
+          endAt: at("13:00"),
+          status: ReservationStatus.Provisional,
+          requireNoApprovedOverlap: true,
+        }),
+        [],
+      );
+
+      expect(result._unsafeUnwrap().applied).toBe(true);
+    });
+
+    it.each([
+      ["別の施設の承認済み予約", { facilityId: "fac_b", status: ReservationStatus.Approved }],
+      ["同じ時間帯の仮予約", { status: ReservationStatus.Provisional }],
+      ["同じ時間帯の却下済み予約", { status: ReservationStatus.Rejected }],
+    ] as const)("%s とは重なっていても書き換える", async (_name, other) => {
+      const { sqlite, repository } = createTestDb();
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Provisional,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+      insertReservation(sqlite, {
+        id: "res_other",
+        startAt: at("14:00"),
+        endAt: at("16:00"),
+        ...other,
+      });
+
+      const result = await repository.applyContentEdit(
+        editArgs({ startAt: at("14:00"), endAt: at("16:00"), requireNoApprovedOverlap: true }),
+        [],
+      );
+
+      expect(result._unsafeUnwrap().applied).toBe(true);
+    });
+
+    it("終了時刻ちょうどに始まる承認済み予約とは重ならない", async () => {
+      const { sqlite, repository } = createTestDb();
+      insertReservation(sqlite, {
+        id: "res_target",
+        status: ReservationStatus.Provisional,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+      });
+      insertReservation(sqlite, {
+        id: "res_other",
+        status: ReservationStatus.Approved,
+        startAt: at("15:00"),
+        endAt: at("16:00"),
+      });
+
+      const result = await repository.applyContentEdit(
+        editArgs({ startAt: at("13:00"), endAt: at("15:00"), requireNoApprovedOverlap: true }),
+        [],
+      );
+
+      expect(result._unsafeUnwrap().applied).toBe(true);
+    });
+  });
+});
+
+describe("existsApprovedOverlap を SQLite で実行する", () => {
+  it("excludeReservationId に渡した予約は、重なりの相手に数えない", async () => {
+    const { sqlite, repository } = createTestDb();
+    insertReservation(sqlite, {
+      id: "res_target",
+      status: ReservationStatus.Approved,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+    });
+    const slot = { facilityId: "fac_a", startAt: at("11:00"), endAt: at("13:00") };
+
+    expect((await repository.existsApprovedOverlap(slot))._unsafeUnwrap()).toBe(true);
+    expect(
+      (
+        await repository.existsApprovedOverlap({ ...slot, excludeReservationId: "res_target" })
+      )._unsafeUnwrap(),
+    ).toBe(false);
+  });
+});
