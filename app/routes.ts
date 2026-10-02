@@ -57,6 +57,11 @@ export default [
      * アカウント設定（SCR-021）。
      */
     route("account", "routes/account/route.tsx"),
+    /*
+     * 操作履歴（SCR-018）。
+     * 事務局スタッフ限定の画面。全件の操作履歴の閲覧・絞り込みを扱う。
+     */
+    route("staff/audit-log", "routes/audit-log/staff/route.tsx"),
   ]),
 
   /*

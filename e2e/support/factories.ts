@@ -25,6 +25,7 @@ type InvitationRow = typeof schema.groupInvitationTable.$inferSelect;
 type ReservationRow = typeof schema.reservationTable.$inferSelect;
 type SessionRow = typeof schema.session.$inferSelect;
 type PasskeyRow = typeof schema.passkey.$inferSelect;
+type AuditLogRow = typeof schema.auditLogTable.$inferSelect;
 
 /** 呼ぶたびに違う、短い印 */
 export const uniqueSuffix = (): string => randomUUID().slice(0, 8);
@@ -220,6 +221,31 @@ export async function createPasskey(
       transports: "internal",
       createdAt: new Date(),
       aaguid: null,
+      ...values,
+    })
+    .returning();
+  return row;
+}
+
+/** 操作履歴を作る */
+export async function createAuditLog(
+  db: E2eDb,
+  values: Pick<
+    typeof schema.auditLogTable.$inferInsert,
+    "actorId" | "action" | "targetType" | "targetId"
+  > &
+    Partial<typeof schema.auditLogTable.$inferInsert>,
+): Promise<AuditLogRow> {
+  const suffix = uniqueSuffix();
+  const now = new Date();
+  const [row] = await db
+    .insert(schema.auditLogTable)
+    .values({
+      id: `log_e2e_${suffix}`,
+      occurredAt: now,
+      actedAsStaff: false,
+      groupId: null,
+      changes: {},
       ...values,
     })
     .returning();
