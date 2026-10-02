@@ -74,9 +74,10 @@ export interface ChangeReservationStatusResult {
  *
  * 【最後の更新を条件付きで行う理由】
  * findById から更新までの間に別の操作が割り込むことがある
- * （例: 重なった仮予約を 2 人の事務局が同時に承認する）。D1 では確認と更新を
- * 1 つのトランザクションで囲めないため、ここまでの確認結果には頼らず、
- * 「読んだときの状態から変わっていないこと」を UPDATE 文の条件に持ち込む。
+ * （例: 重なった仮予約を 2 人の事務局が同時に承認する、承認しようとした仮予約の日時を
+ * 団体のメンバーが変える）。D1 では確認と更新を 1 つのトランザクションで囲めないため、
+ * ここまでの確認結果には頼らず、「読んだときのステータスと更新日時から変わっていないこと」を
+ * UPDATE 文の条件に持ち込む。
  * 状態変更通知メールは、その UPDATE と不可分に outbox へ積む（ADR-002 決定 3）。
  */
 export const changeReservationStatusUseCase = (
@@ -156,6 +157,7 @@ export const changeReservationStatusUseCase = (
       {
         id: reservation.id,
         expectedStatus: transitionSourceStatus[args.transition],
+        expectedUpdatedAt: reservation.updatedAt,
         status: targetStatus,
         statusReason,
         updatedAt: now,
@@ -167,9 +169,9 @@ export const changeReservationStatusUseCase = (
     if (!outcome.applied) {
       return errAsync<never, ReservationError>({
         code: ReservationErrorCode.Conflict,
-        message: `予約 ${reservation.id} は読んだ後に状態が変わっていたので、更新しなかった。`,
+        message: `予約 ${reservation.id} は読んだ後に状態か内容が変わっていたので、更新しなかった。`,
         userMessage:
-          "この予約には別の操作が先に反映されました。画面を読み込み直して、状態を確認してください。",
+          "この予約には別の操作が先に反映されました。画面を読み込み直して、状態と内容を確認してください。",
       });
     }
 

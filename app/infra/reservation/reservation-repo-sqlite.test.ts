@@ -1,5 +1,5 @@
 /**
- * 予約の内容の変更（UC-005 / UC-017）の更新文を、本物の SQLite に対して実行して確かめるテスト。
+ * 予約の内容の変更（UC-005 / UC-017）とステータスの変更の更新文を、本物の SQLite に対して実行して確かめるテスト。
  *
  * 【なぜ実際に流すのか】
  * ユースケースのテストは Repository を偽物に差し替えるので、更新文の条件の誤りは素通りする。
@@ -22,7 +22,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import * as schema from "~/db/schema";
-import { ReservationStatus, type ApplyContentEditArgs } from "~/domain/reservation";
+import {
+  ReservationStatus,
+  type ApplyContentEditArgs,
+  type ApplyStatusTransitionArgs,
+} from "~/domain/reservation";
 import type { Database } from "../db";
 import { createReservationRepository } from "./reservation-repo";
 
@@ -323,6 +327,58 @@ describe("applyContentEdit を SQLite で実行する", () => {
 
       expect(result._unsafeUnwrap().applied).toBe(true);
     });
+  });
+});
+
+describe("applyStatusTransition を SQLite で実行する", () => {
+  /** 10:00〜12:00 の仮予約を、読んだときの値のまま承認する引数 */
+  const approveArgs: ApplyStatusTransitionArgs = {
+    id: "res_target",
+    expectedStatus: ReservationStatus.Provisional,
+    expectedUpdatedAt: READ_AT,
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    updatedAt: EDITED_AT,
+    requireNoApprovedOverlap: true,
+  };
+
+  it("読んだときのままなら、承認する", async () => {
+    const { sqlite, repository } = createTestDb();
+    insertReservation(sqlite, {
+      id: "res_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+    });
+
+    const result = await repository.applyStatusTransition(approveArgs, []);
+
+    expect(result._unsafeUnwrap().applied).toBe(true);
+    expect(rowOf(sqlite, "res_target")).toMatchObject({
+      status: ReservationStatus.Approved,
+      updated_at: EDITED_AT.getTime(),
+    });
+  });
+
+  /*
+   * 退行テスト。ステータスだけを条件にしていた時期は、事務局が読んだ後に団体のメンバーが
+   * 仮予約の日時を変えても（仮予約のままなので）承認が通り、事務局が見ていない日時の予約が承認されていた。
+   */
+  it("読んだ後に内容が変わっていたら（ステータスが同じでも）、承認しない", async () => {
+    const { sqlite, repository } = createTestDb();
+    // 事務局が読んだ後に、団体のメンバーが 14:00〜16:00 に変えた。仮予約のまま
+    insertReservation(sqlite, {
+      id: "res_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("14:00"),
+      endAt: at("16:00"),
+      updatedAt: new Date("2026-09-20T09:30:00+09:00"),
+    });
+
+    const result = await repository.applyStatusTransition(approveArgs, []);
+
+    expect(result._unsafeUnwrap().applied).toBe(false);
+    expect(rowOf(sqlite, "res_target")).toMatchObject({ status: ReservationStatus.Provisional });
   });
 });
 

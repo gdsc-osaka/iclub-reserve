@@ -27,6 +27,8 @@ import {
 
 /** 1789866000000 ミリ秒。通知の idempotencyKey に更新日時として入る */
 const testNow = new Date("2026-09-20T10:00:00+09:00");
+/** 予約を読んだときの更新日時。条件付き更新の条件（expectedUpdatedAt）に渡る */
+const readAt = new Date("2026-09-20T09:00:00+09:00");
 
 const baseProvisionalReservation: Reservation = {
   id: "res_provisional_01",
@@ -40,7 +42,7 @@ const baseProvisionalReservation: Reservation = {
   statusReason: null,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-20T09:00:00+09:00"),
-  updatedAt: new Date("2026-09-20T09:00:00+09:00"),
+  updatedAt: readAt,
 };
 
 const baseApprovedReservation: Reservation = {
@@ -189,6 +191,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_provisional_01",
           expectedStatus: ReservationStatus.Provisional,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Withdrawn,
           statusReason: "都合がつかなくなったため",
           updatedAt: testNow,
@@ -249,6 +252,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_approved_01",
           expectedStatus: ReservationStatus.Approved,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Cancelled,
           statusReason: "イベント延期のため",
           updatedAt: testNow,
@@ -304,6 +308,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_provisional_01",
           expectedStatus: ReservationStatus.Provisional,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Approved,
           statusReason: null,
           updatedAt: testNow,
@@ -388,6 +393,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_provisional_01",
           expectedStatus: ReservationStatus.Provisional,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Rejected,
           statusReason: "設備点検のため利用できません",
           updatedAt: testNow,
@@ -427,6 +433,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_approved_01",
           expectedStatus: ReservationStatus.Approved,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.CancelledByStaff,
           statusReason: "大学の公式行事のため",
           updatedAt: testNow,

@@ -232,6 +232,15 @@ export interface ApplyStatusTransitionArgs {
    * 操作したとき、あとから届いた方が相手の結果を上書きしてしまうのを防ぐ。
    */
   readonly expectedStatus: ReservationStatus;
+  /**
+   * 読んだときの更新日時。
+   *
+   * 仮予約は施設・日時を変えても仮予約のまま（UC-017）なので、ステータスだけでは
+   * 読んでから書くまでに内容が変わったことに気づけない。気づけないと、事務局が見ていない
+   * 施設・日時の予約を承認し、承認の通知には読んだときの古い日時が載ってしまう。
+   * ステータスと両方を条件にする理由は ApplyContentEditArgs.expectedUpdatedAt と同じ。
+   */
+  readonly expectedUpdatedAt: Date;
   /** 更新後の予約ステータス */
   readonly status: ReservationStatus;
   readonly statusReason: string | null;

@@ -240,8 +240,9 @@ export const createReservationRepository = (db: Database): ReservationRepository
       .where(
         and(
           eq(reservationTable.id, args.id),
-          // 読んだときの状態から変わっていないことを、更新の条件に入れる
+          // 読んだときから変わっていないことを、更新の条件に入れる（ApplyStatusTransitionArgs を参照）
           eq(reservationTable.status, args.expectedStatus),
+          eq(reservationTable.updatedAt, args.expectedUpdatedAt),
           args.requireNoApprovedOverlap ? noApprovedOverlap : undefined,
         ),
       )
