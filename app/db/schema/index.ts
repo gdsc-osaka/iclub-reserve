@@ -1,7 +1,7 @@
 /**
  * DB スキーマの入口。
  *
- * スキーマは 5 つに分かれている。
+ * スキーマは 6 つに分かれている。
  *
  * - `auth.ts`: Better Auth が管理するテーブル。
  *   `pnpm db:auth:generate` が**ファイルごと上書きする**ので、手で編集しないこと。
@@ -13,6 +13,7 @@
  *   もとは Better Auth の生成物だったが、ADR-003 で自前に戻した手書きのテーブル。
  * - `reservation.ts`: このアプリ独自のテーブル。こちらは手で書く。
  * - `mail.ts`: Transactional Outbox 用のテーブル（ADR-002）。
+ * - `audit-log.ts`: 操作履歴テーブル（INFO-008 / BIZ-007）。追記専用の監査記録。
  *
  * 参照する側は今までどおり `~/db/schema` から import すればよい。
  *
@@ -26,3 +27,4 @@ export * from "./passkey-usage";
 export * from "./group";
 export * from "./reservation";
 export * from "./mail";
+export * from "./audit-log";
