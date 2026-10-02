@@ -3,6 +3,7 @@ import {
   CalendarCheck,
   CalendarDays,
   ClipboardCheck,
+  History,
   LayoutDashboard,
   Settings2,
   Users,
@@ -126,6 +127,14 @@ export const staffNavItems: readonly NavItem[] = [
     icon: Settings2,
     enabled: true,
     screen: "SCR-009",
+  },
+  {
+    id: "staff-audit-log",
+    label: "操作履歴",
+    to: "/staff/audit-log",
+    icon: History,
+    enabled: true,
+    screen: "SCR-018",
   },
 ];
 
