@@ -1,8 +1,9 @@
 import type { ResultAsync } from "neverthrow";
 
 import type { PermissionTable } from "../authz";
+import { ErrorKind, type BaseError } from "../error";
 import type { MailDraft } from "../mail/mail-outbox";
-import { MembershipRole } from "../membership";
+import { MembershipRole, StaffRole, type ActorRole } from "../membership";
 
 export const ReservationStatus = {
   Provisional: "provisional",
@@ -31,6 +32,19 @@ export interface Reservation {
 }
 
 export const ReservationAction = {
+  /**
+   * 概要（施設・日時・団体名・ステータス）を見る（COND-008）。
+   *
+   * 予約そのものを開けるかどうかは、この操作が許されるかで決まる。
+   */
+  ViewSummary: "view_summary",
+  /**
+   * 詳しい項目（使用人数・備考・却下/キャンセル理由・作成者・メッセージ）まで見る（COND-008）。
+   *
+   * ViewSummary とは別の操作にしてある。1 つにまとめて「見られるか」だけを問うと、
+   * 表からは 2 段階に分かれていることが読み取れなくなる。
+   */
+  ViewDetail: "view_detail",
   CreateProvisional: "create_provisional",
   Withdraw: "withdraw",
   Cancel: "cancel",
@@ -39,51 +53,148 @@ export const ReservationAction = {
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
 
 /**
- * 団体の中での役割ごとに許可する操作。
+ * 予約への操作を誰に許すかの表。
  *
- * 承認・却下・事務局キャンセルはここに無い。事務局の権限は団体での役割とは
- * 別の軸にあり（COND-009）、団体に所属していない事務局の人にも成り立つため、
- * 役割の表では表せない。判定は transition.ts の canTransition の `isStaff` で行う。
+ * 承認・却下・事務局キャンセルはここに無い。状態を遷移させる操作なので、
+ * どの状態からどの状態へ動かせるかと一体で transition.ts の transitionAuthority が持つ。
+ *
+ * 判定するときは Membership の `canAct` にこの表を渡すこと。
  */
-export const reservationPermissions: PermissionTable<MembershipRole, ReservationAction> = {
-  [MembershipRole.Admin]: [
-    ReservationAction.CreateProvisional,
-    ReservationAction.Withdraw,
-    ReservationAction.Cancel,
-  ],
-  [MembershipRole.Member]: [
-    ReservationAction.CreateProvisional,
-    ReservationAction.Withdraw,
-    ReservationAction.Cancel,
-  ],
+export const reservationPermissions: PermissionTable<ActorRole, ReservationAction> = {
+  /*
+   * 所属していない人でも、予約の概要は見られる (COND-008)。
+   * 空き状況カレンダー (SCR-001) が「いつ空いているか」を答えるには、
+   * 他団体の予約も施設・日時・団体名・ステータスまで見えている必要がある。
+   *
+   * ここに ViewDetail を足してはいけない。使用人数・備考・却下理由・作成者は
+   * 自団体と事務局にだけ見せる項目である (COND-008)。
+   *
+   * NOTE: COND-008 の 3 段目 (Google Calendar 経由で誰でも見られる範囲) はここに無い。
+   * ログインしていない相手には操作する人が居ないので、表の外で決める (authz.ts 参照)。
+   */
+  base: [ReservationAction.ViewSummary],
+  byRole: {
+    [MembershipRole.Admin]: [
+      ReservationAction.ViewDetail,
+      ReservationAction.CreateProvisional,
+      ReservationAction.Withdraw,
+      ReservationAction.Cancel,
+    ],
+    [MembershipRole.Member]: [
+      ReservationAction.ViewDetail,
+      ReservationAction.CreateProvisional,
+      ReservationAction.Withdraw,
+      ReservationAction.Cancel,
+    ],
+    /*
+     * 事務局は所属していない団体でも予約を作れる (COND-009)。
+     *
+     * 取り消し・キャンセルを入れていないのは、事務局にはそれ用の操作
+     * (却下・事務局キャンセル) が別にあり、理由の入力を必須にしてあるため (COND-002)。
+     * 事務局の人が自分の所属する団体の予約を取り消すときは、
+     * メンバーとしての役割が和集合で効くので、そちらから取り消せる。
+     */
+    [StaffRole]: [ReservationAction.ViewDetail, ReservationAction.CreateProvisional],
+  },
 };
 
+/**
+ * 予約まわりのエラーコード。
+ *
+ * 列挙子の名前は型名を繰り返さないが、文字列の値は変えないこと（ADR-004 決定 1）。
+ * ログに出るのは値の方なので、変えると過去のログと突き合わせられなくなる。
+ */
 export const ReservationErrorCode = {
-  ReservationNotFound: "RESERVATION_NOT_FOUND",
-  ReservationForbidden: "RESERVATION_FORBIDDEN",
+  /** 予約が存在しない */
+  NotFound: "RESERVATION_NOT_FOUND",
+  /**
+   * 予約はあるが、見る権限が無いので見せない（COND-008）。
+   *
+   * 利用者には `NotFound` と同じ応答を返す。予約 ID を総当たりして存在を確かめられないようにするためで、
+   * 団体の存在秘匿（COND-011）と同じ考え方である。ユースケースが `NotFound` に潰さずに正直に返すのは、
+   * サーバーのログでは権限の無いアクセスとして残したいため。秘匿は画面の側
+   * （`app/routes/_shared/reservation-error.server.ts`）が行う（ADR-004 決定 4）。
+   *
+   * NOTE: いまは権限表の `base` が概要の閲覧を全員に許しているので、ログイン済みの人には起きない。
+   */
+  NotVisible: "RESERVATION_NOT_VISIBLE",
+  /** 予約を見られるが、その操作をする権限が無い */
+  Forbidden: "RESERVATION_FORBIDDEN",
   /** 申請できない利用時間（刻み・利用可能時間・日またぎ・過去日時） */
-  ReservationInvalidPeriod: "RESERVATION_INVALID_PERIOD",
-  /** 利用時間以外の入力が不正（使用人数・備考） */
-  ReservationInvalidInput: "RESERVATION_INVALID_INPUT",
+  InvalidPeriod: "RESERVATION_INVALID_PERIOD",
+  /** 利用時間以外の入力が不正（使用人数・備考・理由） */
+  InvalidInput: "RESERVATION_INVALID_INPUT",
   /** 不正なステータス遷移（許可されていない状態からの操作） */
-  ReservationInvalidTransition: "RESERVATION_INVALID_TRANSITION",
+  InvalidTransition: "RESERVATION_INVALID_TRANSITION",
   /**
    * 同一施設・同一時間帯に承認済みの予約がある（COND-001）、
    * または同じ予約に対する別の操作が先に反映された
    */
-  ReservationConflict: "RESERVATION_CONFLICT",
+  Conflict: "RESERVATION_CONFLICT",
   /** 申請元に選んだ団体が有効でない（COND-006） */
-  ReservationGroupNotEligible: "RESERVATION_GROUP_NOT_ELIGIBLE",
+  GroupNotEligible: "RESERVATION_GROUP_NOT_ELIGIBLE",
   /** 申請先に選んだ施設・設備が見つからない、または無効になっている */
-  ReservationFacilityNotAvailable: "RESERVATION_FACILITY_NOT_AVAILABLE",
+  FacilityNotAvailable: "RESERVATION_FACILITY_NOT_AVAILABLE",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type ReservationErrorCode = (typeof ReservationErrorCode)[keyof typeof ReservationErrorCode];
 
-export interface ReservationError {
+/**
+ * 予約まわりのエラーコードの分類（ADR-004 決定 3）。
+ *
+ * HTTP の status とログのレベルは、この表から決まる。
+ * `NotVisible` を `not_found` にしないこと。ログで総当たりを見つけるには
+ * `forbidden`（warn）として残る必要がある。利用者への応答を 404 に揃えるのは画面の側の仕事である。
+ */
+export const reservationErrorKind: Record<ReservationErrorCode, ErrorKind> = {
+  [ReservationErrorCode.NotFound]: ErrorKind.NotFound,
+  [ReservationErrorCode.NotVisible]: ErrorKind.Forbidden,
+  [ReservationErrorCode.Forbidden]: ErrorKind.Forbidden,
+  [ReservationErrorCode.InvalidPeriod]: ErrorKind.InvalidInput,
+  [ReservationErrorCode.InvalidInput]: ErrorKind.InvalidInput,
+  // 操作は正しいが、予約がもうその状態にない。画面を開いた後に状態が変わったときに起きる
+  [ReservationErrorCode.InvalidTransition]: ErrorKind.Conflict,
+  [ReservationErrorCode.Conflict]: ErrorKind.Conflict,
+  /*
+   * 団体と施設は、存在して申請も許されているが、いまの状態（承認待ち・無効）が申請と両立しない。
+   * 申請する権限は、この確認より前に確かめ終えているので forbidden ではなく、
+   * 送られてきた ID も正しい形をしているので invalid_input でもない。
+   */
+  [ReservationErrorCode.GroupNotEligible]: ErrorKind.Conflict,
+  [ReservationErrorCode.FacilityNotAvailable]: ErrorKind.Conflict,
+  [ReservationErrorCode.DatabaseError]: ErrorKind.Internal,
+};
+
+/**
+ * 失敗が、どの項目についてのものか（ADR-004 決定 6）。
+ *
+ * 画面の入力欄の名前ではなく、ドメインの語彙で書く。どの欄の下に出すかは、
+ * 画面ごとにこの値から自分の欄を引く表を持って決める。
+ *
+ * 入力の誤り（invalid_input）に限らず、選び直せば通る失敗にも付ける。
+ * 承認済みの予約との重なりなら時間帯を、団体が承認待ちなら団体を選び直せばよい。
+ * どの欄の下に出るかで、何を直せばよいかが伝わる。
+ */
+export const ReservationField = {
+  /** 申請元の団体 */
+  Group: "reservation_group",
+  /** 申請先の施設・設備 */
+  Facility: "reservation_facility",
+  /** 利用時間（日付・開始・終了をまとめて 1 つ） */
+  Period: "reservation_period",
+  /** 使用人数 */
+  HeadCount: "reservation_head_count",
+  /** 備考 */
+  Note: "reservation_note",
+  /** 却下・キャンセルの理由（COND-002） */
+  StatusReason: "reservation_status_reason",
+} as const;
+export type ReservationField = (typeof ReservationField)[keyof typeof ReservationField];
+
+export interface ReservationError extends BaseError {
   readonly code: ReservationErrorCode;
-  readonly message: string;
-  readonly cause?: unknown;
+  /** どの項目についての失敗か。画面が欄を決めるのに使う */
+  readonly field?: ReservationField;
 }
 
 /** 重複の確認（COND-001）に渡す時間帯。 */

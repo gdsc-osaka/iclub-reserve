@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "neverthrow";
-import { GroupErrorCode, type GroupError } from "./index";
+import { GroupErrorCode, GroupField, type GroupError } from "./index";
 
 /**
  * 団体名の最大文字数。
@@ -10,9 +10,17 @@ import { GroupErrorCode, type GroupError } from "./index";
  */
 export const GROUP_NAME_MAX_LENGTH = 64;
 
-const invalidInput = (message: string): GroupError => ({
-  code: GroupErrorCode.GroupInvalidInput,
+/**
+ * 団体名の誤りを表すエラーを作る。
+ *
+ * @param message ログに残す説明。入力された団体名は埋め込まない
+ * @param userMessage 入力欄の下に出す、直し方の分かる文言
+ */
+const invalidName = (message: string, userMessage: string): GroupError => ({
+  code: GroupErrorCode.InvalidInput,
+  field: GroupField.Name,
   message,
+  userMessage,
 });
 
 /**
@@ -27,23 +35,30 @@ const invalidInput = (message: string): GroupError => ({
  */
 export const validateGroupName = (raw: string | null | undefined): Result<string, GroupError> => {
   if (raw === null || raw === undefined) {
-    return err(invalidInput("団体名を入力してください。"));
+    return err(invalidName("団体名が送られていない。", "団体名を入力してください。"));
   }
 
   const trimmed = raw.trim();
 
   if (trimmed === "") {
-    return err(invalidInput("団体名を入力してください。"));
+    return err(invalidName("団体名が空である。", "団体名を入力してください。"));
   }
 
   // 見出しやメールの 1 行表示を崩さないため、改行やタブ文字を禁止する
   if (/[\r\n\t]/.test(trimmed)) {
-    return err(invalidInput("団体名に改行やタブは使えません。"));
+    return err(
+      invalidName("団体名に改行かタブが含まれている。", "団体名に改行やタブは使えません。"),
+    );
   }
 
   // 文字数の数え方は RESERVATION_NOTE_MAX_LENGTH の判定とそろえ、String.prototype.length を使う
   if (trimmed.length > GROUP_NAME_MAX_LENGTH) {
-    return err(invalidInput(`団体名は ${GROUP_NAME_MAX_LENGTH} 文字以内で入力してください。`));
+    return err(
+      invalidName(
+        `団体名が ${GROUP_NAME_MAX_LENGTH} 文字を超えている。`,
+        `団体名は ${GROUP_NAME_MAX_LENGTH} 文字以内で入力してください。`,
+      ),
+    );
   }
 
   return ok(trimmed);

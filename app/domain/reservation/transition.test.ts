@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { MembershipRole } from "../membership";
 import { ReservationErrorCode, ReservationStatus } from ".";
 import {
+  canPerformTransition,
   canTransition,
   isStaffTransition,
   parseReservationTransition,
@@ -12,10 +13,10 @@ import {
 
 describe("canTransition", () => {
   /** 指定した役割でその予約の団体に所属している人 */
-  const membershipOf = (...roles: MembershipRole[]) => ({
+  const membershipOf = (role: MembershipRole) => ({
     groupId: "grp_01",
     userId: "usr_01",
-    roles,
+    role,
   });
 
   const memberActor = { isStaff: false, membership: membershipOf(MembershipRole.Member) };
@@ -41,12 +42,15 @@ describe("canTransition", () => {
       ).toBe(true);
     });
 
-    it("役割を 1 つも持たない所属では、取り消しもキャンセルもできない", () => {
+    it("未定義の役割の所属では、取り消しもキャンセルもできない", () => {
       /*
        * 所属しているかどうかだけで判定していると、この場合も通ってしまう。
        * 権限表を引いていることを、ここで固定しておく。
        */
-      const rolelessActor = { isStaff: false, membership: membershipOf() };
+      const rolelessActor = {
+        isStaff: false,
+        membership: membershipOf("unknown" as MembershipRole),
+      };
 
       expect(
         canTransition(
@@ -54,14 +58,14 @@ describe("canTransition", () => {
           ReservationTransition.Withdraw,
           rolelessActor,
         )._unsafeUnwrapErr().code,
-      ).toBe(ReservationErrorCode.ReservationForbidden);
+      ).toBe(ReservationErrorCode.Forbidden);
       expect(
         canTransition(
           { status: ReservationStatus.Approved },
           ReservationTransition.Cancel,
           rolelessActor,
         )._unsafeUnwrapErr().code,
-      ).toBe(ReservationErrorCode.ReservationForbidden);
+      ).toBe(ReservationErrorCode.Forbidden);
     });
   });
 
@@ -93,22 +97,20 @@ describe("canTransition", () => {
       expect(result.isOk()).toBe(true);
     });
 
-    it("事務局は理由を入力して仮予約を却下できる（provisional → rejected）", () => {
+    it("事務局は仮予約を却下できる（provisional → rejected）", () => {
       const result = canTransition(
         { status: ReservationStatus.Provisional },
         ReservationTransition.Reject,
         staffActor,
-        "施設のメンテナンスのため",
       );
       expect(result.isOk()).toBe(true);
     });
 
-    it("事務局は理由を入力して承認済み予約をキャンセルできる（approved → cancelled_by_staff）", () => {
+    it("事務局は承認済み予約をキャンセルできる（approved → cancelled_by_staff）", () => {
       const result = canTransition(
         { status: ReservationStatus.Approved },
         ReservationTransition.StaffCancel,
         staffActor,
-        "緊急点検のため",
       );
       expect(result.isOk()).toBe(true);
     });
@@ -121,7 +123,7 @@ describe("canTransition", () => {
         ReservationTransition.Withdraw,
         nonMemberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("他団体（非メンバーかつ非スタッフ）はキャンセルできない", () => {
@@ -130,7 +132,7 @@ describe("canTransition", () => {
         ReservationTransition.Cancel,
         nonMemberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("一般メンバー（非スタッフ）は承認できない", () => {
@@ -139,7 +141,7 @@ describe("canTransition", () => {
         ReservationTransition.Approve,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("一般メンバー（非スタッフ）は却下できない", () => {
@@ -147,9 +149,8 @@ describe("canTransition", () => {
         { status: ReservationStatus.Provisional },
         ReservationTransition.Reject,
         memberActor,
-        "理由",
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("一般メンバー（非スタッフ）は事務局キャンセルできない", () => {
@@ -157,9 +158,8 @@ describe("canTransition", () => {
         { status: ReservationStatus.Approved },
         ReservationTransition.StaffCancel,
         memberActor,
-        "理由",
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("非メンバーの事務局は取り消し（withdraw）ではなく却下（reject）を行う", () => {
@@ -168,7 +168,7 @@ describe("canTransition", () => {
         ReservationTransition.Withdraw,
         staffActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
   });
 
@@ -179,9 +179,7 @@ describe("canTransition", () => {
         ReservationTransition.Withdraw,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("仮予約に対して通常のキャンセルはできない", () => {
@@ -190,9 +188,7 @@ describe("canTransition", () => {
         ReservationTransition.Cancel,
         memberActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("承認済み予約に対して承認はできない", () => {
@@ -201,9 +197,7 @@ describe("canTransition", () => {
         ReservationTransition.Approve,
         staffActor,
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("承認済み予約に対して却下はできない", () => {
@@ -211,11 +205,8 @@ describe("canTransition", () => {
         { status: ReservationStatus.Approved },
         ReservationTransition.Reject,
         staffActor,
-        "理由",
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     it("仮予約に対して事務局キャンセルはできない", () => {
@@ -223,11 +214,8 @@ describe("canTransition", () => {
         { status: ReservationStatus.Provisional },
         ReservationTransition.StaffCancel,
         staffActor,
-        "理由",
       );
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
     });
 
     const endedStatuses = [
@@ -240,10 +228,8 @@ describe("canTransition", () => {
     it.each(endedStatuses)("終了した状態（%s）からの遷移はすべて拒否される", (status) => {
       for (const transition of Object.values(ReservationTransition)) {
         const actor = { isStaff: true, membership: membershipOf(MembershipRole.Admin) };
-        const result = canTransition({ status }, transition, actor, "理由");
-        expect(result._unsafeUnwrapErr().code).toBe(
-          ReservationErrorCode.ReservationInvalidTransition,
-        );
+        const result = canTransition({ status }, transition, actor);
+        expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
       }
     });
   });
@@ -259,17 +245,17 @@ describe("validateTransitionReason (COND-002)", () => {
 
     it("理由が null のときは弾く", () => {
       const result = validateTransitionReason(ReservationTransition.Reject, null);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
 
     it("空文字は弾く", () => {
       const result = validateTransitionReason(ReservationTransition.Reject, "");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
 
     it("空白のみは弾く", () => {
       const result = validateTransitionReason(ReservationTransition.Reject, "   \n\t  ");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
   });
 
@@ -282,12 +268,12 @@ describe("validateTransitionReason (COND-002)", () => {
 
     it("理由が無い場合は弾く", () => {
       const result = validateTransitionReason(ReservationTransition.StaffCancel, "");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
 
     it("空白のみは弾く", () => {
       const result = validateTransitionReason(ReservationTransition.StaffCancel, "   ");
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
     });
   });
 
@@ -363,5 +349,37 @@ describe("isStaffTransition", () => {
     expect(staffOnly.length + groupOnly.length).toBe(transitions.length);
     expect(staffOnly.length).toBeGreaterThan(0);
     expect(groupOnly.length).toBeGreaterThan(0);
+  });
+});
+
+describe("canPerformTransition", () => {
+  it("事務局だけの操作は、予約を見ずに事務局かどうかだけで決まる", () => {
+    // ユースケースが予約を引く前に呼ぶので、予約の状態を受け取らないこと
+    expect(
+      canPerformTransition(ReservationTransition.Approve, {
+        isStaff: false,
+        membership: null,
+      })._unsafeUnwrapErr().code,
+    ).toBe(ReservationErrorCode.Forbidden);
+    expect(
+      canPerformTransition(ReservationTransition.Approve, {
+        isStaff: true,
+        membership: null,
+      }).isOk(),
+    ).toBe(true);
+  });
+
+  it("canTransition の権限の判定と同じ結果になる", () => {
+    const nonMember = { isStaff: false, membership: null };
+
+    expect(
+      canPerformTransition(ReservationTransition.Withdraw, nonMember)._unsafeUnwrapErr(),
+    ).toEqual(
+      canTransition(
+        { status: ReservationStatus.Provisional },
+        ReservationTransition.Withdraw,
+        nonMember,
+      )._unsafeUnwrapErr(),
+    );
   });
 });

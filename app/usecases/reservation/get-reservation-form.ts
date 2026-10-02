@@ -94,7 +94,7 @@ const findCreated = (
     .findById(args.createdReservationId)
     .map((reservation) => (reservation.createdBy === args.actorUserId ? reservation : null))
     .orElse((error): ResultAsync<Reservation | null, QueryError> =>
-      error.code === ReservationErrorCode.ReservationNotFound
+      error.code === ReservationErrorCode.NotFound
         ? okAsync(null)
         : errAsync({
             code: QueryErrorCode.DatabaseError,

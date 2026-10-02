@@ -1,4 +1,4 @@
-import type { BaseError } from "~/domain/error";
+import { ErrorKind, type BaseError } from "~/domain/error";
 
 /**
  * 読み取り (Query) の失敗を表すコード。
@@ -19,3 +19,14 @@ export type QueryErrorCode = (typeof QueryErrorCode)[keyof typeof QueryErrorCode
 export interface QueryError extends BaseError {
   readonly code: QueryErrorCode;
 }
+
+/**
+ * 読み取りの失敗の分類（ADR-004 決定 3）。
+ *
+ * HTTP の status とログのレベルは、この表から決まる。
+ */
+export const queryErrorKind: Record<QueryErrorCode, ErrorKind> = {
+  [QueryErrorCode.NotFound]: ErrorKind.NotFound,
+  [QueryErrorCode.Forbidden]: ErrorKind.Forbidden,
+  [QueryErrorCode.DatabaseError]: ErrorKind.Internal,
+};

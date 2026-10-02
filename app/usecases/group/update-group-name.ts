@@ -1,10 +1,10 @@
 import { errAsync, ResultAsync } from "neverthrow";
 
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
-import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
+import { GroupAction } from "~/domain/group";
 import { validateGroupName } from "~/domain/group/group-name";
-import type { MembershipError, MembershipRepository } from "~/domain/membership";
-import { canPerform } from "~/domain/membership";
+import type { MembershipRepository } from "~/domain/membership";
+import { ensureGroupPermission, groupNotFound } from "./_shared/group-authorization";
 
 export interface UpdateGroupNameDeps {
   readonly groupRepository: GroupRepository;
@@ -23,25 +23,6 @@ export interface UpdateGroupNameArgs {
 }
 
 /**
- * 団体が存在しないか、あるいは所属していない（存在秘匿）ときに返すエラー。
- *
- * 「所属していないグループ」と「存在しないグループ」で同じ値を返すことで、
- * グループ ID を総当たりされても、そのグループがあるかどうかを気取られないようにする（COND-011 存在の秘匿）。
- * そのため、この関数を通さずに個別のメッセージを書いてはいけない。
- */
-const groupNotFound = (): GroupError => ({
-  code: GroupErrorCode.GroupNotFound,
-  message: "グループが見つかりません。",
-});
-
-/** Membership 取得時の DB エラーを GroupError に変換する */
-const toGroupDatabaseError = (error: MembershipError): GroupError => ({
-  code: GroupErrorCode.DatabaseError,
-  message: "グループ情報の取得に失敗しました。",
-  cause: error,
-});
-
-/**
  * 団体名を更新するユースケース（REQ-020 / UC-013）。
  *
  * 【処理の流れと設計上の配慮】
@@ -52,16 +33,17 @@ const toGroupDatabaseError = (error: MembershipError): GroupError => ({
  *    先に返しても団体の有無が外部に漏れることはない。無効な入力に対して無駄な DB 往復を
  *    確実に 1 回削減できる（Cloudflare D1 のレイテンシとコストの削減）。
  * 3. 事務局スタッフの場合（COND-009）:
- *    事務局は団体に所属せず（member 行を持たない）、全団体の管理権限を持つため、
+ *    事務局は所属の有無に関わらず全団体の管理権限を持つため（COND-009）、
  *    membershipRepository を問い合わせずに直接 updateName を実行する。
  *    事務局に対しては存在秘匿（COND-011）の対象外であるため、団体が存在しない場合は
- *    素直に GroupNotFound が返る。
+ *    素直に NotFound が返る。
  * 4. 一般利用者の場合（所属と認可判定）:
- *    先に membershipRepository で所属を確認する。DB エラーは GroupNotFound に潰さず
+ *    先に membershipRepository で所属を確認する。DB エラーは NotFound に潰さず
  *    DatabaseError として返す（潰すとインフラ障害が 404 として誤認され、監視や対応が遅れるため）。
- *    - 閲覧権限（GroupAction.View）がない場合: 団体の存在ごと秘匿するため groupNotFound() を返す（COND-011）。
+ *    - 閲覧権限（GroupAction.View）がない場合: NotVisible を返す。
+ *      利用者への応答を NotFound と同じにして存在を秘匿するのは画面の側である（COND-011 / ADR-004 決定 4）。
  *    - View は通るが Update 権限がない場合（一般メンバー）:
- *      GroupForbidden「団体情報を編集できるのは管理者と事務局だけです。」を返す。
+ *      Forbidden「団体情報を編集できるのは管理者と事務局だけです。」を返す。
  *      この利用者は既に画面を開いており、団体の存在を知っているため、ここで 404 を装っても
  *      秘匿上の意味がなく、単に「なぜ保存できないのか分からない不親切な画面」になってしまうため。
  *    - 権限確認が通った場合: 検証済みの名前で groupRepository.updateName を呼び出す。
@@ -84,38 +66,13 @@ export const updateGroupNameUseCase = (
   }
   const validatedName = nameValidationResult.value;
 
-  // 3. 事務局スタッフの場合（COND-009: member 行を持たないため所属チェックをスキップ）
-  if (args.isStaff) {
-    return deps.groupRepository.updateName({
+  // 3. 認可判定（存在秘匿と権限の出し分けは共通の関数が持つ）
+  return ensureGroupPermission(deps, { ...args, groupId }, GroupAction.Update).andThen(() =>
+    // 4. 団体名を更新する
+    deps.groupRepository.updateName({
       id: groupId,
       name: validatedName,
       updatedAt: args.now,
-    });
-  }
-
-  // 4. 事務局以外の一般利用者の場合（所属確認と権限判定）
-  return deps.membershipRepository
-    .findByGroupAndUser(groupId, args.actorUserId)
-    .mapErr(toGroupDatabaseError)
-    .andThen((membership) => {
-      // 閲覧権限がない場合は存在秘匿（COND-011）
-      if (!canPerform(groupPermissions, membership, GroupAction.View)) {
-        return errAsync(groupNotFound());
-      }
-
-      // 管理権限がない一般メンバーの場合
-      if (!canPerform(groupPermissions, membership, GroupAction.Update)) {
-        return errAsync({
-          code: GroupErrorCode.GroupForbidden,
-          message: "団体情報を編集できるのは管理者と事務局だけです。",
-        });
-      }
-
-      // 権限確認を通過したら名前を更新する
-      return deps.groupRepository.updateName({
-        id: groupId,
-        name: validatedName,
-        updatedAt: args.now,
-      });
-    });
+    }),
+  );
 };

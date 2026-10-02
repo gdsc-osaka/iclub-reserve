@@ -1,22 +1,22 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, Link, redirect } from "react-router";
+import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { ReservationErrorCode } from "~/domain/reservation";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
+import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { logServerError } from "~/lib/log.server";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
+import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
 import type { Route } from "./+types/route";
-import { toActionErrorMessage } from "./action-error";
 import { parseReservationListParams } from "./query-params";
 
 export function meta() {
@@ -53,12 +53,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    /*
-     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
-     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
-     */
-    logServerError("reservations.loader", result.error);
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 失敗の中身は画面へ出さず、ログにだけ残す。決めているのは表の側
+    throw queryErrorResponse({ where: "reservations.loader", userId: user.id }, result.error);
   }
 
   return {
@@ -79,7 +75,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const reason = formData.get("reason");
 
   if (typeof reservationId !== "string" || !reservationId) {
-    return { error: "予約が指定されていません。" };
+    return { formError: "予約が指定されていません。" };
   }
 
   /*
@@ -90,14 +86,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   const transition = parseReservationTransition(intent);
 
   if (transition === null || isStaffTransition(transition)) {
-    return { error: "不正な操作です。" };
+    return { formError: "不正な操作です。" };
   }
 
   const db = createDb(env.DB);
   const result = await changeReservationStatusUseCase(
     {
       reservationRepository: createReservationRepository(db),
-      userGroupListQuery: createUserGroupListQuery(db),
+      membershipRepository: createMembershipRepository(db),
       reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
       mailOutboxNotifier: createQueueMailOutboxNotifier(),
     },
@@ -113,14 +109,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (result.isErr()) {
     /*
-     * 差し戻し（理由の未入力・重なり・権限）は想定内なのでログに残さない。
-     * DB の失敗だけは、画面に出さない代わりに原因をサーバー側へ残す。
+     * 一覧には欄が無いので、誤りはすべて一覧の上に出す。
+     * ログの where に操作の種類まで入れて、どの操作で失敗したかを絞り込めるようにする。
      */
-    if (result.error.code === ReservationErrorCode.DatabaseError) {
-      logServerError("reservations.action", result.error);
-    }
-
-    return { error: toActionErrorMessage(result.error) };
+    return reservationActionErrors(
+      { where: `reservations.${transition}`, userId: user.id },
+      result.error,
+    );
   }
 
   /*
@@ -143,7 +138,7 @@ export default function ReservationListRoute({ loaderData, actionData }: Route.C
       params={params}
       scope="own"
       now={new Date(now)}
-      actionError={actionData?.error}
+      actionError={actionData?.formError}
     />
   );
 }

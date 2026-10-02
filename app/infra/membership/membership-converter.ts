@@ -1,38 +1,24 @@
-import { member } from "~/db/schema";
+import { groupMemberTable } from "~/db/schema";
 import { isMembershipRole, MembershipRole, type Membership } from "~/domain/membership";
 
-type MemberRow = typeof member.$inferSelect;
+type GroupMemberRow = typeof groupMemberTable.$inferSelect;
 
 /**
- * DB の `member.role` 列を MembershipRole の配列に変換する。
+ * DB の `group_member.role` 列を MembershipRole に変換する。
  *
- * Better Auth は複数の役割を "admin,member" のようにカンマ区切りの 1 文字列で持つ。
- * 単一の役割だと決めつけて実装すると、"admin,member" を持つ人が
- * 自前の判定では権限ゼロなのに Better Auth の API では通る、という
- * 逆転した食い違いが起きるため、ここで配列に開いておく。
- *
- * 知らない役割 (creatorRole を直す前に作られた "owner" など) は捨てる。
- * その結果 1 つも残らなかった場合は、最小権限の Member として扱う。
- * ここを空配列のままにすると、自分が所属しているはずのグループが
- * 閲覧できなくなり、利用者からは「グループが消えた」ように見えてしまう。
+ * 未知の役割で権限ゼロにすると、自分の団体が見えなくなり利用者からは団体が消えたように見えるため、
+ * 安全側に倒して最小権限の Member として扱う。
  */
-export const toMembershipRoles = (raw: string): readonly MembershipRole[] => {
-  const roles = raw
-    .split(",")
-    .map((role) => role.trim())
-    .filter(isMembershipRole);
-
-  return roles.length > 0 ? roles : [MembershipRole.Member];
+export const toMembershipRole = (raw: string): MembershipRole => {
+  const trimmed = raw.trim();
+  return isMembershipRole(trimmed) ? trimmed : MembershipRole.Member;
 };
 
 /**
- * DB の member 行をドメインモデルへ変換する。
- *
- * 役割の文字列は Better Auth の仕様でカンマ区切りになりうるので、
- * `toMembershipRoles` で配列に開いてから渡す。
+ * DB の group_member 行をドメインモデルへ変換する。
  */
-export const toMembership = (row: MemberRow): Membership => ({
-  groupId: row.organizationId,
+export const toMembership = (row: GroupMemberRow): Membership => ({
+  groupId: row.groupId,
   userId: row.userId,
-  roles: toMembershipRoles(row.role),
+  role: toMembershipRole(row.role),
 });

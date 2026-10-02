@@ -8,11 +8,12 @@ import {
   PasskeyRegistrationStep,
 } from "~/components/auth/passkey-registration-step";
 import { Alert, AlertDescription } from "~/components/ui/alert";
-import { isProfileCompleted } from "~/domain/authn/user-profile";
+import { isProfileCompleted, validateUserName } from "~/domain/authn/user-profile";
+import { isFreshSession } from "~/domain/authn/session-freshness";
 import { authClient } from "~/lib/auth/auth-client";
 import { toAuthErrorMessage } from "~/lib/auth/auth-error-message";
 import { LOGIN_PATH, readRedirectTo, withRedirectTo } from "~/lib/auth/auth-redirect";
-import { getRequestUser } from "~/lib/auth/auth-session.server";
+import { getRequestSession, getRequestUser } from "~/lib/auth/auth-session.server";
 import { detectPasskeySupport } from "~/lib/auth/passkey-support";
 
 import type { Route } from "./+types/route";
@@ -36,7 +37,10 @@ export function loader({ request, context }: Route.LoaderArgs) {
   if (!user) throw redirect(withRedirectTo(LOGIN_PATH, redirectTo));
   if (isProfileCompleted(user)) throw redirect(redirectTo);
 
-  return { redirectTo };
+  const session = getRequestSession(context);
+  const canSuggestPasskey = session ? isFreshSession(session.createdAt, new Date()) : false;
+
+  return { redirectTo, canSuggestPasskey };
 }
 
 /**
@@ -69,7 +73,7 @@ const stepHeadings: Record<Step, { readonly title: string; readonly description:
 export default function Onboarding({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   // セットアップを終えたあとに戻すページ。
-  const { redirectTo } = loaderData;
+  const { redirectTo, canSuggestPasskey } = loaderData;
 
   const [step, setStep] = useState<Step>("name");
   const [name, setName] = useState("");
@@ -85,10 +89,17 @@ export default function Onboarding({ loaderData }: Route.ComponentProps) {
 
   /** お名前を登録して、次の段階へ進む。 */
   const registerName = async () => {
-    setPending(true);
     setErrorMessage(null);
 
-    const { error } = await authClient.updateUser({ name: name.trim() });
+    const validation = validateUserName(name);
+    if (validation.isErr()) {
+      setErrorMessage(validation.error.userMessage);
+      return;
+    }
+
+    setPending(true);
+
+    const { error } = await authClient.updateUser({ name: validation.value });
 
     if (error) {
       setPending(false);
@@ -104,14 +115,20 @@ export default function Onboarding({ loaderData }: Route.ComponentProps) {
     // パスキーの登録は任意なので、ここで離脱されてもお名前は残る。
     // 逆にすると、お名前が未登録のまま離脱されて、次のログインでまたこの画面に戻ってしまう。
     //
-    // 判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
+    // ただし、ログインから 24 時間以上たっていたら勧めない（COND-019）。
+    // 名前を登録しないまま時間がたったログインでもこの画面は開かれるが、
+    // その場合パスキーの登録は Better Auth に断られるため。
+    //
+    // 端末の判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
     // 判定が終わる前にお名前を登録し終えた人に、勧めそこねてしまう。
-    const { canRegisterOnThisDevice } = await detectPasskeySupport();
+    if (canSuggestPasskey) {
+      const { canRegisterOnThisDevice } = await detectPasskeySupport();
 
-    if (canRegisterOnThisDevice) {
-      setPending(false);
-      setStep("passkey");
-      return;
+      if (canRegisterOnThisDevice) {
+        setPending(false);
+        setStep("passkey");
+        return;
+      }
     }
 
     await finish();

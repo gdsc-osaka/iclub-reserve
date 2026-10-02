@@ -18,7 +18,12 @@ import type {
 import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
 import { getReservationFormUseCase } from "./get-reservation-form";
 
-const meetingRoomA = { id: "fac_meeting_a", name: "ミーティングルーム A", description: null };
+const meetingRoomA = {
+  id: "fac_meeting_a",
+  name: "ミーティングルーム A",
+  description: null,
+  photoUrl: null,
+};
 
 /** 自分が所属している団体の予約 */
 const ownRow: ReservationFormReservationRow = {
@@ -47,7 +52,8 @@ const myGroups: UserGroupList = [
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
     status: GroupStatus.Enabled,
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
+    memberCount: 4,
   },
 ];
 
@@ -96,7 +102,7 @@ const createDeps = (
     findById: () =>
       overrides.created == null
         ? errAsync({
-            code: overrides.createdError ?? ReservationErrorCode.ReservationNotFound,
+            code: overrides.createdError ?? ReservationErrorCode.NotFound,
             message: "予約を読めませんでした",
           })
         : okAsync(overrides.created),

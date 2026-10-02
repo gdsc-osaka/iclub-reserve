@@ -1,9 +1,10 @@
 import { err, ok, type Result } from "neverthrow";
 
-import { canPerform, type Membership } from "../membership";
+import { canAct, type Actor } from "../membership";
 import {
   ReservationAction,
   ReservationErrorCode,
+  ReservationField,
   reservationPermissions,
   ReservationStatus,
   type Reservation,
@@ -80,7 +81,7 @@ export const transitionSourceStatus: Record<ReservationTransition, ReservationSt
  * 事務局だけの操作は "staff" を持つ。事務局の権限は団体での役割とは別の軸にあり、
  * 団体に所属していない事務局の人にも成り立つため、役割の表では表せない。
  *
- * この表は 2 か所から読む。{@link canTransition} の権限判定と、画面（ルート）が
+ * この表は 2 か所から読む。{@link canPerformTransition} の権限判定と、画面（ルート）が
  * 受け付ける操作の絞り込み（{@link isStaffTransition}）である。どちらかが
  * 操作の一覧を自前で書き写すと、操作を増やしたときに片方だけ直して食い違う。
  */
@@ -120,20 +121,13 @@ export const parseReservationTransition = (value: unknown): ReservationTransitio
  * 状態変更操作の実行者。
  *
  * 団体の中での権限（取り消し・キャンセル）と、事務局の権限（承認・却下・事務局キャンセル）は
- * 別の軸にある（COND-009）。そのため所属と事務局フラグの両方を持ち、
- * 団体側の判定は必ず権限表（{@link reservationPermissions}）を通す。
+ * 別の軸にある（COND-009）。そのため所属と事務局かどうかの両方を持つ Actor をそのまま使う。
+ * 予約のための別の型にすると、同じ形の型が 2 つになり、どちらを渡すか迷うことになる。
+ *
+ * 予約に対しては「その予約が属する団体での所属」を持たせること。
+ * 一覧のように複数の団体の予約が混ざる画面では、行ごとに組み立てる。
  */
-export interface ReservationActor {
-  /** 事務局スタッフかどうか（COND-009: 事務局は全団体の予約を操作可能） */
-  readonly isStaff: boolean;
-  /**
-   * その予約が属する団体での所属。所属していない場合は null。
-   *
-   * null を渡せば必ず不許可になる（Membership の `canPerform`）ので、
-   * 「所属を確かめ忘れたまま操作できてしまう」ことが起きない。
-   */
-  readonly membership: Membership | null;
-}
+export type ReservationActor = Actor;
 
 /**
  * 操作理由の妥当性を検証する（COND-002）。
@@ -152,8 +146,10 @@ export const validateTransitionReason = (
     case ReservationTransition.Reject:
       if (trimmed === "") {
         return err({
-          code: ReservationErrorCode.ReservationInvalidInput,
-          message: "却下理由を入力してください。",
+          code: ReservationErrorCode.InvalidInput,
+          field: ReservationField.StatusReason,
+          message: "却下理由が空である。",
+          userMessage: "却下理由を入力してください。",
         });
       }
       return ok(trimmed);
@@ -161,8 +157,10 @@ export const validateTransitionReason = (
     case ReservationTransition.StaffCancel:
       if (trimmed === "") {
         return err({
-          code: ReservationErrorCode.ReservationInvalidInput,
-          message: "キャンセル理由を入力してください。",
+          code: ReservationErrorCode.InvalidInput,
+          field: ReservationField.StatusReason,
+          message: "事務局キャンセルの理由が空である。",
+          userMessage: "キャンセル理由を入力してください。",
         });
       }
       return ok(trimmed);
@@ -177,7 +175,7 @@ export const validateTransitionReason = (
 };
 
 /**
- * 今の状態では操作できないことを伝える文言。
+ * 今の状態では操作できないことを、利用者に伝える文言（`userMessage`）。
  *
  * 「この操作はできません」だけでは、利用者は自分の画面が古いのか
  * そもそも許されない操作なのか分からない。今どの状態なのかを添える。
@@ -194,24 +192,58 @@ const statusMismatchMessage = (current: ReservationStatus): string => {
 };
 
 /**
- * 予約に対する状態変更操作が可能かを判定する純粋関数（STATE-001 / COND-002 / COND-009）。
+ * 予約に対する状態変更操作が可能かを判定する純粋関数（STATE-001 / COND-009）。
  *
- * 画面でのボタン表示可否判定にも使えるよう、reason が渡された場合のみ COND-002（理由の検証）も行う。
+ * 判定するのは「誰が」と「いまの状態から動かせるか」だけで、理由（COND-002）は見ない。
+ * 理由の検証と正規化は {@link validateTransitionReason} が持つ。
+ * かつてはここでも reason を受け取って検証していたが、保存する値を得るために
+ * 呼び出し側が validateTransitionReason を呼び直すことになり、同じ検証が 2 度走っていた。
+ *
+ * 画面のボタン表示可否（reservation-list-row）もこの関数で判定する。
+ * 理由をまだ入力していない段階でボタンが消えないよう、理由は判定に含めない。
  *
  * @param reservation 現在の予約情報（status を参照）
  * @param transition 実行したい操作
  * @param actor 操作者（事務局かどうかと、その予約の団体での所属）
- * @param reason 操作理由（省略時はステータス遷移と権限のみを検証）
  */
 export const canTransition = (
   reservation: Pick<Reservation, "status">,
   transition: ReservationTransition,
   actor: ReservationActor,
-  reason?: string | null,
+): Result<void, ReservationError> =>
+  // 1. 誰が実行できるか（COND-009）→ 2. いまの状態から動かせるか（STATE-001）
+  canPerformTransition(transition, actor).andThen(() => canTransitionFrom(reservation, transition));
+
+/**
+ * その人がその予約に対して実行できる状態変更を、すべて挙げる。
+ *
+ * 画面に出す操作ボタンは、この結果だけで決める（予約一覧・予約詳細）。
+ * 並びは {@link ReservationTransition} の定義順で、画面のボタンの並びとは関係ない。
+ */
+export const allowedTransitions = (
+  reservation: Pick<Reservation, "status">,
+  actor: ReservationActor,
+): readonly ReservationTransition[] =>
+  Object.values(ReservationTransition).filter((transition) =>
+    canTransition(reservation, transition, actor).isOk(),
+  );
+
+/**
+ * その操作を、その人が実行してよいかだけを判定する（COND-009）。予約のいまの状態は見ない。
+ *
+ * 普段は {@link canTransition} から呼ばれる。単独で使うのは、予約を引く前に確かめたいとき。
+ * 事務局だけの操作は所属も予約も見ずに判定できるので、ユースケースは予約を引く前にこれで確かめる。
+ * 引いてから確かめると、予約が無い（NotFound）か許されない（Forbidden）かの応答の違いから、
+ * 事務局でない人に予約の有無が伝わってしまう。
+ *
+ * @param transition 実行したい操作
+ * @param actor 操作者（事務局かどうかと、その予約の団体での所属）
+ */
+export const canPerformTransition = (
+  transition: ReservationTransition,
+  actor: ReservationActor,
 ): Result<void, ReservationError> => {
   /*
-   * 1. 操作権限の確認（COND-009）
-   *
    * 「どの操作を誰に許すか」は transitionAuthority が持つ。ここで操作ごとに
    * 分岐を書き並べないのは、操作が増えたときに表とこの判定がずれないようにするため。
    */
@@ -220,33 +252,41 @@ export const canTransition = (
   if (authority === "staff") {
     if (!actor.isStaff) {
       return err({
-        code: ReservationErrorCode.ReservationForbidden,
-        message: "この操作は事務局スタッフのみ実行できます。",
+        code: ReservationErrorCode.Forbidden,
+        message: `事務局だけの操作 (${transition}) を、事務局でない人が行おうとした。`,
+        userMessage: "この操作は事務局スタッフのみ実行できます。",
       });
     }
     /*
      * 団体側の操作は、役割ごとの権限表（reservationPermissions）で判定する。
      * ここで `membership !== null` を自前で書かないのは、書き忘れを防ぐため
-     * （app/domain/membership の canPerform を参照）。
+     * （app/domain/membership の canAct を参照）。
+     *
+     * 事務局でありながらその団体のメンバーでもある人は、両方の役割を持つ（和集合）。
+     * 事務局であることを理由に、自団体の予約を取り消せなくなってはいけない。
      */
-  } else if (!canPerform(reservationPermissions, actor.membership, authority)) {
+  } else if (!canAct(reservationPermissions, actor, authority)) {
     return err({
-      code: ReservationErrorCode.ReservationForbidden,
-      message: "所属している団体の予約のみ操作できます。",
+      code: ReservationErrorCode.Forbidden,
+      message: `許されていない操作 (${transition}) を拒否した。`,
+      userMessage: "所属している団体の予約のみ操作できます。",
     });
   }
 
-  // 2. 現在のステータスからの遷移可否（STATE-001）
+  return ok(undefined);
+};
+
+/** 予約のいまの状態から、その操作で動かせるか（STATE-001） */
+const canTransitionFrom = (
+  reservation: Pick<Reservation, "status">,
+  transition: ReservationTransition,
+): Result<void, ReservationError> => {
   if (reservation.status !== transitionSourceStatus[transition]) {
     return err({
-      code: ReservationErrorCode.ReservationInvalidTransition,
-      message: statusMismatchMessage(reservation.status),
+      code: ReservationErrorCode.InvalidTransition,
+      message: `${reservation.status} の予約に ${transition} はできない。`,
+      userMessage: statusMismatchMessage(reservation.status),
     });
-  }
-
-  // 3. 理由の入力検証（理由が引数として与えられている場合のみ検証）
-  if (reason !== undefined) {
-    return validateTransitionReason(transition, reason).map(() => undefined);
   }
 
   return ok(undefined);

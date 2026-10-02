@@ -114,6 +114,26 @@ export const mailOutboxInserts = (db: Database, mails: readonly MailDraft[]): Ma
   return { ids, statements };
 };
 
+/**
+ * 業務データを伴わずに、メールだけを単独で積む。積んだ行の ID を返す。
+ *
+ * ADR-002 は「業務データと同じ batch で積む」ことを原則にしている。これはその例外で、
+ * 業務データの書き込みを認証基盤（Better Auth）が行うため、同じ batch に入れられない場合にだけ使う。
+ * いま使っているのは、メールアドレスの切り替えの後に積む変更の通知（EVT-016）だけ。
+ * 切り替えの後に積むので、ここで失敗すると通知は届かない（そのリスクは EVT-016 で受け入れている）。
+ */
+export const insertMailsAlone = async (
+  db: Database,
+  mails: readonly MailDraft[],
+): Promise<readonly string[]> => {
+  const { ids, statements } = mailOutboxInserts(db, mails);
+  const [first, ...rest] = statements;
+  if (first === undefined) return [];
+
+  await db.batch([first, ...rest]);
+  return ids;
+};
+
 /** 条件付きで積むときに、「業務データが実際に書かれたか」を確かめる条件 */
 export interface MailOutboxGuard {
   /** 確かめる先の表（業務データを書いた表） */

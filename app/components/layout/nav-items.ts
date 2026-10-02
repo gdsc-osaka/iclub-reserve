@@ -40,7 +40,7 @@ export interface NavItem {
   /**
    * 対応する RDRA の画面 ID（`docs/implementation-status.md` の画面一覧）。
    *
-   * ダッシュボードのように要件側に対応する画面が無いものは undefined。
+   * 要件側に対応する画面が無いものは undefined。
    */
   readonly screen?: string;
 }
@@ -58,6 +58,7 @@ export const commonNavItems: readonly NavItem[] = [
     to: "/",
     icon: LayoutDashboard,
     enabled: true,
+    screen: "SCR-022",
   },
   {
     id: "availability",
@@ -88,7 +89,7 @@ export const commonNavItems: readonly NavItem[] = [
     label: "所属団体",
     to: "/groups",
     icon: Users,
-    enabled: false,
+    enabled: true,
     screen: "SCR-008",
   },
 ];
@@ -115,7 +116,7 @@ export const staffNavItems: readonly NavItem[] = [
     label: "団体の管理",
     to: "/staff/groups",
     icon: Building2,
-    enabled: false,
+    enabled: true,
     screen: "SCR-008",
   },
   {
@@ -123,7 +124,7 @@ export const staffNavItems: readonly NavItem[] = [
     label: "施設の管理",
     to: "/staff/facilities",
     icon: Settings2,
-    enabled: false,
+    enabled: true,
     screen: "SCR-009",
   },
 ];

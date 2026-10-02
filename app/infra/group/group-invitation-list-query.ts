@@ -1,14 +1,14 @@
 import { and, asc, eq } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
-import { invitation } from "~/db/schema";
+import { groupInvitationTable } from "~/db/schema";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
   GroupInvitationList,
   GroupInvitationListQuery,
 } from "~/query/group/group-invitation-list";
 import type { Database } from "../db";
-import { toMembershipRoles } from "../membership/membership-converter";
+import { toMembershipRole } from "../membership/membership-converter";
 
 /**
  * Cloudflare D1 (Drizzle) を使った GroupInvitationListQuery の実装。
@@ -22,18 +22,23 @@ export const createGroupInvitationListQuery = (db: Database): GroupInvitationLis
     ResultAsync.fromPromise(
       db
         .select({
-          id: invitation.id,
-          email: invitation.email,
-          role: invitation.role,
-          expiresAt: invitation.expiresAt,
+          id: groupInvitationTable.id,
+          email: groupInvitationTable.email,
+          role: groupInvitationTable.role,
+          expiresAt: groupInvitationTable.expiresAt,
         })
-        .from(invitation)
-        .where(and(eq(invitation.organizationId, groupId), eq(invitation.status, "pending")))
+        .from(groupInvitationTable)
+        .where(
+          and(
+            eq(groupInvitationTable.groupId, groupId),
+            eq(groupInvitationTable.status, "pending"),
+          ),
+        )
         /*
          * 期限が近い招待から順に確認できるよう、期限の昇順で並べる。
          * 同一期限の行の順序が安定するよう、ID を第 2 キーにする。
          */
-        .orderBy(asc(invitation.expiresAt), asc(invitation.id)),
+        .orderBy(asc(groupInvitationTable.expiresAt), asc(groupInvitationTable.id)),
       (error): QueryError => ({
         code: QueryErrorCode.DatabaseError,
         message: "承諾待ちの招待一覧の取得に失敗しました。",
@@ -43,7 +48,7 @@ export const createGroupInvitationListQuery = (db: Database): GroupInvitationLis
       rows.map((row) => ({
         id: row.id,
         email: row.email,
-        roles: toMembershipRoles(row.role ?? ""),
+        role: toMembershipRole(row.role),
         expiresAt: row.expiresAt,
       })),
     ),

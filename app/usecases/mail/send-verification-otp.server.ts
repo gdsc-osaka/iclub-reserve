@@ -36,8 +36,8 @@ const TEMPLATES: Record<VerificationOtpType, { subject: string; purpose: string 
     purpose: "ログイン",
   },
   "email-verification": {
-    subject: "【i-Club予約システム】メールアドレス確認用の認証コード",
-    purpose: "メールアドレスの確認",
+    subject: "【i-Club予約システム】メールアドレス変更の本人確認用認証コード",
+    purpose: "メールアドレス変更の本人確認",
   },
   "forget-password": {
     subject: "【i-Club予約システム】パスワード再設定用の認証コード",

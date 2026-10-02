@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 
-import { facilityTable, organization, reservationTable } from "~/db/schema";
+import { facilityTable, groupTable, reservationTable } from "~/db/schema";
 import { calendarVisibleStatuses } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
@@ -58,7 +58,7 @@ const selectReservations = (db: Database, facilityId: string, from: Date, to: Da
     .select({
       id: reservationTable.id,
       groupId: reservationTable.groupId,
-      groupName: organization.name,
+      groupName: groupTable.name,
       startAt: reservationTable.startAt,
       endAt: reservationTable.endAt,
       status: reservationTable.status,
@@ -66,7 +66,7 @@ const selectReservations = (db: Database, facilityId: string, from: Date, to: Da
       note: reservationTable.note,
     })
     .from(reservationTable)
-    .innerJoin(organization, eq(reservationTable.groupId, organization.id))
+    .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))
     .where(
       and(
         eq(reservationTable.facilityId, facilityId),
@@ -96,7 +96,7 @@ const pickFacility = (
     return first === undefined
       ? err({
           code: QueryErrorCode.NotFound,
-          message: "表示できる施設・設備がありません。",
+          message: "有効な施設・設備が 1 件も無い。",
         })
       : ok(first);
   }
@@ -106,7 +106,7 @@ const pickFacility = (
   return found === undefined
     ? err({
         code: QueryErrorCode.NotFound,
-        message: `ID が ${facilityId} の施設・設備は見つかりませんでした。`,
+        message: `施設・設備 ${facilityId} が有効な施設の中に見つからない。`,
       })
     : ok(found);
 };

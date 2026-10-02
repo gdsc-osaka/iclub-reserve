@@ -5,9 +5,15 @@ import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/dom
 import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~/domain/group";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { ReservationMailAudience } from "~/domain/mail/reservation-mail";
-import { MembershipRole, type Membership, type MembershipRepository } from "~/domain/membership";
+import {
+  MembershipErrorCode,
+  MembershipRole,
+  type Membership,
+  type MembershipRepository,
+} from "~/domain/membership";
 import {
   ReservationErrorCode,
+  ReservationField,
   ReservationStatus,
   type Reservation,
   type ReservationRepository,
@@ -28,6 +34,9 @@ const activeFacility: Facility = {
   id: "fac_meeting_a",
   name: "会議室 A",
   description: null,
+  photoUrl: null,
+  googleCalendarId: null,
+  calendarUrl: null,
   isActive: true,
   createdAt: new Date("2026-04-01T00:00:00+09:00"),
   updatedAt: new Date("2026-04-01T00:00:00+09:00"),
@@ -36,7 +45,7 @@ const activeFacility: Facility = {
 const membership: Membership = {
   groupId: "grp_robotics",
   userId: "usr_student_01",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 /** 判定の基準になる「いま」。2026 年 9 月 14 日（月）の 9 時 */
@@ -84,8 +93,7 @@ const createDeps = (
   );
 
   const reservationRepository: ReservationRepository = {
-    findById: () =>
-      errAsync({ code: ReservationErrorCode.ReservationNotFound, message: "not found" }),
+    findById: () => errAsync({ code: ReservationErrorCode.NotFound, message: "not found" }),
     create,
     existsApprovedOverlap: () => okAsync(overrides.hasApprovedOverlap ?? false),
     applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
@@ -94,23 +102,42 @@ const createDeps = (
   const membershipRepository: MembershipRepository = {
     findByGroupAndUser: () =>
       okAsync(overrides.membership === undefined ? membership : overrides.membership),
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    countAdmins: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateRole: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    remove: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   const groupRepository: GroupRepository = {
     findById: () =>
       overrides.groupNotFound === true
-        ? errAsync({ code: GroupErrorCode.GroupNotFound, message: "not found" })
+        ? errAsync({ code: GroupErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.group ?? enabledGroup),
     // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
     updateName: () =>
       errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateStatus: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    create: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは create は使わない" }),
   };
 
   const facilityRepository: FacilityRepository = {
     findById: () =>
       overrides.facilityNotFound === true
-        ? errAsync({ code: FacilityErrorCode.FacilityNotFound, message: "not found" })
+        ? errAsync({ code: FacilityErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.facility ?? activeFacility),
+    create: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    update: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    countBlockingReservations: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateActiveStatus: () =>
+      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   const findForNewReservation = vi.fn((_args: { groupId: string; applicantUserId: string }) =>
@@ -185,7 +212,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -213,7 +240,11 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationGroupNotEligible);
+    // 申請フォームが団体の欄の下に出せるよう、どの項目についての失敗かを添える（ADR-004 決定 6）
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.GroupNotEligible,
+      field: ReservationField.Group,
+    });
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -225,7 +256,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, { ...args, isStaff: true });
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationGroupNotEligible);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.GroupNotEligible);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 
@@ -234,7 +265,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationGroupNotEligible);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.GroupNotEligible);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 
@@ -245,9 +276,10 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(
-      ReservationErrorCode.ReservationFacilityNotAvailable,
-    );
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.FacilityNotAvailable,
+      field: ReservationField.Facility,
+    });
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -259,9 +291,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, { ...args, isStaff: true });
 
-    expect(result._unsafeUnwrapErr().code).toBe(
-      ReservationErrorCode.ReservationFacilityNotAvailable,
-    );
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.FacilityNotAvailable);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 
@@ -270,9 +300,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(
-      ReservationErrorCode.ReservationFacilityNotAvailable,
-    );
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.FacilityNotAvailable);
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -283,7 +311,11 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
+    // 重なりは時間帯を選び直せば通るので、利用時間についての失敗として返す
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.Conflict,
+      field: ReservationField.Period,
+    });
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -300,7 +332,7 @@ describe("createProvisionalReservationUseCase", () => {
       },
     });
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidPeriod);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidPeriod);
     expect(findForNewReservation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -313,7 +345,7 @@ describe("createProvisionalReservationUseCase", () => {
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
-    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+    expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     expect(findForNewReservation).not.toHaveBeenCalled();
   });
 

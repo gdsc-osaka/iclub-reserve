@@ -5,12 +5,14 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "../app/db/schema/index.js";
 import { createLocalDrizzleDb } from "./lib/d1.js";
+import { insertSeedData } from "./seed/insert-seed-data.js";
 import {
   seedFacilities,
-  seedOrganizations,
+  seedGroups,
   seedReservations,
   seedUsers,
-  seedMembers,
+  seedGroupMembers,
+  seedGroupInvitations,
 } from "./seed/seed-data.js";
 
 /**
@@ -42,21 +44,7 @@ async function seedLocal() {
   console.log(`接続先 DB: ${dbPath}`);
 
   try {
-    console.log("1/5 施設・備品データを投入中...");
-    await db.insert(schema.facilityTable).values(seedFacilities).onConflictDoNothing();
-
-    console.log("2/5 テストユーザーデータを投入中...");
-    await db.insert(schema.user).values(seedUsers).onConflictDoNothing();
-
-    console.log("3/5 団体データを投入中...");
-    await db.insert(schema.organization).values(seedOrganizations).onConflictDoNothing();
-
-    console.log("4/5 団体メンバーシップデータを投入中...");
-    await db.insert(schema.member).values(seedMembers).onConflictDoNothing();
-
-    console.log("5/5 サンプル予約データを投入中...");
-    await db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing();
-
+    await insertSeedData(db, console.log);
     console.log("🎉 ローカル D1 データベースへのシードが正常に完了しました！");
   } finally {
     sqlite.close();
@@ -82,9 +70,18 @@ function seedRemote() {
       ),
       toExecutableSql(db.insert(schema.user).values(seedUsers).onConflictDoNothing().toSQL()),
       toExecutableSql(
-        db.insert(schema.organization).values(seedOrganizations).onConflictDoNothing().toSQL(),
+        db.insert(schema.groupTable).values(seedGroups).onConflictDoNothing().toSQL(),
       ),
-      toExecutableSql(db.insert(schema.member).values(seedMembers).onConflictDoNothing().toSQL()),
+      toExecutableSql(
+        db.insert(schema.groupMemberTable).values(seedGroupMembers).onConflictDoNothing().toSQL(),
+      ),
+      toExecutableSql(
+        db
+          .insert(schema.groupInvitationTable)
+          .values(seedGroupInvitations)
+          .onConflictDoNothing()
+          .toSQL(),
+      ),
       toExecutableSql(
         db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing().toSQL(),
       ),

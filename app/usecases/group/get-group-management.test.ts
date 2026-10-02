@@ -24,13 +24,13 @@ const testGroup: Group = {
 const adminMembership: Membership = {
   groupId: testGroup.id,
   userId: "usr_admin",
-  roles: [MembershipRole.Admin],
+  role: MembershipRole.Admin,
 };
 
 const memberMembership: Membership = {
   groupId: testGroup.id,
   userId: "usr_member",
-  roles: [MembershipRole.Member],
+  role: MembershipRole.Member,
 };
 
 const testMembers: GroupMemberList = [
@@ -39,14 +39,14 @@ const testMembers: GroupMemberList = [
     userId: "usr_admin",
     name: "管理者 太郎",
     email: "admin@example.com",
-    roles: [MembershipRole.Admin],
+    role: MembershipRole.Admin,
   },
   {
     memberId: "mem_2",
     userId: "usr_member",
     name: "メンバー 次郎",
     email: "member@example.com",
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
   },
 ];
 
@@ -54,7 +54,7 @@ const testInvitations: GroupInvitationList = [
   {
     id: "inv_1",
     email: "invited@example.com",
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
     expiresAt: new Date("2026-09-22T12:00:00.000Z"),
   },
 ];
@@ -70,7 +70,7 @@ const createFakeGroupRepository = (groups: readonly Group[]) => {
 
       if (found === undefined) {
         return errAsync({
-          code: GroupErrorCode.GroupNotFound,
+          code: GroupErrorCode.NotFound,
           message: "Group not found",
         });
       }
@@ -80,6 +80,10 @@ const createFakeGroupRepository = (groups: readonly Group[]) => {
     // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
     updateName: () =>
       errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateStatus: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    create: () =>
+      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは create は使わない" }),
   };
 
   return { repository, findByIdCallCount: () => findByIdCallCount };
@@ -96,6 +100,13 @@ const createFakeMembershipRepository = (memberships: readonly Membership[]) => {
 
       return okAsync(found ?? null);
     },
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    countAdmins: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateRole: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    remove: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   return { repository, callCount: () => callCount };
@@ -199,7 +210,7 @@ describe("getGroupManagementUseCase", () => {
         memberId: "mem_1",
         userId: "usr_admin",
         name: "管理者 太郎",
-        roles: [MembershipRole.Admin],
+        role: MembershipRole.Admin,
       });
     }
   });
@@ -258,7 +269,7 @@ describe("getGroupManagementUseCase", () => {
     expect(groups.findByIdCallCount()).toBe(1);
   });
 
-  it("所属していない人は GROUP_NOT_FOUND になり、団体を取りに行かない（呼び出し回数が 0）", async () => {
+  it("所属していない人は NotVisible になり、団体を取りに行かない（呼び出し回数が 0）", async () => {
     const groups = createFakeGroupRepository([testGroup]);
     const memberships = createFakeMembershipRepository([]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
@@ -280,7 +291,7 @@ describe("getGroupManagementUseCase", () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupNotFound);
+    expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotVisible);
     // 存在の有無が問い合わせ回数に現れないよう、団体リポジトリは呼ばれない
     expect(groups.findByIdCallCount()).toBe(0);
     expect(memberListQuery.callCount()).toBe(0);
@@ -329,6 +340,13 @@ describe("getGroupManagementUseCase", () => {
           message: "メンバーシップの取得に失敗しました。",
           cause: new Error("DB error"),
         }),
+      // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+      countAdmins: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+      updateRole: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+      remove: () =>
+        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     };
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
@@ -393,21 +411,21 @@ describe("getGroupManagementUseCase", () => {
       {
         id: "inv_expired_before",
         email: "expired_before@example.com",
-        roles: [MembershipRole.Member],
+        role: MembershipRole.Member,
         // now より前 (1 ミリ秒前)
         expiresAt: new Date(baseNow.getTime() - 1),
       },
       {
         id: "inv_expired_exact",
         email: "expired_exact@example.com",
-        roles: [MembershipRole.Member],
+        role: MembershipRole.Member,
         // now と同時刻 (expiresAt > now を満たさない)
         expiresAt: new Date(baseNow.getTime()),
       },
       {
         id: "inv_active_after",
         email: "active_after@example.com",
-        roles: [MembershipRole.Member],
+        role: MembershipRole.Member,
         // now より後 (1 ミリ秒後)
         expiresAt: new Date(baseNow.getTime() + 1),
       },
@@ -463,7 +481,7 @@ describe("getGroupManagementUseCase", () => {
       );
 
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.GroupNotFound);
+      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotFound);
       expect(memberships.callCount()).toBe(0);
       expect(groups.findByIdCallCount()).toBe(0);
       expect(memberListQuery.callCount()).toBe(0);

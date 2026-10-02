@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { GroupErrorCode } from "./index";
+import { GroupErrorCode, GroupField } from "./index";
 import { GROUP_NAME_MAX_LENGTH, validateGroupName } from "./group-name";
 
 describe("validateGroupName", () => {
@@ -18,33 +18,33 @@ describe("validateGroupName", () => {
     expect(result._unsafeUnwrap()).toBe("ロボティクス開発プロジェクト");
   });
 
-  it.each(["", "   ", "\t"])("空または空白文字のみ（%o）は GroupInvalidInput になる", (raw) => {
+  it.each(["", "   ", "\t"])("空または空白文字のみ（%o）は InvalidInput になる", (raw) => {
     const result = validateGroupName(raw);
 
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
-    expect(error.code).toBe(GroupErrorCode.GroupInvalidInput);
-    expect(error.message).toBe("団体名を入力してください。");
+    expect(error.code).toBe(GroupErrorCode.InvalidInput);
+    expect(error.userMessage).toBe("団体名を入力してください。");
   });
 
-  it.each([null, undefined])("値が %o のときは GroupInvalidInput になる", (raw) => {
+  it.each([null, undefined])("値が %o のときは InvalidInput になる", (raw) => {
     const result = validateGroupName(raw);
 
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
-    expect(error.code).toBe(GroupErrorCode.GroupInvalidInput);
-    expect(error.message).toBe("団体名を入力してください。");
+    expect(error.code).toBe(GroupErrorCode.InvalidInput);
+    expect(error.userMessage).toBe("団体名を入力してください。");
   });
 
   it.each(["あ\nい", "あ\r\nい", "あ\tい"])(
-    "改行やタブを含む名前（%o）は GroupInvalidInput になる",
+    "改行やタブを含む名前（%o）は InvalidInput になる",
     (raw) => {
       const result = validateGroupName(raw);
 
       expect(result.isErr()).toBe(true);
       const error = result._unsafeUnwrapErr();
-      expect(error.code).toBe(GroupErrorCode.GroupInvalidInput);
-      expect(error.message).toBe("団体名に改行やタブは使えません。");
+      expect(error.code).toBe(GroupErrorCode.InvalidInput);
+      expect(error.userMessage).toBe("団体名に改行やタブは使えません。");
     },
   );
 
@@ -62,9 +62,23 @@ describe("validateGroupName", () => {
 
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
-    expect(error.code).toBe(GroupErrorCode.GroupInvalidInput);
-    expect(error.message).toBe(`団体名は ${GROUP_NAME_MAX_LENGTH} 文字以内で入力してください。`);
+    expect(error.code).toBe(GroupErrorCode.InvalidInput);
+    expect(error.userMessage).toBe(
+      `団体名は ${GROUP_NAME_MAX_LENGTH} 文字以内で入力してください。`,
+    );
   });
+
+  it.each(["", "ロボ\n研", "ロ".repeat(GROUP_NAME_MAX_LENGTH + 1)])(
+    "誤り（%o）は団体名の項目として返り、ログ用の message に入力値を含まない",
+    (raw) => {
+      const error = validateGroupName(raw)._unsafeUnwrapErr();
+
+      // 画面が団体名の欄の下に出せるよう、どの項目の誤りかを持っている
+      expect(error.field).toBe(GroupField.Name);
+      // 入力値をログに残さない（ADR-004 決定 9）
+      expect(error.message).not.toContain("ロ");
+    },
+  );
 
   it("前後の空白を落とした結果で長さを測っている", () => {
     // 前後に空白があっても、trim 後の長さが 64 文字なら通る

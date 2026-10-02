@@ -3,7 +3,9 @@
   "include": [
     "drizzle.config.ts",
     "vite.config.ts",
+    "playwright.config.ts",
     "scripts/**/*.ts",
+    "e2e/**/*.ts",
     "app/db/schema/**/*",
     "app/domain/**/*",
     "app/lib/date.ts"

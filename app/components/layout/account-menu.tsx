@@ -1,4 +1,5 @@
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import { ChevronsUpDown, LogOut, Settings } from "lucide-react";
+import { Link } from "react-router";
 
 import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 import {
@@ -25,10 +26,6 @@ import { toAvatarInitial, type ShellUser } from "./shell-user";
  * ここに入れるのは「自分にだけ関係する設定」に限る。
  * この画面は所属している団体を横断して表示していて「いまどの団体か」が
  * 決まっていないため、団体の設定はここではなく団体の画面側に置く。
- *
- * NOTE: プロフィールの変更・メールアドレスの変更（SCR-017）・
- * パスキーの管理は、画面ができてからここに足す。
- * 今は押しても何も起きない項目を並べないでおく。
  */
 export function AccountMenu({ user }: Readonly<{ user: ShellUser }>) {
   const { isMobile } = useSidebar();
@@ -67,6 +64,12 @@ export function AccountMenu({ user }: Readonly<{ user: ShellUser }>) {
             </DropdownMenuLabel>
 
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/account">
+                <Settings aria-hidden />
+                アカウント設定
+              </Link>
+            </DropdownMenuItem>
             <SignOutMenuItem />
           </DropdownMenuContent>
         </DropdownMenu>

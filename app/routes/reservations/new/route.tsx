@@ -1,10 +1,17 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
-import { data, isRouteErrorResponse, Link, redirect } from "react-router";
+import { isRouteErrorResponse, Link, redirect } from "react-router";
 
+import { NoEnabledGroupReason } from "~/components/reservation/no-enabled-group-reason";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  fieldKeyOf,
+  parseReservation,
+  readValues,
+  toFormErrors,
+} from "~/components/reservation/editor/form-values";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { createGroupRepository } from "~/infra/group/group-repo";
@@ -23,13 +30,14 @@ import {
   toTokyoDateKey,
 } from "~/lib/date";
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
+import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { createProvisionalReservationUseCase } from "~/usecases/reservation/create-reservation";
 import { getReservationFormUseCase } from "~/usecases/reservation/get-reservation-form";
 
 import type { Route } from "./+types/route";
 import { ApplicationForm } from "./application-form";
 import { CreatedPanel } from "./created-panel";
-import { parseReservation, readValues, toFormErrors } from "./form-values";
 import { toCalendarPath } from "./paths";
 
 export function meta() {
@@ -97,7 +105,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 失敗の中身は画面へ出さず、ログにだけ残す。決めているのは表の側
+    throw queryErrorResponse({ where: "reservations.new.loader", userId: user.id }, result.error);
   }
 
   const form = result.value;
@@ -155,7 +164,16 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
 
   if (result.isErr()) {
-    return { values, ...toFormErrors(result.error) };
+    return {
+      values,
+      ...toFormErrors(
+        reservationActionErrors(
+          { where: "reservations.new.action", userId: user.id },
+          result.error,
+          fieldKeyOf,
+        ),
+      ),
+    };
   }
 
   const params = new URLSearchParams({
@@ -232,10 +250,10 @@ function PageShell({
           ← 空き状況カレンダーへ戻る
         </Link>
 
-        <h1 className="text-xl font-semibold">仮予約を申請</h1>
+        <h1 className="text-xl font-semibold">仮予約の申請</h1>
 
         <p className="text-sm text-muted-foreground">
-          申請すると仮予約として登録されます。実際に使えるようになるのは、事務局が承認したあとです。
+          申請すると仮予約として登録されます。施設・設備を利用できるのは、事務局が承認してからです。
         </p>
       </div>
 
@@ -260,9 +278,11 @@ function CannotApplyCard({
       <AlertTitle>まだ申請できません</AlertTitle>
       <AlertDescription>
         {!hasGroup &&
-          (isStaff
-            ? "申請元にできる有効な団体がまだ 1 つもありません。団体を有効にしてから申請してください。"
-            : "予約を申請できるのは、事務局が有効にした団体だけです。所属している団体が承認待ちの場合は、承認されるまでお待ちください。")}
+          (isStaff ? (
+            "申請元にできる有効な団体がまだ 1 つもありません。団体を有効にしてから申請してください。"
+          ) : (
+            <NoEnabledGroupReason />
+          ))}
         {hasGroup && !hasFacility && "予約できる施設・設備がまだ登録されていません。"}
       </AlertDescription>
     </Alert>

@@ -1,5 +1,5 @@
 import type { ResultAsync } from "neverthrow";
-import type { BaseError } from "../error";
+import { ErrorKind, type BaseError } from "../error";
 
 /**
  * ユーザーを表すドメインモデル。
@@ -18,14 +18,36 @@ export interface User {
   readonly updatedAt: Date;
 }
 
-/** ユーザーに関するエラーの種類 */
+/**
+ * ユーザーに関するエラーの種類。
+ *
+ * 列挙子の名前は型名を繰り返さないが、文字列の値は変えないこと（ADR-004 決定 1）。
+ * ログに出るのは値の方なので、変えると過去のログと突き合わせられなくなる。
+ */
 export const UserErrorCode = {
   /** 指定された ID のユーザーが存在しない */
-  UserNotFound: "USER_NOT_FOUND",
+  NotFound: "USER_NOT_FOUND",
   /** DB へのアクセスに失敗した */
   DatabaseError: "DATABASE_ERROR",
+  /** 対象のセッションが見つからない（存在しない、または他人のセッション） */
+  SessionNotFound: "SESSION_NOT_FOUND",
+  /** 利用中のセッションをログアウトしようとした */
+  CurrentSession: "CURRENT_SESSION",
 } as const;
 export type UserErrorCode = (typeof UserErrorCode)[keyof typeof UserErrorCode];
+
+/**
+ * ユーザーに関するエラーコードの分類（ADR-004 決定 3）。
+ *
+ * HTTP の status とログのレベルは、この表から決まる。
+ * 利用者にどう見せるかの表は `app/routes/_shared/user-error.server.ts` に定義する。
+ */
+export const userErrorKind: Record<UserErrorCode, ErrorKind> = {
+  [UserErrorCode.NotFound]: ErrorKind.NotFound,
+  [UserErrorCode.DatabaseError]: ErrorKind.Internal,
+  [UserErrorCode.SessionNotFound]: ErrorKind.NotFound,
+  [UserErrorCode.CurrentSession]: ErrorKind.Conflict,
+};
 
 /**
  * ユーザーに関するドメインエラー。
@@ -53,4 +75,33 @@ export interface UserRepository {
    * - DB アクセスに失敗した場合: err(DATABASE_ERROR)
    */
   findById(id: string): ResultAsync<User, UserError>;
+}
+
+/**
+ * ログイン中の端末（INFO-011）を読む窓口 (ポート)。
+ *
+ * セッションのトークンは、ログアウトさせる処理の中でだけ使う。
+ * 画面へは ID しか出さないので、ID からトークンを引くのはこの窓口の役目になる（実装課題 8）。
+ */
+export interface UserSessionRepository {
+  /**
+   * そのユーザー自身のセッションを ID で探し、トークンを返す。
+   *
+   * - 見つかった場合: ok(トークン)
+   * - 無い場合と、他人のセッションだった場合: ok(null)。2 つを区別しない
+   * - DB アクセスに失敗した場合: err(DATABASE_ERROR)
+   */
+  findOwnSessionToken(userId: string, sessionId: string): ResultAsync<string | null, UserError>;
+}
+
+/**
+ * ログイン中の端末をログアウトさせる窓口 (ポート)。
+ *
+ * 実際に終わらせるのは Better Auth なので、infra ではなく `app/lib/auth/` が実装する。
+ */
+export interface SessionRevoker {
+  /** トークンで指したセッションを終わらせる */
+  revoke(token: string): ResultAsync<void, UserError>;
+  /** 利用中の端末以外のセッションをすべて終わらせる */
+  revokeOthers(): ResultAsync<void, UserError>;
 }

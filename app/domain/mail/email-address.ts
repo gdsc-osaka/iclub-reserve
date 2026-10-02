@@ -25,14 +25,19 @@ export type EmailAddress = {
  */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
-/** メールアドレスの最大長（RFC 5321） */
-const MAX_LENGTH = 254;
+/**
+ * メールアドレスの最大長（RFC 5321 が定めるアドレス全体の上限）。
+ *
+ * 入力欄の `maxLength` など、送信以外の場所でも同じ上限を使いたいので公開している。
+ * 値を 2 か所に書くと、片方だけ直したときに「画面は通るが送信で弾かれる」食い違いが起きる。
+ */
+export const EMAIL_ADDRESS_MAX_LENGTH = 254;
 
 /** 文字列を検証して EmailAddress を生成する */
 export const createEmailAddress = (raw: string): Result<EmailAddress, InvalidEmailAddressError> => {
   const value = raw.trim();
 
-  if (value.length === 0 || value.length > MAX_LENGTH || !EMAIL_PATTERN.test(value)) {
+  if (value.length === 0 || value.length > EMAIL_ADDRESS_MAX_LENGTH || !EMAIL_PATTERN.test(value)) {
     return err({ type: "invalid_email_address", input: raw });
   }
 

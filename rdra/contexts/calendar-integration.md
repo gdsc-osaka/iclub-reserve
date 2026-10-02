@@ -56,7 +56,7 @@ boundary:
       description: "承認済み予約を Google Calendar に登録する。公開情報: 施設名・日時。団体名・使用人数・備考は載せない（COND-008）。"
     - id: "EVT-010"
       name: "Google Calendar削除"
-      trigger: "UC-004（団体キャンセル）/ UC-007（事務局キャンセル）/ UC-005（施設・日時変更で仮予約に戻る場合）/ UC-008（事務局が承認済み予約を直接削除する場合）"
+      trigger: "UC-004（団体キャンセル）/ UC-007（事務局キャンセル）/ UC-005（施設・日時変更で仮予約に戻る場合）"
       description: "承認済み予約がキャンセルまたは仮予約に差し戻された場合に Google Calendar から削除する。"
     - id: "EVT-011"
       name: "Google Calendar更新"
@@ -105,6 +105,5 @@ graph TB
     uc004["UC-004: 団体キャンセル"] --> evt010["EVT-010: Google Calendar削除"]
     uc007["UC-007: 事務局キャンセル"] --> evt010
     uc005["UC-005: 施設・日時変更（仮予約に差し戻し）"] --> evt010
-    uc008d["UC-008: 事務局直接削除"] --> evt010
     uc008u["UC-008: 事務局が公開フィールドを直接変更"] --> evt011["EVT-011: Google Calendar更新"]
 ```

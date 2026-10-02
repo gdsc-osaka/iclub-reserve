@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -7,6 +8,7 @@ import {
   ScrollRestoration,
 } from "react-router";
 
+import { Toaster } from "~/components/ui/sonner";
 import { getRequestUser, requireAuthentication } from "~/lib/auth/auth-session.server";
 
 import type { Route } from "./+types/root";
@@ -47,6 +49,16 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  /*
+   * 画面が操作できる状態になった（ブラウザで React の読み込みが終わった）ことを、
+   * <html data-hydrated="true"> という印で知らせる。
+   * E2E テスト（`e2e/support/page.ts`）はこの印を待ってから操作する。
+   * 読み込みが終わる前にボタンを押しても、何も起きないことがあるため。
+   */
+  useEffect(() => {
+    document.documentElement.dataset.hydrated = "true";
+  }, []);
+
   return (
     <html lang="ja">
       <head>
@@ -57,6 +69,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        {/*
+          操作の結果を知らせる通知（sonner）。どの画面からも toast() で出せるよう、外枠に 1 つだけ置く。
+          画面上部に出すのは、スマホでは画面下にボトムナビがあり、下に出すと重なって読めないため。
+        */}
+        <Toaster position="top-center" />
         <ScrollRestoration />
         <Scripts />
       </body>

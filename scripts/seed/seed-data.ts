@@ -1,3 +1,4 @@
+import { InvitationStatus, invitationExpiresAt } from "~/domain/invitation";
 import { ReservationStatus } from "~/domain/reservation";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
@@ -56,11 +57,18 @@ export const seedFacilities: (typeof schema.facilityTable.$inferInsert)[] = [
 ];
 
 /**
- * テスト用ユーザーのシードデータ
- * 大阪大学の許可ドメイン（@osaka-u.ac.jp / @*.osaka-u.ac.jp）に準拠
+ * テスト用ユーザーのシードデータ。
+ * 大阪大学の許可ドメイン（@osaka-u.ac.jp / @*.osaka-u.ac.jp）に準拠。
+ *
+ * 1 人ずつ「どの立場の人か」を名前で引けるようにしている。
+ * E2E テスト（`e2e/`）は `seedPersonas.groupMember` のように立場で人を選ぶので、
+ * ID やメールアドレスを書き換えてもテストは直さなくてよい。
+ * 逆に、立場（所属する団体・役割・事務局かどうか）を変えるとテストが落ちるので、
+ * 変えるときは `e2e/` も合わせて確かめること。
  */
-export const seedUsers: (typeof schema.user.$inferInsert)[] = [
-  {
+export const seedPersonas = {
+  /** 事務局スタッフ。どの団体にも入っていない */
+  staff: {
     id: "usr_staff_01",
     name: "管理者スタッフ",
     email: "staff@osaka-u.ac.jp",
@@ -68,7 +76,8 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
     image: null,
     is_staff: true,
   },
-  {
+  /** 有効な団体「ロボティクス開発プロジェクト」の管理者。承認待ちの団体にも一般メンバーとして入っている */
+  groupAdmin: {
     id: "usr_student_01",
     name: "阪大 太郎 (学生オーナー)",
     email: "taro@ecs.osaka-u.ac.jp",
@@ -76,7 +85,8 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
     image: null,
     is_staff: false,
   },
-  {
+  /** 有効な団体「ロボティクス開発プロジェクト」の一般メンバー */
+  groupMember: {
     id: "usr_student_02",
     name: "阪大 花子 (学生メンバー)",
     email: "hanako@ecs.osaka-u.ac.jp",
@@ -84,21 +94,38 @@ export const seedUsers: (typeof schema.user.$inferInsert)[] = [
     image: null,
     is_staff: false,
   },
-];
+  /** どの団体にも入っていない人。ダッシュボードが空のときの見え方を確かめられる */
+  noGroupUser: {
+    id: "usr_student_03",
+    name: "阪大 次郎 (未所属)",
+    email: "jiro@ecs.osaka-u.ac.jp",
+    emailVerified: true,
+    image: null,
+    is_staff: false,
+  },
+  /**
+   * 承認待ちの団体「AI ハッカソンチーム」だけに入っている管理者。
+   * 承認待ちの団体は予約を申請できない（COND-006）ので、申請の導線が出ないことを確かめられる。
+   */
+  pendingGroupAdmin: {
+    id: "usr_student_04",
+    name: "阪大 三郎 (承認待ちの団体の管理者)",
+    email: "saburo@ecs.osaka-u.ac.jp",
+    emailVerified: true,
+    image: null,
+    is_staff: false,
+  },
+} as const satisfies Record<string, typeof schema.user.$inferInsert>;
+
+export const seedUsers: (typeof schema.user.$inferInsert)[] = Object.values(seedPersonas);
 
 /**
  * サンプル団体のシードデータ
- *
- * NOTE: slug に id をそのまま入れないこと。
- * slug は「所属していない人にも見える可能性がある値」として扱う必要がある一方、
- * id は所属している人にしか知られたくない値。
- * 同じにすると、片方が漏れたときにもう片方も分かってしまう。
  */
-export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
+export const seedGroups: (typeof schema.groupTable.$inferInsert)[] = [
   {
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
-    slug: "robotics-dev",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Enabled,
@@ -106,7 +133,6 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_ai_hackers",
     name: "AI ハッカソンチーム",
-    slug: "ai-hackers",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Pending,
@@ -114,7 +140,6 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
   {
     id: "grp_disabled_group",
     name: "無効化された団体",
-    slug: "disabled-group",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: GroupStatus.Disabled,
@@ -124,10 +149,10 @@ export const seedOrganizations: (typeof schema.organization.$inferInsert)[] = [
 /**
  * 団体メンバーシップのシードデータ
  */
-export const seedMembers: (typeof schema.member.$inferInsert)[] = [
+export const seedGroupMembers: (typeof schema.groupMemberTable.$inferInsert)[] = [
   {
     id: "mem_taro_robotics",
-    organizationId: "grp_robotics",
+    groupId: "grp_robotics",
     userId: "usr_student_01",
     role: MembershipRole.Admin,
     createdAt: new Date(),
@@ -135,7 +160,7 @@ export const seedMembers: (typeof schema.member.$inferInsert)[] = [
   },
   {
     id: "mem_hanako_robotics",
-    organizationId: "grp_robotics",
+    groupId: "grp_robotics",
     userId: "usr_student_02",
     role: MembershipRole.Member,
     createdAt: new Date(),
@@ -143,11 +168,41 @@ export const seedMembers: (typeof schema.member.$inferInsert)[] = [
   },
   {
     id: "mem_taro_ai",
-    organizationId: "grp_ai_hackers",
+    groupId: "grp_ai_hackers",
     userId: "usr_student_01",
     role: MembershipRole.Member,
     createdAt: new Date(),
     updatedAt: new Date(),
+  },
+  {
+    id: "mem_saburo_ai",
+    groupId: "grp_ai_hackers",
+    userId: "usr_student_04",
+    role: MembershipRole.Admin,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+];
+
+/**
+ * 承諾待ちの招待のシードデータ。
+ *
+ * 招待の承諾画面（SCR-016）をローカルで開けるようにするためのもの。
+ * 花子は「AI ハッカソンチーム」に所属していないので、承諾すると実際にメンバーが増える。
+ * 有効期限は運用と同じ規則（`invitationExpiresAt`）で決める。ここで独自の値を書くと、
+ * 期限の考え方が 2 か所に散ってしまう。
+ */
+export const seedGroupInvitations: (typeof schema.groupInvitationTable.$inferInsert)[] = [
+  {
+    id: "inv_seed_hanako_ai",
+    groupId: "grp_ai_hackers",
+    email: "hanako@ecs.osaka-u.ac.jp",
+    role: MembershipRole.Member,
+    status: InvitationStatus.Pending,
+    expiresAt: invitationExpiresAt(new Date()),
+    createdAt: new Date(),
+    // 招待を送れるのは管理者だけなので、この団体の管理者（三郎）が送ったことにする
+    inviterId: "usr_student_04",
   },
 ];
 

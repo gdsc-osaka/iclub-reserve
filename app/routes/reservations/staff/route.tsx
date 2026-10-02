@@ -1,20 +1,19 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, Link, redirect } from "react-router";
+import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { ReservationErrorCode } from "~/domain/reservation";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
+import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { logServerError } from "~/lib/log.server";
-import { QueryErrorCode } from "~/query/error";
-import { toActionErrorMessage } from "~/routes/reservations/list/action-error";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
+import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { parseReservationListParams } from "~/routes/reservations/list/query-params";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
@@ -27,15 +26,14 @@ export function meta() {
 /**
  * 事務局向け予約承認・管理画面（SCR-003）のローダー。
  *
- * 事務局スタッフのみがアクセス可能。非スタッフは 403 をスローする（COND-009）。
+ * 事務局スタッフのみがアクセス可能。非スタッフには 403 を返す（COND-009）。
+ *
+ * 事務局かどうかはここでは確かめず、ユースケースに任せる。ユースケースが同じ判定を持っており、
+ * ここにも書くと判定が 2 か所に分かれるうえ、ルートで先に弾いた分はログに残らない。
+ * ユースケースが返した `Forbidden` は、表を通して 403 になり、warn でログに残る（ADR-004 決定 9）。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
-
-  // 事務局スタッフ以外はアクセス不可
-  if (!user.is_staff) {
-    throw data({ message: "Forbidden" }, { status: 403 });
-  }
 
   const now = new Date();
   const url = new URL(request.url);
@@ -60,16 +58,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   );
 
   if (result.isErr()) {
-    // 権限が無いのは想定内の応答なので、ログには残さない
-    if (result.error.code === QueryErrorCode.Forbidden) {
-      throw data({ message: "Forbidden" }, { status: 403 });
-    }
-    /*
-     * 失敗の中身は画面へ出さない。利用者にできることは増えず、
-     * こちらの内部の事情だけが伝わってしまう。原因はサーバー側のログにだけ残す。
-     */
-    logServerError("staff.reservations.loader", result.error);
-    throw data({ message: "Internal server error" }, { status: 500 });
+    // 事務局でなければ 403、DB の失敗は 500 になる。どちらもログに残る
+    throw queryErrorResponse({ where: "staff.reservations.loader", userId: user.id }, result.error);
   }
 
   return {
@@ -84,36 +74,33 @@ export async function loader({ request, context }: Route.LoaderArgs) {
  */
 export async function action({ request, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
-
-  if (!user.is_staff) {
-    throw data({ message: "Forbidden" }, { status: 403 });
-  }
-
   const formData = await request.formData();
   const intent = formData.get("intent");
   const reservationId = formData.get("reservationId");
   const reason = formData.get("reason");
 
   if (typeof reservationId !== "string" || !reservationId) {
-    return { error: "予約が指定されていません。" };
+    return { formError: "予約が指定されていません。" };
   }
 
   /*
    * この画面が出している操作（事務局のもの）だけを受け付ける。どれが事務局の操作かは
    * ドメインの表（transitionAuthority）が決めるので、ここに操作名を書き並べない。
-   * 操作そのものの可否（今の状態・理由）はユースケースの canTransition が見る。
+   * 操作そのものの可否（事務局かどうか・今の状態・理由）はユースケースの canTransition が見る。
+   * 事務局でない人の送信は、ユースケースが予約を引く前に `Forbidden` で止め、warn でログに残る。
+   * ここで先に弾くと、判定が 2 か所に分かれるうえログに残らない（loader と同じ）。
    */
   const transition = parseReservationTransition(intent);
 
   if (transition === null || !isStaffTransition(transition)) {
-    return { error: "不正な操作です。" };
+    return { formError: "不正な操作です。" };
   }
 
   const db = createDb(env.DB);
   const result = await changeReservationStatusUseCase(
     {
       reservationRepository: createReservationRepository(db),
-      userGroupListQuery: createUserGroupListQuery(db),
+      membershipRepository: createMembershipRepository(db),
       reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
       mailOutboxNotifier: createQueueMailOutboxNotifier(),
     },
@@ -129,14 +116,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (result.isErr()) {
     /*
-     * 差し戻し（理由の未入力・重なり・権限）は想定内なのでログに残さない。
-     * DB の失敗だけは、画面に出さない代わりに原因をサーバー側へ残す。
+     * 一覧には欄が無いので、誤りはすべて一覧の上に出す。却下・キャンセルの理由も、
+     * 入力するダイアログは送信のたびに閉じるので、欄の下に出す先が無い。
+     * ログの where に操作の種類まで入れて、どの操作で失敗したかを絞り込めるようにする。
      */
-    if (result.error.code === ReservationErrorCode.DatabaseError) {
-      logServerError("staff.reservations.action", result.error);
-    }
-
-    return { error: toActionErrorMessage(result.error) };
+    return reservationActionErrors(
+      { where: `staff.reservations.${transition}`, userId: user.id },
+      result.error,
+    );
   }
 
   /*
@@ -162,7 +149,7 @@ export default function StaffReservationListRoute({
       params={params}
       scope="all"
       now={new Date(now)}
-      actionError={actionData?.error}
+      actionError={actionData?.formError}
     />
   );
 }

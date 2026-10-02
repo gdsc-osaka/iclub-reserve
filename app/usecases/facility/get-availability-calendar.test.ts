@@ -44,7 +44,8 @@ const enabledMembership: UserGroupList = [
     id: "grp_robotics",
     name: "ロボティクス開発プロジェクト",
     status: GroupStatus.Enabled,
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
+    memberCount: 3,
   },
 ];
 
@@ -54,7 +55,8 @@ const pendingMembership: UserGroupList = [
     id: "grp_ai_hackers",
     name: "AI ハッカソンチーム",
     status: GroupStatus.Pending,
-    roles: [MembershipRole.Member],
+    role: MembershipRole.Member,
+    memberCount: 2,
   },
 ];
 
@@ -166,7 +168,7 @@ describe("getAvailabilityCalendarUseCase", () => {
         findByFacilityAndPeriod: () =>
           errAsync({
             code: QueryErrorCode.NotFound,
-            message: "ID が fac_unknown の施設・設備は見つかりませんでした。",
+            message: "施設・設備 fac_unknown が有効な施設の中に見つからない。",
           }),
       } as FacilityAvailabilityCalendarQuery,
     };

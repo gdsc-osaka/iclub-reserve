@@ -1,9 +1,13 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { GroupStatus } from "~/domain/group";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
-import { MembershipRole } from "~/domain/membership";
+import {
+  MembershipErrorCode,
+  MembershipRole,
+  type Membership,
+  type MembershipRepository,
+} from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationStatus,
@@ -15,7 +19,6 @@ import type {
   ReservationMailAudience,
   ReservationMailRecipientsQuery,
 } from "~/query/reservation/reservation-mail-recipients";
-import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
 import {
   changeReservationStatusUseCase,
   type ChangeReservationStatusArgs,
@@ -45,23 +48,12 @@ const baseApprovedReservation: Reservation = {
   status: ReservationStatus.Approved,
 };
 
-const memberGroups: UserGroupList = [
-  {
-    id: "grp_robotics",
-    name: "ロボティクス開発プロジェクト",
-    status: GroupStatus.Enabled,
-    roles: [MembershipRole.Member],
-  },
-];
-
-const otherGroups: UserGroupList = [
-  {
-    id: "grp_other",
-    name: "他団体",
-    status: GroupStatus.Enabled,
-    roles: [MembershipRole.Member],
-  },
-];
+/** 予約の団体（grp_robotics）でのメンバーとしての所属 */
+const memberMembership: Membership = {
+  groupId: "grp_robotics",
+  userId: "usr_student_01",
+  role: MembershipRole.Member,
+};
 
 const defaultAudience: ReservationMailAudience = {
   groupMembers: [
@@ -82,7 +74,10 @@ const defaultAudience: ReservationMailAudience = {
 
 const createMockDeps = (options?: {
   reservation?: Reservation | null;
-  userGroups?: UserGroupList;
+  /** 予約の団体での所属。null は所属していないことを表す */
+  membership?: Membership | null;
+  /** 所属の確認が DB エラーになる場合 */
+  membershipDbError?: boolean;
   hasOverlap?: boolean;
   /** 条件付き更新が 1 件更新できたか。false は同時操作との競合を表す */
   applied?: boolean;
@@ -90,7 +85,7 @@ const createMockDeps = (options?: {
   audience?: ReservationMailAudience;
 }) => {
   const res = options?.reservation !== undefined ? options.reservation : baseProvisionalReservation;
-  const groups = options?.userGroups ?? memberGroups;
+  const membership = options?.membership === undefined ? memberMembership : options.membership;
   const hasOverlap = options?.hasOverlap ?? false;
   const applied = options?.applied ?? true;
   const enqueuedMailIds = options?.enqueuedMailIds ?? (applied ? ["outbox_mock_01"] : []);
@@ -100,7 +95,7 @@ const createMockDeps = (options?: {
     res
       ? okAsync(res)
       : errAsync({
-          code: ReservationErrorCode.ReservationNotFound,
+          code: ReservationErrorCode.NotFound,
           message: "Reservation not Found",
         }),
   );
@@ -120,8 +115,21 @@ const createMockDeps = (options?: {
     applyContentEdit,
   };
 
-  const findByUserId = vi.fn((_userId: string) => okAsync(groups));
-  const userGroupListQuery: UserGroupListQuery = { findByUserId };
+  const findByGroupAndUser = vi.fn((_groupId: string, _userId: string) =>
+    options?.membershipDbError === true
+      ? errAsync({ code: MembershipErrorCode.DatabaseError, message: "db down" })
+      : okAsync(membership),
+  );
+  const membershipRepository: MembershipRepository = {
+    findByGroupAndUser,
+    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    countAdmins: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    updateRole: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    remove: () =>
+      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
+  };
 
   const findByReservationId = vi.fn((_reservationId: string) => okAsync(audience));
   const reservationMailRecipientsQuery: ReservationMailRecipientsQuery = {
@@ -135,7 +143,7 @@ const createMockDeps = (options?: {
 
   const deps: ChangeReservationStatusDeps = {
     reservationRepository,
-    userGroupListQuery,
+    membershipRepository,
     reservationMailRecipientsQuery,
     mailOutboxNotifier,
   };
@@ -146,7 +154,7 @@ const createMockDeps = (options?: {
       findById,
       existsApprovedOverlap,
       applyStatusTransition,
-      findByUserId,
+      findByGroupAndUser,
       findByReservationId,
       notifyEnqueued,
     },
@@ -433,6 +441,72 @@ describe("changeReservationStatusUseCase", () => {
     });
   });
 
+  describe("所属の引き方（COND-009）", () => {
+    it("事務局だけの操作では所属を引かない（判定が isStaff しか見ないため）", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        reason: null,
+      });
+
+      expect(spies.findByGroupAndUser).not.toHaveBeenCalled();
+    });
+
+    it("取り消し・キャンセルでは、予約が属する団体での所属を引く", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition: ReservationTransition.Withdraw,
+      });
+
+      expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_student_01");
+    });
+
+    /*
+     * 事務局の行には取り消し・キャンセルが無いので、事務局であることを理由に
+     * 所属を省いてはいけない。省くと、自団体の予約を取り消せなくなる。
+     */
+    it("事務局であっても、取り消しのときは所属を引いてメンバーとしての権限を併せ持つ", async () => {
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        membership: { ...memberMembership, userId: "usr_staff_01" },
+      });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Withdraw,
+      });
+
+      expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
+      expect(result.isOk()).toBe(true);
+    });
+
+    it("所属の確認に失敗したら DatabaseError を返す", async () => {
+      const { deps } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        membershipDbError: true,
+      });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition: ReservationTransition.Withdraw,
+      });
+
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.DatabaseError);
+    });
+  });
+
   describe("失敗パターン", () => {
     it("理由なしの却下は弾かれる（COND-002）", async () => {
       const { deps } = createMockDeps({ reservation: baseProvisionalReservation });
@@ -447,8 +521,8 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
-      expect(result._unsafeUnwrapErr().message).toContain("却下理由を入力してください");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("却下理由を入力してください");
     });
 
     it("理由なしの事務局キャンセルは弾かれる（COND-002）", async () => {
@@ -464,14 +538,14 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationInvalidInput);
-      expect(result._unsafeUnwrapErr().message).toContain("キャンセル理由を入力してください");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("キャンセル理由を入力してください");
     });
 
     it("他団体所属のユーザーによる取り消しは拒否される（自団体の突き合わせ）", async () => {
       const { deps } = createMockDeps({
         reservation: baseProvisionalReservation,
-        userGroups: otherGroups, // 予約の "grp_robotics" に所属していない
+        membership: null, // 予約の "grp_robotics" に所属していない
       });
 
       const args: ChangeReservationStatusArgs = {
@@ -483,7 +557,7 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("非スタッフによる承認は拒否される", async () => {
@@ -498,7 +572,43 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationForbidden);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
+    });
+
+    it.each([
+      ReservationTransition.Approve,
+      ReservationTransition.Reject,
+      ReservationTransition.StaffCancel,
+    ])("非スタッフの %s は、予約を引く前に拒否される", async (transition) => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition,
+        reason: "理由",
+      });
+
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
+      expect(spies.findById).not.toHaveBeenCalled();
+    });
+
+    it("非スタッフの承認は、予約が無くても同じ Forbidden になる（予約の有無が伝わらない）", async () => {
+      // 予約を引いてから確かめると、無い予約だけ NotFound になり、応答の違いから有無が分かってしまう
+      const { deps: existing } = createMockDeps({ reservation: baseProvisionalReservation });
+      const { deps: missing } = createMockDeps({ reservation: null });
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition: ReservationTransition.Approve,
+      };
+
+      const fromExisting = await changeReservationStatusUseCase(existing, args);
+      const fromMissing = await changeReservationStatusUseCase(missing, args);
+
+      expect(fromMissing._unsafeUnwrapErr()).toEqual(fromExisting._unsafeUnwrapErr());
     });
 
     it("承認時に同一施設・同一時間帯に承認済みの重複予約が存在する場合は拒否される（COND-001）", async () => {
@@ -517,8 +627,8 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
-      expect(result._unsafeUnwrapErr().message).toContain("先にそちらをキャンセルしてください");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Conflict);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("先にそちらをキャンセルしてください");
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
 
@@ -534,9 +644,7 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(
-        ReservationErrorCode.ReservationInvalidTransition,
-      );
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
 
@@ -556,8 +664,8 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationConflict);
-      expect(result._unsafeUnwrapErr().message).toContain("読み込み直して");
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Conflict);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("読み込み直して");
       // 0 件更新なら outbox にも積まれていないので、配送を依頼してはいけない
       expect(spies.notifyEnqueued).not.toHaveBeenCalled();
     });
@@ -574,7 +682,7 @@ describe("changeReservationStatusUseCase", () => {
 
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.ReservationNotFound);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
     });
 
     it("宛先取得に失敗した場合は DatabaseError となり applyStatusTransition は呼ばれない", async () => {

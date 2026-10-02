@@ -41,7 +41,7 @@ describe("createSendVerificationOtpUseCase", () => {
 
   it.each<[VerificationOtpType, string]>([
     ["sign-in", "ログイン"],
-    ["email-verification", "メールアドレスの確認"],
+    ["email-verification", "メールアドレス変更の本人確認"],
     ["forget-password", "パスワードの再設定"],
     ["change-email", "メールアドレスの変更"],
   ])("type が %s のとき用途に応じた文面になる", async (type, purpose) => {

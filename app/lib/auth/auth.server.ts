@@ -4,25 +4,35 @@ import type {} from "zod/v4/core";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { emailOTP, organization } from "better-auth/plugins";
-import { env } from "cloudflare:workers";
+import { emailOTP } from "better-auth/plugins";
+import { env, waitUntil } from "cloudflare:workers";
 import { createDb } from "~/infra/db";
 import {
   ALLOWED_EMAIL_DOMAINS_LABEL,
   EMAIL_DOMAIN_NOT_ALLOWED_CODE,
   isAllowedEmailAddress,
 } from "~/domain/authn/allowed-email-domain";
+import { toPasskeyName } from "~/domain/authn/device-name";
+import { SESSION_FRESH_AGE_SECONDS } from "~/domain/authn/session-freshness";
+import { ErrorKind } from "~/domain/error";
+import { insertMailsAlone } from "~/infra/mail/mail-outbox-writes";
+import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
+import { recordPasskeyUse } from "~/infra/user/passkey-usage-repo";
+import { logFailure } from "~/lib/log.server";
 import { formatSendEmailError } from "~/usecases/mail/send-email.server";
 import {
   createSendVerificationOtpUseCase,
   OTP_EXPIRES_IN_SECONDS,
 } from "~/usecases/mail/send-verification-otp.server";
+import { createFinishEmailChangeUseCase } from "~/usecases/user/finish-email-change";
 import { passkey } from "@better-auth/passkey";
-import { GroupStatus } from "~/domain/group";
-import { MembershipRole } from "~/domain/membership";
-import { assertAllowedOrganizationRequest } from "./organization-guard";
+import {
+  applyUpdatePasskeyRule,
+  applyUpdateUserRule,
+  applyVerifyRegistrationRule,
+  checkRequestEmailChangeRule,
+} from "./auth-hook-rules";
 import { buildPreviewTrustedOrigins } from "./preview-trusted-origins";
-import { ac, admin, member } from "./permission";
 import { createId } from "@paralleldrive/cuid2";
 
 /** 許可外のドメインを拒否するときに返す説明文。 */
@@ -51,6 +61,23 @@ const APP_NAME = "i-Club 予約システム";
  */
 const toOrigin = (baseURL: string | undefined): string | undefined =>
   typeof baseURL === "string" && URL.canParse(baseURL) ? new URL(baseURL).origin : undefined;
+
+/**
+ * パスキーの検証で期待する origin を、環境に応じて決める。
+ *
+ * プレビューだけは固定しない。派生ブランチの Preview は `<ブランチ名>.<代表 URL のホスト名>`
+ * で公開され（ADR-006）、origin がブランチごとに違うため、1 つの値に決められない。
+ * Better Auth の `origin` はワイルドカードを受け付けないので、未指定にして
+ * リクエストの Origin ヘッダーを期待値に使わせる。
+ *
+ * その Origin は、先に trustedOrigins（代表 URL とそのサブドメイン）の検査を通ったものだけ。
+ * さらにブラウザは rpID（代表 URL のホスト名）の配下の origin にしかパスキーを使わせないので、
+ * 信頼できる範囲は代表 URL のサブドメインに限られる。
+ */
+const toPasskeyOrigin = (
+  appEnv: Env["APP_ENV"],
+  baseURL: string | undefined,
+): string | undefined => (appEnv === "preview" ? undefined : toOrigin(baseURL));
 
 /**
  * Better Auth の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
@@ -90,6 +117,13 @@ const createAuth = () => {
         // ID を CUID2 で生成
         generateId: () => createId(),
       },
+      backgroundTasks: {
+        handler: (promise) => waitUntil(promise),
+      },
+    },
+
+    session: {
+      freshAge: SESSION_FRESH_AGE_SECONDS,
     },
 
     user: {
@@ -130,10 +164,6 @@ const createAuth = () => {
 
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        // 使っていない組織エンドポイントの遮断と、役割の値の検証。
-        // 判定の中身と理由は organization-guard.ts を参照。
-        assertAllowedOrganizationRequest(ctx);
-
         /*
          * 新規登録につながらない宛先には、そもそも認証コードを送らない。
          *
@@ -145,17 +175,124 @@ const createAuth = () => {
          * 既に登録済みの人を締め出すことではない。
          * そのため、アカウントが既にある場合はドメインを問わず通す。
          */
-        if (ctx.path !== "/email-otp/send-verification-otp") return;
+        if (ctx.path === "/email-otp/send-verification-otp") {
+          const email = (ctx.body as { email?: unknown } | undefined)?.email;
+          if (typeof email !== "string" || isAllowedEmailAddress(email)) return;
 
-        const email = (ctx.body as { email?: unknown } | undefined)?.email;
-        if (typeof email !== "string" || isAllowedEmailAddress(email)) return;
+          const existing = await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase());
+          if (existing) return;
 
-        const existing = await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase());
-        if (existing) return;
+          throw new APIError("FORBIDDEN", {
+            code: EMAIL_DOMAIN_NOT_ALLOWED_CODE,
+            message: NOT_ALLOWED_MESSAGE,
+          });
+        }
 
-        throw new APIError("FORBIDDEN", {
-          code: EMAIL_DOMAIN_NOT_ALLOWED_CODE,
-          message: NOT_ALLOWED_MESSAGE,
+        /*
+         * メールアドレス変更用のコード送信（COND-004 / COND-018）。
+         * 大阪大学のドメイン以外は拒否し、アカウントの有無による例外は適用しない。
+         */
+        if (ctx.path === "/email-otp/request-email-change") {
+          const newEmail = (ctx.body as { newEmail?: unknown } | undefined)?.newEmail;
+          const res = checkRequestEmailChangeRule(newEmail);
+          if (res.isErr()) {
+            throw new APIError("FORBIDDEN", {
+              code: res.error.code,
+              message: res.error.message,
+            });
+          }
+          return;
+        }
+
+        /*
+         * ユーザー名の更新（COND-017 / UC-029）。
+         */
+        if (ctx.path === "/update-user") {
+          const body = (ctx.body ?? {}) as { name?: unknown };
+          const res = applyUpdateUserRule(body);
+          if (res.isErr()) {
+            throw new APIError("BAD_REQUEST", {
+              code: res.error.code,
+              message: res.error.message,
+            });
+          }
+          return { context: { body: res.value.body } };
+        }
+
+        /*
+         * パスキーの登録検証（COND-020）。
+         * クライアントからの名前を消して空文字にし、サーバー側で命名した名前を採用させる。
+         */
+        if (ctx.path === "/passkey/verify-registration") {
+          const body = (ctx.body ?? {}) as Record<string, unknown>;
+          const { body: updatedBody } = applyVerifyRegistrationRule(body);
+          return { context: { body: updatedBody } };
+        }
+
+        /*
+         * パスキー名の更新（COND-020 / UC-030）。
+         */
+        if (ctx.path === "/passkey/update-passkey") {
+          const body = (ctx.body ?? {}) as { name?: unknown };
+          const res = applyUpdatePasskeyRule(body);
+          if (res.isErr()) {
+            throw new APIError("BAD_REQUEST", {
+              code: res.error.code,
+              message: res.error.message,
+            });
+          }
+          return { context: { body: res.value.body } };
+        }
+      }),
+
+      after: createAuthMiddleware(async (ctx) => {
+        /*
+         * メールアドレスの切り替えが済んだ後の処理（EVT-016 / COND-018）。
+         * 変更前のアドレスへの通知と、変更に使った端末以外のログアウトを行う。
+         *
+         * 失敗した切り替え（コードの誤りなど）では何もしない。
+         * 成否は、エンドポイントが返した値が APIError かどうかで分かる。
+         */
+        if (ctx.path !== "/email-otp/change-email") return;
+        if (ctx.context.returned instanceof APIError) return;
+
+        /*
+         * `ctx.context.session` は、エンドポイントの前に sensitiveSessionMiddleware が入れた
+         * **切り替え前の**セッション。だから `user.email` は変更前のアドレスになる。
+         * 切り替えの後に DB から読み直すと、もう新しいアドレスしか残っていない。
+         */
+        const session = ctx.context.session;
+        const newEmail = (ctx.body as { newEmail?: unknown } | undefined)?.newEmail;
+
+        if (!session || typeof newEmail !== "string") {
+          // 成功した切り替えでここに来ることは無いはず。来たら通知もログアウトもできていないので、必ず残す
+          logFailure({
+            level: "error",
+            where: "auth.change-email.after",
+            code: "EMAIL_CHANGE_AFTER_WITHOUT_SESSION",
+            kind: ErrorKind.Internal,
+            userId: session?.user.id ?? "",
+            message: "メールアドレスの切り替えの後処理で、切り替え前のセッションを読めなかった。",
+          });
+          return;
+        }
+
+        const db = createDb(env.DB);
+        const finishEmailChange = createFinishEmailChangeUseCase({
+          enqueueMails: (mails) => insertMailsAlone(db, mails),
+          mailOutboxNotifier: createQueueMailOutboxNotifier(),
+          sessionStore: ctx.context.internalAdapter,
+          staffContactEmail: env.STAFF_CONTACT_EMAIL,
+        });
+
+        // 失敗はユースケースの中でログに残すので、ここでは待つだけ（例外は投げてこない）
+        await finishEmailChange({
+          userId: session.user.id,
+          userName: session.user.name,
+          previousEmail: session.user.email,
+          newEmail: newEmail.toLowerCase(),
+          currentToken: session.session.token,
+          changedAt: new Date(),
         });
       }),
     },
@@ -171,9 +308,9 @@ const createAuth = () => {
         /**
          * 認証コードのメール送信。
          *
-         * Better Auth はこのコールバックをバックグラウンドで実行するため、
+         * advanced.backgroundTasks.handler により waitUntil でバックグラウンド実行されるため、
          * ここで例外を投げても HTTP レスポンスは 200 のまま。
-         * 送信の失敗は Workers のログ（ローカルではターミナル）に出る。
+         * 送信の失敗は Better Auth によりログに記録される。
          */
         async sendVerificationOTP({ email, otp, type }) {
           // メール送信の実装（worker-mailer）は `cloudflare:sockets` を読み込む。
@@ -206,10 +343,14 @@ const createAuth = () => {
        * rpID は指定しなければ baseURL のホスト名になる。
        * この値は登録済みのパスキー 1 つ 1 つに焼き付けられるため、
        * 後から変えると既存のパスキーが**すべて使えなくなる**点に注意。
+       *
+       * プレビューでは rpID が `iclub-preview.gdgoc-osaka.jp` になり、派生ブランチの Preview
+       * （`<ブランチ名>.iclub-preview.gdgoc-osaka.jp`）はその配下にあるため、
+       * develop で登録したパスキーがどのブランチでもそのまま使える（ADR-006）。
        */
       passkey({
         rpName: APP_NAME,
-        origin: toOrigin(BETTER_AUTH_URL),
+        origin: toPasskeyOrigin(env.APP_ENV, BETTER_AUTH_URL),
 
         authenticatorSelection: {
           /**
@@ -224,73 +365,49 @@ const createAuth = () => {
           // 生体認証・PIN の要求。"required" だと毎回必ず求められて煩わしいので既定のまま。
           userVerification: "preferred",
         },
-      }),
 
-      // グループの管理機能 (ロール・招待など)
-      organization({
-        schema: {
-          organization: {
-            additionalFields: {
-              /*
-               * `input: false` なのでクライアントからは決して渡ってこない。
-               * `defaultValue` が無いと作成時に値を埋める経路がどこにも無くなり、
-               * `NOT NULL constraint failed: organization.status` で必ず失敗する。
-               *
-               * 既定を Pending にしているのは、作られた直後は承認待ちだから。
-               * 作り方によって状態を変えたくなったら beforeCreateOrganization で上書きする。
-               */
-              status: {
-                type: Object.values(GroupStatus),
-                input: false,
-                required: true,
-                defaultValue: GroupStatus.Pending,
-              },
-              updatedAt: { type: "date", input: false, required: true },
-            },
-          },
-          member: {
-            additionalFields: {
-              updatedAt: { type: "date", input: false, required: true },
-            },
-          },
-        },
-        organizationHooks: {
-          beforeCreateOrganization: async ({ organization }) => ({
-            data: { ...organization, updatedAt: new Date() },
-          }),
-          beforeUpdateOrganization: async ({ organization }) => ({
-            data: { ...organization, updatedAt: new Date() },
-          }),
-          beforeAddMember: async ({ member }) => ({
-            data: { ...member, updatedAt: new Date() },
-          }),
-          /*
-           * NOTE: beforeUpdateMemberRole は意図的に定義していない。
-           *
-           * 他の before フックには「これから書き込む値」が渡ってくるので
-           * `{ ...x, updatedAt }` と足せばよいが、このフックにだけは
-           * **更新前の既存行**が渡ってくる。そのまま展開すると古い role が混ざり、
-           * Better Auth 側の `response.data.role || newRole` が古い role を採用して、
-           * 役割変更が 200 を返しながら何も起きない、という壊れ方をする。
-           *
-           * そもそも Better Auth の updateMember(memberId, role) は role しか書かないので、
-           * ここで updatedAt を足しても捨てられる。定義する意味が無い。
-           * 役割変更で member.updatedAt を更新したくなったら afterUpdateMemberRole で
-           * 自前に UPDATE を投げること。
-           */
-        },
-        ac,
-        roles: { admin, member },
-        creatorRole: MembershipRole.Admin,
-
-        /*
-         * 団体は運営が承認して作るものなので、利用者が自分で作れないようにする。
-         * 既定は true で、ログイン済みなら誰でも自分を admin とする団体を作れてしまう。
+        /**
+         * パスキーの名前は、登録した人に入力させずにサーバーで付ける（COND-020）。
          *
-         * false にしても、セッションを介さずサーバ側から userId を指定して呼ぶ経路
-         * (auth.api.createOrganization) は残るので、承認フローはそちらで実装できる。
+         * ブラウザから届いた名前は `hooks.before` で空にしてあるので、ここで返した名前が保存される。
+         * ブラウザから名前を渡すと、OS のパスキー保存ダイアログに出るアカウント名まで置き換わってしまうため。
          */
-        allowUserToCreateOrganization: false,
+        registration: {
+          afterVerification: ({ ctx, verification }) => ({
+            name: toPasskeyName({
+              aaguid: verification.registrationInfo?.aaguid,
+              userAgent: ctx.headers?.get("user-agent") ?? ctx.request?.headers.get("user-agent"),
+            }),
+          }),
+        },
+
+        /**
+         * パスキーでログインするたびに、そのパスキーを最後に使った日時を記録する（INFO-010）。
+         *
+         * 記録に失敗してもログインは止めない。一覧に出す日時が古くなるだけで、ログインの可否には関わらないため。
+         */
+        authentication: {
+          afterVerification: async ({ verification }) => {
+            try {
+              await recordPasskeyUse(
+                createDb(env.DB),
+                verification.authenticationInfo.credentialID,
+                new Date(),
+              );
+            } catch (cause) {
+              logFailure({
+                level: "error",
+                where: "auth.passkey.after-authentication",
+                code: "PASSKEY_LAST_USED_NOT_RECORDED",
+                kind: ErrorKind.Internal,
+                // ここではまだセッションが無く、誰のログインかはパスキーを引くまで分からない
+                userId: "",
+                message: "パスキーを最後に使った日時を記録できなかった。",
+                cause,
+              });
+            }
+          },
+        },
       }),
     ],
   });

@@ -76,10 +76,14 @@ entities:
         "UC-006",
         "UC-007",
         "UC-008",
+        "UC-032",
+        "UC-033",
+        "UC-034",
         "SCR-001",
         "SCR-002",
         "SCR-003",
         "SCR-005",
+        "SCR-018",
       ]
 
   - id: "INFO-002"
@@ -101,7 +105,7 @@ entities:
       - name: "photo_url"
         type: "string"
         required: false
-        description: "施設・設備の写真URL"
+        description: "施設・設備の写真URL（R2 に置いた写真の配信 URL。アプリ内の相対パス）"
       - name: "google_calendar_id"
         type: "string"
         required: false
@@ -126,7 +130,19 @@ entities:
       - target: "INFO-001"
         type: "1:N"
         label: "予約"
-    traces_to: ["UC-015", "UC-016", "UC-018", "SCR-001", "SCR-009", "SCR-010"]
+    traces_to:
+      [
+        "UC-015",
+        "UC-016",
+        "UC-018",
+        "SCR-001",
+        "SCR-002",
+        "SCR-003",
+        "SCR-005",
+        "SCR-009",
+        "SCR-010",
+        "SCR-018",
+      ]
 
   - id: "INFO-003"
     name: "団体"
@@ -174,7 +190,26 @@ entities:
       - target: "INFO-007"
         type: "1:N"
         label: "招待"
-    traces_to: ["UC-010", "UC-013", "UC-014", "SCR-006", "SCR-007", "SCR-008"]
+      - target: "INFO-008"
+        type: "1:N"
+        label: "操作履歴"
+    traces_to:
+      [
+        "UC-010",
+        "UC-013",
+        "UC-014",
+        "UC-035",
+        "SCR-001",
+        "SCR-002",
+        "SCR-003",
+        "SCR-005",
+        "SCR-006",
+        "SCR-007",
+        "SCR-008",
+        "SCR-016",
+        "SCR-018",
+        "SCR-022",
+      ]
 
   - id: "INFO-004"
     name: "メッセージ"
@@ -192,6 +227,10 @@ entities:
         type: "string"
         required: true
         description: "送信者のユーザーID"
+      - name: "sent_as_staff"
+        type: "boolean"
+        required: true
+        description: "事務局の横断権限（COND-009）によって初めて許された送信であれば true。送信者がその予約の団体に所属していない事務局である場合にあたる。送信時に固定し、後から所属や事務局権限が変わっても表示は変わらない。団体側の表示で送信者を「事務局」とするかの判定に使う（COND-008）。考え方は INFO-008.acted_as_staff と同じ。"
       - name: "body"
         type: "string"
         required: true
@@ -244,7 +283,7 @@ entities:
       - target: "INFO-003"
         type: "N:1"
         label: "団体"
-    traces_to: ["UC-011", "UC-012", "UC-022", "SCR-007"]
+    traces_to: ["UC-011", "UC-012", "UC-022", "UC-035", "SCR-007", "SCR-008", "SCR-022"]
 
   - id: "INFO-006"
     name: "ユーザー"
@@ -261,7 +300,7 @@ entities:
       - name: "name"
         type: "string"
         required: true
-        description: "氏名。NULLは許さず、未設定は空文字で表す。アカウント作成の直後は空文字であり、初回セットアップ（SCR-014）で登録して本登録が完了する。空白のみの値も未設定として扱う。"
+        description: "氏名（本名）。NULLは許さず、未設定は空文字で表す。アカウント作成の直後は空文字であり、初回セットアップ（SCR-014）で登録して本登録が完了する。空白のみの値も未設定として扱う。登録・変更（SCR-021）の入力はCOND-017を満たすこと。"
       - name: "email_verified"
         type: "boolean"
         required: true
@@ -273,7 +312,7 @@ entities:
       - name: "is_staff"
         type: "boolean"
         required: true
-        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。"
+        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。true にするのは事務局招待の承諾（UC-027）、false に戻すのは事務局による剥奪（UC-028）である。最初の1人だけは DB またはシードで設定する。事務局が0人になる変更はできない（COND-014）。"
       - name: "created_at"
         type: "datetime"
         required: true
@@ -292,6 +331,18 @@ entities:
       - target: "INFO-007"
         type: "1:N"
         label: "送信した招待"
+      - target: "INFO-008"
+        type: "1:N"
+        label: "行った操作"
+      - target: "INFO-009"
+        type: "1:N"
+        label: "送信した事務局招待"
+      - target: "INFO-010"
+        type: "1:N"
+        label: "登録したパスキー"
+      - target: "INFO-011"
+        type: "1:N"
+        label: "ログイン中の端末"
     traces_to:
       [
         "UC-010",
@@ -299,12 +350,21 @@ entities:
         "UC-019",
         "UC-020",
         "UC-021",
-        "SCR-006",
+        "UC-023",
+        "UC-026",
+        "UC-027",
+        "UC-028",
+        "UC-029",
+        "UC-035",
+        "SCR-005",
         "SCR-007",
         "SCR-012",
-        "SCR-013",
         "SCR-014",
         "SCR-015",
+        "SCR-017",
+        "SCR-018",
+        "SCR-019",
+        "SCR-021",
       ]
 
   - id: "INFO-007"
@@ -334,7 +394,7 @@ entities:
       - name: "expires_at"
         type: "datetime"
         required: true
-        description: "招待の有効期限。期限を過ぎた招待は承諾できない。"
+        description: "招待の有効期限。送信から48時間。期限を過ぎた招待は承諾・辞退できない。"
       - name: "inviter_id"
         type: "string"
         required: true
@@ -351,11 +411,198 @@ entities:
         type: "N:1"
         label: "招待者"
     traces_to: ["UC-011", "UC-022", "SCR-007", "SCR-016"]
+
+  - id: "INFO-008"
+    name: "操作履歴"
+    description: "予約・団体・メンバーシップ・招待・施設・事務局権限に対して人が行った変更の記録。1回の操作につき1件を、業務データの変更と同じ db.batch で追記する（COND-013）。更新・削除はせず、無期限に保持する（REQ-038）。記録対象や操作者が後で削除されても（メンバーシップの削除など）記録は残るよう、他の情報への外部キー制約は張らず、論理的な参照とする。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "操作履歴ID（主キー）"
+      - name: "occurred_at"
+        type: "datetime"
+        required: true
+        description: "操作日時"
+      - name: "actor_id"
+        type: "string"
+        required: true
+        description: "操作者のユーザーID。画面には現在の氏名を表示する。"
+      - name: "acted_as_staff"
+        type: "boolean"
+        required: true
+        description: "事務局の横断権限（COND-009）によって初めて許された操作であれば true。記録時に固定する。団体側の表示で操作者を「事務局」とするかの判定に使う（COND-012）。"
+      - name: "action"
+        type: "enum"
+        required: true
+        description: "操作の種類（VAR-002）"
+      - name: "target_type"
+        type: "enum"
+        required: true
+        description: "記録対象の種類（VAR-003）"
+      - name: "target_id"
+        type: "string"
+        required: true
+        description: "記録対象のID。事務局権限の記録では、招待・招待の取り消し・辞退は事務局招待のID、承諾・剥奪は対象ユーザーのIDとする（承諾の changes には事務局招待のIDを含める）。これにより、あるユーザーへの付与と剥奪を同じ target_id でたどれる。"
+      - name: "group_id"
+        type: "string"
+        required: false
+        description: "記録対象が属する団体のID。予約・団体・メンバーシップ・招待の記録で設定し、施設/設備・事務局権限の記録では空。開示範囲の判定に使う（COND-012）。"
+      - name: "changes"
+        type: "json"
+        required: true
+        description: "変更のあった項目ごとの変更前・変更後の値。作成では変更前を空、状態の変更では理由（status_reason）を含める。削除された対象を後から特定できるよう、値が変わらなくても対象を特定する項目（メンバーシップなら user_id、招待なら email と role）を含める。招待先のメールアドレスは承諾されなかった招待でも残す。管理者は招待を送った時点でそのアドレスを知っており、SCR-007 でも開示済みのため、履歴で新たに開示する情報は無い。"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "操作者"
+      - target: "INFO-003"
+        type: "N:1"
+        label: "対象の団体"
+    traces_to:
+      [
+        "UC-002",
+        "UC-003",
+        "UC-004",
+        "UC-005",
+        "UC-006",
+        "UC-007",
+        "UC-008",
+        "UC-010",
+        "UC-011",
+        "UC-012",
+        "UC-013",
+        "UC-014",
+        "UC-015",
+        "UC-016",
+        "UC-017",
+        "UC-022",
+        "UC-024",
+        "UC-025",
+        "UC-026",
+        "UC-027",
+        "UC-028",
+        "SCR-005",
+        "SCR-007",
+        "SCR-018",
+      ]
+
+  - id: "INFO-009"
+    name: "事務局招待"
+    description: "事務局権限への招待。事務局が送り、招待された人が承諾すると INFO-006.is_staff が true になる。団体の招待（INFO-007）とは、団体を持たないこと・与えるものがロールではなく事務局権限であることが異なるため、別の情報として扱う。状態は STATE-003。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "事務局招待ID（主キー）"
+      - name: "email"
+        type: "string"
+        required: true
+        description: "招待先のメールアドレス"
+      - name: "status"
+        type: "enum"
+        required: true
+        description: "事務局招待の状態: pending（承諾待ち）/ accepted（承諾済み）/ rejected（辞退）/ canceled（取り消し）。既定は pending（STATE-003）。"
+      - name: "expires_at"
+        type: "datetime"
+        required: true
+        description: "有効期限。送信から48時間（団体の招待と同じ）。期限を過ぎた招待は承諾・辞退できない（COND-015）。"
+      - name: "inviter_id"
+        type: "string"
+        required: true
+        description: "招待を送った事務局のユーザーID（外部キー）"
+      - name: "created_at"
+        type: "datetime"
+        required: true
+        description: "作成日時"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "招待者"
+    traces_to: ["UC-026", "UC-027", "SCR-018", "SCR-019", "SCR-020"]
+
+  - id: "INFO-010"
+    name: "パスキー"
+    description: "ユーザーがログインに使うパスキー（WebAuthn の資格情報）。認証基盤（Better Auth）が管理するが、利用者がアカウント設定（SCR-021）で一覧し、名前を変え、削除するため本モデルに含める。ここに載せるのは画面に出す・判定に使う属性だけで、公開鍵・署名カウンター・通信方式・認証器の種別など、認証のためだけの値は省く。last_used_at だけは Better Auth が記録しない値で、アプリが自分で持つ。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "パスキーID（主キー）"
+      - name: "user_id"
+        type: "string"
+        required: true
+        description: "持ち主のユーザーID（外部キー）"
+      - name: "name"
+        type: "string"
+        required: false
+        description: "表示名。登録時にサーバーが付け（COND-020）、利用者が変更できる。名前の無い既存のパスキーは、表示の際にCOND-020の規則で組み立てる。"
+      - name: "credential_id"
+        type: "string"
+        required: true
+        description: "資格情報ID。認証器の中でこのパスキーを指す値。削除したことを端末へ伝える（UC-030・WebAuthn の Signal API）ときに使う。"
+      - name: "aaguid"
+        type: "string"
+        required: false
+        description: "認証器の機種ID。名前と一覧に出すアイコンを決めるのに使う（COND-020）。Appleの端末などは0埋めで届き、機種が分からない。"
+      - name: "backed_up"
+        type: "boolean"
+        required: true
+        description: "同期されるかどうか。true なら iCloud キーチェーンや Google Password Manager などで他の端末と同期される。false なら登録した認証器（セキュリティキーなど）だけに保存されている。登録した時点の値で、その後は更新されない。一覧には「同期される」「同期されない（登録した認証器だけ）」と表示する（別の端末から一覧を見たときに誤解されないよう「この端末」とは書かない）。"
+      - name: "created_at"
+        type: "datetime"
+        required: true
+        description: "登録日時。Better Auth が登録時に必ず入れる（DB の列自体は NULL を許す）。"
+      - name: "last_used_at"
+        type: "datetime"
+        required: false
+        description: "最後にこのパスキーでログインした日時。Better Auth は記録しないため、アプリが持つ。パスキーでのログインが成功するたびに更新する。登録してから一度も使っていなければ空。"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "持ち主"
+    traces_to: ["UC-020", "UC-021", "UC-030", "SCR-014", "SCR-015", "SCR-021"]
+
+  - id: "INFO-011"
+    name: "ログインセッション"
+    description: "ログイン中の端末を表す。ログインのたびに1件作られ、ログアウト・有効期限切れ・ほかの端末からのログアウト（UC-031）・メールアドレスの変更（COND-018）で消える。認証基盤（Better Auth）が管理するが、利用者がアカウント設定（SCR-021）で一覧し、ログアウトさせるため本モデルに含める。ログインしたときの IP アドレスも Better Auth が保存するが、学内ネットワークではほぼ同じ値になり見分けに役立たず、画面にも判定にも使わないため載せない。セッションを識別するトークンは、ほかの端末のログインを乗っ取る手がかりになるため画面にも利用者のブラウザにも渡さず、一覧とログアウトはサーバー側で行う。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "セッションID（主キー）"
+      - name: "user_id"
+        type: "string"
+        required: true
+        description: "ログインしているユーザーのID（外部キー）"
+      - name: "user_agent"
+        type: "string"
+        required: false
+        description: "ログインした端末の User-Agent。端末名の組み立てに使う（COND-020）。"
+      - name: "created_at"
+        type: "datetime"
+        required: true
+        description: "ログインした日時"
+      - name: "updated_at"
+        type: "datetime"
+        required: true
+        description: "最終更新日時。使い続けると有効期限の延長のたびに更新されるが、延長は多くても1日に1回であるため、「最後に使った日」として日単位の目安で表示する。"
+      - name: "expires_at"
+        type: "datetime"
+        required: true
+        description: "有効期限。最後の延長から7日（Better Auth の既定値）。"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "ログインしているユーザー"
+    traces_to: ["UC-019", "UC-020", "UC-023", "UC-031", "UC-036", "SCR-021"]
 ---
 
 # 情報モデル（横断）
 
-認証基盤（Better Auth）が内部で管理するデータ——セッション・外部アカウント・認証コード・パスキー——は業務上の情報ではないため、本モデルには含めない。一方、招待（INFO-007）は団体運営の業務そのものに現れる情報なので含めている。
+認証基盤（Better Auth）が内部で管理するデータのうち、外部アカウント・認証コードは業務上の情報ではないため、本モデルには含めない。パスキー（INFO-010）とログインセッション（INFO-011）も同じく Better Auth が管理するが、利用者がアカウント設定（SCR-021）で見て操作するため含めている。その場合も、画面に出す・判定に使う属性だけを載せる。招待（INFO-007）は団体運営の業務そのものに現れる情報なので含めている。
+
+各情報の `traces_to` に並ぶ画面（`SCR-*`）は、その情報を `information` に載せている画面（各コンテキストの `boundary.screens`）を逆引きしたものである。両者が食い違ったときは画面側を正とする。画面の `information` には、その画面が表示する・入力を受けるものだけを載せ、ユースケースの結果として裏で作られる・変わるだけの情報は載せない（その関係は、ここの `traces_to` に並ぶユースケース（`UC-*`）で表す）。画面の `information` を変えたら、ここも合わせて直す。
 
 ## ER図
 
@@ -370,6 +617,11 @@ erDiagram
     INFO_006 ||--o{ INFO_001 : "作成する"
     INFO_003 ||--o{ INFO_007 : "招待する"
     INFO_006 ||--o{ INFO_007 : "招待を送る"
+    INFO_006 ||--o{ INFO_008 : "操作する"
+    INFO_003 |o--o{ INFO_008 : "対象になる"
+    INFO_006 ||--o{ INFO_009 : "事務局に招待する"
+    INFO_006 ||--o{ INFO_010 : "登録する"
+    INFO_006 ||--o{ INFO_011 : "ログインする"
 
     INFO_006["INFO-006: ユーザー"] {
         string id PK
@@ -438,10 +690,50 @@ erDiagram
         string id PK
         string reservation_id FK
         string sender_id FK
+        boolean sent_as_staff
         string body
         datetime sent_at
     }
+    INFO_008["INFO-008: 操作履歴"] {
+        string id PK
+        datetime occurred_at
+        string actor_id
+        boolean acted_as_staff
+        enum action "VAR-002"
+        enum target_type "VAR-003"
+        string target_id
+        string group_id
+        json changes
+    }
+    INFO_009["INFO-009: 事務局招待"] {
+        string id PK
+        string email
+        enum status "pending/accepted/rejected/canceled"
+        datetime expires_at
+        string inviter_id FK
+        datetime created_at
+    }
+    INFO_010["INFO-010: パスキー"] {
+        string id PK
+        string user_id FK
+        string name
+        string credential_id
+        string aaguid
+        boolean backed_up
+        datetime created_at
+        datetime last_used_at
+    }
+    INFO_011["INFO-011: ログインセッション"] {
+        string id PK
+        string user_id FK
+        string user_agent
+        datetime created_at
+        datetime updated_at
+        datetime expires_at
+    }
 ```
+
+INFO-008 の actor_id・group_id・target_id は論理的な参照であり、外部キー制約を張らない。記録の対象や操作者が後から消えても、記録は残す必要があるためである。
 
 ## 予約の開示範囲（COND-008）
 
@@ -460,3 +752,20 @@ INFO-001 の属性は、見る人によって次の3段階で開示する。
 | INFO-004 メッセージ   |       ○        |           ×            |            ×            |
 
 Google Calendar に載せるのは承認済みの予約のみ。他団体のログイン済みユーザーには、仮予約もステータス付きで表示する。
+
+メッセージの送信者は氏名で表示する。ただし自団体のメンバーには、INFO-004.sent_as_staff が true のメッセージの送信者を「事務局」とだけ表示する（操作履歴の COND-012 と同じ考え方）。
+
+## 操作履歴の開示範囲（COND-012）
+
+INFO-008 は、記録対象の種類（VAR-003）と見る人によって開示する。範囲は COND-008 と SCR-007 の既存の開示範囲にそろえる。
+
+| 記録対象の種類 | 事務局 | 自団体の管理者 | 自団体のメンバー | 他団体 |
+| -------------- | :----: | :------------: | :--------------: | :----: |
+| 予約           |   ○    |       ○        |        ○         |   ×    |
+| 団体           |   ○    |       ○        |        ×         |   ×    |
+| メンバーシップ |   ○    |       ○        |        ×         |   ×    |
+| 招待           |   ○    |       ○        |        ×         |   ×    |
+| 施設/設備      |   ○    |       ×        |        ×         |   ×    |
+| 事務局権限     |   ○    |       ×        |        ×         |   ×    |
+
+団体側（管理者・メンバー）には、acted_as_staff が true の記録の操作者を「事務局」とだけ表示する。

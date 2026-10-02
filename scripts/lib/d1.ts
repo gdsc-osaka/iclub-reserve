@@ -11,11 +11,20 @@ export interface LocalDrizzleDb {
 }
 
 /**
- * Wrangler (Miniflare) が生成したローカル D1 の SQLite ファイルの絶対パスを取得する。
+ * ローカルの状態（D1・R2 など）を置く既定のフォルダ。
+ * `wrangler dev` や `pnpm run dev` が何も指定しないときに使う場所と同じ。
  */
-export function getLocalD1DBPath(): string {
-  const relativePath = ".wrangler/state/v3/d1/miniflare-D1DatabaseObject";
-  const basePath = path.resolve(relativePath);
+export const DEFAULT_PERSIST_TO = ".wrangler/state";
+
+/**
+ * Wrangler (Miniflare) が生成したローカル D1 の SQLite ファイルの絶対パスを取得する。
+ *
+ * @param persistTo 状態を置くフォルダ。wrangler の `--persist-to` に渡すのと同じ値を渡す。
+ *   E2E テストは開発用の DB を壊さないよう、別のフォルダ（`e2e/support/e2e-env.ts` の `E2E_PERSIST_TO`）を使う。
+ */
+export function getLocalD1DBPath(persistTo: string = DEFAULT_PERSIST_TO): string {
+  // wrangler も Vite のプラグインも、指定したフォルダの下に `v3` を足してから置く
+  const basePath = path.resolve(persistTo, "v3/d1/miniflare-D1DatabaseObject");
 
   if (!fs.existsSync(basePath)) {
     throw new Error(
@@ -70,9 +79,11 @@ export function getLocalD1DBPath(): string {
 
 /**
  * ローカルの SQLite ファイルを開き、Drizzle インスタンスを生成して返す。
+ *
+ * @param persistTo 状態を置くフォルダ。詳しくは `getLocalD1DBPath` を参照。
  */
-export function createLocalDrizzleDb(): LocalDrizzleDb {
-  const dbPath = getLocalD1DBPath();
+export function createLocalDrizzleDb(persistTo: string = DEFAULT_PERSIST_TO): LocalDrizzleDb {
+  const dbPath = getLocalD1DBPath(persistTo);
   const sqlite = new Database(dbPath);
   const db = drizzle(sqlite, { schema });
 

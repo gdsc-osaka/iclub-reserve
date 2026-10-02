@@ -12,6 +12,7 @@ import {
   RESERVATION_NOTE_MAX_LENGTH,
   RESERVATION_STEP_MINUTES,
   ReservationErrorCode,
+  ReservationField,
   type ReservationDraft,
   type ReservationError,
   type ReservationPeriod,
@@ -21,9 +22,17 @@ import {
 const OPEN_MINUTES = FACILITY_OPEN_HOUR * 60;
 const CLOSE_MINUTES = FACILITY_CLOSE_HOUR * 60;
 
-const invalidPeriod = (message: string): ReservationError => ({
-  code: ReservationErrorCode.ReservationInvalidPeriod,
+/**
+ * 利用時間の誤りを表すエラーを作る。
+ *
+ * @param message ログに残す説明。入力された日時は埋め込まない
+ * @param userMessage 入力欄の下に出す、直し方の分かる文言
+ */
+const invalidPeriod = (message: string, userMessage: string): ReservationError => ({
+  code: ReservationErrorCode.InvalidPeriod,
+  field: ReservationField.Period,
   message,
+  userMessage,
 });
 
 /**
@@ -45,7 +54,12 @@ export const validateReservationPeriod = (
   now: Date,
 ): Result<ReservationPeriod, ReservationError> => {
   if (period.endAt <= period.startAt) {
-    return err(invalidPeriod("終了時刻は開始時刻より後にしてください。"));
+    return err(
+      invalidPeriod(
+        "終了時刻が開始時刻より後になっていない。",
+        "終了時刻は開始時刻より後にしてください。",
+      ),
+    );
   }
 
   /*
@@ -54,7 +68,12 @@ export const validateReservationPeriod = (
    * 逆向きの時間帯として通ってしまう。
    */
   if (!isSameTokyoDay(period.startAt, period.endAt)) {
-    return err(invalidPeriod("日をまたぐ予約はできません。日ごとに分けて申請してください。"));
+    return err(
+      invalidPeriod(
+        "開始と終了が別の日になっている。",
+        "日をまたぐ予約はできません。日ごとに分けて申請してください。",
+      ),
+    );
   }
 
   const startMinutes = tokyoMinutesOfDay(period.startAt);
@@ -65,20 +84,24 @@ export const validateReservationPeriod = (
     endMinutes % RESERVATION_STEP_MINUTES !== 0
   ) {
     return err(
-      invalidPeriod(`開始時刻と終了時刻は ${RESERVATION_STEP_MINUTES} 分単位で選んでください。`),
+      invalidPeriod(
+        `開始か終了が ${RESERVATION_STEP_MINUTES} 分の刻みに揃っていない。`,
+        `開始時刻と終了時刻は ${RESERVATION_STEP_MINUTES} 分単位で選んでください。`,
+      ),
     );
   }
 
   if (startMinutes < OPEN_MINUTES || endMinutes > CLOSE_MINUTES) {
     return err(
       invalidPeriod(
+        "利用可能時間の外にかかっている。",
         `利用できるのは ${FACILITY_OPEN_HOUR}:00〜${FACILITY_CLOSE_HOUR}:00 の間です。`,
       ),
     );
   }
 
   if (period.startAt < now) {
-    return err(invalidPeriod("過ぎた日時には申請できません。"));
+    return err(invalidPeriod("開始が現在より前になっている。", "過ぎた日時には申請できません。"));
   }
 
   return ok(period);
@@ -98,15 +121,19 @@ export const validateReservationDraft = (
   validateReservationPeriod(draft, now).andThen(() => {
     if (!Number.isSafeInteger(draft.headCount) || draft.headCount < RESERVATION_MIN_HEAD_COUNT) {
       return err({
-        code: ReservationErrorCode.ReservationInvalidInput,
-        message: `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 以上の整数で入力してください。`,
+        code: ReservationErrorCode.InvalidInput,
+        field: ReservationField.HeadCount,
+        message: `使用人数が ${RESERVATION_MIN_HEAD_COUNT} 以上の整数ではない。`,
+        userMessage: `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 以上の整数で入力してください。`,
       } satisfies ReservationError);
     }
 
     if (draft.note !== null && draft.note.length > RESERVATION_NOTE_MAX_LENGTH) {
       return err({
-        code: ReservationErrorCode.ReservationInvalidInput,
-        message: `備考は ${RESERVATION_NOTE_MAX_LENGTH} 文字以内で入力してください。`,
+        code: ReservationErrorCode.InvalidInput,
+        field: ReservationField.Note,
+        message: `備考が ${RESERVATION_NOTE_MAX_LENGTH} 文字を超えている。`,
+        userMessage: `備考は ${RESERVATION_NOTE_MAX_LENGTH} 文字以内で入力してください。`,
       } satisfies ReservationError);
     }
 
