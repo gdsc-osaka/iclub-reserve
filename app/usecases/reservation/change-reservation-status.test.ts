@@ -25,7 +25,10 @@ import {
   type ChangeReservationStatusDeps,
 } from "./change-reservation-status";
 
+/** 1789866000000 ミリ秒。通知の idempotencyKey に更新日時として入る */
 const testNow = new Date("2026-09-20T10:00:00+09:00");
+/** 予約を読んだときの更新日時。条件付き更新の条件（expectedUpdatedAt）に渡る */
+const readAt = new Date("2026-09-20T09:00:00+09:00");
 
 const baseProvisionalReservation: Reservation = {
   id: "res_provisional_01",
@@ -39,7 +42,7 @@ const baseProvisionalReservation: Reservation = {
   statusReason: null,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-20T09:00:00+09:00"),
-  updatedAt: new Date("2026-09-20T09:00:00+09:00"),
+  updatedAt: readAt,
 };
 
 const baseApprovedReservation: Reservation = {
@@ -105,12 +108,16 @@ const createMockDeps = (options?: {
     okAsync({ applied, enqueuedMailIds }),
   );
   const create = vi.fn((_res: unknown, _mails: unknown) => okAsync({ enqueuedMailIds: [] }));
+  // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+  const applyContentEdit = () =>
+    errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" });
 
   const reservationRepository: ReservationRepository = {
     findById,
     create,
     existsApprovedOverlap,
     applyStatusTransition,
+    applyContentEdit,
   };
 
   const findByGroupAndUser = vi.fn((_groupId: string, _userId: string) =>
@@ -184,6 +191,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_provisional_01",
           expectedStatus: ReservationStatus.Provisional,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Withdrawn,
           statusReason: "都合がつかなくなったため",
           updatedAt: testNow,
@@ -191,7 +199,7 @@ describe("changeReservationStatusUseCase", () => {
         },
         [
           expect.objectContaining({
-            idempotencyKey: "reservation:withdrawn:res_provisional_01:usr_student_01",
+            idempotencyKey: "reservation:withdrawn:res_provisional_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
             subject: "【i-Club予約システム】施設・設備の仮予約が取り消されました",
             text: expect.stringContaining("都合がつかなくなったため"),
@@ -244,6 +252,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_approved_01",
           expectedStatus: ReservationStatus.Approved,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Cancelled,
           statusReason: "イベント延期のため",
           updatedAt: testNow,
@@ -251,13 +260,13 @@ describe("changeReservationStatusUseCase", () => {
         },
         [
           expect.objectContaining({
-            idempotencyKey: "reservation:cancelled:res_approved_01:usr_student_01",
+            idempotencyKey: "reservation:cancelled:res_approved_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
             subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
             text: expect.stringContaining("イベント延期のため"),
           }),
           expect.objectContaining({
-            idempotencyKey: "reservation:cancelled:res_approved_01:usr_staff_01",
+            idempotencyKey: "reservation:cancelled:res_approved_01:1789866000000:usr_staff_01",
             to: { address: "staff@example.com", name: "事務局スタッフ" },
             subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
             text: expect.stringContaining("イベント延期のため"),
@@ -299,6 +308,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_provisional_01",
           expectedStatus: ReservationStatus.Provisional,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Approved,
           statusReason: null,
           updatedAt: testNow,
@@ -306,7 +316,7 @@ describe("changeReservationStatusUseCase", () => {
         },
         [
           expect.objectContaining({
-            idempotencyKey: "reservation:approved:res_provisional_01:usr_student_01",
+            idempotencyKey: "reservation:approved:res_provisional_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
             subject: expect.stringContaining("承認されました"),
           }),
@@ -343,15 +353,15 @@ describe("changeReservationStatusUseCase", () => {
         expect.anything(),
         expect.arrayContaining([
           expect.objectContaining({
-            idempotencyKey: "reservation:approved:res_provisional_01:usr_student_01",
+            idempotencyKey: "reservation:approved:res_provisional_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "申請者" },
           }),
           expect.objectContaining({
-            idempotencyKey: "reservation:approved:res_provisional_01:usr_admin_01",
+            idempotencyKey: "reservation:approved:res_provisional_01:1789866000000:usr_admin_01",
             to: { address: "admin1@example.com", name: "管理者1" },
           }),
           expect.objectContaining({
-            idempotencyKey: "reservation:approved:res_provisional_01:usr_admin_02",
+            idempotencyKey: "reservation:approved:res_provisional_01:1789866000000:usr_admin_02",
             to: { address: "admin2@example.com", name: "管理者2" },
           }),
         ]),
@@ -383,6 +393,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_provisional_01",
           expectedStatus: ReservationStatus.Provisional,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.Rejected,
           statusReason: "設備点検のため利用できません",
           updatedAt: testNow,
@@ -390,7 +401,7 @@ describe("changeReservationStatusUseCase", () => {
         },
         [
           expect.objectContaining({
-            idempotencyKey: "reservation:rejected:res_provisional_01:usr_student_01",
+            idempotencyKey: "reservation:rejected:res_provisional_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
             subject: "【i-Club予約システム】施設・設備の利用予約が却下されました",
             text: expect.stringContaining("理由: 設備点検のため利用できません"),
@@ -422,6 +433,7 @@ describe("changeReservationStatusUseCase", () => {
         {
           id: "res_approved_01",
           expectedStatus: ReservationStatus.Approved,
+          expectedUpdatedAt: readAt,
           status: ReservationStatus.CancelledByStaff,
           statusReason: "大学の公式行事のため",
           updatedAt: testNow,
@@ -429,7 +441,8 @@ describe("changeReservationStatusUseCase", () => {
         },
         [
           expect.objectContaining({
-            idempotencyKey: "reservation:cancelledByStaff:res_approved_01:usr_student_01",
+            idempotencyKey:
+              "reservation:cancelledByStaff:res_approved_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
             subject: "【i-Club予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
             text: expect.stringContaining("理由: 大学の公式行事のため"),

@@ -37,6 +37,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.CreateProvisional]: false,
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
+    [ReservationAction.Edit]: false,
   },
   // 団体の中では役割によらず同じことができる
   メンバー: {
@@ -45,6 +46,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
+    [ReservationAction.Edit]: true,
   },
   管理者: {
     [ReservationAction.ViewSummary]: true,
@@ -52,10 +54,12 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
+    [ReservationAction.Edit]: true,
   },
   /*
    * COND-009: 事務局は所属していない団体でも予約を作れ、中身も全部見られる（COND-008）。
    * 取り消し・キャンセルは事務局の操作ではない（却下・事務局キャンセルが別にある）。
+   * 内容の変更も団体の操作（UC-005 / UC-017）。事務局の変更は直接変更（UC-008）として別に扱う。
    */
   事務局: {
     [ReservationAction.ViewSummary]: true,
@@ -63,6 +67,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
+    [ReservationAction.Edit]: false,
   },
   /*
    * 事務局の人が自分の所属する団体の予約を扱うときは、メンバーとしての権限も併せ持つ。
@@ -74,6 +79,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
+    [ReservationAction.Edit]: true,
   },
   事務局かつ管理者: {
     [ReservationAction.ViewSummary]: true,
@@ -81,6 +87,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.CreateProvisional]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
+    [ReservationAction.Edit]: true,
   },
 };
 

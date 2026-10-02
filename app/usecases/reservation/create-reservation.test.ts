@@ -97,6 +97,7 @@ const createDeps = (
     create,
     existsApprovedOverlap: () => okAsync(overrides.hasApprovedOverlap ?? false),
     applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
+    applyContentEdit: () => okAsync({ applied: true, enqueuedMailIds: [] }),
   };
 
   const membershipRepository: MembershipRepository = {
@@ -200,9 +201,12 @@ describe("createProvisionalReservationUseCase", () => {
     // EVT-001 の MailDraft が生成されて渡されていること（申請者・管理者・事務局の 3 通）
     const mails = create.mock.calls[0]?.[1];
     expect(mails).toHaveLength(3);
-    expect(mails?.[0]?.idempotencyKey).toMatch(/^reservation:applied:.*:usr_student_01$/);
-    expect(mails?.[1]?.idempotencyKey).toMatch(/^reservation:applied:.*:usr_admin_01$/);
-    expect(mails?.[2]?.idempotencyKey).toMatch(/^reservation:applied:.*:usr_staff_01$/);
+    // 予約 ID は毎回作られるので形だけを見る。その次には予約に入れた更新日時（＝いま）が入る
+    const keyOf = (userId: string) =>
+      new RegExp(`^reservation:applied:[^:]+:${now.getTime()}:${userId}$`);
+    expect(mails?.[0]?.idempotencyKey).toMatch(keyOf("usr_student_01"));
+    expect(mails?.[1]?.idempotencyKey).toMatch(keyOf("usr_admin_01"));
+    expect(mails?.[2]?.idempotencyKey).toMatch(keyOf("usr_staff_01"));
     expect(mails?.[0]?.subject).toBe("【i-Club予約システム】施設・設備の利用予約が申請されました");
     expect(mails?.[0]?.text).toContain("施設・設備の利用予約が申請されました。");
   });
