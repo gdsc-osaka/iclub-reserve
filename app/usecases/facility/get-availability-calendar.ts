@@ -1,7 +1,9 @@
 import { ResultAsync } from "neverthrow";
 
 import { GroupStatus } from "~/domain/group";
-import type { Actor, MembershipRole } from "~/domain/membership";
+import { canAct, type Actor, type MembershipRole } from "~/domain/membership";
+import { ReservationAction, reservationPermissions } from "~/domain/reservation";
+import { allowedTransitions, isStaffTransition } from "~/domain/reservation/transition";
 import { canViewReservationDetail } from "~/domain/reservation/visibility";
 import type { QueryError } from "~/query/error";
 import type {
@@ -70,6 +72,8 @@ const toVisibleReservation = (
     membership: role === undefined ? null : { groupId: row.groupId, userId: viewer.userId, role },
   };
 
+  const transitions = allowedTransitions(row, actor).filter(isStaffTransition);
+
   return {
     id: row.id,
     groupName: row.groupName,
@@ -78,6 +82,8 @@ const toVisibleReservation = (
     status: row.status,
     isOwnGroup: role !== undefined,
     detail: canViewReservationDetail(actor) ? { headCount: row.headCount, note: row.note } : null,
+    transitions,
+    hasApprovedOverlap: row.hasApprovedOverlap,
   };
 };
 
@@ -126,5 +132,10 @@ export const getAvailabilityCalendarUseCase = (
       facility: calendar.facility,
       reservations: calendar.reservations.map((row) => toVisibleReservation(row, viewer)),
       canApplyReservation: canApplyReservation(groups, args.isStaff),
+      canCreateDirectly: canAct(
+        reservationPermissions,
+        { isStaff: args.isStaff, membership: null },
+        ReservationAction.CreateDirect,
+      ),
     };
   });

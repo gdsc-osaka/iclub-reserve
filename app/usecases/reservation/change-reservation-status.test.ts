@@ -115,6 +115,8 @@ const createMockDeps = (options?: {
   const reservationRepository: ReservationRepository = {
     findById,
     create,
+    createApproved: () =>
+      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
     existsApprovedOverlap,
     applyStatusTransition,
     applyContentEdit,

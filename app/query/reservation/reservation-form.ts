@@ -71,6 +71,13 @@ export interface CreatedReservation {
   readonly endAt: Date;
   readonly headCount: number;
   readonly note: string | null;
+  /**
+   * 作ったときの状態。仮予約の申請なら仮予約、事務局の直接作成（UC-008）なら承認済み。
+   *
+   * 控えの見出しと案内はこれで切り替える。URL の値で切り替えると、
+   * 書き換えただけで仮予約が「承認済み」と表示されてしまう。
+   */
+  readonly status: ReservationStatus;
 }
 
 /** 画面へ渡してよい、予約申請フォーム（SCR-002）1 画面分のデータ。 */
@@ -82,6 +89,12 @@ export interface ReservationForm {
   readonly reservations: readonly ReservationFormReservation[];
   /** 直前の申請の控え。まだ申請していなければ null */
   readonly created: CreatedReservation | null;
+  /**
+   * 見ている人が、承認済みの予約を直接作成できるかどうか（UC-008 / COND-009）。
+   *
+   * 権限表の CreateDirect から導く。事務局スタッフのときだけ true になる。
+   */
+  readonly canCreateDirectly: boolean;
 }
 
 /** {@link ReservationFormQuery.find} への入力。 */

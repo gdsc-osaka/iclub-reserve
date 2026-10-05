@@ -1,3 +1,4 @@
+import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { InvitationStatus, invitationExpiresAt } from "~/domain/invitation";
 import { ReservationStatus } from "~/domain/reservation";
 import { GroupStatus } from "~/domain/group";
@@ -402,5 +403,175 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
     status: ReservationStatus.CancelledByStaff,
     statusReason: "機材故障による緊急メンテナンスのため",
     createdBy: "usr_student_01",
+  },
+];
+
+/**
+ * 操作履歴のシードデータ（SCR-018 の動作確認用）。
+ *
+ * 記録の書き込み（COND-013）はまだ無いので、上の団体・招待・メンバーシップ・予約・施設に
+ * 実際に起きたことにして並べている。対象の種類 6 つがすべて現れ、事務局権限による操作とそうでない操作、
+ * 「旧 → 新」が出る記録を含む。`changes` の書き方は `AuditLogChanges` の約束に従う。
+ */
+const seedNow = new Date();
+
+export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
+  {
+    id: "log_seed_group_create",
+    occurredAt: addDays(seedNow, -30),
+    actorId: "usr_student_01",
+    actedAsStaff: false,
+    action: AuditLogAction.GroupCreate,
+    targetType: AuditLogTargetType.Group,
+    targetId: "grp_robotics",
+    groupId: "grp_robotics",
+    changes: {
+      name: { before: null, after: "ロボティクス開発プロジェクト" },
+      status: { before: null, after: GroupStatus.Pending },
+    },
+  },
+  {
+    id: "log_seed_group_enable",
+    occurredAt: addDays(seedNow, -29),
+    actorId: "usr_staff_01",
+    actedAsStaff: true,
+    action: AuditLogAction.GroupEnable,
+    targetType: AuditLogTargetType.Group,
+    targetId: "grp_robotics",
+    groupId: "grp_robotics",
+    changes: {
+      status: { before: GroupStatus.Pending, after: GroupStatus.Enabled },
+      status_reason: { before: null, after: null },
+    },
+  },
+  {
+    // 却下された過去の予約（res_past_rejected）は、利用日の 2 日前に却下されたことにする
+    id: "log_seed_reservation_reject",
+    occurredAt: addDays(atWeek(-4, 10), -2),
+    actorId: "usr_staff_01",
+    actedAsStaff: true,
+    action: AuditLogAction.ReservationReject,
+    targetType: AuditLogTargetType.Reservation,
+    targetId: "res_past_rejected",
+    groupId: "grp_robotics",
+    changes: {
+      status: { before: ReservationStatus.Provisional, after: ReservationStatus.Rejected },
+      status_reason: { before: null, after: "利用目的の記載が不十分なため" },
+    },
+  },
+  {
+    id: "log_seed_membership_change_role",
+    occurredAt: addDays(seedNow, -7),
+    actorId: "usr_student_04",
+    actedAsStaff: false,
+    action: AuditLogAction.MembershipChangeRole,
+    targetType: AuditLogTargetType.Membership,
+    targetId: "mem_taro_ai",
+    groupId: "grp_ai_hackers",
+    changes: {
+      // 誰のメンバーシップかを示すため、変わらない user_id も残す
+      user_id: { before: "usr_student_01", after: "usr_student_01" },
+      role: { before: MembershipRole.Admin, after: MembershipRole.Member },
+    },
+  },
+  {
+    id: "log_seed_facility_update",
+    occurredAt: addDays(seedNow, -6),
+    actorId: "usr_staff_01",
+    actedAsStaff: true,
+    action: AuditLogAction.FacilityUpdate,
+    targetType: AuditLogTargetType.Facility,
+    targetId: "fac_vr_set",
+    groupId: null,
+    changes: {
+      description: { before: "VR 体験用ヘッドセット", after: "VR開発・実証実験用ヘッドセット" },
+    },
+  },
+  {
+    id: "log_seed_facility_deactivate",
+    occurredAt: addDays(seedNow, -5),
+    actorId: "usr_staff_01",
+    actedAsStaff: true,
+    action: AuditLogAction.FacilityDeactivate,
+    targetType: AuditLogTargetType.Facility,
+    targetId: "fac_vr_set",
+    groupId: null,
+    changes: {
+      is_active: { before: true, after: false },
+    },
+  },
+  {
+    id: "log_seed_facility_reactivate",
+    occurredAt: addDays(seedNow, -4),
+    actorId: "usr_staff_01",
+    actedAsStaff: true,
+    action: AuditLogAction.FacilityReactivate,
+    targetType: AuditLogTargetType.Facility,
+    targetId: "fac_vr_set",
+    groupId: null,
+    changes: {
+      is_active: { before: false, after: true },
+    },
+  },
+  {
+    // 予約（res_sample_approved）は、利用日の 6 日前に申請され、5 日前に承認されたことにする
+    id: "log_seed_reservation_apply",
+    occurredAt: addDays(atWeek(1, 10), -6),
+    actorId: "usr_student_01",
+    actedAsStaff: false,
+    action: AuditLogAction.ReservationApply,
+    targetType: AuditLogTargetType.Reservation,
+    targetId: "res_sample_approved",
+    groupId: "grp_robotics",
+    changes: {
+      facility_id: { before: null, after: "fac_meeting_a" },
+      start_at: { before: null, after: atWeek(1, 10).toISOString() },
+      end_at: { before: null, after: atWeek(1, 12).toISOString() },
+      head_count: { before: null, after: 4 },
+      note: { before: null, after: "週次プロジェクト定例ミーティング" },
+      status: { before: null, after: ReservationStatus.Provisional },
+    },
+  },
+  {
+    id: "log_seed_reservation_approve",
+    occurredAt: addDays(atWeek(1, 10), -5),
+    actorId: "usr_staff_01",
+    actedAsStaff: true,
+    action: AuditLogAction.ReservationApprove,
+    targetType: AuditLogTargetType.Reservation,
+    targetId: "res_sample_approved",
+    groupId: "grp_robotics",
+    changes: {
+      status: { before: ReservationStatus.Provisional, after: ReservationStatus.Approved },
+      status_reason: { before: null, after: null },
+    },
+  },
+  {
+    id: "log_seed_invitation_send",
+    occurredAt: addDays(seedNow, -1),
+    actorId: "usr_student_04",
+    actedAsStaff: false,
+    action: AuditLogAction.InvitationSend,
+    targetType: AuditLogTargetType.Invitation,
+    targetId: "inv_seed_hanako_ai",
+    groupId: "grp_ai_hackers",
+    changes: {
+      email: { before: null, after: "hanako@ecs.osaka-u.ac.jp" },
+      role: { before: null, after: MembershipRole.Member },
+    },
+  },
+  {
+    // 事務局招待（INFO-009）はまだテーブルが無いので、対象の ID は記録の中にしか無い
+    id: "log_seed_staff_role_invite",
+    occurredAt: seedNow,
+    actorId: "usr_staff_01",
+    actedAsStaff: true,
+    action: AuditLogAction.StaffRoleInvite,
+    targetType: AuditLogTargetType.StaffRole,
+    targetId: "staff_inv_seed_01",
+    groupId: null,
+    changes: {
+      email: { before: null, after: "substaff@osaka-u.ac.jp" },
+    },
   },
 ];

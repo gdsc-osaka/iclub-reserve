@@ -7,7 +7,7 @@ import type {
   AvailabilityReservation,
 } from "~/query/facility/facility-availability-calendar";
 
-import { AvailabilityDraftCard } from "./availability-detail-card";
+import { AvailabilityDraftCard, AvailabilityReservationCard } from "./availability-detail-card";
 import {
   blockStyle,
   isPastDay,
@@ -15,7 +15,7 @@ import {
   weekdayStyle,
   type AvailabilityDay,
 } from "./availability-week";
-import { ReservationStatusBadge } from "./reservation-status-badge";
+import { ReservationStatusBadge, reservationStatusLabel } from "./reservation-status-badge";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Badge } from "../ui/badge";
@@ -37,6 +37,7 @@ export function AvailabilityWeekAgenda({
   facility,
   now,
   canApply,
+  canCreateDirectly = false,
 }: Readonly<{
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
@@ -46,6 +47,8 @@ export function AvailabilityWeekAgenda({
   now: Date;
   /** 申請へ進めるかどうか（COND-006） */
   canApply: boolean;
+  /** 承認済みで直接作成できるか（事務局のみ） */
+  canCreateDirectly?: boolean;
 }>) {
   return (
     <ul className="divide-y">
@@ -86,13 +89,16 @@ export function AvailabilityWeekAgenda({
                   </PopoverTrigger>
 
                   <PopoverContent align="end" className="w-72">
-                    <AvailabilityDraftCard draft={{ facility, day, startHour: null }} />
+                    <AvailabilityDraftCard
+                      draft={{ facility, day, startHour: null }}
+                      canCreateDirectly={canCreateDirectly}
+                    />
                   </PopoverContent>
                 </Popover>
               )}
             </div>
 
-            <DayReservations day={day} reservations={reservations} />
+            <DayReservations day={day} reservations={reservations} facility={facility} />
           </li>
         );
       })}
@@ -104,7 +110,12 @@ export function AvailabilityWeekAgenda({
 function DayReservations({
   day,
   reservations,
-}: Readonly<{ day: AvailabilityDay; reservations: readonly AvailabilityReservation[] }>) {
+  facility,
+}: Readonly<{
+  day: AvailabilityDay;
+  reservations: readonly AvailabilityReservation[];
+  facility: AvailabilityFacility;
+}>) {
   const blocks = toDayBlocks(day, reservations);
 
   if (blocks.length === 0) {
@@ -115,42 +126,61 @@ function DayReservations({
     <ul className="mt-2 flex flex-col gap-2">
       {blocks.map(({ reservation }) => {
         const style = blockStyle(reservation.status, reservation.isOwnGroup);
+        const timeRange = formatTimeRange(reservation.startAt, reservation.endAt);
+        const statusLabel = reservationStatusLabel[reservation.status];
 
         return (
-          <li
-            key={reservation.id}
-            className={cn("relative overflow-hidden rounded-md border py-2 pr-3 pl-3", style.box)}
-          >
-            <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", style.rail)} />
+          <li key={reservation.id}>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`${timeRange} ${reservation.groupName} ${statusLabel} の詳細を見る`}
+                  className={cn(
+                    "relative block w-full overflow-hidden rounded-md border py-2 pr-3 pl-3 text-left transition-shadow",
+                    "hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    "data-[state=open]:ring-2 data-[state=open]:ring-ring data-[state=open]:ring-offset-1",
+                    style.box,
+                  )}
+                >
+                  <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", style.rail)} />
 
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {/*
-               * 日をまたぐ予約は 2 日ぶんの欄に出るので、時刻だけで書くと
-               * どちらの欄でも「20:00〜10:00」と逆向きに見える。
-               * 表記はカレンダーの帯と同じ関数に任せる。
-               */}
-              <span className="text-sm font-medium tabular-nums">
-                {formatTimeRange(reservation.startAt, reservation.endAt)}
-              </span>
-              <ReservationStatusBadge status={reservation.status} />
-              {reservation.isOwnGroup && <Badge>自団体</Badge>}
-            </div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {/*
+                     * 日をまたぐ予約は 2 日ぶんの欄に出るので、時刻だけで書くと
+                     * どちらの欄でも「20:00〜10:00」と逆向きに見える。
+                     * 表記はカレンダーの帯と同じ関数に任せる。
+                     */}
+                    <span className="text-sm font-medium tabular-nums">{timeRange}</span>
+                    <ReservationStatusBadge status={reservation.status} />
+                    {reservation.isOwnGroup && <Badge>自団体</Badge>}
+                  </div>
 
-            {/* 自団体の団体名は太字にする。色の濃さだけでは自分たちの予約を見つけにくい */}
-            <p className={cn("mt-1 text-sm", reservation.isOwnGroup && "font-medium")}>
-              {reservation.groupName}
-            </p>
+                  {/* 自団体の団体名は太字にする。色の濃さだけでは自分たちの予約を見つけにくい */}
+                  <p className={cn("mt-1 text-sm", reservation.isOwnGroup && "font-medium")}>
+                    {reservation.groupName}
+                  </p>
 
-            {/*
-             * 使用人数と備考は自団体のメンバーと事務局にしか渡していない（COND-008）。
-             * 他団体の予約では detail が null になるので、ここは描かれない。
-             */}
-            {reservation.detail !== null && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {reservation.detail.headCount} 名
-                {reservation.detail.note !== null && `／${reservation.detail.note}`}
-              </p>
-            )}
+                  {/*
+                   * 使用人数と備考は自団体のメンバーと事務局にしか渡していない（COND-008）。
+                   * 他団体の予約では detail が null になるので、ここは描かれない。
+                   */}
+                  {reservation.detail !== null && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {reservation.detail.headCount} 名
+                      {reservation.detail.note !== null && `／${reservation.detail.note}`}
+                    </p>
+                  )}
+                </button>
+              </PopoverTrigger>
+
+              <PopoverContent align="start" className="w-72">
+                <AvailabilityReservationCard
+                  reservation={reservation}
+                  facilityName={facility.name}
+                />
+              </PopoverContent>
+            </Popover>
           </li>
         );
       })}

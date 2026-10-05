@@ -107,6 +107,7 @@ const createDeps = (
           })
         : okAsync(overrides.created),
     create: () => okAsync({ enqueuedMailIds: [] }),
+    createApproved: () => okAsync({ applied: true }),
     existsApprovedOverlap: () => okAsync(false),
     applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
     applyContentEdit: () => okAsync({ applied: true, enqueuedMailIds: [] }),
@@ -169,6 +170,16 @@ describe("getReservationFormUseCase", () => {
     expect(result._unsafeUnwrap().reservations.every((item) => !item.isOwnGroup)).toBe(true);
   });
 
+  it("一般ユーザーは canCreateDirectly が false、事務局は true になる", async () => {
+    const { deps } = createDeps();
+
+    const normalResult = await getReservationFormUseCase(deps, args);
+    expect(normalResult._unsafeUnwrap().canCreateDirectly).toBe(false);
+
+    const staffResult = await getReservationFormUseCase(deps, { ...args, isStaff: true });
+    expect(staffResult._unsafeUnwrap().canCreateDirectly).toBe(true);
+  });
+
   it("申請し終えた直後は、いま作った予約の控えを返す", async () => {
     const { deps } = createDeps({ created: createdReservation });
 
@@ -183,6 +194,7 @@ describe("getReservationFormUseCase", () => {
       facilityName: "ミーティングルーム A",
       headCount: 4,
       note: "キックオフ",
+      status: ReservationStatus.Provisional,
     });
   });
 

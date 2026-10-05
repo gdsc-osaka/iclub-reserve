@@ -1,6 +1,7 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../../app/db/schema/index.js";
 import {
+  seedAuditLogs,
   seedFacilities,
   seedGroupInvitations,
   seedGroupMembers,
@@ -22,21 +23,24 @@ export async function insertSeedData(
   db: BetterSQLite3Database<typeof schema>,
   log: (message: string) => void = () => {},
 ): Promise<void> {
-  log("1/6 施設・備品データを投入中...");
+  log("1/7 施設・備品データを投入中...");
   await db.insert(schema.facilityTable).values(seedFacilities).onConflictDoNothing();
 
-  log("2/6 テストユーザーデータを投入中...");
+  log("2/7 テストユーザーデータを投入中...");
   await db.insert(schema.user).values(seedUsers).onConflictDoNothing();
 
-  log("3/6 団体データを投入中...");
+  log("3/7 団体データを投入中...");
   await db.insert(schema.groupTable).values(seedGroups).onConflictDoNothing();
 
-  log("4/6 団体メンバーシップデータを投入中...");
+  log("4/7 団体メンバーシップデータを投入中...");
   await db.insert(schema.groupMemberTable).values(seedGroupMembers).onConflictDoNothing();
 
-  log("5/6 招待データを投入中...");
+  log("5/7 招待データを投入中...");
   await db.insert(schema.groupInvitationTable).values(seedGroupInvitations).onConflictDoNothing();
 
-  log("6/6 サンプル予約データを投入中...");
+  log("6/7 サンプル予約データを投入中...");
   await db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing();
+
+  log("7/7 操作履歴データを投入中...");
+  await db.insert(schema.auditLogTable).values(seedAuditLogs).onConflictDoNothing();
 }

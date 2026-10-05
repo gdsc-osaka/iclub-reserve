@@ -29,6 +29,7 @@ const values = (overrides: Partial<FormValues> = {}): FormValues => ({
   endTime: "15:00",
   headCount: "4",
   note: "",
+  mode: "provisional",
   ...overrides,
 });
 
@@ -70,6 +71,7 @@ describe("readValues", () => {
       endTime: "15:00",
       headCount: "4",
       note: "定例ミーティング",
+      mode: "provisional",
     });
   });
 
@@ -78,6 +80,18 @@ describe("readValues", () => {
     formData.set("note", new Blob(["添付されたもの"]));
 
     expect(readValues(formData)).toMatchObject({ groupId: "", note: "" });
+  });
+
+  it.each([
+    ["direct", "direct"],
+    ["provisional", "provisional"],
+    ["approved", "provisional"],
+    [null, "provisional"],
+  ] as const)("mode に %s が送られてきたら %s として読む", (sent, expected) => {
+    const formData = new FormData();
+    if (sent !== null) formData.set("mode", sent);
+
+    expect(readValues(formData).mode).toBe(expected);
   });
 });
 

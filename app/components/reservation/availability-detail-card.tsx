@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { formatMonthDay, formatTimeRange, toTokyoTimeKey } from "~/lib/date";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 
+import { ReservationActionButtons } from "./reservation-action-buttons";
 import type { ReservationDraft } from "./availability-week";
 import { ReservationStatusBadge } from "./reservation-status-badge";
 import { Button } from "../ui/button";
@@ -27,11 +28,12 @@ import { Link } from "react-router";
  * 日付や時刻が決まっていないのに埋めてしまうと、
  * フォームを開いた人が「自分が選んだ値なのか」を確かめ直すことになる。
  */
-const toApplicationPath = (draft: ReservationDraft): string => {
+const toApplicationPath = (draft: ReservationDraft, mode?: "direct"): string => {
   const params = new URLSearchParams({ facility: draft.facility.id });
 
   if (draft.day !== null) params.set("date", draft.day.dateKey);
   if (draft.startHour !== null) params.set("start", toTokyoTimeKey(draft.startHour * 60));
+  if (mode === "direct") params.set("mode", "direct");
 
   return `/reservations/new?${params.toString()}`;
 };
@@ -44,12 +46,16 @@ const toApplicationPath = (draft: ReservationDraft): string => {
  * 渡していない相手には `detail` が `null` で届くため、
  * ここで隠しているのではなく、そもそも手元に無い。
  *
- * NOTE: 予約詳細（SCR-005）と事務局の承認・却下（UC-008）はまだ無いので、
- * この欄は読むだけにしている。画面ができたら、ここに導線を足すこと。
+ * 事務局スタッフには実行可能な状態変更操作ボタン（承認・却下・キャンセル）を出す。
+ * 予約詳細（SCR-005）へのリンクは、見ている人全員に出す。
  */
 export function AvailabilityReservationCard({
   reservation,
-}: Readonly<{ reservation: AvailabilityReservation }>) {
+  facilityName,
+}: Readonly<{
+  reservation: AvailabilityReservation;
+  facilityName: string;
+}>) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -82,6 +88,33 @@ export function AvailabilityReservationCard({
           使用人数と備考は、申請した団体のメンバーと事務局だけが見られます。
         </p>
       )}
+
+      {/*
+       * 見ている人が実行できる操作があるときは操作ボタンを出す。
+       * 事務局には detail が必ず入るが、型の上で null を外してから使用する。
+       */}
+      {reservation.transitions.length > 0 && reservation.detail !== null && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <ReservationActionButtons
+            item={{
+              id: reservation.id,
+              facilityName,
+              groupName: reservation.groupName,
+              startAt: reservation.startAt,
+              endAt: reservation.endAt,
+              headCount: reservation.detail.headCount,
+              status: reservation.status,
+              hasApprovedOverlap: reservation.hasApprovedOverlap,
+            }}
+            transitions={reservation.transitions}
+            showGroupName={true}
+          />
+        </div>
+      )}
+
+      <Button asChild variant="outline" size="sm" className="w-full">
+        <Link to={`/reservations/${reservation.id}`}>予約詳細を見る</Link>
+      </Button>
     </div>
   );
 }
@@ -93,7 +126,13 @@ export function AvailabilityReservationCard({
  * 何が決まっていて何がまだ決まっていないかを先に見せておかないと、
  * フォームを開いてから「日付が入っていない」と戸惑うことになる。
  */
-export function AvailabilityDraftCard({ draft }: Readonly<{ draft: ReservationDraft }>) {
+export function AvailabilityDraftCard({
+  draft,
+  canCreateDirectly = false,
+}: Readonly<{
+  draft: ReservationDraft;
+  canCreateDirectly?: boolean;
+}>) {
   return (
     <div className="flex flex-col gap-2">
       <dl className="flex flex-col gap-1 text-sm">
@@ -114,6 +153,12 @@ export function AvailabilityDraftCard({ draft }: Readonly<{ draft: ReservationDr
       <Button asChild size="sm" className="w-full">
         <Link to={toApplicationPath(draft)}>仮予約を申請</Link>
       </Button>
+
+      {canCreateDirectly && (
+        <Button asChild variant="secondary" size="sm" className="w-full">
+          <Link to={toApplicationPath(draft, "direct")}>承認済みで直接作成</Link>
+        </Button>
+      )}
 
       <p className="text-xs text-muted-foreground">
         ここで選んだ内容は申請フォームに引き継がれます。まだ決まっていない項目はフォームで選べます。

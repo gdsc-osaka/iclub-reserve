@@ -16,6 +16,13 @@ import {
 import { validateReservationPeriod } from "~/domain/reservation/validation";
 import { atTokyoMinutes, parseTokyoDateKey, parseTokyoTimeKey } from "~/lib/date";
 
+/**
+ * 申請フォームで何を作るか。仮予約の申請（UC-002）か、事務局による承認済みの直接作成（UC-008）か。
+ *
+ * 選べるのは事務局だけで、事務局でない人が "direct" を送っても直接作成のユースケースが止める。
+ */
+export type ReservationFormMode = "provisional" | "direct";
+
 /** フォームが送ってくる値。入力し直してもらうためにそのまま持ち帰る */
 export interface FormValues {
   readonly groupId: string;
@@ -25,6 +32,8 @@ export interface FormValues {
   readonly endTime: string;
   readonly headCount: string;
   readonly note: string;
+  /** 決まった値以外が送られてきたら、仮予約の申請として扱う */
+  readonly mode: ReservationFormMode;
 }
 
 /**
@@ -52,6 +61,7 @@ export const readValues = (formData: FormData): FormValues => ({
   endTime: readString(formData, "end_time"),
   headCount: readString(formData, "head_count"),
   note: readString(formData, "note"),
+  mode: readString(formData, "mode") === "direct" ? "direct" : "provisional",
 });
 
 /** 申請の中身。フォームの文字列を確かめ終えた形 */

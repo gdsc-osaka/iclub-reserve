@@ -11,6 +11,7 @@ import {
   parseReservation,
   readValues,
   toFormErrors,
+  type ReservationFormMode,
 } from "~/components/reservation/editor/form-values";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
@@ -32,6 +33,7 @@ import {
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
+import { createDirectReservationUseCase } from "~/usecases/reservation/create-direct-reservation";
 import { createProvisionalReservationUseCase } from "~/usecases/reservation/create-reservation";
 import { getReservationFormUseCase } from "~/usecases/reservation/get-reservation-form";
 
@@ -110,6 +112,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   }
 
   const form = result.value;
+  /*
+   * 直接作成（UC-008）の切り替えを最初からオンにして開くか。空き状況カレンダーの
+   * 「承認済みで直接作成」から来たとき。事務局でない人が URL に付けても、切り替えごと出さない。
+   */
+  const mode: ReservationFormMode =
+    form.canCreateDirectly && url.searchParams.get("mode") === "direct" ? "direct" : "provisional";
 
   return {
     form,
@@ -122,15 +130,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       facilityId: pickFacilityId(form.facilities, url.searchParams.get("facility")),
       dateKey: toTokyoDateKey(day),
       startMinutes: parseTokyoTimeKey(url.searchParams.get("start")),
+      mode,
     },
   };
 }
 
 /**
- * 仮予約を申請する（UC-002）。
+ * 仮予約を申請する（UC-002）か、事務局が承認済みの予約を直接作成する（UC-008）。
  *
- * ステータスは受け取らない。申請は必ず仮予約として作られる（STATE-001）ので、
- * フォームから送られてくる余地を無くしている。
+ * ステータスは受け取らない。どちらで作るかは `mode` で選び、仮予約か承認済みかは
+ * それぞれのユースケースが決める（STATE-001）。事務局でない人が `mode=direct` を送っても、
+ * 直接作成のユースケースが Forbidden で止め、ログに残す。
  *
  * 成功したら、同じ画面の「申請できました」に転送する。
  * 送信の結果をそのまま描くと、完了画面での再読み込みが再送信になり、
@@ -150,25 +160,36 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = createDb(env.DB);
+  const isDirect = values.mode === "direct";
+  const deps = {
+    reservationRepository: createReservationRepository(db),
+    membershipRepository: createMembershipRepository(db),
+    groupRepository: createGroupRepository(db),
+    facilityRepository: createFacilityRepository(db),
+  };
+  const args = { actorUserId: user.id, isStaff: user.is_staff, now, reservation };
 
-  const result = await createProvisionalReservationUseCase(
-    {
-      reservationRepository: createReservationRepository(db),
-      membershipRepository: createMembershipRepository(db),
-      groupRepository: createGroupRepository(db),
-      facilityRepository: createFacilityRepository(db),
-      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-      mailOutboxNotifier: createQueueMailOutboxNotifier(),
-    },
-    { actorUserId: user.id, isStaff: user.is_staff, now, reservation },
-  );
+  // 直接作成ではメールを送らないので、通知に使う依存は申請のときだけ渡す
+  const result = isDirect
+    ? await createDirectReservationUseCase(deps, args)
+    : await createProvisionalReservationUseCase(
+        {
+          ...deps,
+          reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+          mailOutboxNotifier: createQueueMailOutboxNotifier(),
+        },
+        args,
+      );
 
   if (result.isErr()) {
     return {
       values,
       ...toFormErrors(
         reservationActionErrors(
-          { where: "reservations.new.action", userId: user.id },
+          {
+            where: isDirect ? "reservations.new.direct" : "reservations.new.action",
+            userId: user.id,
+          },
           result.error,
           fieldKeyOf,
         ),
@@ -186,10 +207,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 /**
- * 仮予約の申請フォーム（SCR-002 / UC-002）。
+ * 仮予約の申請フォーム（SCR-002 / UC-002 / UC-008）。
  *
  * 申請できるのは有効な団体だけで（COND-006）、事務局は所属に関わらず
- * 任意の団体として申請できる（COND-009）。どちらの候補を出すかはローダーが決めていて、
+ * 任意の団体として申請・直接作成できる（COND-009）。どちらの候補を出すかはローダーが決めていて、
  * この画面は渡された候補を並べるだけにしている。
  */
 export default function NewReservation({ loaderData, actionData }: Route.ComponentProps) {
@@ -229,6 +250,7 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
         todayKey={todayKey}
         initial={initial}
         actionData={actionData ?? null}
+        canCreateDirectly={form.canCreateDirectly}
       />
     </PageShell>
   );
