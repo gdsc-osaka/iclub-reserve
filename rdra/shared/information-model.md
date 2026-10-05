@@ -213,7 +213,7 @@ entities:
 
   - id: "INFO-004"
     name: "メッセージ"
-    description: "予約単位での事務局・団体間のメッセージ。自団体のメンバーと事務局のみが閲覧でき、他の団体からは閲覧できない（COND-008）。"
+    description: "予約単位での事務局・団体間のメッセージ。自団体のメンバーと事務局のみが閲覧でき、他の団体からは閲覧できない（COND-008）。追記のみで、送った後に編集・削除はしない（COND-023）。"
     attributes:
       - name: "id"
         type: "string"
@@ -234,7 +234,7 @@ entities:
       - name: "body"
         type: "string"
         required: true
-        description: "メッセージ本文"
+        description: "メッセージ本文。前後の空白を取り除いた値を、途中の改行を含めて保存する。1〜2000文字（COND-023）"
       - name: "sent_at"
         type: "datetime"
         required: true
