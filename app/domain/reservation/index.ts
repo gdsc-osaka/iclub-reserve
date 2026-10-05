@@ -61,6 +61,13 @@ export const ReservationAction = {
    * 団体メンバーには許されず、事務局だけに許される操作（COND-009）。
    */
   CreateDirect: "create_direct",
+  /**
+   * 予約にメッセージを送信する（UC-009 / COND-023）。
+   *
+   * 許す範囲は ViewDetail（予約の全項目を見られる人）と同じだが、
+   * 見られる人と送れる人を表の上で別々に決められるようにするため別の操作として定義している。
+   */
+  SendMessage: "send_message",
 } as const;
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
 
@@ -92,6 +99,7 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
       ReservationAction.Withdraw,
       ReservationAction.Cancel,
       ReservationAction.Edit,
+      ReservationAction.SendMessage,
     ],
     [MembershipRole.Member]: [
       ReservationAction.ViewDetail,
@@ -99,6 +107,7 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
       ReservationAction.Withdraw,
       ReservationAction.Cancel,
       ReservationAction.Edit,
+      ReservationAction.SendMessage,
     ],
     /*
      * 事務局は所属していない団体でも予約を作れる (COND-009)。
@@ -118,6 +127,7 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
       ReservationAction.ViewDetail,
       ReservationAction.CreateProvisional,
       ReservationAction.CreateDirect,
+      ReservationAction.SendMessage,
     ],
   },
 };
@@ -212,6 +222,8 @@ export const ReservationField = {
   Note: "reservation_note",
   /** 却下・キャンセルの理由（COND-002） */
   StatusReason: "reservation_status_reason",
+  /** メッセージ本文（COND-023） */
+  MessageBody: "reservation_message_body",
 } as const;
 export type ReservationField = (typeof ReservationField)[keyof typeof ReservationField];
 
@@ -440,3 +452,9 @@ export const calendarVisibleStatuses = [
   ReservationStatus.Provisional,
   ReservationStatus.Approved,
 ] as const;
+
+/**
+ * 予約詳細画面のパスを生成する純粋関数（SCR-005 / UC-034）。
+ */
+export const reservationDetailPath = (reservationId: string): string =>
+  `/reservations/${reservationId}`;

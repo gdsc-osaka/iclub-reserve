@@ -21,6 +21,7 @@ import { describe, expect, it } from "vitest";
 import * as schema from "~/db/schema";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
+import { QueryErrorCode } from "~/query/error";
 import type { Database } from "../db";
 import { createReservationMailRecipientsQuery } from "./reservation-mail-recipients-query";
 
@@ -176,5 +177,174 @@ describe("findByReservationId を SQLite で実行する（申請者を宛先に
 
     // 申請者として団体側に入れ、事務局の宛先からは重複を除く
     expect(result._unsafeUnwrap()).toEqual({ groupMembers: [ADMIN, APPLICANT], staff: [STAFF] });
+  });
+});
+
+function insertMessage(
+  sqlite: BetterSqlite3.Database,
+  message: {
+    id: string;
+    reservationId: string;
+    senderId: string;
+    sentAsStaff: boolean;
+    body: string;
+    sentAt: number;
+  },
+) {
+  sqlite
+    .prepare(
+      `INSERT INTO "reservation_message" (id, reservation_id, sender_id, sent_as_staff, body, sent_at) VALUES (?,?,?,?,?,?)`,
+    )
+    .run(
+      message.id,
+      message.reservationId,
+      message.senderId,
+      message.sentAsStaff ? 1 : 0,
+      message.body,
+      message.sentAt,
+    );
+}
+
+describe("findForMessage を SQLite で実行する（メッセージ通知先の取得条件。EVT-008）", () => {
+  it("申請者は、団体から外れていて事務局でもなければ groupMembers に入らない", async () => {
+    const { sqlite, query } = createTestDb();
+    insertUser(sqlite, APPLICANT, { isStaff: false });
+    insertMember(sqlite, APPLICANT.userId, MembershipRole.Member);
+    insertReservation(sqlite);
+    // 申請者を団体から外す
+    sqlite.prepare(`DELETE FROM "group_member" WHERE user_id = ?`).run(APPLICANT.userId);
+
+    const result = await query.findForMessage("res_target");
+
+    expect(result.isOk()).toBe(true);
+    const audience = result._unsafeUnwrap();
+    expect(audience.groupMembers).toEqual([ADMIN]);
+  });
+
+  it("staff は groupMembers と重複しても除かれない", async () => {
+    const { sqlite, query } = createTestDb();
+    insertUser(sqlite, APPLICANT, { isStaff: false });
+    insertReservation(sqlite);
+    // 事務局員を団体管理者としても登録
+    insertMember(sqlite, STAFF.userId, MembershipRole.Admin);
+
+    const result = await query.findForMessage("res_target");
+
+    expect(result.isOk()).toBe(true);
+    const audience = result._unsafeUnwrap();
+    // 団体側にも事務局側にも STAFF が残る
+    expect(audience.groupMembers).toEqual([ADMIN, STAFF]);
+    expect(audience.staff).toEqual([STAFF]);
+  });
+
+  it("priorGroupSideSenders は sent_as_staff = false の送信者のみが入り、重複せず、他予約や団体から外れた者は除かれる", async () => {
+    const { sqlite, query } = createTestDb();
+    insertUser(sqlite, APPLICANT, { isStaff: false });
+    insertReservation(sqlite);
+
+    // 別の予約を作成
+    sqlite
+      .prepare(
+        `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        "res_other",
+        "grp_robotics",
+        "fac_a",
+        new Date("2026-10-11T10:00:00+09:00").getTime(),
+        new Date("2026-10-11T12:00:00+09:00").getTime(),
+        2,
+        ReservationStatus.Approved,
+        ADMIN.userId,
+        0,
+        0,
+      );
+
+    const SENDER_VALID = {
+      userId: "usr_sender_valid",
+      address: "sender_valid@ecs.osaka-u.ac.jp",
+      name: "有効送信者",
+    };
+    const SENDER_REMOVED = {
+      userId: "usr_sender_removed",
+      address: "sender_removed@ecs.osaka-u.ac.jp",
+      name: "脱退送信者",
+    };
+    const SENDER_OTHER_RES = {
+      userId: "usr_sender_other",
+      address: "sender_other@ecs.osaka-u.ac.jp",
+      name: "他予約送信者",
+    };
+
+    insertUser(sqlite, SENDER_VALID, { isStaff: false });
+    insertMember(sqlite, SENDER_VALID.userId, MembershipRole.Member);
+
+    insertUser(sqlite, SENDER_REMOVED, { isStaff: false });
+    // 脱退済み（メンバーシップなし）
+
+    insertUser(sqlite, SENDER_OTHER_RES, { isStaff: false });
+    insertMember(sqlite, SENDER_OTHER_RES.userId, MembershipRole.Member);
+
+    // 1. sent_as_staff = false の正常なメッセージ送信（複数回送信しても1人）
+    insertMessage(sqlite, {
+      id: "msg_1",
+      reservationId: "res_target",
+      senderId: SENDER_VALID.userId,
+      sentAsStaff: false,
+      body: "メッセージ1",
+      sentAt: 100,
+    });
+    insertMessage(sqlite, {
+      id: "msg_2",
+      reservationId: "res_target",
+      senderId: SENDER_VALID.userId,
+      sentAsStaff: false,
+      body: "メッセージ2",
+      sentAt: 200,
+    });
+
+    // 2. sent_as_staff = true の事務局送信（priorGroupSideSenders に入らない）
+    insertMessage(sqlite, {
+      id: "msg_3",
+      reservationId: "res_target",
+      senderId: STAFF.userId,
+      sentAsStaff: true,
+      body: "事務局からの返信",
+      sentAt: 300,
+    });
+
+    // 3. 脱退した元メンバーの過去送信（入らない）
+    insertMessage(sqlite, {
+      id: "msg_4",
+      reservationId: "res_target",
+      senderId: SENDER_REMOVED.userId,
+      sentAsStaff: false,
+      body: "脱退者のメッセージ",
+      sentAt: 400,
+    });
+
+    // 4. 別の予約に対する送信（入らない）
+    insertMessage(sqlite, {
+      id: "msg_5",
+      reservationId: "res_other",
+      senderId: SENDER_OTHER_RES.userId,
+      sentAsStaff: false,
+      body: "別予約のメッセージ",
+      sentAt: 500,
+    });
+
+    const result = await query.findForMessage("res_target");
+
+    expect(result.isOk()).toBe(true);
+    const audience = result._unsafeUnwrap();
+    expect(audience.priorGroupSideSenders).toEqual([SENDER_VALID]);
+  });
+
+  it("予約が存在しない場合は NotFound となる", async () => {
+    const { query } = createTestDb();
+    const result = await query.findForMessage("non_existent_res");
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.NotFound);
   });
 });

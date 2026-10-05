@@ -1,12 +1,14 @@
 import { and, eq, isNotNull, or } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
-import { groupMemberTable, reservationTable, user } from "~/db/schema";
+import { groupMemberTable, reservationMessageTable, reservationTable, user } from "~/db/schema";
 import { MembershipRole } from "~/domain/membership";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
   ReservationMailAudience,
   ReservationMailRecipient,
+  ReservationMailRecipients,
   ReservationMailRecipientsQuery,
+  ReservationMessageAudience,
 } from "~/query/reservation/reservation-mail-recipients";
 import type { Database } from "../db";
 import { toMembershipRole } from "../membership/membership-converter";
@@ -91,6 +93,104 @@ const buildAudience = (
 };
 
 /**
+ * メールアドレスで重複を取り除き、アドレス昇順に並べた宛先リストを生成する純粋関数。
+ */
+const toUniqueSortedRecipients = (
+  rows: readonly { id: string; email: string; name: string | null }[],
+): ReservationMailRecipients => {
+  const map = new Map<string, ReservationMailRecipient>();
+  for (const row of rows) {
+    if (!row.email) continue;
+    if (!map.has(row.email)) {
+      map.set(row.email, {
+        userId: row.id,
+        address: row.email,
+        name: row.name,
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.address.localeCompare(b.address));
+};
+
+/**
+ * 既存の予約について、申請者を引く SELECT クエリ。
+ *
+ * 申請者は、いまも予約の全項目を見られる人（自団体のメンバーか事務局。COND-008 の (1)）に限る。
+ * 団体から外された元メンバー（UC-011）や、他団体の予約を代わりに申請した後で
+ * 事務局権限を剥奪された人（UC-028）に、通知を届けないため。
+ * group_member は (group_id, user_id) が一意なので、左結合しても申請者の行は増えない。
+ * findByReservationId と findForMessage で同じ条件を用いるため共通化する。
+ */
+const selectApplicantForReservation = (db: Database, reservationId: string) =>
+  db
+    .select({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    })
+    .from(reservationTable)
+    .innerJoin(user, eq(user.id, reservationTable.createdBy))
+    .leftJoin(
+      groupMemberTable,
+      and(
+        eq(groupMemberTable.groupId, reservationTable.groupId),
+        eq(groupMemberTable.userId, reservationTable.createdBy),
+      ),
+    )
+    .where(
+      and(
+        eq(reservationTable.id, reservationId),
+        or(isNotNull(groupMemberTable.id), eq(user.is_staff, true)),
+      ),
+    );
+
+/**
+ * 既存の予約について、その団体のメンバーを引く SELECT クエリ。
+ */
+const selectGroupMembersForReservation = (db: Database, reservationId: string) =>
+  db
+    .select({
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: groupMemberTable.role,
+    })
+    .from(reservationTable)
+    .innerJoin(groupMemberTable, eq(groupMemberTable.groupId, reservationTable.groupId))
+    .innerJoin(user, eq(user.id, groupMemberTable.userId))
+    .where(eq(reservationTable.id, reservationId));
+
+/**
+ * その予約に団体側として（sent_as_staff = false）メッセージを送信したことのあるユーザーを引く SELECT クエリ。
+ *
+ * 申請者と同様に、いまも予約の全項目を見られる人（自団体のメンバーか事務局。COND-008 の (1)）に限る。
+ */
+const selectPriorGroupSideSenders = (db: Database, reservationId: string) =>
+  db
+    .select({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    })
+    .from(reservationMessageTable)
+    .innerJoin(reservationTable, eq(reservationTable.id, reservationMessageTable.reservationId))
+    .innerJoin(user, eq(user.id, reservationMessageTable.senderId))
+    .leftJoin(
+      groupMemberTable,
+      and(
+        eq(groupMemberTable.groupId, reservationTable.groupId),
+        eq(groupMemberTable.userId, reservationMessageTable.senderId),
+      ),
+    )
+    .where(
+      and(
+        eq(reservationMessageTable.reservationId, reservationId),
+        eq(reservationMessageTable.sentAsStaff, false),
+        or(isNotNull(groupMemberTable.id), eq(user.is_staff, true)),
+      ),
+    );
+
+/**
  * Cloudflare D1 (Drizzle) を使った ReservationMailRecipientsQuery の実装。
  *
  * D1 の往復コストを抑えるため、通知先の取得は `db.batch([...])` により 1 回のネットワーク往復で取得する。
@@ -98,7 +198,7 @@ const buildAudience = (
 export const createReservationMailRecipientsQuery = (
   db: Database,
 ): ReservationMailRecipientsQuery => {
-  /** 事務局（user.is_staff）。予約にも団体にも依存しないので、どちらのメソッドでも同じ 1 文 */
+  /** 事務局（user.is_staff）。予約にも団体にも依存しないので、どのメソッドでも同じ 1 文 */
   const staffQuery = () =>
     db
       .select({
@@ -116,43 +216,8 @@ export const createReservationMailRecipientsQuery = (
         .from(reservationTable)
         .where(eq(reservationTable.id, reservationId));
 
-      // 申請者は、いまも予約の全項目を見られる人（自団体のメンバーか事務局。COND-008 の (1)）に限る。
-      // 団体から外された元メンバー（UC-011）や、他団体の予約を代わりに申請した後で
-      // 事務局権限を剥奪された人（UC-028）に、理由（status_reason）を載せた通知を届けないため。
-      // group_member は (group_id, user_id) が一意なので、左結合しても申請者の行は増えない。
-      const applicantQuery = db
-        .select({
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        })
-        .from(reservationTable)
-        .innerJoin(user, eq(user.id, reservationTable.createdBy))
-        .leftJoin(
-          groupMemberTable,
-          and(
-            eq(groupMemberTable.groupId, reservationTable.groupId),
-            eq(groupMemberTable.userId, reservationTable.createdBy),
-          ),
-        )
-        .where(
-          and(
-            eq(reservationTable.id, reservationId),
-            or(isNotNull(groupMemberTable.id), eq(user.is_staff, true)),
-          ),
-        );
-
-      const groupMembersQuery = db
-        .select({
-          userId: user.id,
-          email: user.email,
-          name: user.name,
-          role: groupMemberTable.role,
-        })
-        .from(reservationTable)
-        .innerJoin(groupMemberTable, eq(groupMemberTable.groupId, reservationTable.groupId))
-        .innerJoin(user, eq(user.id, groupMemberTable.userId))
-        .where(eq(reservationTable.id, reservationId));
+      const applicantQuery = selectApplicantForReservation(db, reservationId);
+      const groupMembersQuery = selectGroupMembersForReservation(db, reservationId);
 
       return ResultAsync.fromPromise(
         db.batch([reservationCheckQuery, applicantQuery, groupMembersQuery, staffQuery()]),
@@ -210,6 +275,50 @@ export const createReservationMailRecipientsQuery = (
       ).map(([applicantRows, memberRows, staffRows]) =>
         buildAudience(buildGroupRecipients(applicantRows, memberRows), staffRows),
       );
+    },
+
+    findForMessage: (reservationId: string) => {
+      const reservationCheckQuery = db
+        .select({ id: reservationTable.id })
+        .from(reservationTable)
+        .where(eq(reservationTable.id, reservationId));
+
+      const applicantQuery = selectApplicantForReservation(db, reservationId);
+      const groupMembersQuery = selectGroupMembersForReservation(db, reservationId);
+      const priorSendersQuery = selectPriorGroupSideSenders(db, reservationId);
+
+      return ResultAsync.fromPromise(
+        db.batch([
+          reservationCheckQuery,
+          applicantQuery,
+          groupMembersQuery,
+          staffQuery(),
+          priorSendersQuery,
+        ]),
+        (error): QueryError => ({
+          code: QueryErrorCode.DatabaseError,
+          message: "予約メッセージ通知先アドレスの取得に失敗しました。",
+          cause: error,
+        }),
+      ).andThen(([reservationRows, applicantRows, memberRows, staffRows, priorSenderRows]) => {
+        if (reservationRows.length === 0) {
+          return err<ReservationMessageAudience, QueryError>({
+            code: QueryErrorCode.NotFound,
+            message: `ID が ${reservationId} の予約は見つかりませんでした。`,
+          });
+        }
+
+        const groupRecipientsMap = buildGroupRecipients(applicantRows, memberRows);
+        const groupMembers = Array.from(groupRecipientsMap.values()).sort((a, b) =>
+          a.address.localeCompare(b.address),
+        );
+
+        return ok<ReservationMessageAudience, QueryError>({
+          staff: toUniqueSortedRecipients(staffRows),
+          groupMembers,
+          priorGroupSideSenders: toUniqueSortedRecipients(priorSenderRows),
+        });
+      });
     },
   };
 };

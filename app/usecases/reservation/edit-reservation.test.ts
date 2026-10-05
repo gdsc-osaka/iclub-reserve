@@ -176,6 +176,8 @@ const createDeps = (
     findByReservationId,
     findForNewReservation: () =>
       errAsync({ code: QueryErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    findForMessage: () =>
+      errAsync({ code: QueryErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});

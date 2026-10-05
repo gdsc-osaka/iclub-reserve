@@ -143,6 +143,8 @@ const createMockDeps = (options?: {
     findByReservationId,
     findForNewReservation: () =>
       errAsync({ code: "NOT_FOUND" as any, message: "not implemented in this mock" }),
+    findForMessage: () =>
+      errAsync({ code: "NOT_FOUND" as any, message: "not implemented in this mock" }),
   };
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);

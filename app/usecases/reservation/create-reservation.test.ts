@@ -152,6 +152,8 @@ const createDeps = (
     findByReservationId: () =>
       errAsync({ code: QueryErrorCode.NotFound, message: "not implemented in this mock" }),
     findForNewReservation,
+    findForMessage: () =>
+      errAsync({ code: QueryErrorCode.NotFound, message: "not implemented in this mock" }),
   };
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
