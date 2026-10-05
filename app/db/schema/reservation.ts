@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
 import { user } from "./auth";
 import { groupTable } from "./group";
@@ -74,3 +74,29 @@ export const reservationTable = sqliteTable("reservation", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+export const reservationMessageTable = sqliteTable(
+  "reservation_message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+
+    reservationId: text("reservation_id")
+      .references(() => reservationTable.id)
+      .notNull(),
+
+    senderId: text("sender_id")
+      .references(() => user.id)
+      .notNull(),
+
+    sentAsStaff: integer("sent_as_staff", { mode: "boolean" }).notNull(),
+
+    body: text("body").notNull(),
+
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("reservation_message_reservation_sent_at_idx").on(table.reservationId, table.sentAt),
+  ],
+);

@@ -25,6 +25,30 @@ export interface ReservationAccessRequest {
 const staffOnly: Actor = { isStaff: true, membership: null };
 
 /**
+ * 予約が属する団体での操作する人を、事務局であっても必ず所属を引いて組み立てる。
+ *
+ * `resolveReservationActor` は「事務局の役割だけで通る操作なら所属を引かない」最適化を行うが、
+ * メッセージ送信（UC-009 / COND-023）では送信者がその団体のメンバーであるかどうかによって
+ * `sent_as_staff`（団体側としての送信か、事務局としての送信か）が分岐するため、
+ * 事務局であっても必ず所属を確認する必要がある。
+ * 所属を省くと、その団体に所属する事務局員まで `membership: null` になり、
+ * `sent_as_staff` を誤って true にしてしまう。
+ */
+export const resolveReservationActorWithMembership = (
+  deps: ReservationAuthorizationDeps,
+  groupId: string,
+  request: ReservationAccessRequest,
+): ResultAsync<Actor, ReservationError> =>
+  deps.membershipRepository
+    .findByGroupAndUser(groupId, request.actorUserId)
+    .mapErr((error): ReservationError => ({
+      code: ReservationErrorCode.DatabaseError,
+      message: "所属を読み取れなかった。",
+      cause: error,
+    }))
+    .map((membership): Actor => ({ isStaff: request.isStaff, membership }));
+
+/**
  * 予約が属する団体での操作する人を組み立てる。
  *
  * 事務局であっても、原則としてその団体での所属を引く。事務局の行が他の役割の行を
@@ -47,14 +71,7 @@ export const resolveReservationActor = (
     return okAsync<Actor, ReservationError>(staffOnly);
   }
 
-  return deps.membershipRepository
-    .findByGroupAndUser(groupId, request.actorUserId)
-    .mapErr((error): ReservationError => ({
-      code: ReservationErrorCode.DatabaseError,
-      message: "所属を読み取れなかった。",
-      cause: error,
-    }))
-    .map((membership): Actor => ({ isStaff: request.isStaff, membership }));
+  return resolveReservationActorWithMembership(deps, groupId, request);
 };
 
 /**

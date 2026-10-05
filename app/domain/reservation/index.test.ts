@@ -39,6 +39,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
     [ReservationAction.Edit]: false,
+    [ReservationAction.SendMessage]: false,
   },
   // 団体の中では役割によらず同じことができる
   メンバー: {
@@ -49,6 +50,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,
+    [ReservationAction.SendMessage]: true,
   },
   管理者: {
     [ReservationAction.ViewSummary]: true,
@@ -58,6 +60,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,
+    [ReservationAction.SendMessage]: true,
   },
   /*
    * COND-009: 事務局は所属していない団体でも予約を作れ、中身も全部見られる（COND-008）。
@@ -73,6 +76,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
     [ReservationAction.Edit]: false,
+    [ReservationAction.SendMessage]: true,
   },
   /*
    * 事務局の人が自分の所属する団体の予約を扱うときは、メンバーとしての権限も併せ持つ。
@@ -86,6 +90,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,
+    [ReservationAction.SendMessage]: true,
   },
   事務局かつ管理者: {
     [ReservationAction.ViewSummary]: true,
@@ -95,6 +100,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,
+    [ReservationAction.SendMessage]: true,
   },
 };
 

@@ -4,9 +4,15 @@ import type {
   ReservationMailRecipient,
   ReservationMailRecipients,
 } from "~/domain/mail/reservation-mail";
+import type { ReservationMessageAudience } from "~/domain/mail/reservation-message-mail";
 import type { QueryError } from "../error";
 
-export type { ReservationMailAudience, ReservationMailRecipient, ReservationMailRecipients };
+export type {
+  ReservationMailAudience,
+  ReservationMailRecipient,
+  ReservationMailRecipients,
+  ReservationMessageAudience,
+};
 
 /**
  * 予約通知の宛先を取得する読み取り専用の窓口（ポート）。
@@ -29,4 +35,10 @@ export interface ReservationMailRecipientsQuery {
     readonly groupId: string;
     readonly applicantUserId: string;
   }): ResultAsync<ReservationMailAudience, QueryError>;
+
+  /**
+   * 予約へのメッセージ送信時の通知先候補 (EVT-008)。
+   * 予約が存在しない場合は NotFound。
+   */
+  findForMessage(reservationId: string): ResultAsync<ReservationMessageAudience, QueryError>;
 }
