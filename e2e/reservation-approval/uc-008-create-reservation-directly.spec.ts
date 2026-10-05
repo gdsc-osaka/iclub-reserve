@@ -95,11 +95,15 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     expect(reservation.status).toBe(ReservationStatus.Approved);
     expect(reservation.headCount).toBe(5);
 
-    // 直接作成ではメール通知（EVT）は積まれない
-    const applicantMails = await findQueuedMails(db, applicant.email);
-    expect(applicantMails).toHaveLength(0);
-    const staffMails = await findQueuedMails(db, personas.staff.email);
-    expect(staffMails).toHaveLength(0);
+    /*
+     * 直接作成ではメールを積まない（UC-008 のイベントは Google Calendar への登録だけ）。
+     * 事務局のアカウントはほかのテストと共有していて、別の予約の通知も届いているので、
+     * 本文に入る予約 ID で、この予約の通知だけに絞って数える。
+     */
+    const mailsOfReservation = async (to: string) =>
+      (await findQueuedMails(db, to)).filter((mail) => mail.bodyText.includes(reservation.id));
+    expect(await mailsOfReservation(applicant.email)).toHaveLength(0);
+    expect(await mailsOfReservation(personas.staff.email)).toHaveLength(0);
   });
 
   test("一般ユーザーには直接作成のスイッチが表示されない（権限の境目）", async ({

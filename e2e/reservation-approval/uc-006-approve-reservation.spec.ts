@@ -66,16 +66,19 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "承認する" }).click();
 
-    // 承認後は DB 上で承認済みとして保存されている
-    await expect
-      .poll(async () => {
-        const [saved] = await db
-          .select()
-          .from(reservationTable)
-          .where(eq(reservationTable.id, reservation.id));
-        return saved?.status;
-      })
-      .toBe(ReservationStatus.Approved);
+    /*
+     * 承認の結果は、同じカレンダーに戻って帯が「承認済み」に変わったことで待つ。
+     * 帯の読み上げ名には状態が入っているので、変わればこの名前で見つかる。
+     * 承認後にカレンダーから離れていないこと（施設と日付が残っていること）も合わせて確かめる。
+     */
+    await expect(page.getByRole("button", { name: /承認済み の詳細を見る/ })).toBeVisible();
+    await expect(page).toHaveURL(`/availability?facility=${facility.id}&date=${dateKey}`);
+
+    const [saved] = await db
+      .select()
+      .from(reservationTable)
+      .where(eq(reservationTable.id, reservation.id));
+    expect(saved?.status).toBe(ReservationStatus.Approved);
   });
 
   test("事務局が承認すると承認済みになり、承認の通知が積まれる", async ({ page, db, signInAs }) => {

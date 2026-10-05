@@ -127,6 +127,11 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
   }
 
+  /*
+   * 操作のあとは、いま見ていたカレンダーへ戻す（同じ内容の再送信を防ぐ PRG）。
+   * `.` は URL の階層ではなく「いま表示しているルート」を指し、React Router がルートのパスから
+   * 解決する（事務局の予約一覧と同じ）。施設と週を外さないよう、クエリは残す。
+   */
   return redirect(`.${new URL(request.url).search}`);
 }
 
