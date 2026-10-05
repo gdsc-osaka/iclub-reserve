@@ -9,7 +9,11 @@ import {
   type ReservationRepository,
   type ReservationStatus,
 } from "~/domain/reservation";
-import { canEditReservation } from "~/domain/reservation/edit";
+import {
+  canChangeReservationContent,
+  resolveEditMode,
+  ReservationEditMode,
+} from "~/domain/reservation/edit";
 import { addDays, parseTokyoDateKey, startOfTokyoDay } from "~/lib/date";
 import type {
   ReservationFormFacility,
@@ -63,13 +67,15 @@ export interface GetReservationEditFormResult {
   readonly facilities: readonly ReservationFormFacility[];
   readonly reservations: readonly ReservationFormReservation[];
   readonly selectedDay: Date;
+  /** 事務局による直接変更か（UC-008） */
+  readonly isDirect: boolean;
 }
 
 /**
- * 予約の変更画面（UC-005 / UC-017）に出すデータを取得するユースケース。
+ * 予約の変更画面（UC-005 / UC-008 / UC-017）に出すデータを取得するユースケース。
  *
- * 変更できるのは自団体のメンバーで、開始前の仮予約または承認済みの予約のみ。
- * action（`editReservationUseCase`）と同じ判定（canEditReservation）を先に通し、
+ * 変更できるのは自団体のメンバーまたは事務局で、開始前の仮予約または承認済みの予約のみ。
+ * action（`editReservationUseCase` / `editReservationDirectlyUseCase`）と同じ判定を先に通し、
  * 変更できない予約では画面を開かせない。開けてから送信で断られても、入力が無駄になるだけなので。
  *
  * 施設の選択肢と表示する日の予約は、申請フォーム（SCR-002）と同じ Query から読む。
@@ -83,19 +89,22 @@ export const getReservationEditFormUseCase = (
     // 1. 予約の取得（無ければ NotFound）
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
+    const mode = resolveEditMode(args);
+    const isDirect = mode === ReservationEditMode.Direct;
+
     /*
-     * 2. 事務局の役割には変更（Edit）が無いので、事務局であっても所属を引く。
-     * editReservationUseCase と同じ判定に揃える。
+     * 2. 事務局なら直接変更（EditDirect）、団体なら通常の変更（Edit）で認可を解決する。
+     * 事務局は所属を引かずに済む。
      */
     const actor = yield* resolveReservationActor(
       deps,
       reservation.groupId,
       args,
-      ReservationAction.Edit,
+      isDirect ? ReservationAction.EditDirect : ReservationAction.Edit,
     );
 
     // 3. 誰が・いまの状態・開始前か（action と同じ判定）。ここで弾かれた予約は画面を開かせない
-    yield* canEditReservation(reservation, actor, args.now);
+    yield* canChangeReservationContent(reservation, actor, args.now);
 
     // 表示する日の決定（指定が無ければ予約の開始日）
     const selectedDay = parseTokyoDateKey(args.dateKey) ?? startOfTokyoDay(reservation.startAt);
@@ -160,5 +169,6 @@ export const getReservationEditFormUseCase = (
       facilities: formData.facilities,
       reservations: visibleReservations,
       selectedDay,
+      isDirect,
     });
   });

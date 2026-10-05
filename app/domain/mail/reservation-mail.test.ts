@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createReservationMailDrafts,
+  directEditMailEvent,
   editMailEvent,
   notifiesStaff,
   ReservationMailEvent,
@@ -213,6 +214,13 @@ describe("reservation-mail", () => {
         expectedOpening: "申請されていた仮予約の内容が変更されました。",
         prefix: "reservation:provisionalEdited:res_test_123:1789866000000:",
       },
+      {
+        event: ReservationMailEvent.EditedByStaff,
+        expectedSubject: "【i-Club予約システム】施設・設備の利用予約が事務局により変更されました",
+        expectedOpening:
+          "利用予約の内容が事務局により変更されました。予約のステータスは変わりません。",
+        prefix: "reservation:editedByStaff:res_test_123:1789866000000:",
+      },
     ] as const;
 
     it.each(testCases)(
@@ -241,6 +249,8 @@ describe("reservation-mail", () => {
         [ReservationMailEvent.ApprovedEdited]: true,
         [ReservationMailEvent.ReapprovalRequested]: true,
         [ReservationMailEvent.ProvisionalEdited]: true,
+        // 事務局による直接変更は、操作者が事務局自身のため事務局には送らない（EVT-017）
+        [ReservationMailEvent.EditedByStaff]: false,
       });
     });
 
@@ -268,7 +278,7 @@ describe("reservation-mail", () => {
       }
     });
 
-    it("withdrawn / approved / rejected / cancelledByStaff では staff 宛の MailDraft が生成されない", () => {
+    it("withdrawn / approved / rejected / cancelledByStaff / editedByStaff では staff 宛の MailDraft が生成されない", () => {
       const audience: ReservationMailAudience = {
         groupMembers: [{ userId: "usr_student", address: "student@example.com" }],
         staff: [{ userId: "usr_staff", address: "staff@example.com" }],
@@ -279,6 +289,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Approved,
         ReservationMailEvent.Rejected,
         ReservationMailEvent.CancelledByStaff,
+        ReservationMailEvent.EditedByStaff,
       ];
 
       for (const event of noStaffEvents) {
@@ -370,6 +381,15 @@ describe("reservation-mail", () => {
         [ReservationEditOutcome.KeepProvisional]: ReservationMailEvent.ProvisionalEdited,
         [ReservationEditOutcome.KeepApproved]: ReservationMailEvent.ApprovedEdited,
         [ReservationEditOutcome.Reapproval]: ReservationMailEvent.ReapprovalRequested,
+      });
+    });
+  });
+
+  describe("directEditMailEvent", () => {
+    it("直接変更で書き込みが起きる結果すべてが EditedByStaff に対応している", () => {
+      expect(directEditMailEvent).toEqual({
+        [ReservationEditOutcome.KeepProvisional]: ReservationMailEvent.EditedByStaff,
+        [ReservationEditOutcome.KeepApproved]: ReservationMailEvent.EditedByStaff,
       });
     });
   });

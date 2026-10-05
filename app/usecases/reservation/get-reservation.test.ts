@@ -568,7 +568,8 @@ describe("getReservationUseCase", () => {
       }
     });
 
-    it("所属していない事務局は false、所属している事務局は true", async () => {
+    it("事務局は所属の有無に関わらず canEdit が true になる（UC-008）", async () => {
+      // 所属していない事務局（他団体の予約でも直接変更可能）
       const { deps: nonMemberDeps } = createDeps({ membership: null });
       const nonMemberResult = await getReservationUseCase(nonMemberDeps, {
         reservationId: "rsv_01",
@@ -577,8 +578,9 @@ describe("getReservationUseCase", () => {
         now: defaultNow,
       });
       expect(nonMemberResult.isOk()).toBe(true);
-      expect(nonMemberResult._unsafeUnwrap().canEdit).toBe(false);
+      expect(nonMemberResult._unsafeUnwrap().canEdit).toBe(true);
 
+      // 所属している事務局（自団体の予約でも直接変更可能）
       const { deps: memberDeps } = createDeps({ membership });
       const memberResult = await getReservationUseCase(memberDeps, {
         reservationId: "rsv_01",

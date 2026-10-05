@@ -62,6 +62,13 @@ export const ReservationAction = {
    */
   CreateDirect: "create_direct",
   /**
+   * 事務局として予約の内容（施設・日時・使用人数・備考）を直接変更する（UC-008）。
+   *
+   * 承認フローを経ずに直接変更し、ステータスは変えない（承認済みは承認済みのまま、仮予約は仮予約のまま）。
+   * 団体メンバーには許されず、事務局だけに許される操作（COND-009）。
+   */
+  EditDirect: "edit_direct",
+  /**
    * 予約にメッセージを送信する（UC-009 / COND-023）。
    *
    * 許す範囲は ViewDetail（予約の全項目を見られる人）と同じだが、
@@ -120,13 +127,14 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
      * メンバーとしての役割が和集合で効くので、そちらから取り消せる。
      *
      * 変更（Edit）も入れていない。事務局の変更は承認フローを経ない直接変更（UC-008）で、
-     * 承認済みの予約を仮予約に戻さないなど規則が違うため、別の操作として用意する。
+     * 承認済みの予約を仮予約に戻さないなど規則が違うため、別の操作（EditDirect）として用意する。
      * ここに Edit を足すと、事務局の変更が団体の変更（UC-005）の規則で通ってしまう。
      */
     [StaffRole]: [
       ReservationAction.ViewDetail,
       ReservationAction.CreateProvisional,
       ReservationAction.CreateDirect,
+      ReservationAction.EditDirect,
       ReservationAction.SendMessage,
     ],
   },

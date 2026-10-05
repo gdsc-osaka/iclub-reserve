@@ -8,6 +8,17 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 
+/**
+ * 承認済みの予約と重なったときに利用者へ出す文言（COND-001）。
+ *
+ * 書き込む前の確認と、書き込みの条件で止まったときの両方で同じ文言を出す。
+ * 利用者から見ればどちらも「その時間帯はもう埋まっている」で、違いは見分けられないため。
+ * 申請（UC-002）と違って「先にキャンセル」を促すのは、事務局はその予約をキャンセルできるため。
+ * 事務局による直接作成（UC-008）と直接変更（UC-008）の両方で使う。
+ */
+export const APPROVED_OVERLAP_MESSAGE =
+  "選んだ時間帯には、すでに承認済みの予約が入っています。先にその予約をキャンセルするか、別の時間帯を選んでください。";
+
 /** 重なりを調べるために必要な依存 */
 export interface ApprovedOverlapDeps {
   readonly reservationRepository: ReservationRepository;

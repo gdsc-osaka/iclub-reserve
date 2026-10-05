@@ -14,7 +14,7 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 import { validateReservationDraft } from "~/domain/reservation/validation";
-import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
+import { APPROVED_OVERLAP_MESSAGE, ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
 import { ensureGroupIsEnabled } from "./_shared/group-enabled";
 import { ensureReservationPermission } from "./_shared/reservation-authorization";
@@ -47,16 +47,6 @@ export interface CreateDirectReservationArgs {
 export interface CreateDirectReservationReturns {
   readonly reservationId: string;
 }
-
-/**
- * 承認済みの予約と重なったときに利用者へ出す文言（COND-001）。
- *
- * 書き込む前の確認と、書き込みの条件で止まったときの両方で同じ文言を出す。
- * 利用者から見ればどちらも「その時間帯はもう埋まっている」で、違いは見分けられないため。
- * 申請（UC-002）と違って「先にキャンセル」を促すのは、事務局はその予約をキャンセルできるため。
- */
-const APPROVED_OVERLAP_MESSAGE =
-  "選んだ時間帯には、すでに承認済みの予約が入っています。先にその予約をキャンセルするか、別の時間帯を選んでください。";
 
 /**
  * 承認済みの予約を直接作成するユースケース（UC-008）。
