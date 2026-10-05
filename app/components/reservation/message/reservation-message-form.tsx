@@ -25,7 +25,8 @@ export type SendMessageActionData = {
  * 予約へのメッセージの送信欄（UC-009）。
  *
  * useFetcher で送るので、送っても画面は移らない。成功したら入力欄を空にしてトーストを出し、
- * 失敗したら入力を残したまま誤りを出す。
+ * 失敗したら入力を残したまま誤りを出す。送っている間は入力欄も止める。
+ * 止めないと、送信中に書き足した分が、成功したときの空にする処理で消えてしまうため。
  *
  * 文字数の上限（COND-023）は `maxLength` で止めない。ブラウザは UTF-16 の単位で数えるので、
  * サーバーのコードポイントの数え方とずれ、絵文字を含む本文が上限より手前で止まってしまうため。
@@ -67,6 +68,7 @@ export function ReservationMessageForm() {
           placeholder="連絡事項や質問を入力してください"
           aria-invalid={hasBodyError ? true : undefined}
           aria-describedby={hasBodyError ? "reservation-message-body-error" : undefined}
+          disabled={isSubmitting}
           className="resize-y"
         />
         {hasBodyError && (
