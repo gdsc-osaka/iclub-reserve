@@ -15,7 +15,10 @@ export type { ReservationMailAudience, ReservationMailRecipient, ReservationMail
  * この結果を使って更新してはいけない。
  */
 export interface ReservationMailRecipientsQuery {
-  /** 既存の予約についての通知先 (EVT-002/003/005/006/007) */
+  /**
+   * 既存の予約についての通知先 (EVT-002〜007・EVT-012)。
+   * 申請者は、いまも自団体のメンバーか事務局である場合（COND-008 の (1)）に限って含める。
+   */
   findByReservationId(reservationId: string): ResultAsync<ReservationMailAudience, QueryError>;
 
   /**

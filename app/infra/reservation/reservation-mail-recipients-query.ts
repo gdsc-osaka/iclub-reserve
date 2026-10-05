@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, or } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { groupMemberTable, reservationTable, user } from "~/db/schema";
 import { MembershipRole } from "~/domain/membership";
@@ -30,7 +30,7 @@ const buildGroupRecipients = (
 ): Map<string, ReservationMailRecipient> => {
   const recipients = new Map<string, ReservationMailRecipient>();
 
-  // 1. 申請者を追加（見つからない場合はエラーにせず管理者のみで進める）
+  // 1. 申請者を追加（見つからない・宛先の条件を満たさない場合は、エラーにせず管理者のみで進める）
   const applicant = applicantRows.at(0);
   if (applicant?.email) {
     recipients.set(applicant.email, {
@@ -116,6 +116,10 @@ export const createReservationMailRecipientsQuery = (
         .from(reservationTable)
         .where(eq(reservationTable.id, reservationId));
 
+      // 申請者は、いまも予約の全項目を見られる人（自団体のメンバーか事務局。COND-008 の (1)）に限る。
+      // 団体から外された元メンバー（UC-011）や、他団体の予約を代わりに申請した後で
+      // 事務局権限を剥奪された人（UC-028）に、理由（status_reason）を載せた通知を届けないため。
+      // group_member は (group_id, user_id) が一意なので、左結合しても申請者の行は増えない。
       const applicantQuery = db
         .select({
           id: user.id,
@@ -124,7 +128,19 @@ export const createReservationMailRecipientsQuery = (
         })
         .from(reservationTable)
         .innerJoin(user, eq(user.id, reservationTable.createdBy))
-        .where(eq(reservationTable.id, reservationId));
+        .leftJoin(
+          groupMemberTable,
+          and(
+            eq(groupMemberTable.groupId, reservationTable.groupId),
+            eq(groupMemberTable.userId, reservationTable.createdBy),
+          ),
+        )
+        .where(
+          and(
+            eq(reservationTable.id, reservationId),
+            or(isNotNull(groupMemberTable.id), eq(user.is_staff, true)),
+          ),
+        );
 
       const groupMembersQuery = db
         .select({
@@ -160,7 +176,10 @@ export const createReservationMailRecipientsQuery = (
     },
 
     findForNewReservation: (args) => {
-      // 申請者は所属に関わらず取得する（事務局による他団体予約作成 COND-009 に対応）
+      // 申請者は所属を確かめずに取得する（事務局による他団体予約作成 COND-009 に対応）。
+      // findByReservationId と違って宛先の条件（COND-008 の (1)）を足していないのは、
+      // 呼び出し元の仮予約の申請（UC-002）が、直前に申請者が自団体のメンバーか事務局であることを
+      // 確かめているため。申請の時点では条件を必ず満たす。
       const applicantQuery = db
         .select({
           id: user.id,
