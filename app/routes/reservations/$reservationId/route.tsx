@@ -24,6 +24,7 @@ import {
 } from "~/components/reservation/reservation-notices";
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { ReservationField } from "~/domain/reservation";
 import { parseReservationTransition, ReservationTransition } from "~/domain/reservation/transition";
@@ -38,6 +39,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
 import { formatDateTime, formatFullDate, formatTimeRange } from "~/lib/date";
+import { toReservationEditPath } from "~/lib/reservation-paths";
 import {
   reservationActionErrors,
   reservationErrorResponse,
@@ -59,10 +61,13 @@ export function meta() {
  * メッセージもユースケースの時点で落ちている。画面側で隠すのではないので、
  * 通信の中身を見ても読めない。
  */
-export async function loader({ params, context }: Route.LoaderArgs) {
+export async function loader({ request, params, context }: Route.LoaderArgs) {
   // この画面はログイン必須（root.tsx のミドルウェアが先に確認している）
   const user = requireRequestUser(context);
   const db = createDb(env.DB);
+  const now = new Date();
+  const url = new URL(request.url);
+  const edited = url.searchParams.get("edited");
 
   const result = await getReservationUseCase(
     {
@@ -74,6 +79,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       reservationId: params.reservationId,
       actorUserId: user.id,
       isStaff: user.is_staff,
+      now,
     },
   );
 
@@ -90,6 +96,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
   return {
     ...result.value,
     listPath,
+    edited,
   };
 }
 
@@ -208,7 +215,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function ReservationDetailRoute({ loaderData, actionData }: Route.ComponentProps) {
-  const { view, transitions, listPath } = loaderData;
+  const { view, transitions, canEdit, listPath, edited } = loaderData;
   const { reservation } = view;
 
   return (
@@ -222,6 +229,22 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
           予約一覧へ戻る
         </Link>
       </div>
+
+      {/*
+       * 変更画面（UC-005 / UC-017）から戻ってきたときの案内。
+       * 状態（「仮予約に戻りました」など）は書かない。URL の値は書き換えられるので、
+       * それを根拠に状態を言うと事実と食い違いうる。いまの状態は下のバッジが示している。
+       */}
+      {edited === "changed" && (
+        <Alert className="border-border bg-muted/50">
+          <AlertDescription>予約を変更しました。</AlertDescription>
+        </Alert>
+      )}
+      {edited === "unchanged" && (
+        <Alert className="border-border bg-muted/50">
+          <AlertDescription>変更された項目が無かったため、保存していません。</AlertDescription>
+        </Alert>
+      )}
 
       {/* 施設・日時・状態は誰にでも見せる項目（COND-008）なので、見出しにまとめる */}
       <div className="flex flex-col gap-1.5">
@@ -300,8 +323,18 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
             })}
           />
 
-          {transitions.length > 0 && (
+          {(transitions.length > 0 || canEdit) && (
             <div className="flex flex-wrap items-center gap-2">
+              {canEdit && (
+                <Button
+                  asChild
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-3 text-xs font-medium"
+                >
+                  <Link to={toReservationEditPath(view.reservation.id)}>変更</Link>
+                </Button>
+              )}
               <ReservationActionButtons
                 item={view.reservation}
                 transitions={transitions}

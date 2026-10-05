@@ -7,9 +7,10 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { ReservationStatus } from "~/domain/reservation";
 import { formatMonthDay, formatTimeRange } from "~/lib/date";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { CreatedReservation } from "~/query/reservation/reservation-form";
 
-import { toCalendarPath, toDetailPath, toFormPath } from "./paths";
+import { toCalendarPath, toFormPath } from "./paths";
 
 /**
  * 申請が終わったあとの控え。
@@ -60,7 +61,7 @@ export function CreatedPanel({
 
         <div className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link to={toDetailPath(created.id)}>予約の詳細を見る</Link>
+            <Link to={toReservationDetailPath(created.id)}>予約の詳細を見る</Link>
           </Button>
 
           <Button asChild variant="outline">

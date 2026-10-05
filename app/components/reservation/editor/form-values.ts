@@ -1,5 +1,5 @@
 /**
- * 申請フォームが送ってくる文字列を、申請の中身へ変える（SCR-002 / UC-002）。
+ * 予約申請・変更フォームが送ってくる文字列を、申請・変更の中身へ変える（SCR-002 / UC-002 / UC-005 / UC-017）。
  *
  * ここは action 側の入り口にあたる部分だけを集めている。
  * 画面を描かずに確かめられるように、React に触れるものは置かない。
@@ -13,6 +13,7 @@ import {
   RESERVATION_NOTE_MAX_LENGTH,
   ReservationField,
 } from "~/domain/reservation";
+import type { ReservationContent } from "~/domain/reservation/edit";
 import { validateReservationPeriod } from "~/domain/reservation/validation";
 import { atTokyoMinutes, parseTokyoDateKey, parseTokyoTimeKey } from "~/lib/date";
 
@@ -64,32 +65,28 @@ export const readValues = (formData: FormData): FormValues => ({
   mode: readString(formData, "mode") === "direct" ? "direct" : "provisional",
 });
 
-/** 申請の中身。フォームの文字列を確かめ終えた形 */
-export interface ParsedReservation {
-  readonly groupId: string;
-  readonly facilityId: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
-  readonly headCount: number;
-  readonly note: string | null;
-}
-
 /**
- * フォームの文字列を、申請の中身に変える。
+ * フォームの文字列から、団体以外の項目（施設・日時・使用人数・備考）を解釈する。
  *
- * 欄ごとのエラーを作るのがここの仕事で、申請できるかどうか（COND-001・COND-006）は見ない。
+ * 予約の変更（UC-005 / UC-017）は団体を変えられないので、こちらを直接使う。
+ * 申請（`parseReservation`）も、これに団体の確認を足しただけである。
+ * 返す値は、ドメインの `ReservationContent` にそのまま渡せる形にそろえている。
+ *
+ * 欄ごとのエラーを作るのがここの仕事で、申請・変更できるかどうか（COND-001・COND-006 など）は見ない。
  * あちらは DB を引かないと分からないのでユースケース層が確かめる。
  *
  * 利用時間の判定にドメインの `validateReservationPeriod` をそのまま使っているのは、
  * 同じ規則をここにもう一度書くと、片方だけ直したときに食い違うため。
  */
-export const parseReservation = (
-  values: FormValues,
+export const parseReservationContent = (
+  values: Pick<
+    FormValues,
+    "facilityId" | "dateKey" | "startTime" | "endTime" | "headCount" | "note"
+  >,
   now: Date,
-): { readonly reservation: ParsedReservation | null; readonly fieldErrors: FieldErrors } => {
+): { readonly content: ReservationContent | null; readonly fieldErrors: FieldErrors } => {
   const fieldErrors: FieldErrors = {};
 
-  if (values.groupId === "") fieldErrors.groupId = "申請元の団体を選んでください。";
   if (values.facilityId === "") fieldErrors.facilityId = "施設・設備を選んでください。";
 
   const day = parseTokyoDateKey(values.dateKey);
@@ -134,18 +131,57 @@ export const parseReservation = (
   }
 
   if (Object.keys(fieldErrors).length > 0 || startAt === null || endAt === null) {
-    return { reservation: null, fieldErrors };
+    return { content: null, fieldErrors };
   }
 
   return {
-    reservation: {
-      groupId: values.groupId,
+    content: {
       facilityId: values.facilityId,
       startAt,
       endAt,
       headCount,
       // 備考は任意（INFO-001）。空欄は「書かなかった」として null で保存する
       note: note === "" ? null : note,
+    },
+    fieldErrors,
+  };
+};
+
+/** 申請の中身。フォームの文字列を確かめ終えた形 */
+export interface ParsedReservation {
+  readonly groupId: string;
+  readonly facilityId: string;
+  readonly startAt: Date;
+  readonly endAt: Date;
+  readonly headCount: number;
+  readonly note: string | null;
+}
+
+/**
+ * フォームの文字列を、申請の中身に変える（UC-002 / UC-008）。
+ *
+ * 団体以外の項目は `parseReservationContent` に任せ、ここでは申請元の団体だけを確かめる。
+ */
+export const parseReservation = (
+  values: FormValues,
+  now: Date,
+): { readonly reservation: ParsedReservation | null; readonly fieldErrors: FieldErrors } => {
+  const { content, fieldErrors } = parseReservationContent(values, now);
+
+  if (values.groupId === "") fieldErrors.groupId = "申請元の団体を選んでください。";
+
+  if (content === null || fieldErrors.groupId !== undefined) {
+    return { reservation: null, fieldErrors };
+  }
+
+  return {
+    reservation: {
+      groupId: values.groupId,
+      facilityId: content.facilityId,
+      startAt: content.startAt,
+      endAt: content.endAt,
+      headCount: content.headCount,
+      note: content.note,
     },
     fieldErrors,
   };

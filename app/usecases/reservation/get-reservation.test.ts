@@ -43,6 +43,8 @@ const membership: Membership = {
   role: MembershipRole.Member,
 };
 
+const defaultNow = new Date("2026-09-16T09:00:00+09:00");
+
 const createDeps = (
   overrides: {
     row?: ReservationDetailRow | null;
@@ -115,6 +117,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -147,6 +150,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_staff_01",
         isStaff: true,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -165,6 +169,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_staff_01",
         isStaff: true,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -183,6 +188,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_other_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -206,6 +212,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_other_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       const view = result._unsafeUnwrap().view;
@@ -226,6 +233,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
       expect(Object.keys(memberResult._unsafeUnwrap().view.reservation)).not.toContain("groupId");
 
@@ -234,6 +242,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_other_01",
         isStaff: false,
+        now: defaultNow,
       });
       expect(Object.keys(otherResult._unsafeUnwrap().view.reservation)).not.toContain("groupId");
     });
@@ -253,6 +262,7 @@ describe("getReservationUseCase", () => {
           reservationId: "rsv_01",
           actorUserId: "usr_student_01",
           isStaff: false,
+          now: defaultNow,
         });
 
         expect(result._unsafeUnwrap().transitions).toEqual([]);
@@ -268,6 +278,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_staff_01",
         isStaff: true,
+        now: defaultNow,
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
@@ -280,6 +291,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_student_01");
@@ -292,6 +304,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.DatabaseError);
@@ -306,6 +319,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       const err = result._unsafeUnwrapErr();
@@ -320,6 +334,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_missing",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
@@ -334,6 +349,7 @@ describe("getReservationUseCase", () => {
         reservationId: "   ",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
@@ -347,6 +363,7 @@ describe("getReservationUseCase", () => {
         reservationId: "  rsv_01  ",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(spies.findByReservationId).toHaveBeenCalledWith("rsv_01");
@@ -380,6 +397,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -420,6 +438,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_staff_viewer",
         isStaff: true,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -438,6 +457,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_staff_viewer",
         isStaff: true,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -456,6 +476,7 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_other_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result.isOk()).toBe(true);
@@ -472,12 +493,115 @@ describe("getReservationUseCase", () => {
         reservationId: "rsv_01",
         actorUserId: "usr_student_01",
         isStaff: false,
+        now: defaultNow,
       });
 
       expect(result.isErr()).toBe(true);
       const err = result._unsafeUnwrapErr();
       expect(err.code).toBe(ReservationErrorCode.DatabaseError);
       expect(err.message).toBe("メッセージを読み取れなかった。");
+    });
+  });
+
+  describe("canEdit（予約内容の変更可否）", () => {
+    it("自団体のメンバーで開始前の仮予約・承認済みなら true", async () => {
+      const { deps } = createDeps();
+
+      const provisionalResult = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        now: defaultNow,
+      });
+      expect(provisionalResult.isOk()).toBe(true);
+      expect(provisionalResult._unsafeUnwrap().canEdit).toBe(true);
+
+      const { deps: approvedDeps } = createDeps({
+        row: { ...defaultRow, status: ReservationStatus.Approved },
+      });
+      const approvedResult = await getReservationUseCase(approvedDeps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        now: defaultNow,
+      });
+      expect(approvedResult.isOk()).toBe(true);
+      expect(approvedResult._unsafeUnwrap().canEdit).toBe(true);
+    });
+
+    it("自団体のメンバーでも開始日時を過ぎた予約なら false", async () => {
+      const { deps } = createDeps();
+      // defaultRow.startAt は 10:00:00 なので、10:01:00 は開始後
+      const pastNow = new Date("2026-09-16T10:01:00+09:00");
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        now: pastNow,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().canEdit).toBe(false);
+    });
+
+    it("自団体のメンバーでも終了したステータスの予約なら false", async () => {
+      for (const status of [
+        ReservationStatus.Withdrawn,
+        ReservationStatus.Rejected,
+        ReservationStatus.Cancelled,
+        ReservationStatus.CancelledByStaff,
+      ]) {
+        const { deps } = createDeps({
+          row: { ...defaultRow, status, statusReason: "終了" },
+        });
+
+        const result = await getReservationUseCase(deps, {
+          reservationId: "rsv_01",
+          actorUserId: "usr_student_01",
+          isStaff: false,
+          now: defaultNow,
+        });
+
+        expect(result.isOk()).toBe(true);
+        expect(result._unsafeUnwrap().canEdit).toBe(false);
+      }
+    });
+
+    it("所属していない事務局は false、所属している事務局は true", async () => {
+      const { deps: nonMemberDeps } = createDeps({ membership: null });
+      const nonMemberResult = await getReservationUseCase(nonMemberDeps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        now: defaultNow,
+      });
+      expect(nonMemberResult.isOk()).toBe(true);
+      expect(nonMemberResult._unsafeUnwrap().canEdit).toBe(false);
+
+      const { deps: memberDeps } = createDeps({ membership });
+      const memberResult = await getReservationUseCase(memberDeps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        now: defaultNow,
+      });
+      expect(memberResult.isOk()).toBe(true);
+      expect(memberResult._unsafeUnwrap().canEdit).toBe(true);
+    });
+
+    it("他団体のユーザーなら false", async () => {
+      const { deps } = createDeps({ membership: null });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_other_01",
+        isStaff: false,
+        now: defaultNow,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().canEdit).toBe(false);
     });
   });
 });

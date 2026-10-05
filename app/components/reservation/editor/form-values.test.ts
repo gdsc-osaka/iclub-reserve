@@ -12,6 +12,7 @@ import { reservationActionErrors } from "~/routes/_shared/reservation-error.serv
 import {
   fieldKeyOf,
   parseReservation,
+  parseReservationContent,
   readValues,
   toFormErrors,
   type FormValues,
@@ -174,6 +175,54 @@ describe("parseReservation", () => {
 
   it("エラーが 1 つでもあれば、申請の中身は作らない", () => {
     expect(parseReservation(values({ headCount: "0" }), now).reservation).toBeNull();
+  });
+});
+
+describe("parseReservationContent", () => {
+  it("団体（groupId）が無くても通る", () => {
+    const { content, fieldErrors } = parseReservationContent(values({ groupId: "" }), now);
+
+    expect(fieldErrors).toEqual({});
+    expect(content).toMatchObject({
+      facilityId: "fac_meeting_a",
+      headCount: 4,
+    });
+    expect(content?.startAt).toEqual(new Date("2026-09-16T13:00:00+09:00"));
+    expect(content?.endAt).toEqual(new Date("2026-09-16T15:00:00+09:00"));
+  });
+
+  it("備考は前後の空白を落とし、空欄は null にする", () => {
+    expect(parseReservationContent(values({ note: "  打ち合わせ  " }), now).content?.note).toBe(
+      "打ち合わせ",
+    );
+    expect(parseReservationContent(values({ note: "   " }), now).content?.note).toBeNull();
+  });
+
+  it("施設が未選択ならエラーにする", () => {
+    const { content, fieldErrors } = parseReservationContent(values({ facilityId: "" }), now);
+
+    expect(content).toBeNull();
+    expect(fieldErrors.facilityId).toBeDefined();
+  });
+
+  it("日時の形式が不正・範囲外・過去日ならエラーにする", () => {
+    expect(parseReservationContent(values({ dateKey: "" }), now).fieldErrors.period).toBe(
+      "日付と時間帯を選んでください。",
+    );
+    expect(
+      parseReservationContent(values({ startTime: "08:00" }), now).fieldErrors.period,
+    ).toContain("利用できるのは");
+  });
+
+  it("人数や備考が不正ならエラーにする", () => {
+    expect(parseReservationContent(values({ headCount: "0" }), now).fieldErrors.headCount).toBe(
+      `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 以上の整数で入力してください。`,
+    );
+
+    const note = "あ".repeat(RESERVATION_NOTE_MAX_LENGTH + 1);
+    expect(parseReservationContent(values({ note }), now).fieldErrors.note).toBe(
+      `備考は ${RESERVATION_NOTE_MAX_LENGTH} 文字以内で入力してください。`,
+    );
   });
 });
 

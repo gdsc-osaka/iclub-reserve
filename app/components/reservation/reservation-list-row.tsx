@@ -2,6 +2,8 @@ import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { canEditReservation } from "~/domain/reservation/edit";
 import {
   allowedTransitions,
   ReservationTransition,
@@ -14,6 +16,7 @@ import {
   isSameTokyoDay,
   toTokyoDateKey,
 } from "~/lib/date";
+import { toReservationEditPath } from "~/lib/reservation-paths";
 import { cn } from "~/lib/utils";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
 import { ReservationActionButtons } from "./reservation-action-buttons";
@@ -58,6 +61,7 @@ export function ReservationListRow({
   const isToday = isSameTokyoDay(item.startAt, now);
 
   const transitions = allowedTransitions(item, actor);
+  const canEdit = canEditReservation(item, actor, now).isOk();
 
   const overlapNotice = reservationOverlapNotice({
     status: item.status,
@@ -144,11 +148,21 @@ export function ReservationListRow({
       {/*
        * 3. 操作ボタン群（前面に出すため relative z-10 を付与）
        */}
-      {transitions.length > 0 && (
+      {(transitions.length > 0 || canEdit) && (
         <div
           className="relative z-10 flex shrink-0 flex-wrap items-center gap-2"
           onClick={(e) => e.stopPropagation()}
         >
+          {canEdit && (
+            <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs font-medium">
+              <Link
+                to={toReservationEditPath(item.id)}
+                aria-label={`${monthDayStr}(${weekday}) ${item.facilityName} の予約を変更`}
+              >
+                変更
+              </Link>
+            </Button>
+          )}
           <ReservationActionButtons
             item={item}
             transitions={transitions}
