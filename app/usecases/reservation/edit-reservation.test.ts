@@ -129,6 +129,8 @@ const createDeps = (
     // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
     create: () =>
       errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
+    createApproved: () =>
+      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
     applyStatusTransition: () =>
       errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
   };

@@ -1,15 +1,13 @@
 import { createId } from "@paralleldrive/cuid2";
-import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
+import { okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import type { FacilityRepository } from "~/domain/facility";
-import { GroupErrorCode, GroupStatus, type GroupRepository } from "~/domain/group";
+import type { GroupRepository } from "~/domain/group";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createReservationMailDrafts, ReservationMailEvent } from "~/domain/mail/reservation-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import {
   ReservationAction,
-  ReservationErrorCode,
-  ReservationField,
   ReservationStatus,
   type Reservation,
   type ReservationError,
@@ -20,6 +18,7 @@ import type { ReservationMailRecipientsQuery } from "~/query/reservation/reserva
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
+import { ensureGroupIsEnabled } from "./_shared/group-enabled";
 import { toRecipientsError } from "./_shared/mail-recipients";
 import { ensureReservationPermission } from "./_shared/reservation-authorization";
 
@@ -55,43 +54,6 @@ export interface CreateProvisionalReservationArgs {
 export interface CreateProvisionalReservationReturns {
   reservationId: string;
 }
-
-/**
- * 申請元の団体が有効かを確かめる（COND-006 / STATE-001）。
- *
- * 権限の確認より後に置いている。先にここを通すと、団体に所属していない人が
- * 団体 ID を当てずっぽうに送るだけで「その団体が有効かどうか」を読み取れてしまう。
- */
-const ensureGroupIsEnabled = (
-  deps: CreateProvisionalReservationDeps,
-  groupId: string,
-): ResultAsync<null, ReservationError> =>
-  deps.groupRepository
-    .findById(groupId)
-    .mapErr((error): ReservationError =>
-      error.code === GroupErrorCode.NotFound
-        ? {
-            code: ReservationErrorCode.GroupNotEligible,
-            field: ReservationField.Group,
-            message: `申請元の団体 ${groupId} が見つからない。`,
-            userMessage: "選んだ団体が見つかりません。",
-          }
-        : {
-            code: ReservationErrorCode.DatabaseError,
-            message: "申請元の団体を読み取れなかった。",
-            cause: error,
-          },
-    )
-    .andThen((group) =>
-      group.status === GroupStatus.Enabled
-        ? okAsync(null)
-        : errAsync({
-            code: ReservationErrorCode.GroupNotEligible,
-            field: ReservationField.Group,
-            message: `申請元の団体 ${groupId} が有効でない (${group.status})。`,
-            userMessage: "予約を申請できるのは、事務局が有効にした団体だけです。",
-          } satisfies ReservationError),
-    );
 
 /**
  * 仮予約を申請するユースケース（UC-002 / SCR-002）。
@@ -139,7 +101,11 @@ export const createProvisionalReservationUseCase = (
       ReservationAction.CreateProvisional,
       "この団体で予約を申請する権限がありません。",
     );
-    yield* ensureGroupIsEnabled(deps, args.reservation.groupId);
+    yield* ensureGroupIsEnabled(
+      deps,
+      args.reservation.groupId,
+      "予約を申請できるのは、事務局が有効にした団体だけです。",
+    );
     yield* ensureFacilityIsAvailable(deps, args.reservation.facilityId);
     yield* ensureNoApprovedOverlap(
       deps,

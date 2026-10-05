@@ -95,6 +95,7 @@ const createDeps = (
   const reservationRepository: ReservationRepository = {
     findById: () => errAsync({ code: ReservationErrorCode.NotFound, message: "not found" }),
     create,
+    createApproved: () => okAsync({ applied: true }),
     existsApprovedOverlap: () => okAsync(overrides.hasApprovedOverlap ?? false),
     applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
     applyContentEdit: () => okAsync({ applied: true, enqueuedMailIds: [] }),

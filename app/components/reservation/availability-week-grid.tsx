@@ -73,6 +73,7 @@ export function AvailabilityWeekGrid({
   facility,
   now,
   canApply,
+  canCreateDirectly = false,
 }: Readonly<{
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
@@ -82,6 +83,8 @@ export function AvailabilityWeekGrid({
   now: Date;
   /** 空き枠を押して申請へ進めるかどうか（COND-006） */
   canApply: boolean;
+  /** 承認済みの予約を直接作成できるかどうか（UC-008） */
+  canCreateDirectly?: boolean;
 }>) {
   return (
     /*
@@ -119,6 +122,7 @@ export function AvailabilityWeekGrid({
             facility={facility}
             now={now}
             canApply={canApply}
+            canCreateDirectly={canCreateDirectly}
           />
         ))}
       </div>
@@ -208,12 +212,14 @@ function DayColumn({
   facility,
   now,
   canApply,
+  canCreateDirectly = false,
 }: Readonly<{
   day: AvailabilityDay;
   reservations: readonly AvailabilityReservation[];
   facility: AvailabilityFacility;
   now: Date;
   canApply: boolean;
+  canCreateDirectly?: boolean;
 }>) {
   const blocks = toDayBlocks(day, reservations);
   const placements = layoutTimelineItems(blocks);
@@ -254,6 +260,7 @@ function DayColumn({
            */
           isPast={isPastHour(day, hour, now)}
           canApply={canApply}
+          canCreateDirectly={canCreateDirectly}
         />
       ))}
 
@@ -271,6 +278,7 @@ function DayColumn({
           block={item}
           column={column}
           columnCount={columnCount}
+          facilityName={facility.name}
         />
       ))}
     </div>
@@ -290,6 +298,7 @@ function AvailableSlot({
   isOccupied,
   isPast,
   canApply,
+  canCreateDirectly = false,
 }: Readonly<{
   day: AvailabilityDay;
   hour: number;
@@ -298,6 +307,7 @@ function AvailableSlot({
   /** 開始時刻が過ぎた枠かどうか。過ぎた時間帯では申請を始められない */
   isPast: boolean;
   canApply: boolean;
+  canCreateDirectly?: boolean;
 }>) {
   const label = isOccupied
     ? `${formatMonthDay(day.date)} ${hour}:00 は予約済み`
@@ -327,7 +337,10 @@ function AvailableSlot({
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-72">
-        <AvailabilityDraftCard draft={{ facility, day, startHour: hour }} />
+        <AvailabilityDraftCard
+          draft={{ facility, day, startHour: hour }}
+          canCreateDirectly={canCreateDirectly}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -350,10 +363,12 @@ function ReservationBlock({
   block,
   column,
   columnCount,
+  facilityName,
 }: Readonly<{
   block: AvailabilityBlock;
   column: number;
   columnCount: number;
+  facilityName: string;
 }>) {
   const { reservation } = block;
   const style = blockStyle(reservation.status, reservation.isOwnGroup);
@@ -433,7 +448,7 @@ function ReservationBlock({
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-72">
-        <AvailabilityReservationCard reservation={reservation} />
+        <AvailabilityReservationCard reservation={reservation} facilityName={facilityName} />
       </PopoverContent>
     </Popover>
   );

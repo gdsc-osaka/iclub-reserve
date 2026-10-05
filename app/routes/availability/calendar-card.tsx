@@ -33,6 +33,7 @@ export function CalendarCard({
   weekStart,
   now,
   canApply,
+  canCreateDirectly = false,
 }: Readonly<{
   facility: AvailabilityFacility;
   reservations: readonly AvailabilityReservation[];
@@ -41,6 +42,8 @@ export function CalendarCard({
   now: Date;
   /** 空き枠を押して申請へ進めるかどうか（COND-006） */
   canApply: boolean;
+  /** 承認済みで直接作成できるか（事務局のみ） */
+  canCreateDirectly?: boolean;
 }>) {
   const days = buildWeekDays(weekStart, now);
 
@@ -62,7 +65,10 @@ export function CalendarCard({
             </PopoverTrigger>
 
             <PopoverContent align="start" className="w-72">
-              <AvailabilityDraftCard draft={{ facility, day: null, startHour: null }} />
+              <AvailabilityDraftCard
+                draft={{ facility, day: null, startHour: null }}
+                canCreateDirectly={canCreateDirectly}
+              />
             </PopoverContent>
           </Popover>
         )}
@@ -85,6 +91,7 @@ export function CalendarCard({
             facility={facility}
             now={now}
             canApply={canApply}
+            canCreateDirectly={canCreateDirectly}
           />
         </div>
 
@@ -96,6 +103,7 @@ export function CalendarCard({
             facility={facility}
             now={now}
             canApply={canApply}
+            canCreateDirectly={canCreateDirectly}
           />
         </div>
       </CardContent>
