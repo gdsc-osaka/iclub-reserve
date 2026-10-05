@@ -108,6 +108,34 @@ export const editableStatuses: readonly ReservationStatus[] = [
 ];
 
 /**
+ * 予約の内容を変えられる状態・時刻かを判定する（STATE-001）。
+ *
+ * 団体の変更（UC-005 / UC-017）と事務局の直接変更（UC-008）で共通して使う。
+ */
+export const ensureEditableReservation = (
+  reservation: Pick<Reservation, "status" | "startAt">,
+  now: Date,
+): Result<void, ReservationError> => {
+  if (!editableStatuses.includes(reservation.status)) {
+    return err({
+      code: ReservationErrorCode.InvalidTransition,
+      message: `${reservation.status} の予約の内容は変えられない。`,
+      userMessage: "終了した予約は変更できません。",
+    });
+  }
+
+  if (reservation.startAt <= now) {
+    return err({
+      code: ReservationErrorCode.InvalidTransition,
+      message: "開始日時を過ぎた予約の内容を変えようとした。",
+      userMessage: "開始日時を過ぎた予約は変更できません。",
+    });
+  }
+
+  return ok(undefined);
+};
+
+/**
  * その人がその予約の内容を変えてよいかを判定する（STATE-001 / COND-009）。
  *
  * 1. 誰が: 予約の団体のメンバー。役割は問わない（取り消し・キャンセルと同じ）。
@@ -138,24 +166,70 @@ export const canEditReservation = (
     });
   }
 
-  if (!editableStatuses.includes(reservation.status)) {
-    return err({
-      code: ReservationErrorCode.InvalidTransition,
-      message: `${reservation.status} の予約の内容は変えられない。`,
-      userMessage: "終了した予約は変更できません。",
-    });
-  }
-
-  if (reservation.startAt <= now) {
-    return err({
-      code: ReservationErrorCode.InvalidTransition,
-      message: "開始日時を過ぎた予約の内容を変えようとした。",
-      userMessage: "開始日時を過ぎた予約は変更できません。",
-    });
-  }
-
-  return ok(undefined);
+  return ensureEditableReservation(reservation, now);
 };
+
+/**
+ * 事務局がその予約の内容を直接変えてよいかを判定する（UC-008 / COND-009）。
+ *
+ * 1. 誰が: 事務局（EditDirect が許されている人）。
+ * 2. いまの状態: 仮予約か承認済み
+ * 3. いつ: 開始日時より前
+ *
+ * @param now 「開始日時を過ぎたか」の基準になる現在時刻
+ */
+export const canDirectEditReservation = (
+  reservation: Pick<Reservation, "status" | "startAt">,
+  actor: ReservationActor,
+  now: Date,
+): Result<void, ReservationError> => {
+  if (!canAct(reservationPermissions, actor, ReservationAction.EditDirect)) {
+    return err({
+      code: ReservationErrorCode.Forbidden,
+      message: "事務局でない人が、予約の内容を直接変えようとした。",
+      userMessage: "予約を直接変更できるのは事務局だけです。",
+    });
+  }
+
+  return ensureEditableReservation(reservation, now);
+};
+
+/** 予約の内容の変更を、どちらの規則で行うか */
+export const ReservationEditMode = {
+  /** 団体の変更（UC-005 / UC-017）。承認済みの施設・日時を変えると仮予約に戻る */
+  Group: "group",
+  /** 事務局の直接変更（UC-008）。ステータスを変えない */
+  Direct: "direct",
+} as const;
+export type ReservationEditMode = (typeof ReservationEditMode)[keyof typeof ReservationEditMode];
+
+/**
+ * 操作する人から、団体の変更（UC-005 / UC-017）か直接変更（UC-008）かを決める。
+ *
+ * 事務局の人は、自分が所属する団体の予約であっても常に直接変更として扱う。
+ * 所属で分けると、同じ事務局の人が同じ操作をしても、予約の団体によって
+ * 承認済みのまま残ったり仮予約に戻ったりして、結果を予想しにくくなるため。
+ * 事務局は承認もできるので、所属団体の予約を直接変更できても、できることは増えない。
+ *
+ * どちらの規則で変更するかは、この関数だけで決めること。画面の「変更」の出し分け・
+ * 変更画面の loader・action が別々に判定すると、開けた画面と保存の結果が食い違う。
+ */
+export const resolveEditMode = (actor: Pick<ReservationActor, "isStaff">): ReservationEditMode =>
+  actor.isStaff ? ReservationEditMode.Direct : ReservationEditMode.Group;
+
+/**
+ * 操作する人（団体メンバーか事務局か）に応じて、予約の内容を変更できるかを判定する。
+ *
+ * 画面の「変更」ボタンの出し分けに使う。
+ */
+export const canChangeReservationContent = (
+  reservation: Pick<Reservation, "status" | "startAt">,
+  actor: ReservationActor,
+  now: Date,
+): Result<void, ReservationError> =>
+  resolveEditMode(actor) === ReservationEditMode.Direct
+    ? canDirectEditReservation(reservation, actor, now)
+    : canEditReservation(reservation, actor, now);
 
 /**
  * 変えた項目を取り出す。
@@ -200,6 +274,29 @@ export const resolveEditOutcome = (
   const needsReapproval = [...changed].some((field) => reapprovalRequiredFields[field]);
 
   return needsReapproval ? ReservationEditOutcome.Reapproval : ReservationEditOutcome.KeepApproved;
+};
+
+export type DirectReservationEditOutcome =
+  | typeof ReservationEditOutcome.NoChange
+  | typeof ReservationEditOutcome.KeepApproved
+  | typeof ReservationEditOutcome.KeepProvisional;
+
+/**
+ * 事務局による直接変更の結果を決める（UC-008）。
+ *
+ * 承認済みは施設・日時を変えても承認済みのまま（KeepApproved。再承認は不要）。
+ * 仮予約は仮予約のまま（KeepProvisional）。
+ * 1 項目も変えていなければ NoChange。
+ */
+export const resolveDirectEditOutcome = (
+  currentStatus: ReservationStatus,
+  changed: ReadonlySet<ReservationContentField>,
+): DirectReservationEditOutcome => {
+  if (changed.size === 0) return ReservationEditOutcome.NoChange;
+
+  return currentStatus === ReservationStatus.Approved
+    ? ReservationEditOutcome.KeepApproved
+    : ReservationEditOutcome.KeepProvisional;
 };
 
 /** 変えた項目から、承認済みの予約との重なり（COND-001）を確かめ直すかを決める */

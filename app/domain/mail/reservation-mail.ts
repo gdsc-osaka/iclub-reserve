@@ -1,5 +1,9 @@
 import { formatDateTime } from "~/lib/date";
-import { ReservationEditOutcome, type AppliedReservationEdit } from "~/domain/reservation/edit";
+import {
+  ReservationEditOutcome,
+  type AppliedReservationEdit,
+  type DirectReservationEditOutcome,
+} from "~/domain/reservation/edit";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import type { MailDraft } from "./mail-outbox";
 
@@ -14,6 +18,7 @@ export const ReservationMailEvent = {
   ApprovedEdited: "approvedEdited", // EVT-004（使用人数・備考の変更。承認済みのまま）
   ReapprovalRequested: "reapprovalRequested", // EVT-004（施設・日時の変更。仮予約に戻る）
   ProvisionalEdited: "provisionalEdited", // EVT-012
+  EditedByStaff: "editedByStaff", // EVT-017
 } as const;
 export type ReservationMailEvent = (typeof ReservationMailEvent)[keyof typeof ReservationMailEvent];
 
@@ -45,6 +50,7 @@ export const notifiesStaff: Record<ReservationMailEvent, boolean> = {
   [ReservationMailEvent.ApprovedEdited]: true,
   [ReservationMailEvent.ReapprovalRequested]: true,
   [ReservationMailEvent.ProvisionalEdited]: true,
+  [ReservationMailEvent.EditedByStaff]: false,
 };
 
 /**
@@ -70,6 +76,20 @@ export const editMailEvent: Record<AppliedReservationEdit, ReservationMailEvent>
   [ReservationEditOutcome.KeepProvisional]: ReservationMailEvent.ProvisionalEdited,
   [ReservationEditOutcome.KeepApproved]: ReservationMailEvent.ApprovedEdited,
   [ReservationEditOutcome.Reapproval]: ReservationMailEvent.ReapprovalRequested,
+};
+
+/**
+ * 事務局による直接変更の結果と通知イベントの対応（UC-008 / EVT-017）。
+ *
+ * 仮予約・承認済みのどちらを変更した場合も同じイベントで通知する。
+ * 直接変更ではステータスが変わらないので、文面を分ける必要がない。
+ */
+export const directEditMailEvent: Record<
+  Exclude<DirectReservationEditOutcome, typeof ReservationEditOutcome.NoChange>,
+  ReservationMailEvent
+> = {
+  [ReservationEditOutcome.KeepProvisional]: ReservationMailEvent.EditedByStaff,
+  [ReservationEditOutcome.KeepApproved]: ReservationMailEvent.EditedByStaff,
 };
 
 interface EventMailCopy {
@@ -124,6 +144,11 @@ const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
   [ReservationMailEvent.ProvisionalEdited]: {
     subject: "【i-Club予約システム】施設・設備の仮予約の内容が変更されました",
     opening: "申請されていた仮予約の内容が変更されました。",
+    allowsReason: false,
+  },
+  [ReservationMailEvent.EditedByStaff]: {
+    subject: "【i-Club予約システム】施設・設備の利用予約が事務局により変更されました",
+    opening: "利用予約の内容が事務局により変更されました。予約のステータスは変わりません。",
     allowsReason: false,
   },
 };

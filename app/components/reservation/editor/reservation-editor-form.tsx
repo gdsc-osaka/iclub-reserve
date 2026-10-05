@@ -52,6 +52,7 @@ import {
 import {
   changedContentFields,
   editTargetStatus,
+  resolveDirectEditOutcome,
   resolveEditOutcome,
   ReservationEditOutcome,
   type ReservationContentField,
@@ -110,6 +111,8 @@ export type ReservationEditorPurpose =
         readonly note: string | null;
         readonly status: ReservationStatus;
       };
+      /** 事務局による直接変更か（UC-008） */
+      readonly isDirect?: boolean;
     };
 
 /**
@@ -223,13 +226,18 @@ export function ReservationEditorForm({
     purpose.kind === "create" ? (purpose.groups.find((item) => item.id === groupId) ?? null) : null;
   const { range } = draft;
 
+  const isDirectEdit = purpose.kind === "edit" && purpose.isDirect === true;
+
   /** 変更のとき、いまの入力で何が変わり、予約がどうなるか。申請のときと、まだ比べられないときは null */
   const editPreview =
-    purpose.kind === "edit" ? toEditPreview(purpose.reservation, draft, headCount, note) : null;
+    purpose.kind === "edit"
+      ? toEditPreview(purpose.reservation, draft, headCount, note, isDirectEdit)
+      : null;
   /** 1 項目も変えていない。送っても何も起きないので、確認へ進ませない */
   const isUnchanged = editPreview?.outcome === ReservationEditOutcome.NoChange;
-  /** 承認済みの予約の施設・日時を変えたので、仮予約に戻る（COND-005） */
-  const needsReapproval = editPreview?.outcome === ReservationEditOutcome.Reapproval;
+  /** 承認済みの予約の施設・日時を変えたので、仮予約に戻る（COND-005。直接変更では仮予約に戻らない） */
+  const needsReapproval =
+    !isDirectEdit && editPreview?.outcome === ReservationEditOutcome.Reapproval;
 
   /*
    * 確認へ進めるのは、時間帯を選んでいて、承認済みの予約と重なっておらず（COND-001）、
@@ -362,6 +370,7 @@ export function ReservationEditorForm({
 
           {/* 送る前に気づけるよう、確認のダイアログを開く前から出しておく */}
           {needsReapproval && <ReapprovalAlert />}
+          {isDirectEdit && <DirectEditAlert />}
 
           {purpose.kind === "create" && purpose.canCreateDirectly === true && (
             <>
@@ -520,7 +529,9 @@ export function ReservationEditorForm({
         }
         description={
           purpose.kind === "edit"
-            ? "変更すると、申請者・団体の管理者・事務局にお知らせのメールが届きます。"
+            ? isDirectEdit
+              ? "変更すると、申請者と団体の管理者にお知らせのメールが届きます。"
+              : "変更すると、申請者・団体の管理者・事務局にお知らせのメールが届きます。"
             : isDirect
               ? "仮予約を経ずに最初から承認済みとして作成されます。メールは送信されません。"
               : "申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
@@ -605,6 +616,7 @@ export function ReservationEditorForm({
         </dl>
 
         {needsReapproval && <ReapprovalAlert />}
+        {isDirectEdit && <DirectEditAlert />}
 
         {draft.provisionalConflicts.length > 0 && <ProvisionalConflictAlert />}
       </ReservationConfirmDialog>
@@ -629,13 +641,30 @@ function ReapprovalAlert() {
   );
 }
 
+/**
+ * 事務局による直接変更では再承認が不要であることを伝える。
+ *
+ * フォームと確認のダイアログの両方に出すので、文言を 1 か所にまとめている。
+ */
+function DirectEditAlert() {
+  return (
+    <Alert className="border-blue-500/30 bg-blue-500/5">
+      <CircleAlert aria-hidden className="text-blue-600 dark:text-blue-400" />
+      <AlertTitle>再承認は不要です</AlertTitle>
+      <AlertDescription>
+        事務局による直接変更のため、施設や日時を変更しても再承認は不要です（ステータスは変わりません）。
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 /** 変更前の予約。変更（edit）のときに `purpose` で受け取るもの */
 type EditTarget = Extract<ReservationEditorPurpose, { kind: "edit" }>["reservation"];
 
 /**
  * 変更のとき、いまの入力が変更前から何を変えたかと、変更後に予約がどうなるかを求める。
  *
- * 判定はドメインの `changedContentFields` と `resolveEditOutcome` に任せ、ここでは
+ * 判定はドメインの `changedContentFields` と `resolveEditOutcome` / `resolveDirectEditOutcome` に任せ、ここでは
  * 入力を action と同じ形（`parseReservationContent` の結果）にそろえるだけにする。
  * 画面で同じ規則を書き直すと、片方だけ直したときに、確認で見せた状態と実際の結果が食い違う。
  *
@@ -647,6 +676,7 @@ const toEditPreview = (
   draft: ScheduleDraft,
   headCount: string,
   note: string,
+  isDirect: boolean,
 ): {
   readonly changed: ReadonlySet<ReservationContentField>;
   readonly outcome: ReservationEditOutcome;
@@ -668,7 +698,11 @@ const toEditPreview = (
     note: trimmedNote === "" ? null : trimmedNote,
   });
 
-  return { changed, outcome: resolveEditOutcome(original.status, changed) };
+  const outcome = isDirect
+    ? resolveDirectEditOutcome(original.status, changed)
+    : resolveEditOutcome(original.status, changed);
+
+  return { changed, outcome };
 };
 
 /**

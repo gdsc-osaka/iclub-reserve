@@ -3,11 +3,16 @@ import { describe, expect, it } from "vitest";
 import { MembershipRole, type Actor } from "../membership";
 import { ReservationErrorCode, ReservationStatus } from ".";
 import {
+  canChangeReservationContent,
+  canDirectEditReservation,
   canEditReservation,
   changedContentFields,
   editTargetStatus,
   requiresOverlapCheck,
+  resolveDirectEditOutcome,
+  resolveEditMode,
   resolveEditOutcome,
+  ReservationEditMode,
   ReservationEditOutcome,
   type ReservationContent,
   type ReservationContentField,
@@ -21,6 +26,7 @@ const actors = {
   管理者: { isStaff: false, membership: membershipOf(MembershipRole.Admin) },
   事務局: { isStaff: true, membership: null },
   事務局かつメンバー: { isStaff: true, membership: membershipOf(MembershipRole.Member) },
+  事務局かつ管理者: { isStaff: true, membership: membershipOf(MembershipRole.Admin) },
 } as const satisfies Record<string, Actor>;
 
 /** 判定の基準になる「いま」 */
@@ -125,6 +131,101 @@ describe("canEditReservation", () => {
 
       expect(result.isOk()).toBe(true);
     });
+  });
+});
+
+describe("canDirectEditReservation", () => {
+  describe("誰が変えられるか（COND-009）", () => {
+    it.each([
+      ["事務局", actors.事務局],
+      ["事務局かつメンバー", actors.事務局かつメンバー],
+      ["事務局かつ管理者", actors.事務局かつ管理者],
+    ])("%s は直接変えられる", (_name, actor) => {
+      expect(canDirectEditReservation(upcoming, actor, now).isOk()).toBe(true);
+    });
+
+    it.each([
+      ["所属なし", actors.所属なし],
+      ["メンバー", actors.メンバー],
+      ["管理者", actors.管理者],
+    ])("%s は直接変えられない", (_name, actor) => {
+      const error = canDirectEditReservation(upcoming, actor, now)._unsafeUnwrapErr();
+
+      expect(error.code).toBe(ReservationErrorCode.Forbidden);
+      expect(error.userMessage).toBe("予約を直接変更できるのは事務局だけです。");
+    });
+
+    it("権限が無いことを、状態や開始日時より先に答える", () => {
+      const error = canDirectEditReservation(
+        { status: ReservationStatus.Withdrawn, startAt: new Date("2026-09-01T10:00:00+09:00") },
+        actors.メンバー,
+        now,
+      )._unsafeUnwrapErr();
+
+      expect(error.code).toBe(ReservationErrorCode.Forbidden);
+    });
+  });
+
+  describe("いまの状態（STATE-001）", () => {
+    it.each([ReservationStatus.Provisional, ReservationStatus.Approved])(
+      "%s の予約は直接変えられる",
+      (status) => {
+        expect(canDirectEditReservation({ ...upcoming, status }, actors.事務局, now).isOk()).toBe(
+          true,
+        );
+      },
+    );
+
+    it.each([
+      ReservationStatus.Withdrawn,
+      ReservationStatus.Rejected,
+      ReservationStatus.Cancelled,
+      ReservationStatus.CancelledByStaff,
+    ])("終了した予約（%s）は直接変えられない", (status) => {
+      const error = canDirectEditReservation(
+        { ...upcoming, status },
+        actors.事務局,
+        now,
+      )._unsafeUnwrapErr();
+
+      expect(error.code).toBe(ReservationErrorCode.InvalidTransition);
+      expect(error.userMessage).toBe("終了した予約は変更できません。");
+    });
+  });
+
+  describe("開始日時", () => {
+    it("開始日時を過ぎた予約は、承認済みでも直接変えられない", () => {
+      const error = canDirectEditReservation(
+        { status: ReservationStatus.Approved, startAt: new Date("2026-09-20T09:00:00+09:00") },
+        actors.事務局,
+        now,
+      )._unsafeUnwrapErr();
+
+      expect(error.code).toBe(ReservationErrorCode.InvalidTransition);
+      expect(error.userMessage).toBe("開始日時を過ぎた予約は変更できません。");
+    });
+  });
+});
+
+describe("resolveEditMode", () => {
+  it("事務局スタッフは直接変更モードになる", () => {
+    expect(resolveEditMode({ isStaff: true })).toBe(ReservationEditMode.Direct);
+  });
+
+  it("一般ユーザーは団体変更モードになる", () => {
+    expect(resolveEditMode({ isStaff: false })).toBe(ReservationEditMode.Group);
+  });
+});
+
+describe("canChangeReservationContent", () => {
+  it("事務局なら自団体・他団体を問わず直接変更可能", () => {
+    expect(canChangeReservationContent(upcoming, actors.事務局, now).isOk()).toBe(true);
+    expect(canChangeReservationContent(upcoming, actors.事務局かつメンバー, now).isOk()).toBe(true);
+  });
+
+  it("一般メンバーなら自団体の予約のみ変更可能", () => {
+    expect(canChangeReservationContent(upcoming, actors.メンバー, now).isOk()).toBe(true);
+    expect(canChangeReservationContent(upcoming, actors.所属なし, now).isOk()).toBe(false);
   });
 });
 
@@ -237,6 +338,70 @@ describe("resolveEditOutcome（COND-005）", () => {
       [ReservationEditOutcome.KeepApproved]: ReservationStatus.Approved,
       [ReservationEditOutcome.Reapproval]: ReservationStatus.Provisional,
     });
+  });
+});
+
+describe("resolveDirectEditOutcome（UC-008）", () => {
+  const cases: readonly [
+    string,
+    ReservationStatus,
+    readonly ReservationContentField[],
+    ReservationEditOutcome,
+  ][] = [
+    ["何も変えていない仮予約", ReservationStatus.Provisional, [], ReservationEditOutcome.NoChange],
+    ["何も変えていない承認済み", ReservationStatus.Approved, [], ReservationEditOutcome.NoChange],
+    [
+      "仮予約の施設・日時を変えても",
+      ReservationStatus.Provisional,
+      ["facilityId", "startAt", "endAt"],
+      ReservationEditOutcome.KeepProvisional,
+    ],
+    [
+      "仮予約の使用人数・備考を変えても",
+      ReservationStatus.Provisional,
+      ["headCount", "note"],
+      ReservationEditOutcome.KeepProvisional,
+    ],
+    [
+      "承認済みの使用人数を変えると",
+      ReservationStatus.Approved,
+      ["headCount"],
+      ReservationEditOutcome.KeepApproved,
+    ],
+    [
+      "承認済みの備考を変えると",
+      ReservationStatus.Approved,
+      ["note"],
+      ReservationEditOutcome.KeepApproved,
+    ],
+    [
+      "承認済みの施設を変えても承認済みのまま（再承認なし）",
+      ReservationStatus.Approved,
+      ["facilityId"],
+      ReservationEditOutcome.KeepApproved,
+    ],
+    [
+      "承認済みの開始時刻を変えても承認済みのまま（再承認なし）",
+      ReservationStatus.Approved,
+      ["startAt"],
+      ReservationEditOutcome.KeepApproved,
+    ],
+    [
+      "承認済みの終了時刻を変えても承認済みのまま（再承認なし）",
+      ReservationStatus.Approved,
+      ["endAt"],
+      ReservationEditOutcome.KeepApproved,
+    ],
+    [
+      "承認済みの使用人数と日時を一緒に変えても承認済みのまま（再承認なし）",
+      ReservationStatus.Approved,
+      ["headCount", "startAt"],
+      ReservationEditOutcome.KeepApproved,
+    ],
+  ];
+
+  it.each(cases)("%s → %s / %j → %s", (_name, status, fields, expected) => {
+    expect(resolveDirectEditOutcome(status, new Set(fields))).toBe(expected);
   });
 });
 

@@ -2,11 +2,10 @@ import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import type { FacilityRepository } from "~/domain/facility";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
-import { createReservationMailDrafts, editMailEvent } from "~/domain/mail/reservation-mail";
+import { editMailEvent } from "~/domain/mail/reservation-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import {
   ReservationAction,
-  ReservationErrorCode,
   type ReservationError,
   type ReservationRepository,
   type ReservationStatus,
@@ -23,9 +22,8 @@ import {
 import { validateReservationDraft } from "~/domain/reservation/validation";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
-import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
+import { resolveEditOverlapAndMails, toEditConflictError } from "./_shared/edit-reservation-common";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
-import { toRecipientsError } from "./_shared/mail-recipients";
 import { resolveReservationActor } from "./_shared/reservation-authorization";
 
 /** 予約の内容を変えるユースケースの依存 */
@@ -96,8 +94,8 @@ export interface EditReservationResult {
  * 変わっていないこと」と、施設・日時を変えるときは「変更後の時間帯に承認済みの予約が無いこと」を
  * UPDATE 文の条件に持ち込む。変更通知は、その UPDATE と不可分に outbox へ積む（ADR-002 決定 3）。
  *
- * 事務局による直接変更（UC-008）はこのユースケースでは扱わない。事務局の人は、
- * 自分が所属する団体の予約に限り、メンバーとして変えられる。
+ * 事務局による直接変更（UC-008）はこのユースケースでは扱わない。事務局の変更は、
+ * 自団体の予約であっても常に直接変更のユースケース（editReservationDirectlyUseCase）で扱う。
  */
 export const editReservationUseCase = (
   deps: EditReservationDeps,
@@ -136,34 +134,17 @@ export const editReservationUseCase = (
     }
 
     const checksOverlap = requiresOverlapCheck(changed);
-    const overlapCheck = checksOverlap
-      ? ensureNoApprovedOverlap(
-          deps,
-          { ...content, excludeReservationId: reservation.id },
-          "選んだ時間帯には、すでに承認済みの予約が入っています。別の時間帯を選んでください。",
-        )
-      : okAsync<null, ReservationError>(null);
 
-    // 変更通知（EVT-004 / EVT-012）を組み立てる。日時は変更後のものを載せる
-    const mailDraftsCheck = deps.reservationMailRecipientsQuery
-      .findByReservationId(reservation.id)
-      .mapErr(toRecipientsError)
-      .map((audience) =>
-        createReservationMailDrafts(
-          editMailEvent[outcome],
-          {
-            id: reservation.id,
-            startAt: content.startAt,
-            endAt: content.endAt,
-            statusReason: null,
-            updatedAt: now,
-          },
-          audience,
-        ),
-      );
-
-    // この 2 つは同時に投げる。どちらも D1 への往復なので、順に待つとそのまま待ち時間になる
-    const [, mailDrafts] = yield* ResultAsync.combine([overlapCheck, mailDraftsCheck]);
+    // 変更通知（EVT-004 / EVT-012）の組み立てと重なりの確認を同時に投げる
+    const mailDrafts = yield* resolveEditOverlapAndMails(deps, {
+      reservationId: reservation.id,
+      content,
+      now,
+      checksOverlap,
+      overlapUserMessage:
+        "選んだ時間帯には、すでに承認済みの予約が入っています。別の時間帯を選んでください。",
+      mailEvent: editMailEvent[outcome],
+    });
 
     const status = editTargetStatus[outcome];
     const result = yield* deps.reservationRepository.applyContentEdit(
@@ -184,12 +165,7 @@ export const editReservationUseCase = (
     );
 
     if (!result.applied) {
-      return errAsync<never, ReservationError>({
-        code: ReservationErrorCode.Conflict,
-        message: `予約 ${reservation.id} は読んだ後に変わっていたか、変更先の時間帯が埋まったので、更新しなかった。`,
-        userMessage:
-          "この予約には別の操作が先に反映されました。画面を読み込み直して、内容を確認してください。",
-      });
+      return errAsync<never, ReservationError>(toEditConflictError(reservation.id));
     }
 
     // 競合で 0 件更新だったときは outbox にも積まれていないため、ここへは来ない

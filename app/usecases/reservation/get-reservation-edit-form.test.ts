@@ -190,6 +190,7 @@ describe("getReservationEditFormUseCase", () => {
       note: "定期ミーティング",
       status: ReservationStatus.Provisional,
     });
+    expect(data.isDirect).toBe(false);
 
     // 施設の選択肢
     expect(data.facilities).toHaveLength(2);
@@ -273,8 +274,8 @@ describe("getReservationEditFormUseCase", () => {
     expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidTransition);
   });
 
-  it("(f) 所属していない事務局 → Forbidden、所属している事務局 → 開ける", async () => {
-    // 所属していない事務局
+  it("(f) 事務局は所属の有無を問わず直接変更（isDirect: true）として開ける（UC-008）", async () => {
+    // 所属していない事務局（他団体の予約）
     const nonMemberDeps = createDeps({ membership: null });
     const nonMemberResult = await getReservationEditFormUseCase(nonMemberDeps, {
       reservationId: "rsv_edit_target",
@@ -283,10 +284,10 @@ describe("getReservationEditFormUseCase", () => {
       dateKey: "2026-09-16",
       now: nowBefore,
     });
-    expect(nonMemberResult.isErr()).toBe(true);
-    expect(nonMemberResult._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
+    expect(nonMemberResult.isOk()).toBe(true);
+    expect(nonMemberResult._unsafeUnwrap().isDirect).toBe(true);
 
-    // 所属している事務局
+    // 所属している事務局（自団体の予約でも直接変更として扱う）
     const memberDeps = createDeps({
       membership: {
         groupId: "grp_robotics",
@@ -302,5 +303,6 @@ describe("getReservationEditFormUseCase", () => {
       now: nowBefore,
     });
     expect(memberResult.isOk()).toBe(true);
+    expect(memberResult._unsafeUnwrap().isDirect).toBe(true);
   });
 });

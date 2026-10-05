@@ -11,7 +11,11 @@ import {
 } from "~/components/reservation/editor/form-values";
 import { ReservationEditorForm } from "~/components/reservation/editor/reservation-editor-form";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { ReservationEditOutcome } from "~/domain/reservation/edit";
+import {
+  ReservationEditMode,
+  ReservationEditOutcome,
+  resolveEditMode,
+} from "~/domain/reservation/edit";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { createGroupRepository } from "~/infra/group/group-repo";
@@ -30,6 +34,7 @@ import {
   reservationErrorResponse,
 } from "~/routes/_shared/reservation-error.server";
 import { editReservationUseCase } from "~/usecases/reservation/edit-reservation";
+import { editReservationDirectlyUseCase } from "~/usecases/reservation/edit-reservation-directly";
 import { getReservationEditFormUseCase } from "~/usecases/reservation/get-reservation-edit-form";
 
 import type { Route } from "./+types/route";
@@ -109,6 +114,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     reservations: data.reservations,
     now,
     todayKey: toTokyoDateKey(now),
+    isDirect: data.isDirect,
     initial: {
       facilityId,
       dateKey: toTokyoDateKey(data.selectedDay),
@@ -121,7 +127,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 }
 
 /**
- * 予約の内容を変更する（UC-005 / UC-017）。
+ * 予約の内容を変更する（UC-005 / UC-008 / UC-017）。
  *
  * 予約 ID はフォームの値ではなく URL から取る。フォームの値を信じると、
  * この画面から別の予約を書き換えられてしまう。
@@ -143,22 +149,25 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   const db = createDb(env.DB);
-  const result = await editReservationUseCase(
-    {
-      reservationRepository: createReservationRepository(db),
-      membershipRepository: createMembershipRepository(db),
-      facilityRepository: createFacilityRepository(db),
-      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-      mailOutboxNotifier: createQueueMailOutboxNotifier(),
-    },
-    {
-      reservationId,
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-      now,
-      content,
-    },
-  );
+  const deps = {
+    reservationRepository: createReservationRepository(db),
+    membershipRepository: createMembershipRepository(db),
+    facilityRepository: createFacilityRepository(db),
+    reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+    mailOutboxNotifier: createQueueMailOutboxNotifier(),
+  };
+  const args = {
+    reservationId,
+    actorUserId: user.id,
+    isStaff: user.is_staff,
+    now,
+    content,
+  };
+
+  const result =
+    resolveEditMode(args) === ReservationEditMode.Direct
+      ? await editReservationDirectlyUseCase(deps, args)
+      : await editReservationUseCase(deps, args);
 
   if (result.isErr()) {
     return {
@@ -180,9 +189,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   throw redirect(toReservationDetailPath(reservationId, { edited: outcomeParam }));
 }
 
-/** 予約の変更画面（UC-005 / UC-017）。フォームの本体は申請と共有している */
+/** 予約の変更画面（UC-005 / UC-008 / UC-017）。フォームの本体は申請と共有している */
 export default function EditReservation({ loaderData, actionData }: Route.ComponentProps) {
-  const { reservation, facilities, reservations, now, todayKey, initial } = loaderData;
+  const { reservation, facilities, reservations, now, todayKey, initial, isDirect } = loaderData;
 
   return (
     <PageShell reservationId={reservation.id}>
@@ -190,6 +199,7 @@ export default function EditReservation({ loaderData, actionData }: Route.Compon
         purpose={{
           kind: "edit",
           reservation,
+          isDirect,
         }}
         facilities={facilities}
         reservations={reservations}

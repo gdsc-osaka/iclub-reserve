@@ -3,7 +3,7 @@ import { Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { canEditReservation } from "~/domain/reservation/edit";
+import { canChangeReservationContent } from "~/domain/reservation/edit";
 import {
   allowedTransitions,
   ReservationTransition,
@@ -61,7 +61,7 @@ export function ReservationListRow({
   const isToday = isSameTokyoDay(item.startAt, now);
 
   const transitions = allowedTransitions(item, actor);
-  const canEdit = canEditReservation(item, actor, now).isOk();
+  const canEdit = canChangeReservationContent(item, actor, now).isOk();
 
   const overlapNotice = reservationOverlapNotice({
     status: item.status,
