@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { reservationTable } from "~/db/schema";
+import { reservationMessageTable, reservationTable } from "~/db/schema";
 import type { E2eDb } from "./db.js";
 
 /**
@@ -12,4 +12,12 @@ import type { E2eDb } from "./db.js";
 /** ある施設の予約をすべて読む。予約を作るテストは施設もテストごとに作るので、その施設の予約だけが返る */
 export async function findReservationsOfFacility(db: E2eDb, facilityId: string) {
   return db.select().from(reservationTable).where(eq(reservationTable.facilityId, facilityId));
+}
+
+/** ある予約のメッセージをすべて読む */
+export async function findReservationMessages(db: E2eDb, reservationId: string) {
+  return db
+    .select()
+    .from(reservationMessageTable)
+    .where(eq(reservationMessageTable.reservationId, reservationId));
 }

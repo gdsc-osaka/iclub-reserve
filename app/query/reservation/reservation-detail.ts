@@ -2,6 +2,7 @@ import type { ResultAsync } from "neverthrow";
 
 import type { ReservationStatus } from "~/domain/reservation";
 import type { QueryError } from "../error";
+import type { ReservationMessageView } from "./reservation-message-list";
 
 /**
  * DB から読んだままの予約詳細の 1 件。**画面へそのまま渡してはいけない。**
@@ -84,6 +85,7 @@ export type ReservationDetailView =
   | {
       readonly canViewDetail: true;
       readonly reservation: ReservationDetailFull;
+      readonly messages: readonly ReservationMessageView[];
     };
 
 /**

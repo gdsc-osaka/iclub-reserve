@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { MembershipRole } from "../membership";
 import { ReservationErrorCode, ReservationField } from "./index";
-import { isSentAsStaff, validateReservationMessageBody } from "./message";
+import {
+  isSentAsStaff,
+  STAFF_SENDER_LABEL,
+  toMessageSenderLabel,
+  validateReservationMessageBody,
+} from "./message";
 
 describe("validateReservationMessageBody", () => {
   it("前後の半角・全角の空白と改行を取り除き、途中の改行は残す", () => {
@@ -99,5 +104,27 @@ describe("isSentAsStaff", () => {
         },
       }),
     ).toBe(false);
+  });
+});
+
+describe("toMessageSenderLabel", () => {
+  it("sentAsStaff が false なら、見る人が事務局でもそうでなくても送信者の氏名", () => {
+    const message = { sentAsStaff: false, senderName: "山田太郎" };
+
+    expect(toMessageSenderLabel(message, { isStaff: false })).toBe("山田太郎");
+    expect(toMessageSenderLabel(message, { isStaff: true })).toBe("山田太郎");
+  });
+
+  it("sentAsStaff が true を事務局でない人が見ると「事務局」", () => {
+    const message = { sentAsStaff: true, senderName: "佐藤スタッフ" };
+
+    expect(toMessageSenderLabel(message, { isStaff: false })).toBe(STAFF_SENDER_LABEL);
+    expect(toMessageSenderLabel(message, { isStaff: false })).toBe("事務局");
+  });
+
+  it("sentAsStaff が true を事務局が見ると「<氏名>（事務局）」", () => {
+    const message = { sentAsStaff: true, senderName: "佐藤スタッフ" };
+
+    expect(toMessageSenderLabel(message, { isStaff: true })).toBe("佐藤スタッフ（事務局）");
   });
 });

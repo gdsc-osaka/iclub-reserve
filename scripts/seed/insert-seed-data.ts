@@ -6,6 +6,7 @@ import {
   seedGroupInvitations,
   seedGroupMembers,
   seedGroups,
+  seedReservationMessages,
   seedReservations,
   seedUsers,
 } from "./seed-data.js";
@@ -23,24 +24,30 @@ export async function insertSeedData(
   db: BetterSQLite3Database<typeof schema>,
   log: (message: string) => void = () => {},
 ): Promise<void> {
-  log("1/7 施設・備品データを投入中...");
+  log("1/8 施設・備品データを投入中...");
   await db.insert(schema.facilityTable).values(seedFacilities).onConflictDoNothing();
 
-  log("2/7 テストユーザーデータを投入中...");
+  log("2/8 テストユーザーデータを投入中...");
   await db.insert(schema.user).values(seedUsers).onConflictDoNothing();
 
-  log("3/7 団体データを投入中...");
+  log("3/8 団体データを投入中...");
   await db.insert(schema.groupTable).values(seedGroups).onConflictDoNothing();
 
-  log("4/7 団体メンバーシップデータを投入中...");
+  log("4/8 団体メンバーシップデータを投入中...");
   await db.insert(schema.groupMemberTable).values(seedGroupMembers).onConflictDoNothing();
 
-  log("5/7 招待データを投入中...");
+  log("5/8 招待データを投入中...");
   await db.insert(schema.groupInvitationTable).values(seedGroupInvitations).onConflictDoNothing();
 
-  log("6/7 サンプル予約データを投入中...");
+  log("6/8 サンプル予約データを投入中...");
   await db.insert(schema.reservationTable).values(seedReservations).onConflictDoNothing();
 
-  log("7/7 操作履歴データを投入中...");
+  log("7/8 予約メッセージデータを投入中...");
+  await db
+    .insert(schema.reservationMessageTable)
+    .values(seedReservationMessages)
+    .onConflictDoNothing();
+
+  log("8/8 操作履歴データを投入中...");
   await db.insert(schema.auditLogTable).values(seedAuditLogs).onConflictDoNothing();
 }

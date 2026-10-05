@@ -3,7 +3,6 @@ import {
   CalendarPlus,
   ChevronLeft,
   CircleAlert,
-  MessageSquare,
   PersonStanding,
   StickyNote,
   User,
@@ -12,6 +11,11 @@ import {
 import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { InfoItem } from "~/components/info-item";
+import {
+  SEND_MESSAGE_INTENT,
+  type SendMessageActionData,
+} from "~/components/reservation/message/reservation-message-form";
+import { ReservationMessageSection } from "~/components/reservation/message/reservation-message-section";
 import { ReservationActionButtons } from "~/components/reservation/reservation-action-buttons";
 import {
   reservationOverlapNotice,
@@ -21,14 +25,18 @@ import {
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { ReservationField } from "~/domain/reservation";
 import { parseReservationTransition, ReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationDetailQuery } from "~/infra/reservation/reservation-detail-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
+import { createReservationMessageListQuery } from "~/infra/reservation/reservation-message-list-query";
+import { createReservationMessageRepository } from "~/infra/reservation/reservation-message-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { resolveAppBaseUrl } from "~/lib/app-url.server";
+import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
 import { formatDateTime, formatFullDate, formatTimeRange } from "~/lib/date";
 import {
   reservationActionErrors,
@@ -36,6 +44,7 @@ import {
 } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationUseCase } from "~/usecases/reservation/get-reservation";
+import { sendReservationMessageUseCase } from "~/usecases/reservation/send-reservation-message";
 import type { Route } from "./+types/route";
 
 export function meta() {
@@ -46,8 +55,8 @@ export function meta() {
  * 予約詳細画面（SCR-005）のローダー。
  *
  * 見ている人に見せてよい範囲まで絞った予約と、実行可能な状態変更操作を返す（COND-008）。
- * 他団体の予約では、使用人数・備考・却下/キャンセル理由・作成者が
- * ユースケースの時点で落ちている。画面側で隠すのではないので、
+ * 他団体の予約では、使用人数・備考・却下/キャンセル理由・作成者に加え、
+ * メッセージもユースケースの時点で落ちている。画面側で隠すのではないので、
  * 通信の中身を見ても読めない。
  */
 export async function loader({ params, context }: Route.LoaderArgs) {
@@ -59,6 +68,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     {
       reservationDetailQuery: createReservationDetailQuery(db),
       membershipRepository: createMembershipRepository(db),
+      reservationMessageListQuery: createReservationMessageListQuery(db),
     },
     {
       reservationId: params.reservationId,
@@ -84,19 +94,81 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 }
 
 /**
- * 予約詳細画面からの状態変更アクション（取り消し・キャンセル・承認・却下・事務局キャンセル）。
+ * 予約へのメッセージの送信（UC-009）。
+ *
+ * メッセージ欄は useFetcher で送るので、成功しても redirect せずに結果を返す。
+ * 一覧は action の後の loader の読み直しで増える。
+ * 送れるかどうか（COND-023）はユースケースが決めるので、ここでは確かめない。
+ */
+async function handleSendMessageAction(
+  request: Request,
+  reservationId: string,
+  user: SessionUser,
+  formData: FormData,
+): Promise<SendMessageActionData> {
+  const body = formData.get("body");
+  const rawBody = typeof body === "string" ? body : "";
+  const db = createDb(env.DB);
+
+  const result = await sendReservationMessageUseCase(
+    {
+      reservationRepository: createReservationRepository(db),
+      membershipRepository: createMembershipRepository(db),
+      reservationMessageRepository: createReservationMessageRepository(db),
+      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+      mailOutboxNotifier: createQueueMailOutboxNotifier(),
+    },
+    {
+      reservationId,
+      actorUserId: user.id,
+      actorName: user.name,
+      isStaff: user.is_staff,
+      body: rawBody,
+      now: new Date(),
+      appBaseUrl: resolveAppBaseUrl(request),
+    },
+  );
+
+  if (result.isErr()) {
+    return {
+      intent: SEND_MESSAGE_INTENT,
+      sent: false,
+      ...reservationActionErrors(
+        { where: "reservations.detail.send-message", userId: user.id },
+        result.error,
+        { [ReservationField.MessageBody]: "body" },
+      ),
+    };
+  }
+
+  return {
+    intent: SEND_MESSAGE_INTENT,
+    sent: true,
+    body: null,
+    formError: null,
+  };
+}
+
+/**
+ * 予約詳細画面からのアクション。
+ *
+ * 状態変更（取り消し・キャンセル・承認・却下・事務局キャンセル）と、メッセージの送信を受ける。
  */
 export async function action({ request, params, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const reason = formData.get("reason");
   /*
    * 予約 ID はフォームの値ではなく URL から取る。ダイアログは一覧と共有していて
    * reservationId も送ってくるが、そちらを信じると、この画面から別の予約を操作できてしまう。
    */
   const reservationId = params.reservationId;
 
+  if (intent === SEND_MESSAGE_INTENT) {
+    return handleSendMessageAction(request, reservationId, user, formData);
+  }
+
+  const reason = formData.get("reason");
   const transition = parseReservationTransition(intent);
   if (transition === null) {
     return { formError: "不正な操作です。" };
@@ -238,21 +310,8 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
             </div>
           )}
 
-          {/*
-           * メッセージ欄。他団体の人には欄ごと出さない（COND-008）。
-           * NOTE: メッセージ（UC-009 / INFO-004）は未実装。テーブルを作ったらこの欄を置き換える
-           */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">メッセージ</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2 rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                <MessageSquare aria-hidden className="size-4 shrink-0" />
-                メッセージ機能は準備中です。
-              </div>
-            </CardContent>
-          </Card>
+          {/* メッセージ欄。他団体の人には欄ごと出さない（COND-008） */}
+          <ReservationMessageSection messages={view.messages} />
 
           {/* NOTE: 操作履歴（UC-024 / UC-025 / COND-012）は INFO-008 が未実装のため欄を置いていない */}
         </>

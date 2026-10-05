@@ -575,3 +575,38 @@ export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
     },
   },
 ];
+
+/**
+ * 予約へのメッセージのシードデータ（SCR-005 の動作確認用）。
+ *
+ * 承認済みの予約（res_sample_approved）に、一般メンバーの問い合わせ・事務局の返信・管理者のお礼を並べている。
+ * 事務局（どの団体にも入っていない）の返信だけが事務局としての送信（sentAsStaff: true）なので、
+ * 団体の人で開くと送信者が「事務局」と出て、事務局で開くと「<氏名>（事務局）」と出る（COND-008）。
+ * 返信には途中の改行を入れてあり、本文の改行がそのまま出ることも確かめられる。
+ */
+export const seedReservationMessages: (typeof schema.reservationMessageTable.$inferInsert)[] = [
+  {
+    id: "msg_seed_01",
+    reservationId: "res_sample_approved",
+    senderId: "usr_student_02",
+    sentAsStaff: false,
+    body: "当日はプロジェクターをお借りできますでしょうか？",
+    sentAt: addDays(seedNow, -3),
+  },
+  {
+    id: "msg_seed_02",
+    reservationId: "res_sample_approved",
+    senderId: "usr_staff_01",
+    sentAsStaff: true,
+    body: "プロジェクターはご利用いただけます。\n当日、受付でお申し付けください。",
+    sentAt: addDays(seedNow, -2),
+  },
+  {
+    id: "msg_seed_03",
+    reservationId: "res_sample_approved",
+    senderId: "usr_student_01",
+    sentAsStaff: false,
+    body: "承知いたしました。ご準備ありがとうございます。",
+    sentAt: addDays(seedNow, -1),
+  },
+];

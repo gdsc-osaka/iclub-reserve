@@ -1,5 +1,5 @@
 import { formatDateTime } from "~/lib/date";
-import type { ReservationMessage } from "../reservation/message";
+import { STAFF_SENDER_LABEL, type ReservationMessage } from "../reservation/message";
 import { reservationDetailPath } from "../reservation";
 import type { MailDraft } from "./mail-outbox";
 import type { ReservationMailRecipient, ReservationMailRecipients } from "./reservation-mail";
@@ -73,7 +73,7 @@ export interface CreateReservationMessageMailDraftsArgs {
  * 予約メッセージ通知メールの本文を組み立てる純粋関数。
  */
 const buildMessageMailBody = (args: CreateReservationMessageMailDraftsArgs): string => {
-  const senderDisplay = args.message.sentAsStaff ? "事務局" : args.senderName;
+  const senderDisplay = args.message.sentAsStaff ? STAFF_SENDER_LABEL : args.senderName;
   const detailUrl = `${args.appBaseUrl}${reservationDetailPath(args.reservation.id)}`;
 
   const lines = [
