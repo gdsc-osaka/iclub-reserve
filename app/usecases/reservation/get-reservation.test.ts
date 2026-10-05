@@ -14,6 +14,10 @@ import type {
   ReservationDetailQuery,
   ReservationDetailRow,
 } from "~/query/reservation/reservation-detail";
+import type {
+  ReservationMessageListQuery,
+  ReservationMessageRow,
+} from "~/query/reservation/reservation-message-list";
 import { getReservationUseCase } from "./get-reservation";
 
 const defaultRow: ReservationDetailRow = {
@@ -45,6 +49,8 @@ const createDeps = (
     queryError?: boolean;
     membership?: Membership | null;
     membershipDbError?: boolean;
+    messages?: readonly ReservationMessageRow[];
+    messageQueryError?: boolean;
   } = {},
 ) => {
   const findByReservationId = vi.fn((_id: string) => {
@@ -66,8 +72,22 @@ const createDeps = (
       : okAsync(overrides.membership === undefined ? membership : overrides.membership),
   );
 
+  const listByReservationId = vi.fn((_id: string) => {
+    if (overrides.messageQueryError === true) {
+      return errAsync({
+        code: QueryErrorCode.DatabaseError,
+        message: "message query failed",
+      });
+    }
+    return okAsync(overrides.messages ?? []);
+  });
+
   const reservationDetailQuery: ReservationDetailQuery = {
     findByReservationId,
+  };
+
+  const reservationMessageListQuery: ReservationMessageListQuery = {
+    listByReservationId,
   };
 
   const membershipRepository: MembershipRepository = {
@@ -81,8 +101,8 @@ const createDeps = (
   };
 
   return {
-    deps: { reservationDetailQuery, membershipRepository },
-    spies: { findByReservationId, findByGroupAndUser },
+    deps: { reservationDetailQuery, membershipRepository, reservationMessageListQuery },
+    spies: { findByReservationId, findByGroupAndUser, listByReservationId },
   };
 };
 
@@ -330,6 +350,134 @@ describe("getReservationUseCase", () => {
       });
 
       expect(spies.findByReservationId).toHaveBeenCalledWith("rsv_01");
+    });
+  });
+
+  describe("予約メッセージの表示（COND-008）", () => {
+    const messageRows: readonly ReservationMessageRow[] = [
+      {
+        id: "msg_01",
+        senderId: "usr_student_01",
+        senderName: "山田太郎",
+        sentAsStaff: false,
+        body: "機材をお借りできますか？",
+        sentAt: new Date("2026-09-14T10:00:00+09:00"),
+      },
+      {
+        id: "msg_02",
+        senderId: "usr_staff_secret_id",
+        senderName: "秘密のスタッフ",
+        sentAsStaff: true,
+        body: "貸出可能です。",
+        sentAt: new Date("2026-09-14T11:00:00+09:00"),
+      },
+    ];
+
+    it("自団体のメンバーが見る：messages がクエリの順のまま返り、事務局送信は「事務局」、結果全体に事務局員の氏名・ID が含まれず senderId キーも無く自分のものだけ isMine: true", async () => {
+      const { deps } = createDeps({ messages: messageRows });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(data.view.canViewDetail).toBe(true);
+      if (!data.view.canViewDetail) return;
+
+      expect(data.view.messages).toHaveLength(2);
+      expect(data.view.messages[0]).toEqual({
+        id: "msg_01",
+        senderLabel: "山田太郎",
+        isMine: true,
+        body: "機材をお借りできますか？",
+        sentAt: messageRows[0].sentAt,
+      });
+      expect(data.view.messages[1]).toEqual({
+        id: "msg_02",
+        senderLabel: "事務局",
+        isMine: false,
+        body: "貸出可能です。",
+        sentAt: messageRows[1].sentAt,
+      });
+
+      // メッセージに senderId のキーが無い
+      expect("senderId" in data.view.messages[0]).toBe(false);
+      expect("senderId" in data.view.messages[1]).toBe(false);
+
+      // 結果全体（JSON.stringify）に事務局員の氏名も ID も含まれない
+      const json = JSON.stringify(data);
+      expect(json).not.toContain("usr_staff_secret_id");
+      expect(json).not.toContain("秘密のスタッフ");
+    });
+
+    it("所属の無い事務局が見る：事務局としての送信は「<氏名>（事務局）」、団体側の送信は氏名", async () => {
+      const { deps } = createDeps({ membership: null, messages: messageRows });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_viewer",
+        isStaff: true,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(data.view.canViewDetail).toBe(true);
+      if (!data.view.canViewDetail) return;
+
+      expect(data.view.messages[0].senderLabel).toBe("山田太郎");
+      expect(data.view.messages[1].senderLabel).toBe("秘密のスタッフ（事務局）");
+    });
+
+    it("団体に所属している事務局が見る：同じく氏名が見える（事務局として扱う）", async () => {
+      const { deps } = createDeps({ membership, messages: messageRows });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_viewer",
+        isStaff: true,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(data.view.canViewDetail).toBe(true);
+      if (!data.view.canViewDetail) return;
+
+      expect(data.view.messages[0].senderLabel).toBe("山田太郎");
+      expect(data.view.messages[1].senderLabel).toBe("秘密のスタッフ（事務局）");
+    });
+
+    it("他団体の人が見る：listByReservationId が一度も呼ばれず、view に messages のキーが無い", async () => {
+      const { deps, spies } = createDeps({ membership: null, messages: messageRows });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_other_01",
+        isStaff: false,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(data.view.canViewDetail).toBe(false);
+      expect(spies.listByReservationId).not.toHaveBeenCalled();
+      expect("messages" in data.view).toBe(false);
+    });
+
+    it("メッセージの読み取りに失敗したら DatabaseError を返す", async () => {
+      const { deps } = createDeps({ messageQueryError: true });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const err = result._unsafeUnwrapErr();
+      expect(err.code).toBe(ReservationErrorCode.DatabaseError);
+      expect(err.message).toBe("メッセージを読み取れなかった。");
     });
   });
 });

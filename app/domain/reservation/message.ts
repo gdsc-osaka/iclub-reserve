@@ -7,6 +7,36 @@ import { ReservationErrorCode, ReservationField, type ReservationError } from ".
 /** メッセージ本文の最大文字数（コードポイント単位、COND-023）。 */
 export const RESERVATION_MESSAGE_BODY_MAX_LENGTH = 2000;
 
+/** 団体側に見せる、事務局としての送信の送信者の表示（COND-008）。 */
+export const STAFF_SENDER_LABEL = "事務局";
+
+/**
+ * メッセージの送信者表示文字列を決定する純粋関数（COND-008）。
+ *
+ * - sentAsStaff が false:
+ *   送信者の氏名（見る人が事務局でもそうでなくても同じ）。
+ * - sentAsStaff が true:
+ *   - 事務局でない人（団体側）が見る場合:
+ *     事務局員の個人を特定できないよう、「事務局」とだけ表示する。
+ *   - 事務局が見る場合:
+ *     どの送信が団体側に「事務局」として見えているかを把握できるようにするため、
+ *     「<氏名>（事務局）」の形式で表示する。
+ *
+ * ※ 見ている人が事務局かどうかは viewer.isStaff で判断する（団体に所属している事務局員も事務局として扱う）。
+ */
+export const toMessageSenderLabel = (
+  message: { readonly sentAsStaff: boolean; readonly senderName: string },
+  viewer: { readonly isStaff: boolean },
+): string => {
+  if (!message.sentAsStaff) {
+    return message.senderName;
+  }
+  if (!viewer.isStaff) {
+    return STAFF_SENDER_LABEL;
+  }
+  return `${message.senderName}（${STAFF_SENDER_LABEL}）`;
+};
+
 /**
  * 予約へのメッセージ（INFO-004）。
  *

@@ -26,6 +26,7 @@ type ReservationRow = typeof schema.reservationTable.$inferSelect;
 type SessionRow = typeof schema.session.$inferSelect;
 type PasskeyRow = typeof schema.passkey.$inferSelect;
 type AuditLogRow = typeof schema.auditLogTable.$inferSelect;
+type ReservationMessageRow = typeof schema.reservationMessageTable.$inferSelect;
 
 /** 呼ぶたびに違う、短い印 */
 export const uniqueSuffix = (): string => randomUUID().slice(0, 8);
@@ -246,6 +247,28 @@ export async function createAuditLog(
       actedAsStaff: false,
       groupId: null,
       changes: {},
+      ...values,
+    })
+    .returning();
+  return row;
+}
+
+/** 予約メッセージを作る（既定は sentAsStaff: false・sentAt: new Date()・ID: msg_e2e_<印>） */
+export async function createReservationMessage(
+  db: E2eDb,
+  values: Pick<
+    typeof schema.reservationMessageTable.$inferInsert,
+    "reservationId" | "senderId" | "body"
+  > &
+    Partial<typeof schema.reservationMessageTable.$inferInsert>,
+): Promise<ReservationMessageRow> {
+  const suffix = uniqueSuffix();
+  const [row] = await db
+    .insert(schema.reservationMessageTable)
+    .values({
+      id: `msg_e2e_${suffix}`,
+      sentAsStaff: false,
+      sentAt: new Date(),
       ...values,
     })
     .returning();
