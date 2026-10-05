@@ -13,6 +13,7 @@ import {
   toFormErrors,
   type ReservationFormMode,
 } from "~/components/reservation/editor/form-values";
+import { ReservationEditorForm } from "~/components/reservation/editor/reservation-editor-form";
 import { createDb } from "~/infra/db";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { createGroupRepository } from "~/infra/group/group-repo";
@@ -38,7 +39,6 @@ import { createProvisionalReservationUseCase } from "~/usecases/reservation/crea
 import { getReservationFormUseCase } from "~/usecases/reservation/get-reservation-form";
 
 import type { Route } from "./+types/route";
-import { ApplicationForm } from "./application-form";
 import { CreatedPanel } from "./created-panel";
 import { toCalendarPath } from "./paths";
 
@@ -242,15 +242,18 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
 
   return (
     <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey}>
-      <ApplicationForm
-        groups={form.groups}
+      <ReservationEditorForm
+        purpose={{
+          kind: "create",
+          groups: form.groups,
+          canCreateDirectly: form.canCreateDirectly,
+        }}
         facilities={form.facilities}
         reservations={form.reservations}
         now={now}
         todayKey={todayKey}
         initial={initial}
         actionData={actionData ?? null}
-        canCreateDirectly={form.canCreateDirectly}
       />
     </PageShell>
   );

@@ -14,10 +14,9 @@ import type {
   ReservationForm,
   ReservationFormData,
   ReservationFormQuery,
-  ReservationFormReservation,
-  ReservationFormReservationRow,
 } from "~/query/reservation/reservation-form";
 import type { UserGroupListQuery } from "~/query/user/user-group-list";
+import { toVisibleReservation } from "./_shared/visible-reservation";
 
 /** このユースケースが必要とする依存 */
 export interface GetReservationFormDeps {
@@ -47,27 +46,6 @@ export interface GetReservationFormArgs {
   /** 申請し終えた直後なら、いま作った予約の ID。それ以外は null */
   readonly createdReservationId: string | null;
 }
-
-/**
- * 予約 1 件を、見ている人に見せてよい形に絞る（COND-008）。
- *
- * この画面が出すのは「その時間帯が埋まっているか」だけなので、
- * Query の時点で使用人数・備考を読んでいない。ここで落とすのは団体の ID で、
- * 画面は団体名しか出さないのにそのまま渡すと、
- * 使い道の無い識別子だけが他団体のぶんまで手元に残ることになる。
- */
-const toVisibleReservation = (
-  row: ReservationFormReservationRow,
-  myGroupIds: ReadonlySet<string>,
-): ReservationFormReservation => ({
-  id: row.id,
-  facilityId: row.facilityId,
-  groupName: row.groupName,
-  startAt: row.startAt,
-  endAt: row.endAt,
-  status: row.status,
-  isOwnGroup: myGroupIds.has(row.groupId),
-});
 
 /**
  * 申請し終えた直後の予約を読み直す。

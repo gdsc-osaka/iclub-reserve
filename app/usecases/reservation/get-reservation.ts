@@ -6,6 +6,7 @@ import {
   ReservationErrorCode,
   type ReservationError,
 } from "~/domain/reservation";
+import { canEditReservation } from "~/domain/reservation/edit";
 import { toMessageSenderLabel } from "~/domain/reservation/message";
 import { allowedTransitions, type ReservationTransition } from "~/domain/reservation/transition";
 import { canViewReservationDetail } from "~/domain/reservation/visibility";
@@ -38,12 +39,16 @@ export interface GetReservationArgs {
   readonly actorUserId: string;
   /** そのユーザーが事務局スタッフかどうか（COND-009） */
   readonly isStaff: boolean;
+  /** 「開始日時を過ぎたか」の基準。変更できるか（canEdit）の判定に使う */
+  readonly now: Date;
 }
 
 export interface ReservationDetailResult {
   readonly view: ReservationDetailView;
   /** 見ている人がこの予約に対して実行できる状態変更（allowedTransitions の結果） */
   readonly transitions: readonly ReservationTransition[];
+  /** 見ている人がこの予約の内容を変更できるか（canEditReservation の結果） */
+  readonly canEdit: boolean;
 }
 
 /**
@@ -188,5 +193,7 @@ export const getReservationUseCase = (
       view: toReservationDetailView(row, actor, messages),
       // 詳細を見られない人は所属も事務局の権限も持たないので、ここは自然に空になる
       transitions: allowedTransitions(row, actor),
+      // 画面が「変更」の入り口を出すかは、変更のユースケースと同じ判定で決める
+      canEdit: canEditReservation(row, actor, args.now).isOk(),
     });
   });

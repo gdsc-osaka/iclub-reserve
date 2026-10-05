@@ -20,8 +20,14 @@ import {
 } from "~/components/reservation/editor/schedule-conflict-alerts";
 import { SchedulePickerSheet } from "~/components/reservation/editor/schedule-picker-sheet";
 import { SummaryItem } from "~/components/reservation/editor/summary-item";
-import { useScheduleDraft } from "~/components/reservation/editor/use-schedule-draft";
-import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
+import {
+  useScheduleDraft,
+  type ScheduleDraft,
+} from "~/components/reservation/editor/use-schedule-draft";
+import {
+  ReservationStatusBadge,
+  reservationStatusLabel,
+} from "~/components/reservation/reservation-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -35,8 +41,8 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Separator } from "~/components/ui/separator";
-import { Textarea } from "~/components/ui/textarea";
 import { Switch } from "~/components/ui/switch";
+import { Textarea } from "~/components/ui/textarea";
 import {
   RESERVATION_MIN_HEAD_COUNT,
   RESERVATION_NOTE_MAX_LENGTH,
@@ -44,7 +50,16 @@ import {
   ReservationStatus,
 } from "~/domain/reservation";
 import {
+  changedContentFields,
+  editTargetStatus,
+  resolveEditOutcome,
+  ReservationEditOutcome,
+  type ReservationContentField,
+} from "~/domain/reservation/edit";
+import {
+  atTokyoMinutes,
   formatMonthDay,
+  formatTime,
   parseTokyoDateKey,
   parseTokyoTimeKey,
   startOfTokyoDay,
@@ -68,49 +83,90 @@ function FieldError({ id, message }: Readonly<{ id: string; message: string | un
 }
 
 /**
- * 申請フォームの本体。
+ * このフォームで何をするか。仮予約の申請・直接作成（create）か、予約の内容の変更（edit）か。
+ *
+ * 申請と変更の違いはこの prop 1 つだけで受け取る。日時の選択・人数・備考・確認のダイアログの流れは
+ * どちらも同じものを使い、違うところ（団体の欄・文言・確認で見せる状態）だけを `kind` で分ける。
+ * prop を別々に増やすと、「変更なのに直接作成のスイッチが出る」といった組み合わせを作れてしまう。
+ */
+export type ReservationEditorPurpose =
+  | {
+      readonly kind: "create";
+      /** 申請元として選べる有効な団体 */
+      readonly groups: readonly ReservationFormGroup[];
+      /** 承認済みで直接作成できるか（事務局のみ） */
+      readonly canCreateDirectly?: boolean;
+    }
+  | {
+      readonly kind: "edit";
+      /** 変更前の予約。初期値ではなく、何を変えたかを比べる基準として使う */
+      readonly reservation: {
+        readonly id: string;
+        readonly groupName: string;
+        readonly facilityId: string;
+        readonly startAt: Date;
+        readonly endAt: Date;
+        readonly headCount: number;
+        readonly note: string | null;
+        readonly status: ReservationStatus;
+      };
+    };
+
+/**
+ * フォームの初期値。どちらのルートも同じ形で渡す。
+ *
+ * 送信して戻ってきたときは、ここではなく送った値（`actionData.values`）が優先される。
+ */
+export interface ReservationEditorInitial {
+  readonly facilityId: string;
+  readonly dateKey: string;
+  readonly startMinutes: number | null;
+  /** 終了時刻。分からないときは開始から 1 枠ぶんを選んでおく */
+  readonly endMinutes?: number | null;
+  readonly headCount?: string;
+  readonly note?: string;
+  /** 申請のときだけ使う。直接作成のスイッチを最初からオンにするか */
+  readonly mode?: ReservationFormMode;
+}
+
+/**
+ * 予約の申請・変更フォームの本体（SCR-002 / UC-002 / UC-008、UC-005 / UC-017）。
+ *
+ * 申請（`/reservations/new`）と変更（`/reservations/:reservationId/edit`）で共有する。
  *
  * PC（lg 以上）では左右に分け、左で施設・日付・時間帯を、右で残りの項目を入力する。
  * スマホでは左右に分けられないので、施設・日時は写真付きのカードに要約し、
  * 押すと全画面の選択（`SchedulePickerSheet`）が開く。どちらも同じ部品を入れ物だけ変えて使う。
  *
- * 申請のボタンはすぐには送らず、確認のダイアログを開く。最初から「この内容で申請する」が
+ * ボタンはすぐには送らず、確認のダイアログを開く。最初から「この内容で申請する」が
  * 見えていると、内容を確かめないまま押されやすいため。
  *
  * 日付だけは状態に持たず、URL（＝ローダー）が持つものを唯一の正とする。
  * タイムラインに描けるのはローダーが読んだ日の予約だけなので、
  * 画面が指している日を別に持つと、日付の表示と予約の中身がずれる余地ができる。
  */
-export function ApplicationForm({
-  groups,
+export function ReservationEditorForm({
+  purpose,
   facilities,
   reservations,
   now,
   todayKey,
   initial,
   actionData,
-  canCreateDirectly = false,
 }: Readonly<{
-  groups: readonly ReservationFormGroup[];
+  purpose: ReservationEditorPurpose;
   facilities: readonly ReservationFormFacility[];
   reservations: readonly ReservationFormReservation[];
   now: Date;
   todayKey: string;
-  initial: {
-    facilityId: string;
-    dateKey: string;
-    startMinutes: number | null;
-    mode: ReservationFormMode;
-  };
+  initial: ReservationEditorInitial;
   actionData: { values: FormValues; fieldErrors: FieldErrors; formError: string | null } | null;
-  /** 承認済みで直接作成できるか（事務局のみ） */
-  canCreateDirectly?: boolean;
 }>) {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   /*
    * 日付を変えたあと、その日の予約を読み終えるまでの間。
-   * ここで申請を止めておかないと、入力欄が新しい日付、確認欄とタイムラインが
+   * ここで送信を止めておかないと、入力欄が新しい日付、確認欄とタイムラインが
    * 古い日付、という一瞬の食い違いのまま送信できてしまう。
    */
   const isBusy = navigation.state !== "idle";
@@ -140,33 +196,71 @@ export function ApplicationForm({
     day: parseTokyoDateKey(initial.dateKey) ?? startOfTokyoDay(now),
     now,
     initialFacilityId: submitted?.facilityId ?? initial.facilityId,
-    initialRange: toInitialRange(submitted, initial.startMinutes),
+    initialRange: toInitialRange(submitted, initial.startMinutes, initial.endMinutes ?? null),
   });
 
-  const [groupId, setGroupId] = useState(submitted?.groupId ?? groups.at(0)?.id ?? "");
-  const [headCount, setHeadCount] = useState(submitted?.headCount ?? "");
-  const [note, setNote] = useState(submitted?.note ?? "");
-  /** 承認済みとして直接作成するか（事務局のみ操作可能） */
+  /*
+   * 団体を選ぶのは申請のときだけ。変更では団体を変えられないので
+   * （`ReservationContent` を参照）、この状態は使わない。
+   */
+  const [groupId, setGroupId] = useState(
+    submitted?.groupId ?? (purpose.kind === "create" ? (purpose.groups.at(0)?.id ?? "") : ""),
+  );
+  const [headCount, setHeadCount] = useState(submitted?.headCount ?? initial.headCount ?? "");
+  const [note, setNote] = useState(submitted?.note ?? initial.note ?? "");
+  /** 承認済みとして直接作成するか（事務局の申請のときだけ操作できる。変更では出さない） */
   const [isDirect, setIsDirect] = useState(
-    canCreateDirectly && (submitted?.mode ?? initial.mode) === "direct",
+    purpose.kind === "create" &&
+      purpose.canCreateDirectly === true &&
+      (submitted?.mode ?? initial.mode) === "direct",
   );
   /** スマホの全画面の選択を開いているか */
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  /** 申請内容の確認ダイアログを開いているか */
+  /** 確認ダイアログを開いているか */
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
-  const group = groups.find((item) => item.id === groupId) ?? null;
+  const group =
+    purpose.kind === "create" ? (purpose.groups.find((item) => item.id === groupId) ?? null) : null;
   const { range } = draft;
+
+  /** 変更のとき、いまの入力で何が変わり、予約がどうなるか。申請のときと、まだ比べられないときは null */
+  const editPreview =
+    purpose.kind === "edit" ? toEditPreview(purpose.reservation, draft, headCount, note) : null;
+  /** 1 項目も変えていない。送っても何も起きないので、確認へ進ませない */
+  const isUnchanged = editPreview?.outcome === ReservationEditOutcome.NoChange;
+  /** 承認済みの予約の施設・日時を変えたので、仮予約に戻る（COND-005） */
+  const needsReapproval = editPreview?.outcome === ReservationEditOutcome.Reapproval;
 
   /*
    * 確認へ進めるのは、時間帯を選んでいて、承認済みの予約と重なっておらず（COND-001）、
-   * 画面が次の状態へ移っている最中でないときだけ。
+   * 画面が次の状態へ移っている最中でなく、変更なら 1 項目以上変えているときだけ。
    *
    * 未選択でも止めるのは、そのすぐ上に「時間帯は未選択」と出しているため。
    * 承認済みと重なっているときも、すぐ上に理由の警告を出している。
+   * 何も変えていないときも、ボタンのすぐ上にそう出している。
    * 理由の見えない場所で止めているわけではない。
    */
-  const canConfirm = range !== null && draft.approvedConflicts.length === 0 && !isBusy;
+  const canConfirm =
+    range !== null && draft.approvedConflicts.length === 0 && !isBusy && !isUnchanged;
+
+  /** 変更前の施設。確認のダイアログで「変更前」を添えるために使う */
+  const originalFacility =
+    purpose.kind === "edit"
+      ? (facilities.find((item) => item.id === purpose.reservation.facilityId) ?? null)
+      : null;
+
+  /*
+   * 確認のダイアログに出す、送ったあとの状態。
+   * 変更では、どの項目を変えたかで承認済みのままか仮予約に戻るかが決まる（COND-005）。
+   */
+  const statusAfterSubmit: ReservationStatus =
+    purpose.kind === "create"
+      ? isDirect
+        ? ReservationStatus.Approved
+        : ReservationStatus.Provisional
+      : editPreview === null || editPreview.outcome === ReservationEditOutcome.NoChange
+        ? purpose.reservation.status
+        : editTargetStatus[editPreview.outcome];
 
   return (
     <>
@@ -212,12 +306,17 @@ export function ApplicationForm({
           name="end_time"
           value={range === null ? "" : toTokyoTimeKey(range.endMinutes)}
         />
-        <input type="hidden" name="mode" value={isDirect ? "direct" : "provisional"} />
+        {/* 変更画面では mode（直接作成）は存在しないため、申請時のみ送る */}
+        {purpose.kind === "create" && (
+          <input type="hidden" name="mode" value={isDirect ? "direct" : "provisional"} />
+        )}
 
         {actionData?.formError != null && (
           <Alert variant="destructive" className="lg:col-span-2">
             <CircleAlert aria-hidden />
-            <AlertTitle>申請できませんでした</AlertTitle>
+            <AlertTitle>
+              {purpose.kind === "edit" ? "変更できませんでした" : "申請できませんでした"}
+            </AlertTitle>
             <AlertDescription>{actionData.formError}</AlertDescription>
           </Alert>
         )}
@@ -261,7 +360,10 @@ export function ApplicationForm({
 
           <ScheduleConflictAlerts draft={draft} />
 
-          {canCreateDirectly && (
+          {/* 送る前に気づけるよう、確認のダイアログを開く前から出しておく */}
+          {needsReapproval && <ReapprovalAlert />}
+
+          {purpose.kind === "create" && purpose.canCreateDirectly === true && (
             <>
               <Separator />
 
@@ -282,13 +384,19 @@ export function ApplicationForm({
           <Separator />
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="group_id">申請元の団体</Label>
+            <Label htmlFor="group_id">{purpose.kind === "edit" ? "団体" : "申請元の団体"}</Label>
 
-            {groups.length === 1 ? (
+            {purpose.kind === "edit" ? (
+              /*
+               * 変更では団体を変えられないので、名前を出すだけにする。
+               * group_id も送らない（`ReservationContent` を参照）。
+               */
+              <p className="text-sm font-medium">{purpose.reservation.groupName}</p>
+            ) : purpose.groups.length === 1 ? (
               /* 選べる団体が 1 つしかないなら、選ばせる意味がないので表示だけにする */
               <>
-                <p className="text-sm font-medium">{groups[0].name}</p>
-                <input type="hidden" name="group_id" value={groups[0].id} />
+                <p className="text-sm font-medium">{purpose.groups[0].name}</p>
+                <input type="hidden" name="group_id" value={purpose.groups[0].id} />
               </>
             ) : (
               <Select name="group_id" required value={groupId} onValueChange={setGroupId}>
@@ -304,7 +412,7 @@ export function ApplicationForm({
                 {/* 項目を `SelectGroup` で包む理由は `ReservationScheduler` の施設の欄を参照 */}
                 <SelectContent>
                   <SelectGroup>
-                    {groups.map((item) => (
+                    {purpose.groups.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.name}
                       </SelectItem>
@@ -371,10 +479,18 @@ export function ApplicationForm({
             <FieldError id={ids.noteError} message={fieldErrors.note} />
           </div>
 
-          <Button type="submit" size="lg" disabled={!canConfirm} className="w-full">
-            <ClipboardCheck aria-hidden />
-            内容を確認する
-          </Button>
+          <div className="flex flex-col gap-2">
+            {/* 何も変えていない場合はボタンのすぐ近くに理由を表示する */}
+            {isUnchanged && (
+              <p className="text-center text-xs text-muted-foreground">
+                まだ何も変更していません。
+              </p>
+            )}
+            <Button type="submit" size="lg" disabled={!canConfirm} className="w-full">
+              <ClipboardCheck aria-hidden />
+              {purpose.kind === "edit" ? "変更内容を確認する" : "内容を確認する"}
+            </Button>
+          </div>
         </div>
       </Form>
 
@@ -395,14 +511,28 @@ export function ApplicationForm({
         onOpenChange={setIsConfirmOpen}
         formId={formId}
         isSubmitting={isSubmitting}
-        title={isDirect ? "予約の直接作成" : "この内容で申請しますか？"}
-        description={
-          isDirect
-            ? "仮予約を経ずに最初から承認済みとして作成されます。メールは送信されません。"
-            : "申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
+        title={
+          purpose.kind === "edit"
+            ? "この内容で変更しますか？"
+            : isDirect
+              ? "予約の直接作成"
+              : "この内容で申請しますか？"
         }
-        submitLabel={isDirect ? "承認済みで作成する" : "この内容で申請する"}
-        submittingLabel={isDirect ? "作成中…" : "申請中…"}
+        description={
+          purpose.kind === "edit"
+            ? "変更すると、申請者・団体の管理者・事務局にお知らせのメールが届きます。"
+            : isDirect
+              ? "仮予約を経ずに最初から承認済みとして作成されます。メールは送信されません。"
+              : "申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
+        }
+        submitLabel={
+          purpose.kind === "edit"
+            ? "この内容で変更する"
+            : isDirect
+              ? "承認済みで作成する"
+              : "この内容で申請する"
+        }
+        submittingLabel={purpose.kind === "edit" ? "変更中…" : isDirect ? "作成中…" : "申請中…"}
       >
         {/* 何を・いつ使うのかを先に大きく出す。取り違えがいちばん困る 2 つなので */}
         <div className="flex items-center gap-3 rounded-lg bg-muted/60 p-3">
@@ -414,28 +544,67 @@ export function ApplicationForm({
 
           <div className="flex min-w-0 flex-col gap-0.5">
             <p className="font-medium">{draft.facility.name}</p>
+            {editPreview?.changed.has("facilityId") === true && (
+              <p className="text-xs text-muted-foreground">
+                変更前: {originalFacility?.name ?? "不明"}
+              </p>
+            )}
             <p className="tabular-nums">
               {formatMonthDay(draft.day)} {range === null ? "" : formatSlotRange(range)}
             </p>
+            {purpose.kind === "edit" &&
+              (editPreview?.changed.has("startAt") === true ||
+                editPreview?.changed.has("endAt") === true) && (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  変更前: {formatMonthDay(purpose.reservation.startAt)}{" "}
+                  {formatTime(purpose.reservation.startAt)} –{" "}
+                  {formatTime(purpose.reservation.endAt)}
+                </p>
+              )}
           </div>
         </div>
 
         <dl className="flex flex-col gap-2">
-          <SummaryItem label="団体">{group?.name ?? null}</SummaryItem>
-          <SummaryItem label="使用人数">
-            {headCount.trim() === "" ? null : `${headCount} 名`}
+          <SummaryItem label="団体">
+            {purpose.kind === "edit" ? purpose.reservation.groupName : (group?.name ?? null)}
           </SummaryItem>
-          <SummaryItem label="備考">{note.trim() === "" ? "なし" : note.trim()}</SummaryItem>
+          <SummaryItem label="使用人数">
+            <div className="flex flex-col">
+              <span>{headCount.trim() === "" ? null : `${headCount} 名`}</span>
+              {purpose.kind === "edit" && editPreview?.changed.has("headCount") === true && (
+                <span className="text-xs text-muted-foreground">
+                  変更前: {purpose.reservation.headCount} 名
+                </span>
+              )}
+            </div>
+          </SummaryItem>
+          <SummaryItem label="備考">
+            <div className="flex flex-col">
+              <span className="whitespace-pre-wrap">
+                {note.trim() === "" ? "なし" : note.trim()}
+              </span>
+              {purpose.kind === "edit" && editPreview?.changed.has("note") === true && (
+                <span className="text-xs text-muted-foreground">
+                  変更前: {purpose.reservation.note ?? "なし"}
+                </span>
+              )}
+            </div>
+          </SummaryItem>
 
           <div className="flex items-baseline gap-2">
             <dt className="w-20 shrink-0 text-xs text-muted-foreground">状態</dt>
-            <dd>
-              <ReservationStatusBadge
-                status={isDirect ? ReservationStatus.Approved : ReservationStatus.Provisional}
-              />
+            <dd className="flex items-center gap-2">
+              <ReservationStatusBadge status={statusAfterSubmit} />
+              {purpose.kind === "edit" && statusAfterSubmit !== purpose.reservation.status && (
+                <span className="text-xs text-muted-foreground">
+                  （変更前: {reservationStatusLabel[purpose.reservation.status]}）
+                </span>
+              )}
             </dd>
           </div>
         </dl>
+
+        {needsReapproval && <ReapprovalAlert />}
 
         {draft.provisionalConflicts.length > 0 && <ProvisionalConflictAlert />}
       </ReservationConfirmDialog>
@@ -444,19 +613,80 @@ export function ApplicationForm({
 }
 
 /**
+ * 承認済みの予約の施設・日時を変えると、仮予約に戻ることを伝える（COND-005）。
+ *
+ * フォームと確認のダイアログの両方に出すので、文言を 1 か所にまとめている。
+ */
+function ReapprovalAlert() {
+  return (
+    <Alert className="border-amber-500/30 bg-amber-500/5">
+      <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+      <AlertTitle>再承認が必要です</AlertTitle>
+      <AlertDescription>
+        施設または日時を変更すると、予約は仮予約に戻り、事務局による再承認が必要になります。
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/** 変更前の予約。変更（edit）のときに `purpose` で受け取るもの */
+type EditTarget = Extract<ReservationEditorPurpose, { kind: "edit" }>["reservation"];
+
+/**
+ * 変更のとき、いまの入力が変更前から何を変えたかと、変更後に予約がどうなるかを求める。
+ *
+ * 判定はドメインの `changedContentFields` と `resolveEditOutcome` に任せ、ここでは
+ * 入力を action と同じ形（`parseReservationContent` の結果）にそろえるだけにする。
+ * 画面で同じ規則を書き直すと、片方だけ直したときに、確認で見せた状態と実際の結果が食い違う。
+ *
+ * 時間帯を選んでいない・人数が数になっていないなど、まだ比べられないときは null を返す。
+ * そのときを「何も変えていない」と扱うと、人数を消しただけで「まだ何も変更していません」と出てしまう。
+ */
+const toEditPreview = (
+  original: EditTarget,
+  draft: ScheduleDraft,
+  headCount: string,
+  note: string,
+): {
+  readonly changed: ReadonlySet<ReservationContentField>;
+  readonly outcome: ReservationEditOutcome;
+} | null => {
+  const { range } = draft;
+  const parsedHeadCount = Number(headCount);
+
+  if (range === null || headCount.trim() === "" || !Number.isSafeInteger(parsedHeadCount)) {
+    return null;
+  }
+
+  const trimmedNote = note.trim();
+  const changed = changedContentFields(original, {
+    facilityId: draft.facility.id,
+    startAt: atTokyoMinutes(draft.day, range.startMinutes),
+    endAt: atTokyoMinutes(draft.day, range.endMinutes),
+    headCount: parsedHeadCount,
+    // 備考は申請と同じく、空欄を null にそろえてから比べる（`parseReservationContent` を参照）
+    note: trimmedNote === "" ? null : trimmedNote,
+  });
+
+  return { changed, outcome: resolveEditOutcome(original.status, changed) };
+};
+
+/**
  * 最初に選んでおく時間帯を決める。
  *
- * 送信して戻ってきたときはその値を、空き状況カレンダーから来たときは
- * 押した枠の開始時刻を使う。終了時刻が分からないときは 1 枠ぶんだけ選んでおく。
+ * 送信して戻ってきたときはその値を使う。それ以外は、変更なら予約の開始・終了、
+ * 空き状況カレンダーから来た申請なら押した枠の開始時刻を使う。
+ * 終了時刻が分からないときは 1 枠ぶんだけ選んでおく。
  */
 const toInitialRange = (
   submitted: FormValues | null,
   initialStartMinutes: number | null,
+  initialEndMinutes: number | null,
 ): SlotRange | null => {
   const startMinutes = parseTokyoTimeKey(submitted?.startTime ?? null) ?? initialStartMinutes;
   if (startMinutes === null) return null;
 
-  const endMinutes = parseTokyoTimeKey(submitted?.endTime ?? null);
+  const endMinutes = parseTokyoTimeKey(submitted?.endTime ?? null) ?? initialEndMinutes;
 
   return {
     startMinutes,

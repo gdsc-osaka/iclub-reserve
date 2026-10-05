@@ -14,7 +14,3 @@ export const toFormPath = (facilityId: string, dateKey: string, mode?: "direct")
   const base = `/reservations/new?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
   return mode === "direct" ? `${base}&mode=direct` : base;
 };
-
-/** 申請した予約の詳細（SCR-005）の URL を組み立てる */
-export const toDetailPath = (reservationId: string): string =>
-  `/reservations/${encodeURIComponent(reservationId)}`;
