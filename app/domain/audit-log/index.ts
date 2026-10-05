@@ -235,3 +235,29 @@ export const parseAuditLogChanges = (value: unknown): AuditLogChanges => {
 
   return result;
 };
+
+/** 画面に渡す操作者。団体側に伏せるときは名前を持たない形にする（COND-012） */
+export type AuditLogActorView =
+  | { readonly kind: "staff" } // 「事務局」とだけ出す
+  | { readonly kind: "person"; readonly name: string | null; readonly actedAsStaff: boolean };
+
+/**
+ * 記録の操作者を見る人に応じて詰め替える純粋関数（COND-012）。
+ *
+ * 事務局権限による操作（actedAsStaff: true）を事務局以外の利用者（自団体の管理者など）が
+ * 閲覧する場合、操作者の個人名や ID を伏せて「事務局」として表示する。
+ * 事務局員本人が見る場合は、誰が行った操作かを把握できるよう個人名を表示する。
+ */
+export const toAuditLogActorView = (
+  record: { readonly actorName: string | null; readonly actedAsStaff: boolean },
+  viewer: { readonly isStaff: boolean },
+): AuditLogActorView => {
+  if (record.actedAsStaff && !viewer.isStaff) {
+    return { kind: "staff" };
+  }
+  return {
+    kind: "person",
+    name: record.actorName,
+    actedAsStaff: record.actedAsStaff,
+  };
+};

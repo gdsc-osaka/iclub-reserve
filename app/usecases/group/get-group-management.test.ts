@@ -1,10 +1,16 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
+import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import type { Group, GroupRepository } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
 import type { Membership, MembershipRepository } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
+import type {
+  GroupAuditLogItem,
+  GroupAuditLogList,
+  GroupAuditLogListQuery,
+} from "~/query/audit-log/group-audit-log-list";
 import { QueryErrorCode } from "~/query/error";
 import type {
   GroupInvitationList,
@@ -140,6 +146,31 @@ const createFakeGroupInvitationListQuery = (invitations: GroupInvitationList) =>
   return { query, callCount: () => callCount };
 };
 
+/** D1 を使わないダミーの操作履歴一覧 Query */
+const createFakeGroupAuditLogListQuery = (
+  auditLogs: GroupAuditLogList = { items: [], hasNextPage: false, userNames: {} },
+) => {
+  let callCount = 0;
+  let lastGroupId: string | null = null;
+  let lastPage: number | null = null;
+
+  const query: GroupAuditLogListQuery = {
+    findByGroupId: (groupId, page) => {
+      callCount += 1;
+      lastGroupId = groupId;
+      lastPage = page;
+      return okAsync(auditLogs);
+    },
+  };
+
+  return {
+    query,
+    callCount: () => callCount,
+    lastGroupId: () => lastGroupId,
+    lastPage: () => lastPage,
+  };
+};
+
 describe("getGroupManagementUseCase", () => {
   const baseNow = new Date("2026-09-21T12:00:00.000Z");
 
@@ -148,6 +179,7 @@ describe("getGroupManagementUseCase", () => {
     const memberships = createFakeMembershipRepository([adminMembership]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const result = await getGroupManagementUseCase(
       {
@@ -155,12 +187,14 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: memberships.repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: adminMembership.userId,
         isStaff: false,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
@@ -172,6 +206,8 @@ describe("getGroupManagementUseCase", () => {
       expect(view.members).toEqual(testMembers);
       expect(view.members[0].email).toBe("admin@example.com");
       expect(view.invitations).toEqual(testInvitations);
+      expect(view.auditLogs.items).toEqual([]);
+      expect(auditLogListQuery.callCount()).toBe(1);
     }
   });
 
@@ -180,6 +216,7 @@ describe("getGroupManagementUseCase", () => {
     const memberships = createFakeMembershipRepository([memberMembership]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const result = await getGroupManagementUseCase(
       {
@@ -187,12 +224,14 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: memberships.repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: memberMembership.userId,
         isStaff: false,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
@@ -212,14 +251,17 @@ describe("getGroupManagementUseCase", () => {
         name: "管理者 太郎",
         role: MembershipRole.Admin,
       });
+      // 一般メンバーのビューには auditLogs が存在しない
+      expect("auditLogs" in view).toBe(false);
     }
   });
 
-  it("一般メンバーには招待一覧を取りに行かない（偽 Query の呼び出し回数が 0）", async () => {
+  it("一般メンバーには招待一覧および操作履歴一覧を取りに行かない（偽 Query の呼び出し回数が 0）", async () => {
     const groups = createFakeGroupRepository([testGroup]);
     const memberships = createFakeMembershipRepository([memberMembership]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const result = await getGroupManagementUseCase(
       {
@@ -227,17 +269,20 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: memberships.repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: memberMembership.userId,
         isStaff: false,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
     expect(result.isOk()).toBe(true);
     expect(invitationListQuery.callCount()).toBe(0);
+    expect(auditLogListQuery.callCount()).toBe(0);
   });
 
   it("事務局（isStaff: true）は所属していなくても canManage: true で取得でき、所属を一度も問い合わせない（偽 Repository の呼び出し回数が 0）", async () => {
@@ -245,6 +290,7 @@ describe("getGroupManagementUseCase", () => {
     const memberships = createFakeMembershipRepository([]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const result = await getGroupManagementUseCase(
       {
@@ -252,12 +298,14 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: memberships.repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: "usr_staff",
         isStaff: true,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
@@ -267,6 +315,7 @@ describe("getGroupManagementUseCase", () => {
     // 事務局は所属を持たないので membershipRepository を問い合わせてはならない
     expect(memberships.callCount()).toBe(0);
     expect(groups.findByIdCallCount()).toBe(1);
+    expect(auditLogListQuery.callCount()).toBe(1);
   });
 
   it("所属していない人は NotVisible になり、団体を取りに行かない（呼び出し回数が 0）", async () => {
@@ -274,6 +323,7 @@ describe("getGroupManagementUseCase", () => {
     const memberships = createFakeMembershipRepository([]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const result = await getGroupManagementUseCase(
       {
@@ -281,12 +331,14 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: memberships.repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: "usr_outsider",
         isStaff: false,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
@@ -296,6 +348,7 @@ describe("getGroupManagementUseCase", () => {
     expect(groups.findByIdCallCount()).toBe(0);
     expect(memberListQuery.callCount()).toBe(0);
     expect(invitationListQuery.callCount()).toBe(0);
+    expect(auditLogListQuery.callCount()).toBe(0);
   });
 
   it("所属していない団体と存在しない団体で、返るエラーがメッセージまで含めて完全に一致する", async () => {
@@ -303,12 +356,14 @@ describe("getGroupManagementUseCase", () => {
     const memberships = createFakeMembershipRepository([]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const deps = {
       groupRepository: groups.repository,
       membershipRepository: memberships.repository,
       groupMemberListQuery: memberListQuery.query,
       groupInvitationListQuery: invitationListQuery.query,
+      groupAuditLogListQuery: auditLogListQuery.query,
     };
 
     // 存在するが所属していない団体
@@ -317,6 +372,7 @@ describe("getGroupManagementUseCase", () => {
       actorUserId: "usr_outsider",
       isStaff: false,
       now: baseNow,
+      auditLogPage: 1,
     });
 
     // そもそも存在しない団体
@@ -325,10 +381,12 @@ describe("getGroupManagementUseCase", () => {
       actorUserId: "usr_outsider",
       isStaff: false,
       now: baseNow,
+      auditLogPage: 1,
     });
 
     expect(notMember._unsafeUnwrapErr()).toEqual(notExists._unsafeUnwrapErr());
     expect(groups.findByIdCallCount()).toBe(0);
+    expect(auditLogListQuery.callCount()).toBe(0);
   });
 
   it("所属の取得に失敗したら DATABASE_ERROR（GROUP_NOT_FOUND に潰れないこと）", async () => {
@@ -350,6 +408,7 @@ describe("getGroupManagementUseCase", () => {
     };
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const result = await getGroupManagementUseCase(
       {
@@ -357,12 +416,14 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: failingMembershipRepo,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: adminMembership.userId,
         isStaff: false,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
@@ -382,6 +443,7 @@ describe("getGroupManagementUseCase", () => {
         }),
     };
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const result = await getGroupManagementUseCase(
       {
@@ -389,12 +451,14 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: memberships.repository,
         groupMemberListQuery: failingMemberListQuery,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: adminMembership.userId,
         isStaff: false,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
@@ -406,6 +470,7 @@ describe("getGroupManagementUseCase", () => {
     const groups = createFakeGroupRepository([testGroup]);
     const memberships = createFakeMembershipRepository([adminMembership]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+    const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
     const invitationsWithBoundaries: GroupInvitationList = [
       {
@@ -439,12 +504,14 @@ describe("getGroupManagementUseCase", () => {
         membershipRepository: memberships.repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
+        groupAuditLogListQuery: auditLogListQuery.query,
       },
       {
         groupId: testGroup.id,
         actorUserId: adminMembership.userId,
         isStaff: false,
         now: baseNow,
+        auditLogPage: 1,
       },
     );
 
@@ -464,6 +531,7 @@ describe("getGroupManagementUseCase", () => {
       const memberships = createFakeMembershipRepository([adminMembership]);
       const memberListQuery = createFakeGroupMemberListQuery(testMembers);
       const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
       const result = await getGroupManagementUseCase(
         {
@@ -471,12 +539,14 @@ describe("getGroupManagementUseCase", () => {
           membershipRepository: memberships.repository,
           groupMemberListQuery: memberListQuery.query,
           groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
         },
         {
           groupId,
           actorUserId: adminMembership.userId,
           isStaff: false,
           now: baseNow,
+          auditLogPage: 1,
         },
       );
 
@@ -486,6 +556,188 @@ describe("getGroupManagementUseCase", () => {
       expect(groups.findByIdCallCount()).toBe(0);
       expect(memberListQuery.callCount()).toBe(0);
       expect(invitationListQuery.callCount()).toBe(0);
+      expect(auditLogListQuery.callCount()).toBe(0);
     },
   );
+
+  describe("操作履歴（auditLogs）の取得と開示制御（COND-012）", () => {
+    const dummyStaffActionLog: GroupAuditLogItem = {
+      id: "log_staff_op",
+      occurredAt: new Date("2026-09-20T10:00:00.000Z"),
+      actorName: "事務局スタッフ太郎",
+      actedAsStaff: true,
+      action: AuditLogAction.MembershipChangeRole,
+      targetType: AuditLogTargetType.Membership,
+      targetId: "mem_2",
+      changes: {
+        role: { before: "member", after: "admin" },
+      },
+    };
+
+    const dummyMemberActionLog: GroupAuditLogItem = {
+      id: "log_member_op",
+      occurredAt: new Date("2026-09-19T10:00:00.000Z"),
+      actorName: "管理者 太郎",
+      actedAsStaff: false,
+      action: AuditLogAction.GroupUpdate,
+      targetType: AuditLogTargetType.Group,
+      targetId: testGroup.id,
+      changes: {
+        name: { before: "旧団体名", after: testGroup.name },
+      },
+    };
+
+    const fakeAuditLogs: GroupAuditLogList = {
+      items: [dummyStaffActionLog, dummyMemberActionLog],
+      hasNextPage: false,
+      userNames: { usr_member: "メンバー 次郎" },
+    };
+
+    it("自団体の管理者が開くと、事務局権限の記録は actor が { kind: 'staff' } となり、JSON.stringify(結果) に事務局員の氏名が含まれない", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([adminMembership]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery(fakeAuditLogs);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: adminMembership.userId,
+          isStaff: false,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      const view = result._unsafeUnwrap();
+      expect(view.canManage).toBe(true);
+      if (view.canManage) {
+        expect(view.auditLogs.items).toHaveLength(2);
+        // 事務局権限の操作は { kind: "staff" }
+        expect(view.auditLogs.items[0].actor).toEqual({ kind: "staff" });
+        // 一般操作は { kind: "person", name: "管理者 太郎", actedAsStaff: false }
+        expect(view.auditLogs.items[1].actor).toEqual({
+          kind: "person",
+          name: "管理者 太郎",
+          actedAsStaff: false,
+        });
+
+        // 通信に載る中身（JSON.stringify(結果)）に事務局員の氏名が含まれない。ID は Query がそもそも返さない
+        const serialized = JSON.stringify(view);
+        expect(serialized).not.toContain("事務局スタッフ太郎");
+      }
+    });
+
+    it("事務局が開くと、事務局権限の記録も個人名（kind: 'person', actedAsStaff: true）で受け取れる", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery(fakeAuditLogs);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: "usr_staff",
+          isStaff: true,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      const view = result._unsafeUnwrap();
+      expect(view.canManage).toBe(true);
+      if (view.canManage) {
+        expect(view.auditLogs.items[0].actor).toEqual({
+          kind: "person",
+          name: "事務局スタッフ太郎",
+          actedAsStaff: true,
+        });
+      }
+    });
+
+    it("履歴 Query が失敗した場合は DatabaseError を返す", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([adminMembership]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const failingAuditLogQuery: GroupAuditLogListQuery = {
+        findByGroupId: () =>
+          errAsync({
+            code: QueryErrorCode.DatabaseError,
+            message: "操作履歴の取得に失敗しました。",
+          }),
+      };
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: failingAuditLogQuery,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: adminMembership.userId,
+          isStaff: false,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.DatabaseError);
+    });
+
+    it("auditLogPage 引数がそのまま Query に渡される", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([adminMembership]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery(fakeAuditLogs);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: adminMembership.userId,
+          isStaff: false,
+          now: baseNow,
+          auditLogPage: 3,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(auditLogListQuery.lastPage()).toBe(3);
+      expect(auditLogListQuery.lastGroupId()).toBe(testGroup.id);
+      const view = result._unsafeUnwrap();
+      if (view.canManage) {
+        expect(view.auditLogs.page).toBe(3);
+      }
+    });
+  });
 });

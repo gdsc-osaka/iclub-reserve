@@ -8,6 +8,7 @@ import {
   auditLogTargetTypeLabel,
   parseAuditLogChanges,
   parseAuditLogTargetType,
+  toAuditLogActorView,
 } from "./index";
 
 describe("操作履歴のドメイン定義", () => {
@@ -87,6 +88,78 @@ describe("操作履歴のドメイン定義", () => {
 
       expect(parseAuditLogChanges(mixed)).toEqual({
         valid: { before: "a", after: "b" },
+      });
+    });
+  });
+
+  describe("toAuditLogActorView", () => {
+    it("事務局権限の操作（actedAsStaff: true）を事務局でない人（viewer.isStaff: false）が見る場合、kind: 'staff' になる", () => {
+      const view = toAuditLogActorView(
+        { actorName: "事務局 太郎", actedAsStaff: true },
+        { isStaff: false },
+      );
+      expect(view).toEqual({ kind: "staff" });
+    });
+
+    it("事務局権限の操作（actedAsStaff: true）で名前が null の場合でも、事務局でない人が見ると kind: 'staff' になる", () => {
+      const view = toAuditLogActorView({ actorName: null, actedAsStaff: true }, { isStaff: false });
+      expect(view).toEqual({ kind: "staff" });
+    });
+
+    it("事務局権限の操作（actedAsStaff: true）を事務局（viewer.isStaff: true）が見る場合、個人名と actedAsStaff: true が返る", () => {
+      const view = toAuditLogActorView(
+        { actorName: "事務局 太郎", actedAsStaff: true },
+        { isStaff: true },
+      );
+      expect(view).toEqual({
+        kind: "person",
+        name: "事務局 太郎",
+        actedAsStaff: true,
+      });
+    });
+
+    it("事務局権限の操作（actedAsStaff: true）で名前が null の場合、事務局が見ると name: null と actedAsStaff: true が返る", () => {
+      const view = toAuditLogActorView({ actorName: null, actedAsStaff: true }, { isStaff: true });
+      expect(view).toEqual({
+        kind: "person",
+        name: null,
+        actedAsStaff: true,
+      });
+    });
+
+    it("一般操作（actedAsStaff: false）を一般の人が見る場合、個人名と actedAsStaff: false が返る", () => {
+      const view = toAuditLogActorView(
+        { actorName: "山田太郎", actedAsStaff: false },
+        { isStaff: false },
+      );
+      expect(view).toEqual({
+        kind: "person",
+        name: "山田太郎",
+        actedAsStaff: false,
+      });
+    });
+
+    it("一般操作（actedAsStaff: false）で名前が null の場合、一般の人が見ると name: null と actedAsStaff: false が返る", () => {
+      const view = toAuditLogActorView(
+        { actorName: null, actedAsStaff: false },
+        { isStaff: false },
+      );
+      expect(view).toEqual({
+        kind: "person",
+        name: null,
+        actedAsStaff: false,
+      });
+    });
+
+    it("一般操作（actedAsStaff: false）を事務局が見る場合、個人名と actedAsStaff: false が返る", () => {
+      const view = toAuditLogActorView(
+        { actorName: "山田太郎", actedAsStaff: false },
+        { isStaff: true },
+      );
+      expect(view).toEqual({
+        kind: "person",
+        name: "山田太郎",
+        actedAsStaff: false,
       });
     });
   });
