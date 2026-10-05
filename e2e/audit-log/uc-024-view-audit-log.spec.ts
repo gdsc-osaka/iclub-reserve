@@ -112,4 +112,37 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
 
     await expect(page.getByText("条件に合う操作履歴はありません。")).toBeVisible();
   });
+
+  test("事務局が団体管理画面を開くと事務局権限の操作者が個人名で見え、操作履歴画面へ遷移できる", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const staff = await createUser(db, { is_staff: true });
+    const group = await createGroup(db, { members: [] });
+
+    await createAuditLog(db, {
+      actorId: staff.id,
+      actedAsStaff: true,
+      action: AuditLogAction.GroupUpdate,
+      targetType: AuditLogTargetType.Group,
+      targetId: group.id,
+      groupId: group.id,
+      changes: {
+        name: { before: "旧団体名", after: group.name },
+      },
+    });
+
+    await signInAs(staff.id);
+    await openPage(page, `/groups/${group.id}`);
+
+    // 操作者が個人名で見え、事務局権限バッジが付いている
+    const record = recordOf(page, "団体情報の編集");
+    await expect(record).toContainText(staff.name);
+    await expect(record).toContainText("事務局権限");
+
+    // 「操作履歴画面で見る」リンクから /staff/audit-log?group=<groupId> に遷移できる
+    await page.getByRole("link", { name: "操作履歴画面で見る" }).click();
+    await expect(page).toHaveURL(new RegExp(`/staff/audit-log\\?group=${group.id}`));
+  });
 });

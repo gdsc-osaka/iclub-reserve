@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import type { FormEvent, ReactNode } from "react";
 import { Form, isRouteErrorResponse, Link, useNavigate } from "react-router";
 
+import { formatChanges } from "~/components/audit-log/format-changes";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -26,7 +27,6 @@ import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { formatDateTime } from "~/lib/date";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { searchAuditLogsUseCase } from "~/usecases/audit-log/search-audit-logs";
-import { formatChanges } from "./format-changes";
 import {
   parseAuditLogSearchParams,
   toAuditLogSearchPath,

@@ -3,7 +3,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { ResultAsync } from "neverthrow";
 
 import { auditLogTable, facilityTable, groupTable, reservationTable, user } from "~/db/schema";
-import { AuditLogTargetType, parseAuditLogChanges, type AuditLogChanges } from "~/domain/audit-log";
+import { AuditLogTargetType, parseAuditLogChanges } from "~/domain/audit-log";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import {
   AUDIT_LOG_PAGE_SIZE,
@@ -14,14 +14,7 @@ import {
 } from "~/query/audit-log/audit-log-search";
 import type { Database } from "../db";
 
-/** changes の key の項目に出てくる ID（before と after の両方）を into に集める */
-const collectIds = (changes: AuditLogChanges, key: string, into: Set<string>): void => {
-  const change = changes[key];
-  if (change === undefined) return;
-  for (const value of [change.before, change.after]) {
-    if (typeof value === "string" && value !== "") into.add(value);
-  }
-};
+import { collectIds } from "./collect-ids";
 
 const searchAuditLogs = async (
   db: Database,

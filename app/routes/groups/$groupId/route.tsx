@@ -4,6 +4,7 @@ import { isRouteErrorResponse, Link, redirect } from "react-router";
 import { GroupStatusBadge } from "~/components/group/group-status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { GroupField } from "~/domain/group";
+import { createGroupAuditLogListQuery } from "~/infra/audit-log/group-audit-log-list-query";
 import { createDb } from "~/infra/db";
 import { createGroupInvitationListQuery } from "~/infra/group/group-invitation-list-query";
 import { createGroupMemberListQuery } from "~/infra/group/group-member-list-query";
@@ -23,9 +24,11 @@ import { updateMemberRoleUseCase } from "~/usecases/group/update-member-role";
 
 import type { Route } from "./+types/route";
 import type { GroupActionData } from "./action-data";
+import { GroupAuditLogCard } from "./group-audit-log-card";
 import { GroupInfoCard } from "./group-info-card";
 import { GroupInvitationCard } from "./group-invitation-card";
 import { GroupMemberCard } from "./group-member-card";
+import { parseHistoryPage } from "./query-params";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   // 団体を取得できなかったとき（エラー画面）は loaderData が undefined になる
@@ -44,13 +47,14 @@ export function meta({ loaderData }: Route.MetaArgs) {
  * 閲覧権限（所属メンバーまたは事務局スタッフ）を確認し、団体情報・所属メンバー・承諾待ち招待を取得する。
  * 所属していない人には存在自体を伏せるため、権限不足ではなく 404 を返す（COND-011 存在の秘匿）。
  */
-export async function loader({ params, context }: Route.LoaderArgs) {
+export async function loader({ request, params, context }: Route.LoaderArgs) {
   const groupId = params.groupId;
 
   // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
   const user = requireRequestUser(context);
   const now = new Date();
   const db = createDb(env.DB);
+  const auditLogPage = parseHistoryPage(request);
 
   const result = await getGroupManagementUseCase(
     {
@@ -58,12 +62,14 @@ export async function loader({ params, context }: Route.LoaderArgs) {
       membershipRepository: createMembershipRepository(db),
       groupMemberListQuery: createGroupMemberListQuery(db),
       groupInvitationListQuery: createGroupInvitationListQuery(db),
+      groupAuditLogListQuery: createGroupAuditLogListQuery(db),
     },
     {
       groupId,
       actorUserId: user.id,
       isStaff: user.is_staff,
       now,
+      auditLogPage,
     },
   );
 
@@ -76,6 +82,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     view: result.value,
     now,
     currentUserId: user.id,
+    isStaff: user.is_staff,
   };
 }
 
@@ -291,7 +298,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
  * 団体の基本情報、所属メンバー一覧、および承諾待ちの招待（管理者・事務局のみ）を表示する。
  */
 export default function GroupManagementRoute({ loaderData, actionData }: Route.ComponentProps) {
-  const { view, now, currentUserId } = loaderData;
+  const { view, now, currentUserId, isStaff } = loaderData;
   const nowDate = new Date(now);
 
   return (
@@ -331,6 +338,11 @@ export default function GroupManagementRoute({ loaderData, actionData }: Route.C
           inviteForm={actionData?.section === "invite" ? actionData : null}
           error={actionData?.section === "invitations" ? actionData.formError : null}
         />
+      )}
+
+      {/* 操作履歴カード（管理者・事務局にだけ表示） */}
+      {view.canManage && (
+        <GroupAuditLogCard groupId={view.group.id} auditLogs={view.auditLogs} isStaff={isStaff} />
       )}
     </main>
   );
