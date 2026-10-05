@@ -1,6 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 
 import type { ReservationStatus } from "~/domain/reservation";
+import type { ReservationTransition } from "~/domain/reservation/transition";
 import type { QueryError } from "../error";
 
 /** カレンダーで切り替えられる施設・設備 1 件分。 */
@@ -30,6 +31,8 @@ export interface AvailabilityReservationRow {
   readonly status: ReservationStatus;
   readonly headCount: number;
   readonly note: string | null;
+  /** 同一施設・同一時間帯にほかの承認済み予約があるか（COND-001） */
+  readonly hasApprovedOverlap: boolean;
 }
 
 /** Query が返す、マスク前の画面 1 つ分のデータ。 */
@@ -76,6 +79,14 @@ export interface AvailabilityReservation {
    * 入れ子にしておけば、null を外さないと中身に触れない。
    */
   readonly detail: AvailabilityReservationDetail | null;
+  /** 見ている人がこの予約に対して実行できる事務局の操作（承認・却下・事務局キャンセル） */
+  readonly transitions: readonly ReservationTransition[];
+  /**
+   * 同一施設・同一時間帯に、ほかの承認済みの予約があるかどうか（COND-001）。
+   *
+   * 承認ボタンを押せるかどうかの判定に使う。
+   */
+  readonly hasApprovedOverlap: boolean;
 }
 
 /** 画面へ渡してよい、空き状況カレンダー 1 画面分のデータ。 */
@@ -93,6 +104,12 @@ export interface AvailabilityCalendar {
    * なぜ押せないかを画面に書く。消すと不具合だと思って何度も試すことになる。
    */
   readonly canApplyReservation: boolean;
+  /**
+   * 見ている人が、承認済みの予約を直接作成できるかどうか（UC-008 / COND-009）。
+   *
+   * 権限表の CreateDirect から導く。事務局スタッフのときだけ true になる。
+   */
+  readonly canCreateDirectly: boolean;
 }
 
 /** {@link FacilityAvailabilityCalendarQuery.findByFacilityAndPeriod} への入力。 */

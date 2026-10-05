@@ -35,6 +35,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.ViewSummary]: true,
     [ReservationAction.ViewDetail]: false,
     [ReservationAction.CreateProvisional]: false,
+    [ReservationAction.CreateDirect]: false,
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
     [ReservationAction.Edit]: false,
@@ -44,6 +45,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.ViewSummary]: true,
     [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
+    [ReservationAction.CreateDirect]: false,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,
@@ -52,6 +54,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.ViewSummary]: true,
     [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
+    [ReservationAction.CreateDirect]: false,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,
@@ -60,11 +63,13 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
    * COND-009: 事務局は所属していない団体でも予約を作れ、中身も全部見られる（COND-008）。
    * 取り消し・キャンセルは事務局の操作ではない（却下・事務局キャンセルが別にある）。
    * 内容の変更も団体の操作（UC-005 / UC-017）。事務局の変更は直接変更（UC-008）として別に扱う。
+   * 直接作成（UC-008）ができるのは事務局だけ。
    */
   事務局: {
     [ReservationAction.ViewSummary]: true,
     [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
+    [ReservationAction.CreateDirect]: true,
     [ReservationAction.Withdraw]: false,
     [ReservationAction.Cancel]: false,
     [ReservationAction.Edit]: false,
@@ -77,6 +82,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.ViewSummary]: true,
     [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
+    [ReservationAction.CreateDirect]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,
@@ -85,6 +91,7 @@ const expected: Record<ActorName, Record<ReservationAction, boolean>> = {
     [ReservationAction.ViewSummary]: true,
     [ReservationAction.ViewDetail]: true,
     [ReservationAction.CreateProvisional]: true,
+    [ReservationAction.CreateDirect]: true,
     [ReservationAction.Withdraw]: true,
     [ReservationAction.Cancel]: true,
     [ReservationAction.Edit]: true,

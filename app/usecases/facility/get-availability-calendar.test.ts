@@ -24,6 +24,7 @@ const ownReservation: AvailabilityReservationRow = {
   status: ReservationStatus.Approved,
   headCount: 4,
   note: "週次定例",
+  hasApprovedOverlap: false,
 };
 
 /** 所属していない団体の予約 */
@@ -36,6 +37,7 @@ const otherReservation: AvailabilityReservationRow = {
   status: ReservationStatus.Provisional,
   headCount: 20,
   note: "ハッカソンのキックオフ",
+  hasApprovedOverlap: false,
 };
 
 /** 有効な団体に所属している状態 */
@@ -159,6 +161,31 @@ describe("getAvailabilityCalendarUseCase", () => {
     const result = await getAvailabilityCalendarUseCase(createDeps([]), { ...args, isStaff: true });
 
     expect(result._unsafeUnwrap().canApplyReservation).toBe(true);
+  });
+
+  it("非事務局は直接作成できず、予約の transitions は空になる", async () => {
+    const result = await getAvailabilityCalendarUseCase(createDeps(enabledMembership), args);
+    const calendar = result._unsafeUnwrap();
+
+    expect(calendar.canCreateDirectly).toBe(false);
+    expect(calendar.reservations.every((r) => r.transitions.length === 0)).toBe(true);
+  });
+
+  it("事務局は直接作成でき、予約の transitions に事務局操作が含まれる", async () => {
+    const result = await getAvailabilityCalendarUseCase(createDeps([]), {
+      ...args,
+      actorUserId: "usr_staff_01",
+      isStaff: true,
+    });
+    const calendar = result._unsafeUnwrap();
+
+    expect(calendar.canCreateDirectly).toBe(true);
+    const approved = calendar.reservations.find((r) => r.id === "res_own");
+    const provisional = calendar.reservations.find((r) => r.id === "res_other");
+
+    expect(approved?.transitions).toContain("staffCancel");
+    expect(provisional?.transitions).toContain("approve");
+    expect(provisional?.transitions).toContain("reject");
   });
 
   it("施設が見つからないときは NOT_FOUND がそのまま伝播する", async () => {

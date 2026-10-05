@@ -1,17 +1,24 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert } from "lucide-react";
-import { isRouteErrorResponse, Link } from "react-router";
+import { isRouteErrorResponse, Link, redirect } from "react-router";
 
 import { DAYS_IN_WEEK } from "~/components/reservation/availability-week";
 import { NoEnabledGroupReason } from "~/components/reservation/no-enabled-group-reason";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facility-availability-calendar-query";
+import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
+import { createMembershipRepository } from "~/infra/membership/membership-repo";
+import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
+import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { addDays, parseTokyoDateKey, startOfTokyoWeek } from "~/lib/date";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
+import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
+import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getAvailabilityCalendarUseCase } from "~/usecases/facility/get-availability-calendar";
 
 import type { Route } from "./+types/route";
@@ -72,6 +79,58 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 /**
+ * 空き状況カレンダーからの事務局状態変更アクション（承認・却下・事務局キャンセル）。
+ */
+export async function action({ request, context }: Route.ActionArgs) {
+  const user = requireRequestUser(context);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  const reservationId = formData.get("reservationId");
+  const reason = formData.get("reason");
+
+  if (typeof reservationId !== "string" || !reservationId) {
+    return { formError: "予約が指定されていません。" };
+  }
+
+  /*
+   * 事務局の操作のみを受け付ける。可否はユースケースに任せ、
+   * 非事務局の操作は Forbidden で弾かれてログに残る。
+   */
+  const transition = parseReservationTransition(intent);
+
+  if (transition === null || !isStaffTransition(transition)) {
+    return { formError: "不正な操作です。" };
+  }
+
+  const db = createDb(env.DB);
+  const result = await changeReservationStatusUseCase(
+    {
+      reservationRepository: createReservationRepository(db),
+      membershipRepository: createMembershipRepository(db),
+      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+      mailOutboxNotifier: createQueueMailOutboxNotifier(),
+    },
+    {
+      reservationId,
+      actorUserId: user.id,
+      isStaff: user.is_staff,
+      transition,
+      reason: typeof reason === "string" ? reason : null,
+      now: new Date(),
+    },
+  );
+
+  if (result.isErr()) {
+    return reservationActionErrors(
+      { where: `availability.${transition}`, userId: user.id },
+      result.error,
+    );
+  }
+
+  return redirect(`.${new URL(request.url).search}`);
+}
+
+/**
  * 施設・設備ごとの予約状況を週単位で見る画面（SCR-001 / UC-001）。
  *
  * 他団体の予約も含めて出す。自団体の予約だけでは、その施設が
@@ -81,9 +140,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
  * 仮予約も確定した予約と同じように描く。仮予約を隠すと、
  * 申請が重なっていることに気づけないまま同じ時間帯を申請してしまう。
  */
-export default function Availability({ loaderData }: Route.ComponentProps) {
+export default function Availability({ loaderData, actionData }: Route.ComponentProps) {
   const { calendar, weekStart, now } = loaderData;
-  const { facility, facilities, reservations, canApplyReservation } = calendar;
+  const { facility, facilities, reservations, canApplyReservation, canCreateDirectly } = calendar;
 
   return (
     /*
@@ -95,6 +154,14 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
      * あふれる部分は中の `overflow` に任せる。
      */
     <main className="mx-auto flex h-(--app-content-height) w-full max-w-6xl flex-col gap-4 overflow-hidden p-4 md:p-6">
+      {actionData?.formError && (
+        <Alert variant="destructive" className="shrink-0">
+          <CircleAlert aria-hidden className="size-4" />
+          <AlertTitle>操作に失敗しました</AlertTitle>
+          <AlertDescription>{actionData.formError}</AlertDescription>
+        </Alert>
+      )}
+
       {!canApplyReservation && <CannotApplyNotice />}
 
       <FacilityTabs facilities={facilities} current={facility} weekStart={weekStart} />
@@ -105,6 +172,7 @@ export default function Availability({ loaderData }: Route.ComponentProps) {
         weekStart={weekStart}
         now={now}
         canApply={canApplyReservation}
+        canCreateDirectly={canCreateDirectly}
       />
     </main>
   );

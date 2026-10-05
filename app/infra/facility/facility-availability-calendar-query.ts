@@ -2,7 +2,8 @@ import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable } from "~/db/schema";
-import { calendarVisibleStatuses } from "~/domain/reservation";
+import { calendarVisibleStatuses, ReservationStatus } from "~/domain/reservation";
+import { hasOverlappingReservation } from "~/infra/reservation/reservation-overlap";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
   AvailabilityFacility,
@@ -64,6 +65,7 @@ const selectReservations = (db: Database, facilityId: string, from: Date, to: Da
       status: reservationTable.status,
       headCount: reservationTable.headCount,
       note: reservationTable.note,
+      hasApprovedOverlap: hasOverlappingReservation(db, ReservationStatus.Approved),
     })
     .from(reservationTable)
     .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))

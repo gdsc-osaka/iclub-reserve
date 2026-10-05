@@ -54,6 +54,13 @@ export const ReservationAction = {
    * 変えられる状態か・開始前かは、この表ではなく edit.ts の canEditReservation が見る。
    */
   Edit: "edit",
+  /**
+   * 事務局として承認済みの予約を直接作成する（UC-008）。
+   *
+   * 承認フローを経ずに最初から承認済み（STATE-001）で作る。
+   * 団体メンバーには許されず、事務局だけに許される操作（COND-009）。
+   */
+  CreateDirect: "create_direct",
 } as const;
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
 
@@ -95,6 +102,8 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
     ],
     /*
      * 事務局は所属していない団体でも予約を作れる (COND-009)。
+     * 仮予約の申請だけでなく、承認済みの予約を直接作成（UC-008）することもできる。
+     * 直接作成できるのは事務局だけである（団体メンバーが承認なしで予約を確定できてはいけないため）。
      *
      * 取り消し・キャンセルを入れていないのは、事務局にはそれ用の操作
      * (却下・事務局キャンセル) が別にあり、理由の入力を必須にしてあるため (COND-002)。
@@ -105,7 +114,11 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
      * 承認済みの予約を仮予約に戻さないなど規則が違うため、別の操作として用意する。
      * ここに Edit を足すと、事務局の変更が団体の変更（UC-005）の規則で通ってしまう。
      */
-    [StaffRole]: [ReservationAction.ViewDetail, ReservationAction.CreateProvisional],
+    [StaffRole]: [
+      ReservationAction.ViewDetail,
+      ReservationAction.CreateProvisional,
+      ReservationAction.CreateDirect,
+    ],
   },
 };
 
@@ -306,12 +319,32 @@ export interface ApplyStatusTransitionOutcome {
 /** 内容の条件付き更新の結果。中身の意味はステータスの条件付き更新と同じ */
 export type ApplyContentEditOutcome = ApplyStatusTransitionOutcome;
 
+/**
+ * 承認済みの予約の条件付き作成の結果。
+ *
+ * 重なる承認済みの予約が先に入っていて書き込まなかったときは applied が false になる。
+ * 利用者に何を伝えるかはユースケースが決めるので、ここではエラーにしない（条件付き更新と同じ）。
+ */
+export interface CreateApprovedReservationOutcome {
+  readonly applied: boolean;
+}
+
 export interface ReservationRepository {
   findById(id: string): ResultAsync<Reservation, ReservationError>;
   create(
     reservation: Reservation,
     mails: readonly MailDraft[],
   ): ResultAsync<CreateReservationOutcome, ReservationError>;
+  /**
+   * 承認済みの予約を直接作成する（UC-008）。
+   *
+   * 重なりの確認から書き込みまでの間に別の予約が承認されるのを防ぐため、
+   * `INSERT ... SELECT ... WHERE NOT EXISTS (承認済みの重なり)` の 1 文で不可分に作成する。
+   * 条件に合わず 0 件だったときは applied が false になる。
+   */
+  createApproved(
+    reservation: Reservation,
+  ): ResultAsync<CreateApprovedReservationOutcome, ReservationError>;
   /**
    * 同一施設・同一時間帯に**承認済み**の予約があるかを調べる（COND-001）。
    *

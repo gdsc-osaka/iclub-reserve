@@ -26,6 +26,7 @@ import {
   ReservationStatus,
   type ApplyContentEditArgs,
   type ApplyStatusTransitionArgs,
+  type Reservation,
 } from "~/domain/reservation";
 import type { Database } from "../db";
 import { createReservationRepository } from "./reservation-repo";
@@ -399,5 +400,93 @@ describe("existsApprovedOverlap を SQLite で実行する", () => {
         await repository.existsApprovedOverlap({ ...slot, excludeReservationId: "res_target" })
       )._unsafeUnwrap(),
     ).toBe(false);
+  });
+});
+
+describe("createApproved を SQLite で実行する", () => {
+  const directReservation = (overrides?: Partial<Reservation>): Reservation => ({
+    id: "res_direct",
+    groupId: "grp_robotics",
+    facilityId: "fac_a",
+    startAt: at("10:00"),
+    endAt: at("12:00"),
+    headCount: 4,
+    note: "直接作成のテスト",
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    createdBy: "usr_taro",
+    createdAt: at("09:00"),
+    updatedAt: at("09:00"),
+    ...overrides,
+  });
+
+  /*
+   * INSERT ... SELECT は列を名前ではなく並び順で対応させるので、読み戻した予約が
+   * 渡したものと全項目で一致することまで確かめる。一部の列だけ見ると、
+   * 作成日時と更新日時の入れ違いのような取り違えを見逃す。
+   */
+  it("(1) 重なりが無ければ承認済みで入り、読み戻すと同じ予約になる", async () => {
+    const { repository } = createTestDb();
+
+    const result = await repository.createApproved(directReservation());
+
+    expect(result._unsafeUnwrap()).toEqual({ applied: true });
+    expect((await repository.findById("res_direct"))._unsafeUnwrap()).toEqual(directReservation());
+  });
+
+  it("(2) 承認済みと重なれば何も入らない", async () => {
+    const { sqlite, repository } = createTestDb();
+    insertReservation(sqlite, {
+      id: "res_existing",
+      status: ReservationStatus.Approved,
+      startAt: at("11:00"),
+      endAt: at("13:00"),
+    });
+
+    const result = await repository.createApproved(directReservation());
+
+    expect(result._unsafeUnwrap()).toEqual({ applied: false });
+    expect(rowOf(sqlite, "res_direct")).toBeUndefined();
+  });
+
+  it("(3) 終了と開始がぴったり接するだけなら作れる", async () => {
+    const { sqlite, repository } = createTestDb();
+    // 8:00〜10:00 と 12:00〜14:00 の前後に承認済みがある
+    insertReservation(sqlite, {
+      id: "res_before",
+      status: ReservationStatus.Approved,
+      startAt: at("08:00"),
+      endAt: at("10:00"),
+    });
+    insertReservation(sqlite, {
+      id: "res_after",
+      status: ReservationStatus.Approved,
+      startAt: at("12:00"),
+      endAt: at("14:00"),
+    });
+
+    const result = await repository.createApproved(directReservation());
+
+    expect(result._unsafeUnwrap()).toEqual({ applied: true });
+    expect(rowOf(sqlite, "res_direct")).toMatchObject({
+      status: ReservationStatus.Approved,
+    });
+  });
+
+  it("(4) 仮予約と重なっても作れる", async () => {
+    const { sqlite, repository } = createTestDb();
+    insertReservation(sqlite, {
+      id: "res_provisional",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+    });
+
+    const result = await repository.createApproved(directReservation());
+
+    expect(result._unsafeUnwrap()).toEqual({ applied: true });
+    expect(rowOf(sqlite, "res_direct")).toMatchObject({
+      status: ReservationStatus.Approved,
+    });
   });
 });

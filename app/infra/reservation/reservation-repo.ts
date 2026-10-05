@@ -1,4 +1,4 @@
-import { and, eq, gt, lt, ne, notExists } from "drizzle-orm";
+import { and, eq, getTableColumns, gt, lt, ne, notExists, sql } from "drizzle-orm";
 import type { RunnableQuery } from "drizzle-orm/runnable-query";
 import { alias } from "drizzle-orm/sqlite-core";
 import { err, ok, ResultAsync } from "neverthrow";
@@ -12,6 +12,7 @@ import {
   type ApplyContentEditOutcome,
   type ApplyStatusTransitionArgs,
   type ApplyStatusTransitionOutcome,
+  type CreateApprovedReservationOutcome,
   type CreateReservationOutcome,
   type Reservation,
   type ReservationError,
@@ -23,6 +24,20 @@ import { guardedMailOutboxInserts, mailOutboxInserts } from "../mail/mail-outbox
 
 /** 重なりを探すとき、同じ予約テーブルをもう一度読むための別名 */
 const overlapping = alias(reservationTable, "overlapping");
+
+type ReservationValues = typeof reservationTable.$inferSelect;
+const reservationColumns = getTableColumns(reservationTable);
+
+/**
+ * 値 1 つを `INSERT ... SELECT` の 1 列ぶんの式にする。
+ *
+ * 列の定義を渡して Drizzle の変換を通すので、日時（timestamp_ms）をミリ秒に直す計算を
+ * ここで書かなくて済む。
+ */
+const insertValue = <K extends keyof ReservationValues>(key: K, value: ReservationValues[K]) =>
+  sql<ReservationValues[K]>`${sql.param(value, reservationColumns[key])}`.as(
+    reservationColumns[key].name,
+  );
 
 export const createReservationRepository = (db: Database): ReservationRepository => {
   /**
@@ -194,6 +209,52 @@ export const createReservationRepository = (db: Database): ReservationRepository
   };
 
   /**
+   * 承認済みの予約を直接作成する（UC-008）。
+   *
+   * 重なりの確認から書き込みまでの間に別の予約が承認されるのを防ぐため、
+   * `INSERT ... SELECT ... WHERE NOT EXISTS (承認済みの重なり)` の 1 文で不可分に作成する。
+   * 書けたかどうかは `applyStatusTransition` と同じく、returning({ id }) が返した行数で見る。
+   *
+   * 【列の並び順】
+   * Drizzle は `INSERT ... SELECT` の列を、テーブル定義（`reservationTable`）の順に並べる。
+   * SELECT 側の列は名前ではなく並び順で対応するので、下の項目はテーブル定義と同じ順に書くこと。
+   * 順番を崩すと、型は通ったまま別の列に値が入る（テストの「読み戻すと同じ予約になる」で気づける）。
+   */
+  const createApproved = (
+    reservation: Reservation,
+  ): ResultAsync<CreateApprovedReservationOutcome, ReservationError> => {
+    const insertQuery = db
+      .insert(reservationTable)
+      .select(
+        db
+          .select({
+            id: insertValue("id", reservation.id),
+            groupId: insertValue("groupId", reservation.groupId),
+            facilityId: insertValue("facilityId", reservation.facilityId),
+            startAt: insertValue("startAt", reservation.startAt),
+            endAt: insertValue("endAt", reservation.endAt),
+            headCount: insertValue("headCount", reservation.headCount),
+            note: insertValue("note", reservation.note),
+            status: insertValue("status", reservation.status),
+            statusReason: insertValue("statusReason", reservation.statusReason),
+            createdBy: insertValue("createdBy", reservation.createdBy),
+            createdAt: insertValue("createdAt", reservation.createdAt),
+            updatedAt: insertValue("updatedAt", reservation.updatedAt),
+          })
+          // 値はすべてパラメーターなので、FROM には 1 行だけ返す表を置けばよい
+          .from(sql`(SELECT 1)`)
+          .where(noApprovedOverlapAt(reservation, reservation.id)),
+      )
+      .returning({ id: reservationTable.id });
+
+    return ResultAsync.fromPromise(insertQuery, (error): ReservationError => ({
+      code: ReservationErrorCode.DatabaseError,
+      message: "承認済みの予約を書き込めなかった。",
+      cause: error,
+    })).map((rows) => ({ applied: rows.length > 0 }));
+  };
+
+  /**
    * 重なっている承認済みの予約を 1 件だけ探す（COND-001）。
    *
    * 件数は要らないので `limit(1)` で打ち切る。重複が 1 件でもあれば申請を止めるため、
@@ -282,5 +343,12 @@ export const createReservationRepository = (db: Database): ReservationRepository
     return runGuardedUpdate(updateQuery, args, mails, "予約の内容");
   };
 
-  return { findById, create, existsApprovedOverlap, applyStatusTransition, applyContentEdit };
+  return {
+    findById,
+    create,
+    createApproved,
+    existsApprovedOverlap,
+    applyStatusTransition,
+    applyContentEdit,
+  };
 };

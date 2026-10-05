@@ -35,6 +35,8 @@ const reservation = (
   status,
   isOwnGroup: false,
   detail: null,
+  transitions: [],
+  hasApprovedOverlap: false,
 });
 
 /** その日の予約から、押せなくなる「時」を取り出す */

@@ -3,7 +3,7 @@ import { reservationTable } from "~/db/schema";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import type { E2eDb } from "../support/db.js";
-import { nextWeekAt, Weekday } from "../support/dates.js";
+import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
   createGroup,
@@ -36,6 +36,48 @@ async function createProvisionalReservation(db: E2eDb) {
 }
 
 test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, () => {
+  test("空き状況カレンダー（SCR-001）の吹き出しからも承認できる", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const { facility, reservation } = await createProvisionalReservation(db);
+
+    await signInAs(personas.staff.id);
+
+    const dateKey = toDateKey(reservation.startAt);
+    await openPage(page, `/availability?facility=${facility.id}&date=${dateKey}`);
+
+    // 予約の帯をクリックして吹き出しを開く
+    const reservationBlock = page.getByRole("button", { name: /詳細を見る/ });
+    await reservationBlock.first().click();
+
+    // 吹き出し内に予約詳細リンクがあることを確認
+    const detailLink = page.getByRole("link", { name: "予約詳細を見る" });
+    await expect(detailLink).toBeVisible();
+    await expect(detailLink).toHaveAttribute("href", `/reservations/${reservation.id}`);
+
+    // 吹き出し内の承認ボタンをクリック
+    const popover = page.getByRole("dialog");
+    await popover.getByRole("button", { name: "承認" }).click();
+
+    // 確認ダイアログが吹き出しと一緒に閉じずに開いていることを確認
+    const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "承認する" }).click();
+
+    // 承認後は DB 上で承認済みとして保存されている
+    await expect
+      .poll(async () => {
+        const [saved] = await db
+          .select()
+          .from(reservationTable)
+          .where(eq(reservationTable.id, reservation.id));
+        return saved?.status;
+      })
+      .toBe(ReservationStatus.Approved);
+  });
+
   test("事務局が承認すると承認済みになり、承認の通知が積まれる", async ({ page, db, signInAs }) => {
     const { applicant, facility, reservation } = await createProvisionalReservation(db);
 

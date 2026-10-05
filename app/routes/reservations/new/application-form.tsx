@@ -4,7 +4,11 @@ import { Form, useNavigation } from "react-router";
 
 import { FacilityPhoto } from "~/components/facility/facility-photo";
 import { FacilityOverview } from "~/components/reservation/editor/facility-overview";
-import type { FieldErrors, FormValues } from "~/components/reservation/editor/form-values";
+import type {
+  FieldErrors,
+  FormValues,
+  ReservationFormMode,
+} from "~/components/reservation/editor/form-values";
 import { PeriodSection } from "~/components/reservation/editor/period-section";
 import { ReservationConfirmDialog } from "~/components/reservation/editor/reservation-confirm-dialog";
 import { ReservationScheduler } from "~/components/reservation/editor/reservation-scheduler";
@@ -32,6 +36,7 @@ import {
 } from "~/components/ui/select";
 import { Separator } from "~/components/ui/separator";
 import { Textarea } from "~/components/ui/textarea";
+import { Switch } from "~/components/ui/switch";
 import {
   RESERVATION_MIN_HEAD_COUNT,
   RESERVATION_NOTE_MAX_LENGTH,
@@ -84,14 +89,22 @@ export function ApplicationForm({
   todayKey,
   initial,
   actionData,
+  canCreateDirectly = false,
 }: Readonly<{
   groups: readonly ReservationFormGroup[];
   facilities: readonly ReservationFormFacility[];
   reservations: readonly ReservationFormReservation[];
   now: Date;
   todayKey: string;
-  initial: { facilityId: string; dateKey: string; startMinutes: number | null };
+  initial: {
+    facilityId: string;
+    dateKey: string;
+    startMinutes: number | null;
+    mode: ReservationFormMode;
+  };
   actionData: { values: FormValues; fieldErrors: FieldErrors; formError: string | null } | null;
+  /** 承認済みで直接作成できるか（事務局のみ） */
+  canCreateDirectly?: boolean;
 }>) {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -133,6 +146,10 @@ export function ApplicationForm({
   const [groupId, setGroupId] = useState(submitted?.groupId ?? groups.at(0)?.id ?? "");
   const [headCount, setHeadCount] = useState(submitted?.headCount ?? "");
   const [note, setNote] = useState(submitted?.note ?? "");
+  /** 承認済みとして直接作成するか（事務局のみ操作可能） */
+  const [isDirect, setIsDirect] = useState(
+    canCreateDirectly && (submitted?.mode ?? initial.mode) === "direct",
+  );
   /** スマホの全画面の選択を開いているか */
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   /** 申請内容の確認ダイアログを開いているか */
@@ -195,6 +212,7 @@ export function ApplicationForm({
           name="end_time"
           value={range === null ? "" : toTokyoTimeKey(range.endMinutes)}
         />
+        <input type="hidden" name="mode" value={isDirect ? "direct" : "provisional"} />
 
         {actionData?.formError != null && (
           <Alert variant="destructive" className="lg:col-span-2">
@@ -242,6 +260,24 @@ export function ApplicationForm({
           <FieldError id={ids.periodError} message={fieldErrors.period} />
 
           <ScheduleConflictAlerts draft={draft} />
+
+          {canCreateDirectly && (
+            <>
+              <Separator />
+
+              <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+                <div className="flex flex-col gap-0.5">
+                  <Label htmlFor="direct-mode-switch" className="text-sm font-medium">
+                    承認済みとして直接作成する
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    仮予約を経ずに最初から承認済みとして登録します（事務局専用）。
+                  </p>
+                </div>
+                <Switch id="direct-mode-switch" checked={isDirect} onCheckedChange={setIsDirect} />
+              </div>
+            </>
+          )}
 
           <Separator />
 
@@ -359,10 +395,14 @@ export function ApplicationForm({
         onOpenChange={setIsConfirmOpen}
         formId={formId}
         isSubmitting={isSubmitting}
-        title="この内容で申請しますか？"
-        description="申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
-        submitLabel="この内容で申請する"
-        submittingLabel="申請中…"
+        title={isDirect ? "予約の直接作成" : "この内容で申請しますか？"}
+        description={
+          isDirect
+            ? "仮予約を経ずに最初から承認済みとして作成されます。メールは送信されません。"
+            : "申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
+        }
+        submitLabel={isDirect ? "承認済みで作成する" : "この内容で申請する"}
+        submittingLabel={isDirect ? "作成中…" : "申請中…"}
       >
         {/* 何を・いつ使うのかを先に大きく出す。取り違えがいちばん困る 2 つなので */}
         <div className="flex items-center gap-3 rounded-lg bg-muted/60 p-3">
@@ -390,7 +430,9 @@ export function ApplicationForm({
           <div className="flex items-baseline gap-2">
             <dt className="w-20 shrink-0 text-xs text-muted-foreground">状態</dt>
             <dd>
-              <ReservationStatusBadge status={ReservationStatus.Provisional} />
+              <ReservationStatusBadge
+                status={isDirect ? ReservationStatus.Approved : ReservationStatus.Provisional}
+              />
             </dd>
           </div>
         </dl>

@@ -23,15 +23,20 @@ export function CreatedPanel({
   facilityId,
   dateKey,
 }: Readonly<{ created: CreatedReservation; facilityId: string; dateKey: string }>) {
+  /** 事務局が承認済みで直接作成した（UC-008）か。仮予約の申請とは案内が変わる */
+  const isDirectCreated = created.status === ReservationStatus.Approved;
+
   return (
     <Card>
       <CardHeader className="gap-1">
         <CardTitle className="flex items-center gap-2 text-base">
           <CircleCheck aria-hidden className="size-4 text-primary" />
-          仮予約を申請しました
+          {isDirectCreated ? "承認済みの予約を作成しました" : "仮予約を申請しました"}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          事務局が承認するまでは、まだ利用できません。承認・却下の結果はメールでお知らせします。申請の内容と状態は、予約の詳細からも確認できます。
+          {isDirectCreated
+            ? "仮予約を経ずに最初から承認済みとして作成されました。メールは送信されません。予約の内容は、予約の詳細からも確認できます。"
+            : "事務局が承認するまでは、まだ利用できません。承認・却下の結果はメールでお知らせします。申請の内容と状態は、予約の詳細からも確認できます。"}
         </p>
       </CardHeader>
 
@@ -48,7 +53,7 @@ export function CreatedPanel({
           <div className="flex items-baseline gap-2">
             <dt className="w-20 shrink-0 text-xs text-muted-foreground">状態</dt>
             <dd>
-              <ReservationStatusBadge status={ReservationStatus.Provisional} />
+              <ReservationStatusBadge status={created.status} />
             </dd>
           </div>
         </dl>
@@ -59,7 +64,9 @@ export function CreatedPanel({
           </Button>
 
           <Button asChild variant="outline">
-            <Link to={toFormPath(facilityId, dateKey)}>続けて申請する</Link>
+            <Link to={toFormPath(facilityId, dateKey, isDirectCreated ? "direct" : undefined)}>
+              {isDirectCreated ? "続けて作成する" : "続けて申請する"}
+            </Link>
           </Button>
 
           <Button asChild variant="outline">

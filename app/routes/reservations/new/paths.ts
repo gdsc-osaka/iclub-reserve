@@ -10,8 +10,10 @@ export const toCalendarPath = (facilityId: string, dateKey: string): string =>
   `/availability?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
 
 /** この画面の URL を組み立てる。施設と日付を持ち回るので、リンクは必ずここを通す */
-export const toFormPath = (facilityId: string, dateKey: string): string =>
-  `/reservations/new?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
+export const toFormPath = (facilityId: string, dateKey: string, mode?: "direct"): string => {
+  const base = `/reservations/new?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
+  return mode === "direct" ? `${base}&mode=direct` : base;
+};
 
 /** 申請した予約の詳細（SCR-005）の URL を組み立てる */
 export const toDetailPath = (reservationId: string): string =>

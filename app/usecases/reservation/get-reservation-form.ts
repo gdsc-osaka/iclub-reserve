@@ -1,7 +1,10 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
+import { canAct } from "~/domain/membership";
 import {
+  ReservationAction,
   ReservationErrorCode,
+  reservationPermissions,
   type Reservation,
   type ReservationRepository,
 } from "~/domain/reservation";
@@ -132,6 +135,7 @@ const toCreatedReservation = (
     endAt: reservation.endAt,
     headCount: reservation.headCount,
     note: reservation.note,
+    status: reservation.status,
   };
 };
 
@@ -166,5 +170,10 @@ export const getReservationFormUseCase = (
       facilities: data.facilities,
       reservations: data.reservations.map((row) => toVisibleReservation(row, myGroupIds)),
       created: toCreatedReservation(created, data),
+      canCreateDirectly: canAct(
+        reservationPermissions,
+        { isStaff: args.isStaff, membership: null },
+        ReservationAction.CreateDirect,
+      ),
     };
   });
