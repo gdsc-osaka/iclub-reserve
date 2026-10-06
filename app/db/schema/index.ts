@@ -14,6 +14,7 @@
  * - `reservation.ts`: このアプリ独自のテーブル。こちらは手で書く。
  * - `mail.ts`: Transactional Outbox 用のテーブル（ADR-002）。
  * - `audit-log.ts`: 操作履歴テーブル（INFO-008 / BIZ-007）。追記専用の監査記録。
+ * - `staff.ts`: 事務局招待テーブル（INFO-009）。
  *
  * 参照する側は今までどおり `~/db/schema` から import すればよい。
  *
@@ -28,3 +29,4 @@ export * from "./group";
 export * from "./reservation";
 export * from "./mail";
 export * from "./audit-log";
+export * from "./staff";

@@ -126,8 +126,7 @@ function TargetDisplay({ item }: { readonly item: AuditLogSearchItem }) {
         </TargetLink>
       );
     case AuditLogTargetType.StaffRole:
-      // 事務局管理画面（SCR-019）はまだ無いので、リンクは置かない。SCR-019 を作るときに足す
-      return <TargetLink to={null}>事務局権限</TargetLink>;
+      return <TargetLink to="/staff/staff-members">事務局権限</TargetLink>;
   }
 }
 

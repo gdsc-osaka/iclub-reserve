@@ -6,6 +6,7 @@ import {
   History,
   LayoutDashboard,
   Settings2,
+  UserCog,
   Users,
   Wrench,
 } from "lucide-react";
@@ -135,6 +136,14 @@ export const staffNavItems: readonly NavItem[] = [
     icon: History,
     enabled: true,
     screen: "SCR-018",
+  },
+  {
+    id: "staff-members",
+    label: "事務局の管理",
+    to: "/staff/staff-members",
+    icon: UserCog,
+    enabled: true,
+    screen: "SCR-019",
   },
 ];
 
