@@ -39,9 +39,9 @@ boundary:
       name: "施設・設備を登録・編集する"
       actors: ["ACTOR-001"]
       screens: ["SCR-009"]
-      events: []
+      events: ["EVT-009", "EVT-011"]
       traces_to: ["BUC-015"]
-      description: "施設・設備の名称・写真・説明・Google Calendar IDを登録または編集する。登録時は有効/無効の初期状態を選べる。登録後の有効/無効は同じ編集画面から切り替えるが、無効化にはCOND-003の確認が伴うため、名称などの保存とは別の操作（UC-016）とする。"
+      description: "施設・設備の名称・写真・説明・Google Calendar IDを登録または編集する。登録時は有効/無効の初期状態を選べる。登録後の有効/無効は同じ編集画面から切り替えるが、無効化にはCOND-003の確認が伴うため、名称などの保存とは別の操作（UC-016）とする。Google Calendar IDには、共有のGoogleアカウントで作って一般公開し、Service Accountに「予定の変更」の権限を共有したカレンダーのIDを入れる（REQ-026）。保存時に書き込めることを確かめる（COND-025）。名称を変えたときはEVT-011（Calendar更新）、Google Calendar IDを設定・変更したときはEVT-009（Calendar登録）で、その施設の承認済み予約の予定に反映する（COND-024）。"
     - id: "UC-016"
       name: "施設・設備を無効化・再有効化する"
       actors: ["ACTOR-001"]
@@ -53,7 +53,7 @@ boundary:
   screens:
     - id: "SCR-009"
       name: "施設管理画面"
-      description: "事務局が施設・設備の登録・編集・無効化・再有効化・一覧確認を行う画面。施設ごとのGoogle Calendar IDの設定も本画面で行う。一覧では各施設・設備の有効/無効を表示するだけで、切り替えは各施設・設備の編集画面で行う（UC-016）。カレンダー購読URLの確認・一覧はSCR-010で提供する。"
+      description: "事務局が施設・設備の登録・編集・無効化・再有効化・一覧確認を行う画面。施設ごとのGoogle Calendar IDの設定も本画面で行う（COND-025）。一覧では各施設・設備の有効/無効を表示するだけで、切り替えは各施設・設備の編集画面で行う（UC-016）。カレンダー購読URLの確認・一覧はSCR-010で提供する。"
       information: ["INFO-002"]
 
   events: []
@@ -66,6 +66,10 @@ system:
       name: "施設無効化の前提条件"
       description: "無効化対象施設の将来の予約（仮予約・承認済み）がすべて終了状態（取り消し済み・却下済み・キャンセル済み）であること。ただし start_at が現在時刻以前かつ end_at が現在時刻以降の承認済み予約（現在使用中）は対象外とする。なお、start_at が現在時刻以前であっても end_at が未来の仮予約は無効化を阻止する。"
       traces_to: ["UC-016"]
+    - id: "COND-025"
+      name: "Google Calendar IDの書き込み確認"
+      description: "施設・設備のGoogle Calendar IDを設定・変更して保存するときは、システム（Google Service Account）がそのカレンダーに予定を書き込めることを確かめる。書き込めない場合（IDの打ち間違い、Service Accountへの共有のし忘れなど）は保存せず、確かめるべきことを示す。IDを変えずに保存する場合と、IDを空にする場合は確かめない。"
+      traces_to: ["UC-015"]
   variations: []
 ---
 
@@ -104,6 +108,28 @@ graph LR
 ```
 
 ## 業務フロー
+
+### BUC-015: 施設・設備の登録・編集
+
+```mermaid
+sequenceDiagram
+    actor 事務局
+    participant システム
+    participant GC as Google Calendar
+
+    事務局->>システム: 施設管理画面で名称・写真・説明・Google Calendar ID を入力して保存
+    opt Google Calendar ID を設定・変更した
+        システム->>GC: 予定を書き込めるか確かめる（COND-025）
+    end
+    alt 書き込めない
+        システム-->>事務局: エラー表示（保存しない。ID と Service Account への共有を確かめるよう促す）
+    else 書き込める、または ID を変えていない
+        システム-->>事務局: 保存完了
+        opt 名称または Google Calendar ID を変えた
+            システム->>GC: 承認済み予約の予定に反映（名称は EVT-011、ID は EVT-009。COND-024）
+        end
+    end
+```
 
 ### BUC-016: 施設・設備の無効化・再有効化
 

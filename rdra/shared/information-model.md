@@ -109,7 +109,7 @@ entities:
       - name: "google_calendar_id"
         type: "string"
         required: false
-        description: "施設に紐づくGoogle CalendarのID。Service Accountで管理。未設定の場合はカレンダー連携をスキップする。"
+        description: "施設に紐づくGoogle CalendarのID。カレンダーは共有のGoogleアカウントで作って一般公開し、Service Accountには予定の書き込みだけを許す（REQ-026）。設定・変更時はService Accountが書き込めることを確かめる（COND-025）。未設定の場合はカレンダー連携をスキップする。"
       - name: "calendar_url"
         type: "string"
         required: false
@@ -734,6 +734,8 @@ erDiagram
 ```
 
 INFO-008 の actor_id・group_id・target_id は論理的な参照であり、外部キー制約を張らない。記録の対象や操作者が後から消えても、記録は残す必要があるためである。
+
+INFO-001 には Google Calendar の予定の ID を持たない。予定の ID は予約の ID から毎回同じ値を導いて使う。同期は予約の今の状態に合わせるため（COND-024）、どの予定が予約に当たるかを予約の ID だけで決められれば足りる。
 
 ## 予約の開示範囲（COND-008）
 
