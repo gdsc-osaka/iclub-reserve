@@ -28,6 +28,11 @@ const createTestDb = () => {
     }
   }
 
+  /*
+   * better-sqlite3 版の Drizzle には `db.batch()` が無いので、渡した文を順に流すだけのものを足す。
+   * D1 の batch と違ってトランザクションにはならないため、招待とメールが不可分に書かれることは
+   * ここでは確かめられない。不可分であることは、1 回の db.batch に入れているという書き方で担保している。
+   */
   const batch = (queries: readonly PromiseLike<unknown>[]) => {
     return Promise.all(queries);
   };
@@ -37,7 +42,7 @@ const createTestDb = () => {
 };
 
 describe("Staff Repositories & Query (SQLite)", () => {
-  it("招待と outbox が同じ batch で入る", async () => {
+  it("招待の行と outbox のメールが入り、enqueuedMailIds が返る", async () => {
     const { sqlite, db } = createTestDb();
     // 招待者を登録
     sqlite
