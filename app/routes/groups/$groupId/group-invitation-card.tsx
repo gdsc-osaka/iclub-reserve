@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Separator } from "~/components/ui/separator";
 import type { GroupInvitationList } from "~/query/group/group-invitation-list";
 import { InvitationCancelDialog } from "./invitation-cancel-dialog";
-import { formatRemainingTime } from "./invitation-expiry";
+import { formatRemainingTime } from "~/lib/invitation-expiry";
 import { InvitationForm, type GroupInviteFormState } from "./invitation-form";
 
 /**

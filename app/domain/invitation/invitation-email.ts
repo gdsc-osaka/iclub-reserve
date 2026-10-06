@@ -26,6 +26,19 @@ const invalidEmail = (message: string, userMessage: string): GroupError => ({
 });
 
 /**
+ * 招待先メールアドレスの誤り。どのドメインのエラーにもまだ詰め替えていない形。
+ *
+ * 団体の招待と事務局の招待で検証の中身は同じだが、返すエラーの型が違う。
+ * 検証をここ 1 か所に置き、それぞれのドメインで自分のエラーに詰め替える。
+ */
+export interface InviteeEmailProblem {
+  /** ログに残す説明。入力されたアドレスは埋め込まない（ADR-004 決定 9） */
+  readonly message: string;
+  /** 入力欄の下に出す、直し方の分かる文言 */
+  readonly userMessage: string;
+}
+
+/**
  * 突き合わせ用にメールアドレスの形をそろえる。
  *
  * 招待は保存の時点で小文字に正規化しているので、承諾のときに突き合わせる
@@ -36,7 +49,7 @@ const invalidEmail = (message: string, userMessage: string): GroupError => ({
 export const normalizeInvitationEmail = (raw: string): string => raw.trim().toLowerCase();
 
 /**
- * 招待先メールアドレスの入力を検証・正規化する純粋関数。
+ * 招待先メールアドレスの入力を検証・正規化する純粋関数（ドメイン非依存）。
  *
  * 【形式の検証を createEmailAddress に任せる理由】
  * `isAllowedEmailAddress` が見ているのは最後の "@" より後のドメイン部だけなので、
@@ -63,66 +76,64 @@ export const normalizeInvitationEmail = (raw: string): string => raw.trim().toLo
  * createEmailAddress の失敗は「形式が不正」の 1 種類しか区別できず、
  * 「空白が入っている」「長すぎる」という直し方の分かる案内を出せないため。
  */
-export const validateInvitationEmail = (
+export const validateInviteeEmail = (
   raw: string | null | undefined,
-): Result<string, GroupError> => {
+): Result<string, InviteeEmailProblem> => {
   if (raw === null || raw === undefined) {
-    return err(
-      invalidEmail(
-        "招待先のメールアドレスが送られていない。",
-        "招待するメールアドレスを入力してください。",
-      ),
-    );
+    return err({
+      message: "招待先のメールアドレスが送られていない。",
+      userMessage: "招待するメールアドレスを入力してください。",
+    });
   }
 
   const trimmed = raw.trim();
 
   if (trimmed === "") {
-    return err(
-      invalidEmail(
-        "招待先のメールアドレスが空である。",
-        "招待するメールアドレスを入力してください。",
-      ),
-    );
+    return err({
+      message: "招待先のメールアドレスが空である。",
+      userMessage: "招待するメールアドレスを入力してください。",
+    });
   }
 
   // trim 後に空白や改行・タブが残っている場合は、打ち間違いや複数入力の可能性があるため禁止する
   if (/\s/.test(trimmed)) {
-    return err(
-      invalidEmail(
-        "招待先のメールアドレスに空白か改行が含まれている。",
-        "メールアドレスに空白や改行は使えません。",
-      ),
-    );
+    return err({
+      message: "招待先のメールアドレスに空白か改行が含まれている。",
+      userMessage: "メールアドレスに空白や改行は使えません。",
+    });
   }
 
   // 文字数の数え方は GROUP_NAME_MAX_LENGTH とそろえて String.prototype.length を使用
   if (trimmed.length > INVITATION_EMAIL_MAX_LENGTH) {
-    return err(
-      invalidEmail(
-        `招待先のメールアドレスが ${INVITATION_EMAIL_MAX_LENGTH} 文字を超えている。`,
-        "メールアドレスが長すぎます。",
-      ),
-    );
+    return err({
+      message: `招待先のメールアドレスが ${INVITATION_EMAIL_MAX_LENGTH} 文字を超えている。`,
+      userMessage: "メールアドレスが長すぎます。",
+    });
   }
 
   if (createEmailAddress(trimmed).isErr()) {
-    return err(
-      invalidEmail(
-        "招待先のメールアドレスの形式が正しくない。",
-        "メールアドレスの形式が正しくありません。",
-      ),
-    );
+    return err({
+      message: "招待先のメールアドレスの形式が正しくない。",
+      userMessage: "メールアドレスの形式が正しくありません。",
+    });
   }
 
   if (!isAllowedEmailAddress(trimmed)) {
-    return err(
-      invalidEmail(
-        "招待先のメールアドレスが許可されたドメインではない。",
-        `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスにのみ招待を送れます。`,
-      ),
-    );
+    return err({
+      message: "招待先のメールアドレスが許可されたドメインではない。",
+      userMessage: `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスにのみ招待を送れます。`,
+    });
   }
 
   return ok(normalizeInvitationEmail(trimmed));
 };
+
+/**
+ * 団体招待先メールアドレスの入力を検証・正規化する。
+ *
+ * 共通の検証処理（`validateInviteeEmail`）を通し、GroupError に詰め替えて返す。
+ */
+export const validateInvitationEmail = (
+  raw: string | null | undefined,
+): Result<string, GroupError> =>
+  validateInviteeEmail(raw).mapErr((problem) => invalidEmail(problem.message, problem.userMessage));
