@@ -12,6 +12,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { InvitationIntent } from "./invitation-intent";
 
 /**
  * 招待辞退確認ダイアログ。
@@ -26,15 +27,18 @@ import { Button } from "~/components/ui/button";
  */
 export function InvitationRejectDialog({
   trigger,
+  description,
 }: Readonly<{
   trigger: ReactNode;
+  description: string;
 }>) {
   const [open, setOpen] = useState(false);
   const navigation = useNavigation();
 
   // この画面には招待が 1 件しかないため、intent だけ見て「処理中」を判定する
   const isSubmitting =
-    navigation.state === "submitting" && navigation.formData?.get("intent") === "reject";
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === InvitationIntent.Reject;
 
   /*
    * 送信が終わったら、このダイアログを自分で閉じる。
@@ -61,13 +65,11 @@ export function InvitationRejectDialog({
         <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
         <AlertDialogContent className="max-w-md">
           <Form method="post" className="flex flex-col gap-4">
-            <input type="hidden" name="intent" value="reject" />
+            <input type="hidden" name="intent" value={InvitationIntent.Reject} />
 
             <AlertDialogHeader>
               <AlertDialogTitle>招待を辞退しますか？</AlertDialogTitle>
-              <AlertDialogDescription>
-                この招待は使えなくなり、あとから承諾することはできません。参加する場合は、団体の管理者に招待し直してもらってください。
-              </AlertDialogDescription>
+              <AlertDialogDescription>{description}</AlertDialogDescription>
             </AlertDialogHeader>
 
             <AlertDialogFooter className="mt-2">
@@ -85,7 +87,7 @@ export function InvitationRejectDialog({
       {/* JavaScript が無効な環境向けのフォールバック */}
       <noscript>
         <Form method="post" className="inline-flex items-center gap-2">
-          <input type="hidden" name="intent" value="reject" />
+          <input type="hidden" name="intent" value={InvitationIntent.Reject} />
           <Button type="submit" variant="destructive" size="sm" className="text-xs">
             辞退する
           </Button>

@@ -46,6 +46,50 @@ export const invitationAcceptPath = (invitationId: string): string =>
   `/invitations/${invitationId}`;
 
 /**
+ * 招待を承諾・辞退できない理由。
+ *
+ * どれに当たっても利用者への応答は同じ 404 になる（COND-011 / COND-015）。
+ * 分けているのは、ユースケースが宛先違いだけを `NotVisible` として返し、ログで見分けるため。
+ */
+export const InvitationUnavailableReason = {
+  NotPending: "not_pending",
+  Expired: "expired",
+  NotAddressee: "not_addressee",
+} as const;
+export type InvitationUnavailableReason =
+  (typeof InvitationUnavailableReason)[keyof typeof InvitationUnavailableReason];
+
+/**
+ * 招待を承諾・辞退できない理由を返す純粋関数。できるなら null を返す。
+ *
+ * 団体の招待（UC-022）と事務局招待（UC-027）が、同じ判定を書き写さずに済むよう 1 か所にまとめている。
+ * 判定の順は 状態 → 期限 → 宛先。宛先を最後にするのは、宛先違い（NotVisible）を
+ * 「それ以外は扱える招待」のときだけにするため。期限ちょうどは切れている扱いにする。
+ *
+ * @param actorEmail ログイン中の人のメールアドレス。`normalizeInvitationEmail` を通したものを渡すこと
+ */
+export const invitationUnavailableReason = (
+  invitation: {
+    readonly status: InvitationStatus;
+    readonly expiresAt: Date;
+    readonly email: string;
+  },
+  actorEmail: string,
+  now: Date,
+): InvitationUnavailableReason | null => {
+  if (invitation.status !== InvitationStatus.Pending) {
+    return InvitationUnavailableReason.NotPending;
+  }
+  if (invitation.expiresAt.getTime() <= now.getTime()) {
+    return InvitationUnavailableReason.Expired;
+  }
+  if (invitation.email !== actorEmail) {
+    return InvitationUnavailableReason.NotAddressee;
+  }
+  return null;
+};
+
+/**
  * 招待を表すドメインモデル。
  */
 export interface Invitation {
