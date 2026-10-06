@@ -208,6 +208,23 @@ export const seedGroupInvitations: (typeof schema.groupInvitationTable.$inferIns
 ];
 
 /**
+ * 事務局招待のシードデータ（SCR-019 の動作確認用）。
+ *
+ * 事務局管理画面（SCR-019）の承諾待ち一覧が空にならないようにするためのもの。
+ * 宛先は既存のシード利用者と重ならない osaka-u.ac.jp のアドレスにする。
+ */
+export const seedStaffInvitations: (typeof schema.staffInvitationTable.$inferInsert)[] = [
+  {
+    id: "staff_inv_seed_01",
+    email: "substaff@osaka-u.ac.jp",
+    status: InvitationStatus.Pending,
+    expiresAt: invitationExpiresAt(new Date()),
+    createdAt: new Date(),
+    inviterId: "usr_staff_01",
+  },
+];
+
+/**
  * サンプル予約のシードデータ
  *
  * 日時は「今週の月曜」を起点に組み立てている。
@@ -561,7 +578,7 @@ export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
     },
   },
   {
-    // 事務局招待（INFO-009）はまだテーブルが無いので、対象の ID は記録の中にしか無い
+    // 事務局招待（INFO-009）への招待操作の履歴
     id: "log_seed_staff_role_invite",
     occurredAt: seedNow,
     actorId: "usr_staff_01",

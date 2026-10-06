@@ -27,6 +27,7 @@ type SessionRow = typeof schema.session.$inferSelect;
 type PasskeyRow = typeof schema.passkey.$inferSelect;
 type AuditLogRow = typeof schema.auditLogTable.$inferSelect;
 type ReservationMessageRow = typeof schema.reservationMessageTable.$inferSelect;
+type StaffInvitationRow = typeof schema.staffInvitationTable.$inferSelect;
 
 /** 呼ぶたびに違う、短い印 */
 export const uniqueSuffix = (): string => randomUUID().slice(0, 8);
@@ -127,6 +128,25 @@ export async function createInvitation(
       role: MembershipRole.Member,
       status: InvitationStatus.Pending,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ...values,
+    })
+    .returning();
+  return row;
+}
+
+/** 事務局への招待を作る。既定では承諾待ちで、48 時間後に期限が切れる */
+export async function createStaffInvitation(
+  db: E2eDb,
+  values: Pick<typeof schema.staffInvitationTable.$inferInsert, "email" | "inviterId"> &
+    Partial<typeof schema.staffInvitationTable.$inferInsert>,
+): Promise<StaffInvitationRow> {
+  const [row] = await db
+    .insert(schema.staffInvitationTable)
+    .values({
+      id: `sinv_e2e_${uniqueSuffix()}`,
+      status: InvitationStatus.Pending,
+      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      createdAt: new Date(),
       ...values,
     })
     .returning();
