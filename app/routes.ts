@@ -36,6 +36,11 @@ export default [
     route("groups/:groupId", "routes/groups/$groupId/route.tsx"),
     route("invitations/:invitationId", "routes/invitations/$invitationId/route.tsx"),
     /*
+     * 事務局招待の承諾（SCR-020）。
+     * 招待される人はまだ事務局ではないため /staff/ の下には置かない。
+     */
+    route("staff-invitations/:invitationId", "routes/staff-invitations/$invitationId/route.tsx"),
+    /*
      * 施設管理（SCR-009）。
      * 事務局スタッフ限定の画面。登録・編集・無効化を扱う。
      * `new` は `:facilityId` より具体的なので、先に配置する。

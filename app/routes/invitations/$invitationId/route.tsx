@@ -1,17 +1,14 @@
 import { env } from "cloudflare:workers";
-import { Form, isRouteErrorResponse, Link, redirect, useNavigation } from "react-router";
+import { redirect } from "react-router";
 
 import { MembershipRoleBadge } from "~/components/group/membership-role-badge";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import { Button } from "~/components/ui/button";
+import { InvitationDetail } from "~/components/invitation/invitation-detail";
+import { InvitationErrorCard } from "~/components/invitation/invitation-error-card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
+  InvitationIntent,
+  type InvitationActionData,
+} from "~/components/invitation/invitation-intent";
+import { InvitationResponseCard } from "~/components/invitation/invitation-response-card";
 import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
@@ -26,12 +23,6 @@ import { getInvitationUseCase } from "~/usecases/group/get-invitation";
 import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
 
 import type { Route } from "./+types/route";
-import { InvitationRejectDialog } from "./invitation-reject-dialog";
-
-/** この画面には入力欄が無いので、誤りはすべてフォームの上に出す */
-export interface InvitationActionData {
-  readonly formError: string | null;
-}
 
 export function meta(): Route.MetaDescriptors {
   return [{ title: "団体への招待 | iclub-reserve" }];
@@ -86,7 +77,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const now = new Date();
 
   // 1. 承諾
-  if (intent === "accept") {
+  if (intent === InvitationIntent.Accept) {
     const result = await acceptInvitationUseCase(
       {
         invitationRepository: createInvitationRepository(db),
@@ -116,7 +107,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   // 2. 辞退
-  if (intent === "reject") {
+  if (intent === InvitationIntent.Reject) {
     const result = await rejectInvitationUseCase(
       {
         invitationRepository: createInvitationRepository(db),
@@ -151,70 +142,31 @@ export async function action({ request, params, context }: Route.ActionArgs) {
  */
 export default function AcceptInvitationRoute({ loaderData, actionData }: Route.ComponentProps) {
   const { invitation } = loaderData;
-  const navigation = useNavigation();
-  const isAccepting =
-    navigation.state === "submitting" && navigation.formData?.get("intent") === "accept";
 
   return (
-    <main className="mx-auto w-full max-w-xl px-4 py-10 md:py-16">
-      <Card className="[--card-spacing:--spacing(6)]">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-            団体への招待
-          </CardTitle>
-          <CardDescription>
-            以下の団体からメンバーとしての招待が届いています。内容を確認し、承諾または辞退を選択してください。
-          </CardDescription>
-        </CardHeader>
+    <InvitationResponseCard
+      title="団体への招待"
+      description="以下の団体からメンバーとしての招待が届いています。内容を確認し、承諾または辞退を選択してください。"
+      formError={actionData?.formError}
+      acceptLabel="承諾して参加する"
+      rejectDescription="この招待は使えなくなり、あとから承諾することはできません。参加する場合は、団体の管理者に招待し直してもらってください。"
+    >
+      <InvitationDetail label="招待元の団体">
+        <p className="mt-1 text-lg font-semibold text-foreground">{invitation.groupName}</p>
+      </InvitationDetail>
 
-        <CardContent className="space-y-6">
-          {actionData?.formError && (
-            <Alert variant="destructive">
-              <AlertTitle>エラー</AlertTitle>
-              <AlertDescription>{actionData.formError}</AlertDescription>
-            </Alert>
-          )}
+      <InvitationDetail label="割り当てられる役割">
+        <div className="mt-1">
+          <MembershipRoleBadge role={invitation.role} />
+        </div>
+      </InvitationDetail>
 
-          <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">招待元の団体</p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{invitation.groupName}</p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">割り当てられる役割</p>
-              <div className="mt-1">
-                <MembershipRoleBadge role={invitation.role} />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">承諾の有効期限</p>
-              <p className="mt-1 text-sm text-foreground">
-                {formatDateTime(new Date(invitation.expiresAt))}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-
-        <CardFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <InvitationRejectDialog
-            trigger={
-              <Button type="button" variant="outline" className="w-full sm:w-auto">
-                辞退する
-              </Button>
-            }
-          />
-
-          <Form method="post" className="w-full sm:w-auto">
-            <input type="hidden" name="intent" value="accept" />
-            <Button type="submit" disabled={isAccepting} className="w-full sm:w-auto">
-              {isAccepting ? "処理中…" : "承諾して参加する"}
-            </Button>
-          </Form>
-        </CardFooter>
-      </Card>
-    </main>
+      <InvitationDetail label="承諾の有効期限">
+        <p className="mt-1 text-sm text-foreground">
+          {formatDateTime(new Date(invitation.expiresAt))}
+        </p>
+      </InvitationDetail>
+    </InvitationResponseCard>
   );
 }
 
@@ -225,28 +177,5 @@ export default function AcceptInvitationRoute({ loaderData, actionData }: Route.
  * すべて同じ文言で案内する。理由を分けると、招待 ID を総当たりして特定の招待の実在を推測できてしまうため。
  */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const isNotFound = isRouteErrorResponse(error) && error.status === 404;
-
-  return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-10">
-      <Card className="[--card-spacing:--spacing(6)]">
-        <CardHeader>
-          <CardTitle className="text-xl">
-            {isNotFound ? "招待が見つかりません" : "招待を表示できません"}
-          </CardTitle>
-          <CardDescription>
-            {isNotFound
-              ? "この招待は期限切れ・取り消し済みか、別のメールアドレス宛ての可能性があります。招待メールの宛先と同じメールアドレスでログインしているか、ご確認ください。"
-              : "時間をおいて、もう一度お試しください。"}
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent>
-          <Link to="/" className="text-sm text-primary underline underline-offset-4">
-            ホームへ戻る
-          </Link>
-        </CardContent>
-      </Card>
-    </main>
-  );
+  return <InvitationErrorCard error={error} />;
 }

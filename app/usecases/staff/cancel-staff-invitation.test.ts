@@ -22,6 +22,9 @@ describe("cancelStaffInvitationUseCase", () => {
         passedId = id;
         return okAsync(canceledCount);
       },
+      findById: () => okAsync(null),
+      accept: () => okAsync(false),
+      reject: () => okAsync(0),
     };
 
     return {

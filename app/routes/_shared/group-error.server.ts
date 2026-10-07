@@ -8,6 +8,7 @@ import {
   type ErrorTables,
   type ErrorView,
 } from "./error-response.server";
+import { invitationNotFoundView, invitationNotVisibleView } from "./invitation-error-view.server";
 
 /**
  * 団体が無いときと、見られないときに出す文言。
@@ -104,13 +105,6 @@ export const groupActionErrors = <K extends string = never>(
 ): ActionErrors<NoInfer<K>> => toActionErrors(groupErrorTables, context, error, fieldOf);
 
 /**
- * 招待が無いときと、宛先が本人ではないときに出す文言。
- *
- * 2 つを必ず同じにするため、1 か所にだけ書く（COND-011）。
- */
-const INVITATION_NOT_FOUND_TEXT = "招待が見つかりません。";
-
-/**
  * 招待の承諾画面（SCR-016）で使う表。招待の 2 行だけが `groupErrorView` と違う。
  *
  * この画面では、招待は URL が指すもの（画面そのもの）である。無ければ画面ごと 404 にする。
@@ -122,9 +116,9 @@ const INVITATION_NOT_FOUND_TEXT = "招待が見つかりません。";
  */
 export const invitationErrorView: Record<GroupErrorCode, ErrorView> = {
   ...groupErrorView,
-  [GroupErrorCode.InvitationNotFound]: { message: INVITATION_NOT_FOUND_TEXT },
+  [GroupErrorCode.InvitationNotFound]: invitationNotFoundView,
   // COND-011: 宛先が違うことを「無い」として答える。既定の 403 を意図的に破っている
-  [GroupErrorCode.InvitationNotVisible]: { status: 404, message: INVITATION_NOT_FOUND_TEXT },
+  [GroupErrorCode.InvitationNotVisible]: invitationNotVisibleView,
 };
 
 const invitationErrorTables: ErrorTables<GroupErrorCode> = {

@@ -2,7 +2,11 @@ import { errAsync, type ResultAsync } from "neverthrow";
 
 import type { GroupError, GroupRepository } from "~/domain/group";
 import { GroupErrorCode } from "~/domain/group";
-import { InvitationStatus, type InvitationRepository } from "~/domain/invitation";
+import {
+  InvitationUnavailableReason,
+  invitationUnavailableReason,
+  type InvitationRepository,
+} from "~/domain/invitation";
 import { normalizeInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { MembershipRole } from "~/domain/membership";
 import { invitationNotFound, invitationNotVisible } from "./_shared/invitation-visibility";
@@ -40,14 +44,14 @@ export interface InvitationView {
  * 【処理の流れと設計上の配慮】
  * 1. invitationId を trim し、空なら DB を引かずに invitationNotFound() を返す。
  * 2. findById で招待を引く。null なら invitationNotFound() を返す。
- * 3. status !== InvitationStatus.Pending なら invitationNotFound() を返す。
- * 4. expiresAt.getTime() <= now.getTime() なら invitationNotFound() を返す（期限ちょうどは切れている扱い）。
- * 5. invitation.email !== normalizeInvitationEmail(args.actorEmail) なら invitationNotVisible() を返す。
- *    利用者への応答は 1〜4 と同じ 404 になるが、揃えるのは画面の側で、ここでは宛先違いとして正直に返す（ADR-004 決定 4）。
+ * 3. 状態・期限・宛先の不整合を invitationUnavailableReason で判定する。
+ *    - 承諾待ち以外の状態、有効期限切れ（期限ちょうどは切れている扱い）なら invitationNotFound() を返す。
+ *    - 宛先違いなら invitationNotVisible() を返す。
+ *    利用者への応答はどちらも同じ 404 になるが、揃えるのは画面の側で、ここでは宛先違いとして正直に返す（ADR-004 決定 4）。
  *    ※宛先照合を団体取得より先に行う理由: 宛先が違う人に対して団体を引きに行くと、
  *    存在する団体のときだけ DB 往復が 1 回増え、応答時間の差から団体の存在を推測されてしまうため（COND-011 存在の秘匿）。
- * 6. ここまで通った人だけが COND-011 の例外（招待を提示した正規の受信者）にあたる。groupRepository.findById で団体名を取得する。
- * 7. 団体の取得が NotFound だったときは invitationNotFound() に畳む。
+ * 4. ここまで通った人だけが COND-011 の例外（招待を提示した正規の受信者）にあたる。groupRepository.findById で団体名を取得する。
+ * 5. 団体の取得が NotFound だったときは invitationNotFound() に畳む。
  *    DatabaseError はそのまま返す（システム障害を 404 に潰すと監視に出ず、原因追跡ができなくなるため）。
  */
 export const getInvitationUseCase = (
@@ -67,20 +71,24 @@ export const getInvitationUseCase = (
       return errAsync(invitationNotFound(`招待 ${invitationId} が見つからない。`));
     }
 
-    // 3. 承諾待ち以外の状態は不可
-    if (invitation.status !== InvitationStatus.Pending) {
+    // 3. 状態・期限・宛先を判定
+    const unavailableReason = invitationUnavailableReason(
+      invitation,
+      normalizeInvitationEmail(args.actorEmail),
+      args.now,
+    );
+
+    if (unavailableReason === InvitationUnavailableReason.NotPending) {
       return errAsync(
         invitationNotFound(`招待 ${invitation.id} は承諾待ちではない (${invitation.status})。`),
       );
     }
 
-    // 4. 有効期限切れ（期限ちょうどは切れている扱い）
-    if (invitation.expiresAt.getTime() <= args.now.getTime()) {
+    if (unavailableReason === InvitationUnavailableReason.Expired) {
       return errAsync(invitationNotFound(`招待 ${invitation.id} は有効期限が切れている。`));
     }
 
-    // 5. 宛先の突き合わせ（宛先が違う人には団体を引きに行かない）
-    if (invitation.email !== normalizeInvitationEmail(args.actorEmail)) {
+    if (unavailableReason === InvitationUnavailableReason.NotAddressee) {
       return errAsync(invitationNotVisible());
     }
 
