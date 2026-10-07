@@ -1,5 +1,6 @@
 import type { ResultAsync } from "neverthrow";
 
+import type { AuditLogEntryView } from "~/domain/audit-log";
 import type { ReservationStatus } from "~/domain/reservation";
 import type { QueryError } from "../error";
 import type { ReservationMessageView } from "./reservation-message-list";
@@ -71,6 +72,15 @@ export interface ReservationDetailFull extends ReservationDetailSummary {
   readonly hasProvisionalOverlap: boolean;
 }
 
+/** 予約詳細画面の操作履歴情報 */
+export interface ReservationAuditLogsView {
+  readonly items: readonly AuditLogEntryView[];
+  readonly hasNextPage: boolean;
+  readonly page: number;
+  readonly userNames: Readonly<Record<string, string>>;
+  readonly facilityNames: Readonly<Record<string, string>>;
+}
+
 /**
  * 予約詳細を、見ている人に見せてよい形にしたもの（COND-008）。
  *
@@ -86,6 +96,7 @@ export type ReservationDetailView =
       readonly canViewDetail: true;
       readonly reservation: ReservationDetailFull;
       readonly messages: readonly ReservationMessageView[];
+      readonly auditLogs: ReservationAuditLogsView;
     };
 
 /**

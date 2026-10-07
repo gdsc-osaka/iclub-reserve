@@ -1,5 +1,6 @@
-import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, safeTry, ResultAsync } from "neverthrow";
 
+import { toAuditLogEntryView } from "~/domain/audit-log";
 import type { Actor, MembershipRepository } from "~/domain/membership";
 import {
   ReservationAction,
@@ -10,7 +11,9 @@ import { canChangeReservationContent } from "~/domain/reservation/edit";
 import { toMessageSenderLabel } from "~/domain/reservation/message";
 import { allowedTransitions, type ReservationTransition } from "~/domain/reservation/transition";
 import { canViewReservationDetail } from "~/domain/reservation/visibility";
+import type { ReservationAuditLogListQuery } from "~/query/audit-log/reservation-audit-log-list";
 import type {
+  ReservationAuditLogsView,
   ReservationDetailQuery,
   ReservationDetailRow,
   ReservationDetailView,
@@ -31,6 +34,8 @@ export interface GetReservationDeps {
   readonly membershipRepository: MembershipRepository;
   /** 詳細を見られる人（COND-008 の (1)）にだけ、メッセージ（INFO-004）を読むために使う */
   readonly reservationMessageListQuery: ReservationMessageListQuery;
+  /** 詳細を見られる人（COND-008 の (1)）にだけ、操作履歴（INFO-008）を読むために使う */
+  readonly reservationAuditLogListQuery: ReservationAuditLogListQuery;
 }
 
 export interface GetReservationArgs {
@@ -41,6 +46,8 @@ export interface GetReservationArgs {
   readonly isStaff: boolean;
   /** 「開始日時を過ぎたか」の基準。変更できるか（canEdit）の判定に使う */
   readonly now: Date;
+  /** 操作履歴の取得ページ番号（1 以上の整数） */
+  readonly auditLogPage: number;
 }
 
 export interface ReservationDetailResult {
@@ -75,12 +82,15 @@ export const toReservationMessageView = (
  * Summary の項目だけを新しいオブジェクトに詰め替えて渡す。
  * どちらの形にも groupId は含めない。
  *
- * @param messages 詳細を見られる人の形にだけ入れる。見られない人の形には、受け取っても入れない
+ * @param details 詳細を見られる人の形にだけ入れる。見られない人の形には、受け取っても入れない
  */
 export const toReservationDetailView = (
   row: ReservationDetailRow,
   actor: Actor,
-  messages: readonly ReservationMessageView[],
+  details: {
+    readonly messages: readonly ReservationMessageView[];
+    readonly auditLogs: ReservationAuditLogsView;
+  },
 ): ReservationDetailView =>
   canViewReservationDetail(actor)
     ? {
@@ -100,7 +110,8 @@ export const toReservationDetailView = (
           hasApprovedOverlap: row.hasApprovedOverlap,
           hasProvisionalOverlap: row.hasProvisionalOverlap,
         },
-        messages,
+        messages: details.messages,
+        auditLogs: details.auditLogs,
       }
     : {
         canViewDetail: false,
@@ -115,11 +126,11 @@ export const toReservationDetailView = (
       };
 
 /**
- * 予約 1 件を、見ている人に見せてよい範囲で取得するユースケース（SCR-005 / COND-008）。
+ * 予約 1 件を、見ている人に見せてよい範囲で取得するユースケース（SCR-005 / COND-008 / COND-012）。
  *
  * 読み取り専用 Query（{@link ReservationDetailQuery}）で名前や重なり情報まで取得し、
  * 返すのは判別可能なユニオン（{@link ReservationDetailView}）と、実行可能な状態変更操作の一覧。
- * 詳細を見られない相手には使用人数・備考・却下/キャンセル理由・作成者・メッセージを型ごと落として渡す。
+ * 詳細を見られない相手には使用人数・備考・却下/キャンセル理由・作成者・メッセージ・操作履歴を型ごと落として渡す。
  *
  * 【所属を引くのを予約より後にしている理由】
  * どの団体の予約かは、予約を読むまで分からない。団体を引数で受け取って先に
@@ -172,25 +183,52 @@ export const getReservationUseCase = (
     yield* ensureCanViewReservation(actor);
 
     /*
-     * 予約詳細を読んだ後に別の往復でメッセージを読む理由：
-     * 誰が見ているか（自団体メンバーか事務局か）が分かるまで、メッセージを読んでよいか決められないため。
-     * 詳細を見られない人（他団体の人）のときは読まない（読まなければ漏れない）。
+     * 予約詳細を読んだ後に別の往復でメッセージと操作履歴を並行に読む理由：
+     * 誰が見ているか（自団体メンバーか事務局か）が分かるまで、メッセージや操作履歴を読んでよいか決められないため。
+     * 詳細を見られない人（他団体の人）のときは両方とも読まない（読まなければ漏れない。COND-008 / COND-012）。
      */
-    const messages = canViewReservationDetail(actor)
-      ? yield* deps.reservationMessageListQuery
-          .listByReservationId(id)
-          .mapErr((error): ReservationError => ({
-            code: ReservationErrorCode.DatabaseError,
-            message: "メッセージを読み取れなかった。",
-            cause: error,
-          }))
-          .map((messageRows) =>
-            messageRows.map((msgRow) => toReservationMessageView(msgRow, actor, args.actorUserId)),
-          )
-      : [];
+    const { messages, auditLogs } = canViewReservationDetail(actor)
+      ? yield* ResultAsync.combine([
+          deps.reservationMessageListQuery
+            .listByReservationId(id)
+            .mapErr((error): ReservationError => ({
+              code: ReservationErrorCode.DatabaseError,
+              message: "メッセージを読み取れなかった。",
+              cause: error,
+            }))
+            .map((messageRows) =>
+              messageRows.map((msgRow) =>
+                toReservationMessageView(msgRow, actor, args.actorUserId),
+              ),
+            ),
+          deps.reservationAuditLogListQuery
+            .findByReservationId(id, args.auditLogPage)
+            .mapErr((error): ReservationError => ({
+              code: ReservationErrorCode.DatabaseError,
+              message: "操作履歴を読み取れなかった。",
+              cause: error,
+            }))
+            .map((auditLogList) => ({
+              items: auditLogList.items.map((item) => toAuditLogEntryView(item, actor)),
+              hasNextPage: auditLogList.hasNextPage,
+              page: args.auditLogPage,
+              userNames: auditLogList.userNames,
+              facilityNames: auditLogList.facilityNames,
+            })),
+        ]).map(([msgs, logs]) => ({ messages: msgs, auditLogs: logs }))
+      : {
+          messages: [],
+          auditLogs: {
+            items: [],
+            hasNextPage: false,
+            page: args.auditLogPage,
+            userNames: {},
+            facilityNames: {},
+          },
+        };
 
     return okAsync({
-      view: toReservationDetailView(row, actor, messages),
+      view: toReservationDetailView(row, actor, { messages, auditLogs }),
       // 詳細を見られない人は所属も事務局の権限も持たないので、ここは自然に空になる
       transitions: allowedTransitions(row, actor),
       // 画面が「変更」の入り口を出すかは、変更のユースケースと同じ判定で決める
