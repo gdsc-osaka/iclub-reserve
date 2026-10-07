@@ -261,3 +261,42 @@ export const toAuditLogActorView = (
     actedAsStaff: record.actedAsStaff,
   };
 };
+
+/** 画面に渡す 1 件の操作履歴情報 */
+export interface AuditLogEntryView {
+  readonly id: string;
+  readonly occurredAt: Date;
+  readonly actor: AuditLogActorView;
+  readonly action: AuditLogAction;
+  readonly targetType: AuditLogTargetType;
+  readonly targetId: string;
+  readonly changes: AuditLogChanges;
+}
+
+/**
+ * 操作履歴の 1 件を画面用の型に詰め替える純粋関数（COND-012）。
+ *
+ * 事務局権限による操作（actedAsStaff: true）は、事務局以外の利用者に対して
+ * 操作者情報を伏せて「事務局」として返す。
+ */
+export const toAuditLogEntryView = (
+  record: {
+    readonly id: string;
+    readonly occurredAt: Date;
+    readonly actorName: string | null;
+    readonly actedAsStaff: boolean;
+    readonly action: AuditLogAction;
+    readonly targetType: AuditLogTargetType;
+    readonly targetId: string;
+    readonly changes: AuditLogChanges;
+  },
+  viewer: { readonly isStaff: boolean },
+): AuditLogEntryView => ({
+  id: record.id,
+  occurredAt: record.occurredAt,
+  actor: toAuditLogActorView(record, viewer),
+  action: record.action,
+  targetType: record.targetType,
+  targetId: record.targetId,
+  changes: record.changes,
+});

@@ -1,6 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import {
   MembershipErrorCode,
   MembershipRole,
@@ -9,6 +10,10 @@ import {
 } from "~/domain/membership";
 import { ReservationErrorCode, ReservationStatus } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
+import type {
+  ReservationAuditLogList,
+  ReservationAuditLogListQuery,
+} from "~/query/audit-log/reservation-audit-log-list";
 import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationDetailQuery,
@@ -53,6 +58,8 @@ const createDeps = (
     membershipDbError?: boolean;
     messages?: readonly ReservationMessageRow[];
     messageQueryError?: boolean;
+    auditLogs?: ReservationAuditLogList;
+    auditLogQueryError?: boolean;
   } = {},
 ) => {
   const findByReservationId = vi.fn((_id: string) => {
@@ -84,12 +91,33 @@ const createDeps = (
     return okAsync(overrides.messages ?? []);
   });
 
+  const findAuditLogsByReservationId = vi.fn((_id: string, _page: number) => {
+    if (overrides.auditLogQueryError === true) {
+      return errAsync({
+        code: QueryErrorCode.DatabaseError,
+        message: "audit log query failed",
+      });
+    }
+    return okAsync(
+      overrides.auditLogs ?? {
+        items: [],
+        hasNextPage: false,
+        userNames: {},
+        facilityNames: {},
+      },
+    );
+  });
+
   const reservationDetailQuery: ReservationDetailQuery = {
     findByReservationId,
   };
 
   const reservationMessageListQuery: ReservationMessageListQuery = {
     listByReservationId,
+  };
+
+  const reservationAuditLogListQuery: ReservationAuditLogListQuery = {
+    findByReservationId: findAuditLogsByReservationId,
   };
 
   const membershipRepository: MembershipRepository = {
@@ -103,8 +131,18 @@ const createDeps = (
   };
 
   return {
-    deps: { reservationDetailQuery, membershipRepository, reservationMessageListQuery },
-    spies: { findByReservationId, findByGroupAndUser, listByReservationId },
+    deps: {
+      reservationDetailQuery,
+      membershipRepository,
+      reservationMessageListQuery,
+      reservationAuditLogListQuery,
+    },
+    spies: {
+      findByReservationId,
+      findByGroupAndUser,
+      listByReservationId,
+      findAuditLogsByReservationId,
+    },
   };
 };
 
@@ -118,6 +156,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -151,6 +190,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -170,6 +210,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -189,6 +230,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_other_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -213,6 +255,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_other_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       const view = result._unsafeUnwrap().view;
@@ -234,6 +277,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
       expect(Object.keys(memberResult._unsafeUnwrap().view.reservation)).not.toContain("groupId");
 
@@ -243,6 +287,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_other_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
       expect(Object.keys(otherResult._unsafeUnwrap().view.reservation)).not.toContain("groupId");
     });
@@ -263,6 +308,7 @@ describe("getReservationUseCase", () => {
           actorUserId: "usr_student_01",
           isStaff: false,
           now: defaultNow,
+          auditLogPage: 1,
         });
 
         expect(result._unsafeUnwrap().transitions).toEqual([]);
@@ -279,6 +325,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
@@ -292,6 +339,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_student_01");
@@ -305,6 +353,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.DatabaseError);
@@ -320,6 +369,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       const err = result._unsafeUnwrapErr();
@@ -335,6 +385,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
@@ -350,6 +401,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.NotFound);
@@ -364,6 +416,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(spies.findByReservationId).toHaveBeenCalledWith("rsv_01");
@@ -398,6 +451,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -439,6 +493,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_staff_viewer",
         isStaff: true,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -458,6 +513,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_staff_viewer",
         isStaff: true,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -477,6 +533,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_other_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -494,6 +551,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isErr()).toBe(true);
@@ -512,6 +570,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
       expect(provisionalResult.isOk()).toBe(true);
       expect(provisionalResult._unsafeUnwrap().canEdit).toBe(true);
@@ -524,6 +583,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
       expect(approvedResult.isOk()).toBe(true);
       expect(approvedResult._unsafeUnwrap().canEdit).toBe(true);
@@ -539,6 +599,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         now: pastNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
@@ -561,6 +622,7 @@ describe("getReservationUseCase", () => {
           actorUserId: "usr_student_01",
           isStaff: false,
           now: defaultNow,
+          auditLogPage: 1,
         });
 
         expect(result.isOk()).toBe(true);
@@ -576,6 +638,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         now: defaultNow,
+        auditLogPage: 1,
       });
       expect(nonMemberResult.isOk()).toBe(true);
       expect(nonMemberResult._unsafeUnwrap().canEdit).toBe(true);
@@ -587,6 +650,7 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         now: defaultNow,
+        auditLogPage: 1,
       });
       expect(memberResult.isOk()).toBe(true);
       expect(memberResult._unsafeUnwrap().canEdit).toBe(true);
@@ -600,10 +664,167 @@ describe("getReservationUseCase", () => {
         actorUserId: "usr_other_01",
         isStaff: false,
         now: defaultNow,
+        auditLogPage: 1,
       });
 
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap().canEdit).toBe(false);
+    });
+  });
+
+  describe("操作履歴（COND-012）", () => {
+    it("他団体の人: 履歴の Query が呼ばれず、view に auditLogs が無い（'auditLogs' in view が偽）", async () => {
+      const { deps, spies } = createDeps({ membership: null });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_other_01",
+        isStaff: false,
+        now: defaultNow,
+        auditLogPage: 1,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(spies.findAuditLogsByReservationId).not.toHaveBeenCalled();
+      expect("auditLogs" in data.view).toBe(false);
+    });
+
+    it("自団体のメンバー（事務局でない）: actedAsStaff: true の記録の actor が { kind: 'staff' } で、事務局員の氏名が JSON.stringify(result.value) のどこにも出ない。actedAsStaff: false の記録は本人名", async () => {
+      const dummyDate = new Date("2026-09-15T12:00:00Z");
+      const { deps } = createDeps({
+        auditLogs: {
+          items: [
+            {
+              id: "log_staff_op",
+              occurredAt: dummyDate,
+              actorName: "秘密の事務局員",
+              actedAsStaff: true,
+              action: AuditLogAction.ReservationApprove,
+              targetType: AuditLogTargetType.Reservation,
+              targetId: "rsv_01",
+              changes: {},
+            },
+            {
+              id: "log_member_op",
+              occurredAt: dummyDate,
+              actorName: "阪大太郎",
+              actedAsStaff: false,
+              action: AuditLogAction.ReservationApply,
+              targetType: AuditLogTargetType.Reservation,
+              targetId: "rsv_01",
+              changes: {},
+            },
+          ],
+          hasNextPage: false,
+          userNames: {},
+          facilityNames: {},
+        },
+      });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        now: defaultNow,
+        auditLogPage: 1,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(data.view.canViewDetail).toBe(true);
+      if (data.view.canViewDetail) {
+        expect(data.view.auditLogs.items[0].actor).toEqual({ kind: "staff" });
+        expect(data.view.auditLogs.items[1].actor).toEqual({
+          kind: "person",
+          name: "阪大太郎",
+          actedAsStaff: false,
+        });
+      }
+      expect(JSON.stringify(data)).not.toContain("秘密の事務局員");
+    });
+
+    it("事務局: actedAsStaff: true の記録も個人名で、actedAsStaff: true が付く", async () => {
+      const dummyDate = new Date("2026-09-15T12:00:00Z");
+      const { deps } = createDeps({
+        membership: null,
+        auditLogs: {
+          items: [
+            {
+              id: "log_staff_op",
+              occurredAt: dummyDate,
+              actorName: "事務局花子",
+              actedAsStaff: true,
+              action: AuditLogAction.ReservationApprove,
+              targetType: AuditLogTargetType.Reservation,
+              targetId: "rsv_01",
+              changes: {},
+            },
+          ],
+          hasNextPage: false,
+          userNames: {},
+          facilityNames: {},
+        },
+      });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        now: defaultNow,
+        auditLogPage: 1,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(data.view.canViewDetail).toBe(true);
+      if (data.view.canViewDetail) {
+        expect(data.view.auditLogs.items[0].actor).toEqual({
+          kind: "person",
+          name: "事務局花子",
+          actedAsStaff: true,
+        });
+      }
+    });
+
+    it("履歴の Query が失敗すると DatabaseError", async () => {
+      const { deps } = createDeps({
+        auditLogQueryError: true,
+      });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        now: defaultNow,
+        auditLogPage: 1,
+      });
+
+      expect(result.isErr()).toBe(true);
+      const err = result._unsafeUnwrapErr();
+      expect(err.code).toBe(ReservationErrorCode.DatabaseError);
+      expect(err.message).toBe("操作履歴を読み取れなかった。");
+      expect(err.cause).toBeDefined();
+    });
+
+    it("auditLogPage がそのまま Query に渡り、view.auditLogs.page に返る", async () => {
+      const { deps, spies } = createDeps();
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        now: defaultNow,
+        auditLogPage: 3,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(spies.findAuditLogsByReservationId).toHaveBeenCalledWith("rsv_01", 3);
+      expect(data.view.canViewDetail).toBe(true);
+      if (data.view.canViewDetail) {
+        expect(data.view.auditLogs.page).toBe(3);
+      }
     });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseHistoryPage } from "./query-params";
+import { parseHistoryPage } from "./history-page";
 
 describe("parseHistoryPage", () => {
   it("指定がない場合は 1 を返す", () => {

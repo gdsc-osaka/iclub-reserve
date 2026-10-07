@@ -145,4 +145,44 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
     await page.getByRole("link", { name: "操作履歴画面で見る" }).click();
     await expect(page).toHaveURL(new RegExp(`/staff/audit-log\\?group=${group.id}`));
   });
+
+  test("団体に所属しない事務局が予約詳細を開くと、事務局権限の操作者が個人名と「事務局権限」バッジで見える", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const staffActor = await createUser(db, { is_staff: true });
+    const staffViewer = await createUser(db, { is_staff: true });
+    const applicant = await createUser(db);
+    const group = await createGroup(db, {
+      members: [{ userId: applicant.id, role: MembershipRole.Admin }],
+    });
+    const facility = await createFacility(db);
+    const reservation = await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: applicant.id,
+    });
+
+    await createAuditLog(db, {
+      actorId: staffActor.id,
+      actedAsStaff: true,
+      action: AuditLogAction.ReservationApprove,
+      targetType: AuditLogTargetType.Reservation,
+      targetId: reservation.id,
+      groupId: group.id,
+      changes: {
+        status: { before: ReservationStatus.Provisional, after: ReservationStatus.Approved },
+      },
+    });
+
+    // 団体に所属しない事務局 staffViewer としてサインイン
+    await signInAs(staffViewer.id);
+    await openPage(page, `/reservations/${reservation.id}`);
+
+    // 操作者が個人名で見え、事務局権限バッジが付いている
+    const record = recordOf(page, "承認");
+    await expect(record).toContainText(staffActor.name);
+    await expect(record).toContainText("事務局権限");
+  });
 });

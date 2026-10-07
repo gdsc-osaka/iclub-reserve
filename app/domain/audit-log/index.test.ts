@@ -9,6 +9,7 @@ import {
   parseAuditLogChanges,
   parseAuditLogTargetType,
   toAuditLogActorView,
+  toAuditLogEntryView,
 } from "./index";
 
 describe("操作履歴のドメイン定義", () => {
@@ -160,6 +161,99 @@ describe("操作履歴のドメイン定義", () => {
         kind: "person",
         name: "山田太郎",
         actedAsStaff: false,
+      });
+    });
+  });
+
+  describe("toAuditLogEntryView", () => {
+    const dummyDate = new Date("2026-10-01T12:00:00Z");
+    const dummyChanges = {
+      status: { before: "provisional", after: "approved" },
+    };
+
+    it("事務局でない人（viewer.isStaff: false）が見る場合、事務局権限の操作（actedAsStaff: true）の actor が { kind: 'staff' } になり名前を持たず、その他の項目はそのまま写る", () => {
+      const entry = toAuditLogEntryView(
+        {
+          id: "log_1",
+          occurredAt: dummyDate,
+          actorName: "事務局員A",
+          actedAsStaff: true,
+          action: AuditLogAction.ReservationApprove,
+          targetType: AuditLogTargetType.Reservation,
+          targetId: "rsv_1",
+          changes: dummyChanges,
+        },
+        { isStaff: false },
+      );
+
+      expect(entry).toEqual({
+        id: "log_1",
+        occurredAt: dummyDate,
+        actor: { kind: "staff" },
+        action: AuditLogAction.ReservationApprove,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "rsv_1",
+        changes: dummyChanges,
+      });
+    });
+
+    it("事務局（viewer.isStaff: true）が見る場合、事務局権限の操作（actedAsStaff: true）でも actor に名前が出て、その他の項目はそのまま写る", () => {
+      const entry = toAuditLogEntryView(
+        {
+          id: "log_2",
+          occurredAt: dummyDate,
+          actorName: "事務局員A",
+          actedAsStaff: true,
+          action: AuditLogAction.ReservationApprove,
+          targetType: AuditLogTargetType.Reservation,
+          targetId: "rsv_1",
+          changes: dummyChanges,
+        },
+        { isStaff: true },
+      );
+
+      expect(entry).toEqual({
+        id: "log_2",
+        occurredAt: dummyDate,
+        actor: {
+          kind: "person",
+          name: "事務局員A",
+          actedAsStaff: true,
+        },
+        action: AuditLogAction.ReservationApprove,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "rsv_1",
+        changes: dummyChanges,
+      });
+    });
+
+    it("一般操作（actedAsStaff: false）の場合、一般の人が見ても actor に名前が出て、その他の項目はそのまま写る", () => {
+      const entry = toAuditLogEntryView(
+        {
+          id: "log_3",
+          occurredAt: dummyDate,
+          actorName: "一般ユーザーB",
+          actedAsStaff: false,
+          action: AuditLogAction.ReservationApply,
+          targetType: AuditLogTargetType.Reservation,
+          targetId: "rsv_1",
+          changes: dummyChanges,
+        },
+        { isStaff: false },
+      );
+
+      expect(entry).toEqual({
+        id: "log_3",
+        occurredAt: dummyDate,
+        actor: {
+          kind: "person",
+          name: "一般ユーザーB",
+          actedAsStaff: false,
+        },
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "rsv_1",
+        changes: dummyChanges,
       });
     });
   });

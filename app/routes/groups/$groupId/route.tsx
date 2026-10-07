@@ -14,6 +14,7 @@ import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { parseHistoryPage } from "~/lib/history-page";
 import { groupActionErrors, groupErrorResponse } from "~/routes/_shared/group-error.server";
 import { cancelInvitationUseCase } from "~/usecases/group/cancel-invitation";
 import { getGroupManagementUseCase } from "~/usecases/group/get-group-management";
@@ -28,7 +29,6 @@ import { GroupAuditLogCard } from "./group-audit-log-card";
 import { GroupInfoCard } from "./group-info-card";
 import { GroupInvitationCard } from "./group-invitation-card";
 import { GroupMemberCard } from "./group-member-card";
-import { parseHistoryPage } from "./query-params";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   // 団体を取得できなかったとき（エラー画面）は loaderData が undefined になる

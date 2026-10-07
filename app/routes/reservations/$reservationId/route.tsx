@@ -28,6 +28,7 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { ReservationField } from "~/domain/reservation";
 import { parseReservationTransition, ReservationTransition } from "~/domain/reservation/transition";
+import { createReservationAuditLogListQuery } from "~/infra/audit-log/reservation-audit-log-list-query";
 import { createDb } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
@@ -39,6 +40,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
 import { formatDateTime, formatFullDate, formatTimeRange } from "~/lib/date";
+import { parseHistoryPage } from "~/lib/history-page";
 import { toReservationEditPath } from "~/lib/reservation-paths";
 import {
   reservationActionErrors,
@@ -48,6 +50,7 @@ import { changeReservationStatusUseCase } from "~/usecases/reservation/change-re
 import { getReservationUseCase } from "~/usecases/reservation/get-reservation";
 import { sendReservationMessageUseCase } from "~/usecases/reservation/send-reservation-message";
 import type { Route } from "./+types/route";
+import { ReservationAuditLogCard } from "./reservation-audit-log-card";
 
 export function meta() {
   return [{ title: "予約の詳細 | iclub-reserve" }];
@@ -68,18 +71,21 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const now = new Date();
   const url = new URL(request.url);
   const edited = url.searchParams.get("edited");
+  const auditLogPage = parseHistoryPage(request);
 
   const result = await getReservationUseCase(
     {
       reservationDetailQuery: createReservationDetailQuery(db),
       membershipRepository: createMembershipRepository(db),
       reservationMessageListQuery: createReservationMessageListQuery(db),
+      reservationAuditLogListQuery: createReservationAuditLogListQuery(db),
     },
     {
       reservationId: params.reservationId,
       actorUserId: user.id,
       isStaff: user.is_staff,
       now,
+      auditLogPage,
     },
   );
 
@@ -346,7 +352,8 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
           {/* メッセージ欄。他団体の人には欄ごと出さない（COND-008） */}
           <ReservationMessageSection messages={view.messages} />
 
-          {/* NOTE: 操作履歴（UC-024 / UC-025 / COND-012）は INFO-008 が未実装のため欄を置いていない */}
+          {/* 操作履歴欄。他団体の人には欄ごと出さない（COND-008 / COND-012） */}
+          <ReservationAuditLogCard auditLogs={view.auditLogs} />
         </>
       )}
     </main>
