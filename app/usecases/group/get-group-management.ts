@@ -1,12 +1,7 @@
 import { errAsync, ResultAsync } from "neverthrow";
 
-import type {
-  AuditLogAction,
-  AuditLogActorView,
-  AuditLogChanges,
-  AuditLogTargetType,
-} from "~/domain/audit-log";
-import { toAuditLogActorView } from "~/domain/audit-log";
+import type { AuditLogEntryView } from "~/domain/audit-log";
+import { toAuditLogEntryView } from "~/domain/audit-log";
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
 import { GroupAction, groupPermissions } from "~/domain/group";
 import type { MembershipRepository, MembershipRole } from "~/domain/membership";
@@ -17,10 +12,7 @@ import {
   resolveGroupActor,
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
-import type {
-  GroupAuditLogItem,
-  GroupAuditLogListQuery,
-} from "~/query/audit-log/group-audit-log-list";
+import type { GroupAuditLogListQuery } from "~/query/audit-log/group-audit-log-list";
 import type {
   GroupInvitationList,
   GroupInvitationListQuery,
@@ -54,17 +46,6 @@ export interface GroupMemberSummary {
   readonly role: MembershipRole;
 }
 
-/** 画面に渡す 1 件の操作履歴情報 */
-export interface GroupAuditLogEntry {
-  readonly id: string;
-  readonly occurredAt: Date;
-  readonly actor: AuditLogActorView;
-  readonly action: AuditLogAction;
-  readonly targetType: AuditLogTargetType;
-  readonly targetId: string;
-  readonly changes: AuditLogChanges;
-}
-
 /**
  * 画面 1 つ分のデータ。`canManage` で 2 つの形に分かれる（判別可能なユニオン）。
  * こうしておくと、管理権限が無い経路では `email` や `auditLogs` に触れるコードが
@@ -82,26 +63,12 @@ export type GroupManagementView =
       readonly members: GroupMemberList;
       readonly invitations: GroupInvitationList;
       readonly auditLogs: {
-        readonly items: readonly GroupAuditLogEntry[];
+        readonly items: readonly AuditLogEntryView[];
         readonly hasNextPage: boolean;
         readonly page: number;
         readonly userNames: Readonly<Record<string, string>>;
       };
     };
-
-/** 操作履歴の 1 件をビュー用の型に詰め替える純粋関数 */
-const toGroupAuditLogEntry = (
-  item: GroupAuditLogItem,
-  viewer: { readonly isStaff: boolean },
-): GroupAuditLogEntry => ({
-  id: item.id,
-  occurredAt: item.occurredAt,
-  actor: toAuditLogActorView(item, viewer),
-  action: item.action,
-  targetType: item.targetType,
-  targetId: item.targetId,
-  changes: item.changes,
-});
 
 /**
  * 団体管理画面（SCR-007）の表示に必要なデータを取得するユースケース。
@@ -165,7 +132,7 @@ export const getGroupManagementUseCase = (
           members,
           invitations: invitations.filter((inv) => inv.expiresAt.getTime() > args.now.getTime()),
           auditLogs: {
-            items: auditLogs.items.map((item) => toGroupAuditLogEntry(item, actor)),
+            items: auditLogs.items.map((item) => toAuditLogEntryView(item, actor)),
             hasNextPage: auditLogs.hasNextPage,
             page: args.auditLogPage,
             userNames: auditLogs.userNames,
