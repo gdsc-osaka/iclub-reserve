@@ -56,6 +56,9 @@ describe("inviteStaffUseCase", () => {
         });
       },
       cancel: () => okAsync(1),
+      findById: () => okAsync(null),
+      accept: () => okAsync(false),
+      reject: () => okAsync(0),
     };
 
     const mailOutboxNotifier: MailOutboxNotifier = {

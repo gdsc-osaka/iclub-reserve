@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import * as schema from "~/db/schema";
+import { InvitationStatus } from "~/domain/invitation";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { Database } from "../db";
 import { createStaffInvitationRepository } from "./staff-invitation-repo";
@@ -273,5 +274,327 @@ describe("Staff Repositories & Query (SQLite)", () => {
       expect(pendingInvitations[1].id).toBe("inv_1b");
       expect(pendingInvitations[2].id).toBe("inv_2");
     }
+  });
+
+  it("findById は招待が存在すれば返し、存在しなければ null を返す", async () => {
+    const { sqlite, db } = createTestDb();
+    sqlite
+      .prepare(
+        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      )
+      .run("usr_staff_01", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1);
+
+    sqlite
+      .prepare(
+        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+      )
+      .run("inv_exists", "target@osaka-u.ac.jp", "pending", 5000, 1000, "usr_staff_01");
+
+    const repo = createStaffInvitationRepository(db);
+
+    const found = (await repo.findById("inv_exists"))._unsafeUnwrap();
+    expect(found).not.toBeNull();
+    expect(found?.id).toBe("inv_exists");
+    expect(found?.email).toBe("target@osaka-u.ac.jp");
+    expect(found?.status).toBe(InvitationStatus.Pending);
+
+    const notFound = (await repo.findById("inv_not_exist"))._unsafeUnwrap();
+    expect(notFound).toBeNull();
+  });
+
+  describe("accept (承諾)", () => {
+    const now = new Date("2026-04-01T12:00:00.000Z");
+    const validExpiresAt = new Date("2026-04-03T12:00:00.000Z");
+    const expiredAt = new Date("2026-03-31T12:00:00.000Z");
+    const targetEmail = "invitee@osaka-u.ac.jp";
+
+    it("承諾で is_staff が true になり、招待が accepted になる", async () => {
+      const { sqlite, db } = createTestDb();
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_staff_01", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1);
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_invitee", "招待された人", targetEmail, 1, 0, 0, 0);
+
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run(
+          "inv_valid",
+          targetEmail,
+          "pending",
+          validExpiresAt.getTime(),
+          now.getTime() - 1000,
+          "usr_staff_01",
+        );
+
+      const repo = createStaffInvitationRepository(db);
+      const result = await repo.accept({
+        invitationId: "inv_valid",
+        email: targetEmail,
+        userId: "usr_invitee",
+        now,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap()).toBe(true);
+
+      // user.is_staff が 1 になっている
+      const userRow = sqlite
+        .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
+        .get("usr_invitee") as { is_staff: number };
+      expect(userRow.is_staff).toBe(1);
+
+      // staff_invitation.status が accepted になっている
+      const invRow = sqlite
+        .prepare(`SELECT status FROM "staff_invitation" WHERE id = ?`)
+        .get("inv_valid") as { status: string };
+      expect(invRow.status).toBe(InvitationStatus.Accepted);
+    });
+
+    it("期限切れの招待は false を返し、is_staff は変わらない", async () => {
+      const { sqlite, db } = createTestDb();
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_staff_01", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1);
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_invitee", "招待された人", targetEmail, 1, 0, 0, 0);
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run("inv_expired", targetEmail, "pending", expiredAt.getTime(), 0, "usr_staff_01");
+
+      const repo = createStaffInvitationRepository(db);
+      const result = await repo.accept({
+        invitationId: "inv_expired",
+        email: targetEmail,
+        userId: "usr_invitee",
+        now,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap()).toBe(false);
+
+      const userRow = sqlite
+        .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
+        .get("usr_invitee") as { is_staff: number };
+      expect(userRow.is_staff).toBe(0);
+
+      const invRow = sqlite
+        .prepare(`SELECT status FROM "staff_invitation" WHERE id = ?`)
+        .get("inv_expired") as { status: string };
+      expect(invRow.status).toBe(InvitationStatus.Pending);
+    });
+
+    it("取り消し済み・承諾済みの招待は false を返し、is_staff は変わらない", async () => {
+      const { sqlite, db } = createTestDb();
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_staff_01", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1);
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_invitee", "招待された人", targetEmail, 1, 0, 0, 0);
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run("inv_canceled", targetEmail, "canceled", validExpiresAt.getTime(), 0, "usr_staff_01");
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run("inv_accepted", targetEmail, "accepted", validExpiresAt.getTime(), 0, "usr_staff_01");
+
+      const repo = createStaffInvitationRepository(db);
+
+      const resCanceled = await repo.accept({
+        invitationId: "inv_canceled",
+        email: targetEmail,
+        userId: "usr_invitee",
+        now,
+      });
+      expect(resCanceled._unsafeUnwrap()).toBe(false);
+
+      const resAccepted = await repo.accept({
+        invitationId: "inv_accepted",
+        email: targetEmail,
+        userId: "usr_invitee",
+        now,
+      });
+      expect(resAccepted._unsafeUnwrap()).toBe(false);
+
+      const userRow = sqlite
+        .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
+        .get("usr_invitee") as { is_staff: number };
+      expect(userRow.is_staff).toBe(0);
+    });
+
+    it("宛先違いの招待は false を返し、is_staff は変わらない", async () => {
+      const { sqlite, db } = createTestDb();
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_staff_01", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1);
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_invitee", "招待された人", "other@osaka-u.ac.jp", 1, 0, 0, 0);
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run("inv_valid", targetEmail, "pending", validExpiresAt.getTime(), 0, "usr_staff_01");
+
+      const repo = createStaffInvitationRepository(db);
+      const result = await repo.accept({
+        invitationId: "inv_valid",
+        email: "other@osaka-u.ac.jp",
+        userId: "usr_invitee",
+        now,
+      });
+
+      expect(result._unsafeUnwrap()).toBe(false);
+      const userRow = sqlite
+        .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
+        .get("usr_invitee") as { is_staff: number };
+      expect(userRow.is_staff).toBe(0);
+    });
+
+    it("すでに事務局の人が承諾しても true になり、招待は accepted になる", async () => {
+      const { sqlite, db } = createTestDb();
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_already_staff", "すでにスタッフ", targetEmail, 1, 0, 0, 1);
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run("inv_valid", targetEmail, "pending", validExpiresAt.getTime(), 0, "usr_already_staff");
+
+      const repo = createStaffInvitationRepository(db);
+      const result = await repo.accept({
+        invitationId: "inv_valid",
+        email: targetEmail,
+        userId: "usr_already_staff",
+        now,
+      });
+
+      expect(result._unsafeUnwrap()).toBe(true);
+      const userRow = sqlite
+        .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
+        .get("usr_already_staff") as { is_staff: number };
+      expect(userRow.is_staff).toBe(1);
+
+      const invRow = sqlite
+        .prepare(`SELECT status FROM "staff_invitation" WHERE id = ?`)
+        .get("inv_valid") as { status: string };
+      expect(invRow.status).toBe(InvitationStatus.Accepted);
+    });
+  });
+
+  describe("reject (辞退)", () => {
+    const now = new Date("2026-04-01T12:00:00.000Z");
+    const validExpiresAt = new Date("2026-04-03T12:00:00.000Z");
+    const targetEmail = "invitee@osaka-u.ac.jp";
+
+    it("辞退で status が rejected になり、件数 1 が返る", async () => {
+      const { sqlite, db } = createTestDb();
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_staff_01", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1);
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run("inv_reject", targetEmail, "pending", validExpiresAt.getTime(), 0, "usr_staff_01");
+
+      const repo = createStaffInvitationRepository(db);
+      const result = await repo.reject({
+        invitationId: "inv_reject",
+        email: targetEmail,
+        now,
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap()).toBe(1);
+
+      const invRow = sqlite
+        .prepare(`SELECT status FROM "staff_invitation" WHERE id = ?`)
+        .get("inv_reject") as { status: string };
+      expect(invRow.status).toBe(InvitationStatus.Rejected);
+    });
+
+    it("宛先違い・期限切れ・存在しない招待の辞退は件数 0 が返る", async () => {
+      const { sqlite, db } = createTestDb();
+      sqlite
+        .prepare(
+          `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+        )
+        .run("usr_staff_01", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1);
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        .run("inv_other", targetEmail, "pending", validExpiresAt.getTime(), 0, "usr_staff_01");
+      sqlite
+        .prepare(
+          `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
+        )
+        // 期限ちょうどは切れている扱い
+        .run("inv_expired", targetEmail, "pending", now.getTime(), 0, "usr_staff_01");
+
+      const repo = createStaffInvitationRepository(db);
+      const diffEmail = await repo.reject({
+        invitationId: "inv_other",
+        email: "wrong@osaka-u.ac.jp",
+        now,
+      });
+      expect(diffEmail._unsafeUnwrap()).toBe(0);
+
+      const expired = await repo.reject({
+        invitationId: "inv_expired",
+        email: targetEmail,
+        now,
+      });
+      expect(expired._unsafeUnwrap()).toBe(0);
+
+      // 0 件だった招待は、承諾待ちのまま残る
+      const statuses = sqlite
+        .prepare(`SELECT status FROM "staff_invitation" WHERE id IN (?, ?)`)
+        .all("inv_other", "inv_expired") as { status: string }[];
+      expect(statuses.map((row) => row.status)).toEqual([
+        InvitationStatus.Pending,
+        InvitationStatus.Pending,
+      ]);
+
+      const notFound = await repo.reject({
+        invitationId: "inv_non_exist",
+        email: targetEmail,
+        now,
+      });
+      expect(notFound._unsafeUnwrap()).toBe(0);
+    });
   });
 });

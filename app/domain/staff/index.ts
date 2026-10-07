@@ -1,7 +1,7 @@
 import type { Result, ResultAsync } from "neverthrow";
 import type { PermissionTable } from "../authz";
 import { ErrorKind, type BaseError } from "../error";
-import type { InvitationStatus } from "../invitation";
+import type { InvitationStatus, RejectInvitationInput } from "../invitation";
 import { validateInviteeEmail } from "../invitation/invitation-email";
 import type { MailDraft } from "../mail/mail-outbox";
 import { StaffRole } from "../membership";
@@ -15,6 +15,15 @@ export const StaffErrorCode = {
   Forbidden: "STAFF_FORBIDDEN",
   InvalidInput: "STAFF_INVALID_INPUT",
   InvitationNotFound: "STAFF_INVITATION_NOT_FOUND",
+  /**
+   * 招待はあるが、宛先が本人ではないので見せない。
+   *
+   * 利用者には `InvitationNotFound` と同じ応答を返す（COND-015）。宛先が違うと答えると、
+   * 招待 ID を知っている人に「この招待は実在する」と伝わってしまう。
+   * ユースケースが `InvitationNotFound` に潰さずに正直に返すのは、他人宛ての招待を開こうとしたことを
+   * サーバーのログに権限の問題として残したいため。秘匿は画面の側が行う（ADR-004 決定 4）。
+   */
+  InvitationNotVisible: "STAFF_INVITATION_NOT_VISIBLE",
   MemberNotFound: "STAFF_MEMBER_NOT_FOUND",
   LastStaffRequired: "STAFF_LAST_STAFF_REQUIRED",
   Conflict: "STAFF_CONFLICT",
@@ -31,6 +40,7 @@ export const staffErrorKind: Record<StaffErrorCode, ErrorKind> = {
   [StaffErrorCode.Forbidden]: ErrorKind.Forbidden,
   [StaffErrorCode.InvalidInput]: ErrorKind.InvalidInput,
   [StaffErrorCode.InvitationNotFound]: ErrorKind.NotFound,
+  [StaffErrorCode.InvitationNotVisible]: ErrorKind.Forbidden,
   [StaffErrorCode.MemberNotFound]: ErrorKind.NotFound,
   [StaffErrorCode.LastStaffRequired]: ErrorKind.Conflict,
   [StaffErrorCode.Conflict]: ErrorKind.Conflict,
@@ -119,7 +129,8 @@ export const wouldRemoveLastStaff = (staffCount: number): boolean => staffCount 
 /**
  * 事務局招待の承諾画面（SCR-020）のパスを返す。
  *
- * SCR-020 は未実装。招待される人はまだ事務局ではないため、/staff/ の下には置かない。
+ * `app/routes/staff-invitations/$invitationId/route.tsx` で実装されている。
+ * 招待される人はまだ事務局ではないため、/staff/ の下には置かない。
  */
 export const staffInvitationAcceptPath = (invitationId: string): string =>
   `/staff-invitations/${invitationId}`;
@@ -140,6 +151,21 @@ export const validateStaffInvitationEmail = (
   }));
 
 /**
+ * 事務局招待の承諾に必要な値。
+ */
+export interface AcceptStaffInvitationInput {
+  readonly invitationId: string;
+  /**
+   * 承諾しようとしている人のメールアドレス（`normalizeInvitationEmail` を通したもの）。
+   */
+  readonly email: string;
+  /** 承諾する人の `user.id`。`user.is_staff` を true にする対象 */
+  readonly userId: string;
+  /** 有効期限を判定する基準時刻 */
+  readonly now: Date;
+}
+
+/**
  * 事務局招待の永続化層に対する窓口（ポート）。
  */
 export interface StaffInvitationRepository {
@@ -152,6 +178,27 @@ export interface StaffInvitationRepository {
   ): ResultAsync<CreateStaffInvitationOutcome, StaffError>;
   /** status = pending のものだけを canceled にする。更新した件数を返す */
   cancel(invitationId: string): ResultAsync<number, StaffError>;
+  /**
+   * 招待を 1 件引く。無ければ ok(null)。
+   *
+   * 承諾できる状態かどうか（期限・状態・宛先）はここでは見ない。
+   * それを判定するための材料を返すのがこのメソッドの役目で、
+   * 判定の基準となる「いま」とログイン中の人を知っているのはユースケースだから。
+   */
+  findById(invitationId: string): ResultAsync<StaffInvitation | null, StaffError>;
+  /**
+   * 招待を承諾し、承諾できた場合は true、できなければ false を返す。
+   *
+   * 「承諾できる招待か」の判定（承諾待ち・期限内・宛先が本人）は UPDATE の WHERE に畳み込む。
+   * false は「対象の招待が無かった」ということであり、DB アクセス自体の異常ではない。
+   */
+  accept(input: AcceptStaffInvitationInput): ResultAsync<boolean, StaffError>;
+  /**
+   * 招待を辞退し、辞退できた行数を返す。
+   *
+   * 判定の条件は `accept` とそろえる。
+   */
+  reject(input: RejectInvitationInput): ResultAsync<number, StaffError>;
 }
 
 /**
