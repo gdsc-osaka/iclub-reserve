@@ -22,7 +22,7 @@ const recordOf = (page: Page, text: string) =>
  *
  * 事務局が全件の操作履歴を新しい順に見て、対象の種類・団体・操作者・期間で絞り込む（SCR-018）。
  * 記録の書き込み（COND-013）はまだ無いので、記録はテストの中で直接入れる。
- * 絞り込みの条件ごとの分岐は、Query のテスト（`audit-log-search-sqlite.test.ts`）で押さえている。
+ * 絞り込みの条件ごとの分岐は、Query のテスト（`audit-log-search-d1.test.ts`）で押さえている。
  */
 test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-024" }, () => {
   test("事務局が操作履歴を見て、団体で絞り込み、予約の記録から予約詳細へ移れる", async ({

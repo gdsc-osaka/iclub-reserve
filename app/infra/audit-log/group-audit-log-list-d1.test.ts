@@ -1,65 +1,70 @@
-import BetterSqlite3 from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import * as schema from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import type { Database } from "../db";
 import { createGroupAuditLogListQuery } from "./group-audit-log-list-query";
+import { useD1TestDb } from "../d1-test-db";
 
-const MIGRATIONS_DIR = join(process.cwd(), "drizzle", "migrations");
+const testDb = useD1TestDb();
 
-/** マイグレーションを流した SQLite インメモリ DB を作成する */
-const createDatabase = () => {
-  const sqlite = new BetterSqlite3(":memory:");
-  sqlite.pragma("foreign_keys = ON");
-
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
-  for (const file of files) {
-    const body = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    for (const statement of body.split("--> statement-breakpoint")) {
-      if (statement.trim() !== "") sqlite.exec(statement.trim());
-    }
-  }
-
-  // 1. ユーザー投入
-  const insertUser = sqlite.prepare(
-    `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+beforeEach(async () => {
+  await testDb.seed(
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_staff",
+      "事務局スタッフ",
+      "staff@osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      1,
+    ],
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_student_1",
+      "阪大太郎",
+      "taro@ecs.osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_student_2",
+      "阪大花子",
+      "hanako@ecs.osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "grp_alpha",
+      "アルファ部",
+      "enabled",
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "grp_beta",
+      "ベータ研究会",
+      "enabled",
+      0,
+      0,
+    ],
   );
-  insertUser.run("usr_staff", "事務局スタッフ", "staff@osaka-u.ac.jp", 1, 0, 0, 1);
-  insertUser.run("usr_student_1", "阪大太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
-  insertUser.run("usr_student_2", "阪大花子", "hanako@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
+});
 
-  // 2. 団体投入
-  const insertGroup = sqlite.prepare(
-    `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-  );
-  insertGroup.run("grp_alpha", "アルファ部", "enabled", 0, 0);
-  insertGroup.run("grp_beta", "ベータ研究会", "enabled", 0, 0);
-
-  return sqlite;
-};
-
-const createTestDb = () => {
-  const sqlite = createDatabase();
-  const db = drizzle(sqlite, { schema }) as unknown as Database;
-  return { sqlite, db };
-};
-
-describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
+describe("GroupAuditLogListQuery (本物の D1 を使用したテスト)", () => {
   it("他の団体の記録が混ざらない", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createGroupAuditLogListQuery(db);
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
-
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_alpha_1",
       1000,
       "usr_student_1",
@@ -69,8 +74,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_alpha",
       "grp_alpha",
       JSON.stringify({ name: { before: "旧名", after: "新名" } }),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_beta_1",
       2000,
       "usr_student_2",
@@ -80,7 +86,7 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_beta",
       "grp_beta",
       JSON.stringify({ name: { before: "ベータ旧", after: "ベータ新" } }),
-    );
+    ]);
 
     const result = await query.findByGroupId("grp_alpha", 1);
     expect(result.isOk()).toBe(true);
@@ -90,15 +96,13 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
   });
 
   it("同じ団体でも予約・施設/設備・事務局権限の記録は出ない", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createGroupAuditLogListQuery(db);
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 対象となる記録（group, membership, invitation）
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_group",
       1000,
       "usr_student_1",
@@ -108,8 +112,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_alpha",
       "grp_alpha",
       JSON.stringify({}),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_membership",
       2000,
       "usr_student_1",
@@ -119,8 +124,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "mem_1",
       "grp_alpha",
       JSON.stringify({}),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_invitation",
       3000,
       "usr_student_1",
@@ -130,10 +136,11 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "inv_1",
       "grp_alpha",
       JSON.stringify({}),
-    );
+    ]);
 
     // 対象外の記録（reservation, facility, staff_role）
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_reservation",
       4000,
       "usr_student_1",
@@ -143,8 +150,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "res_1",
       "grp_alpha",
       JSON.stringify({}),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_facility",
       5000,
       "usr_staff",
@@ -154,8 +162,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "fac_1",
       "grp_alpha", // 通常 facility は group_id=null だが仮に値が入っていても対象外
       JSON.stringify({}),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_staff_role",
       6000,
       "usr_staff",
@@ -165,7 +174,7 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "stf_1",
       "grp_alpha",
       JSON.stringify({}),
-    );
+    ]);
 
     const result = await query.findByGroupId("grp_alpha", 1);
     expect(result.isOk()).toBe(true);
@@ -175,14 +184,12 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
   });
 
   it("新しい順、同時刻は id 降順で並ぶ", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createGroupAuditLogListQuery(db);
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
-
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_old",
       1000,
       "usr_student_1",
@@ -192,8 +199,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_alpha",
       "grp_alpha",
       JSON.stringify({}),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_same_time_a",
       2000,
       "usr_student_1",
@@ -203,8 +211,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_alpha",
       "grp_alpha",
       JSON.stringify({}),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_same_time_b",
       2000,
       "usr_student_1",
@@ -214,8 +223,9 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_alpha",
       "grp_alpha",
       JSON.stringify({}),
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_new",
       3000,
       "usr_student_1",
@@ -225,7 +235,7 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_alpha",
       "grp_alpha",
       JSON.stringify({}),
-    );
+    ]);
 
     const result = await query.findByGroupId("grp_alpha", 1);
     expect(result.isOk()).toBe(true);
@@ -239,17 +249,15 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
   });
 
   it("21 件目があると hasNextPage が true、2 ページ目に残りが出る", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createGroupAuditLogListQuery(db);
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 25 件のログを作成
     for (let i = 1; i <= 25; i++) {
       const id = `log_${i.toString().padStart(2, "0")}`;
-      insertLog.run(
+      await testDb.seed([
+        insertLogSql,
         id,
         i * 1000,
         "usr_student_1",
@@ -259,7 +267,7 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
         "grp_alpha",
         "grp_alpha",
         JSON.stringify({}),
-      );
+      ]);
     }
 
     // 1 ページ目 (20 件、hasNextPage: true)
@@ -283,15 +291,13 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
   });
 
   it("user_id の名前が引ける／削除された操作者は actorName が null", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createGroupAuditLogListQuery(db);
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 1. 存在する操作者と、changes 内の user_id
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_with_user",
       2000,
       "usr_student_1",
@@ -304,10 +310,11 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
         role: { before: "member", after: "admin" },
         user_id: { before: "usr_student_2", after: "usr_student_2" },
       }),
-    );
+    ]);
 
     // 2. 削除された操作者（user テーブルに存在しない ID）
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_deleted_actor",
       1000,
       "usr_deleted",
@@ -317,7 +324,7 @@ describe("GroupAuditLogListQuery (SQLite を使用したテスト)", () => {
       "grp_alpha",
       "grp_alpha",
       JSON.stringify({}),
-    );
+    ]);
 
     const result = await query.findByGroupId("grp_alpha", 1);
     expect(result.isOk()).toBe(true);

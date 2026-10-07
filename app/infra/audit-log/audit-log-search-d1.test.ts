@@ -1,110 +1,114 @@
-import BetterSqlite3 from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import * as schema from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import type { Database } from "../db";
 import { createAuditLogSearchQuery } from "./audit-log-search-query";
+import { useD1TestDb } from "../d1-test-db";
 
-const MIGRATIONS_DIR = join(process.cwd(), "drizzle", "migrations");
-
-/** マイグレーションを流した SQLite インメモリ DB を作成する */
-const createDatabase = () => {
-  const sqlite = new BetterSqlite3(":memory:");
-  sqlite.pragma("foreign_keys = ON");
-
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
-  for (const file of files) {
-    const body = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    for (const statement of body.split("--> statement-breakpoint")) {
-      if (statement.trim() !== "") sqlite.exec(statement.trim());
-    }
-  }
-
-  // 1. ユーザー投入
-  const insertUser = sqlite.prepare(
-    `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-  );
-  insertUser.run("usr_staff", "事務局スタッフ", "staff@osaka-u.ac.jp", 1, 0, 0, 1);
-  insertUser.run("usr_student_1", "阪大太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
-  insertUser.run("usr_student_2", "阪大花子", "hanako@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
-  insertUser.run("usr_never_acted", "未操作ユーザー", "no-action@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
-
-  // 2. 施設投入
-  const insertFacility = sqlite.prepare(
-    `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-  );
-  insertFacility.run("fac_room_a", "ミーティングルームA", 1, 0, 0);
-  insertFacility.run("fac_room_b", "3Dプリンター室", 1, 0, 0);
-
-  // 3. 団体投入
-  const insertGroup = sqlite.prepare(
-    `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-  );
-  insertGroup.run("grp_alpha", "アルファ部", "enabled", 0, 0);
-  insertGroup.run("grp_beta", "ベータ研究会", "enabled", 0, 0);
-
-  // 4. 予約投入
-  const insertReservation = sqlite.prepare(
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  );
-  insertReservation.run(
-    "res_1",
-    "grp_alpha",
-    "fac_room_a",
-    1_700_000_000_000,
-    1_700_003_600_000,
-    4,
-    "approved",
-    "usr_student_1",
-    0,
-    0,
-  );
-
-  return sqlite;
-};
-
-/**
- * better-sqlite3 版の Drizzle には `db.batch()` が無いので、D1 の代わりに渡した順で結果を返すものを足す。
- *
- * D1 の batch は 1 行を「列名 → 値」のオブジェクトで受け取るので、同じ名前の列が 2 つあると
- * 1 つに潰れて後ろの列がずれる。better-sqlite3 ではこれが起きないため、列名が重なる文を渡されたら
- * ここで失敗させて、D1 で壊れる問い合わせをテストで見つけられるようにしている。
+/*
+ * Query は内部で `db.batch()` を使う。D1 の batch は 1 行を「列名 → 値」のオブジェクトで受け取るので、
+ * 同じ名前の列が 2 つあると 1 つに潰れて後ろの列がずれる。ここでは本物の D1 で流しているので、
+ * 列名が重なる問い合わせを書けば、下の値の比較がそのまま落ちる。
  */
-const createTestDb = () => {
-  const sqlite = createDatabase();
-  const batch = (queries: readonly (PromiseLike<unknown> & { toSQL(): { sql: string } })[]) => {
-    for (const query of queries) {
-      const names = sqlite
-        .prepare(query.toSQL().sql)
-        .columns()
-        .map((column) => column.name);
-      if (new Set(names).size !== names.length) {
-        throw new Error(`同じ名前の列があり、D1 の batch では列がずれる: ${names.join(", ")}`);
-      }
-    }
-    return Promise.all(queries);
-  };
-  // 型は D1 版に合わせる。better-sqlite3 版も同じ問い合わせを組み立て、await で結果を返す
-  const db = Object.assign(drizzle(sqlite, { schema }), { batch }) as unknown as Database;
-  return { sqlite, db };
-};
+const testDb = useD1TestDb();
 
-describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () => {
+beforeEach(async () => {
+  await testDb.seed(
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_staff",
+      "事務局スタッフ",
+      "staff@osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      1,
+    ],
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_student_1",
+      "阪大太郎",
+      "taro@ecs.osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_student_2",
+      "阪大花子",
+      "hanako@ecs.osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_never_acted",
+      "未操作ユーザー",
+      "no-action@ecs.osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "fac_room_a",
+      "ミーティングルームA",
+      1,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "fac_room_b",
+      "3Dプリンター室",
+      1,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "grp_alpha",
+      "アルファ部",
+      "enabled",
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "grp_beta",
+      "ベータ研究会",
+      "enabled",
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      "res_1",
+      "grp_alpha",
+      "fac_room_a",
+      1700000000000,
+      1700003600000,
+      4,
+      "approved",
+      "usr_student_1",
+      0,
+      0,
+    ],
+  );
+});
+
+describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
   it("予約・施設・団体の情報が LEFT JOIN され、参照先が消えた記録も落ちずに取得できる", async () => {
-    const { sqlite, db } = createTestDb();
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const db = testDb.db;
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 予約の記録（正常に施設・団体が結合される）
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_res",
       10_000,
       "usr_student_1",
@@ -117,10 +121,11 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
         head_count: { before: null, after: 4 },
         user_id: { before: null, after: "usr_student_1" },
       }),
-    );
+    ]);
 
     // 参照先（予約や団体やユーザー）が存在しない記録（消えたレコード）
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_ghost",
       20_000,
       "usr_ghost_id", // user テーブルに存在しない
@@ -130,7 +135,7 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "res_deleted_id",
       "grp_deleted_id",
       JSON.stringify({}),
-    );
+    ]);
 
     const query = createAuditLogSearchQuery(db);
     const result = (
@@ -167,13 +172,11 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
   });
 
   it("changes に現れる user_id と facility_id の名称が解決される", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
-
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_changes",
       10_000,
       "usr_staff",
@@ -186,7 +189,7 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
         user_id: { before: "usr_student_1", after: "usr_student_2" },
         facility_id: { before: "fac_room_a", after: "fac_room_b" },
       }),
-    );
+    ]);
 
     const query = createAuditLogSearchQuery(db);
     const result = (
@@ -216,14 +219,12 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
   });
 
   it("操作者の選択肢（actors）には記録に一度でも現れた人だけが名前昇順で含まれる", async () => {
-    const { sqlite, db } = createTestDb();
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const db = testDb.db;
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // usr_student_2 と usr_staff だけが記録に現れる（usr_never_acted は現れない）
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_1",
       10_000,
       "usr_student_2",
@@ -233,8 +234,9 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "grp_alpha",
       "grp_alpha",
       "{}",
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_2",
       20_000,
       "usr_staff",
@@ -244,7 +246,7 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "grp_alpha",
       "grp_alpha",
       "{}",
-    );
+    ]);
 
     const query = createAuditLogSearchQuery(db);
     const result = (
@@ -267,13 +269,11 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
   });
 
   it("各絞り込み（種類・団体・操作者・期間の境界）が正しく機能する", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
-
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_1",
       1000,
       "usr_student_1",
@@ -283,8 +283,9 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "res_1",
       "grp_alpha",
       "{}",
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_2",
       2000,
       "usr_staff",
@@ -294,8 +295,9 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "fac_room_a",
       null,
       "{}",
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_3",
       3000,
       "usr_student_2",
@@ -305,7 +307,7 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "grp_beta",
       "grp_beta",
       "{}",
-    );
+    ]);
 
     const query = createAuditLogSearchQuery(db);
 
@@ -371,14 +373,12 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
   });
 
   it("並び順は occurred_at の降順、同時刻は id の降順になる", async () => {
-    const { sqlite, db } = createTestDb();
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const db = testDb.db;
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 同時刻 1000 に 2 件投入
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_a",
       1000,
       "usr_staff",
@@ -388,8 +388,9 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "grp_alpha",
       "grp_alpha",
       "{}",
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_b",
       1000,
       "usr_staff",
@@ -399,9 +400,10 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "grp_alpha",
       "grp_alpha",
       "{}",
-    );
+    ]);
     // 時刻 2000 に 1 件投入
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_c",
       2000,
       "usr_staff",
@@ -411,7 +413,7 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
       "grp_alpha",
       "grp_alpha",
       "{}",
-    );
+    ]);
 
     const query = createAuditLogSearchQuery(db);
     const result = (
@@ -432,16 +434,14 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
   });
 
   it("51 件目で hasNextPage が true になり、2 ページ目が正しく取得できる", async () => {
-    const { sqlite, db } = createTestDb();
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const db = testDb.db;
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 52 件のレコードを投入（1 ページあたり 50 件）
     for (let i = 1; i <= 52; i++) {
       const padded = String(i).padStart(3, "0");
-      insertLog.run(
+      await testDb.seed([
+        insertLogSql,
         `log_${padded}`,
         i * 100,
         "usr_staff",
@@ -451,7 +451,7 @@ describe("AuditLogSearchQuery (本物の SQLite を使用したテスト)", () =
         "grp_alpha",
         "grp_alpha",
         "{}",
-      );
+      ]);
     }
 
     const query = createAuditLogSearchQuery(db);
