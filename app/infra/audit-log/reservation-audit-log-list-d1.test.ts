@@ -1,121 +1,110 @@
-import BetterSqlite3 from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import * as schema from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import type { Database } from "../db";
 import { createReservationAuditLogListQuery } from "./reservation-audit-log-list-query";
+import { useD1TestDb } from "../d1-test-db";
 
-const MIGRATIONS_DIR = join(process.cwd(), "drizzle", "migrations");
-
-/** マイグレーションを流した SQLite インメモリ DB を作成する */
-const createDatabase = () => {
-  const sqlite = new BetterSqlite3(":memory:");
-  sqlite.pragma("foreign_keys = ON");
-
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
-  for (const file of files) {
-    const body = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    for (const statement of body.split("--> statement-breakpoint")) {
-      if (statement.trim() !== "") sqlite.exec(statement.trim());
-    }
-  }
-
-  // 1. ユーザー投入
-  const insertUser = sqlite.prepare(
-    `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-  );
-  insertUser.run("usr_staff", "事務局スタッフ", "staff@osaka-u.ac.jp", 1, 0, 0, 1);
-  insertUser.run("usr_student_1", "阪大太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
-  insertUser.run("usr_student_2", "阪大花子", "hanako@ecs.osaka-u.ac.jp", 1, 0, 0, 0);
-
-  // 2. 団体投入
-  const insertGroup = sqlite.prepare(
-    `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-  );
-  insertGroup.run("grp_alpha", "アルファ部", "enabled", 0, 0);
-
-  // 3. 施設投入
-  const insertFacility = sqlite.prepare(
-    `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-  );
-  insertFacility.run("fac_room_a", "会議室A", 1, 0, 0);
-  insertFacility.run("fac_room_b", "会議室B", 1, 0, 0);
-
-  // 4. 予約投入
-  const insertReservation = sqlite.prepare(
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  );
-  insertReservation.run(
-    "rsv_target",
-    "grp_alpha",
-    "fac_room_a",
-    1_700_000_000_000,
-    1_700_003_600_000,
-    4,
-    "provisional",
-    "usr_student_1",
-    0,
-    0,
-  );
-  insertReservation.run(
-    "rsv_other",
-    "grp_alpha",
-    "fac_room_b",
-    1_700_000_000_000,
-    1_700_003_600_000,
-    4,
-    "provisional",
-    "usr_student_2",
-    0,
-    0,
-  );
-
-  return sqlite;
-};
-
-/**
- * better-sqlite3 版の Drizzle には `db.batch()` が無いので、D1 の代わりに渡した順で結果を返すものを足す。
- *
- * D1 の batch は 1 行を「列名 → 値」のオブジェクトで受け取るので、同じ名前の列が 2 つあると
- * 1 つに潰れて後ろの列がずれる。better-sqlite3 ではこれが起きないため、列名が重なる文を渡されたら
- * ここで失敗させて、D1 で壊れる問い合わせをテストで見つけられるようにしている。
+/*
+ * Query は内部で `db.batch()` を使う。D1 の batch は 1 行を「列名 → 値」のオブジェクトで受け取るので、
+ * 同じ名前の列が 2 つあると 1 つに潰れて後ろの列がずれる。ここでは本物の D1 で流しているので、
+ * 列名が重なる問い合わせを書けば、下の値の比較がそのまま落ちる。
  */
-const createTestDb = () => {
-  const sqlite = createDatabase();
-  const batch = (queries: readonly (PromiseLike<unknown> & { toSQL(): { sql: string } })[]) => {
-    for (const query of queries) {
-      const names = sqlite
-        .prepare(query.toSQL().sql)
-        .columns()
-        .map((column) => column.name);
-      if (new Set(names).size !== names.length) {
-        throw new Error(`同じ名前の列があり、D1 の batch では列がずれる: ${names.join(", ")}`);
-      }
-    }
-    return Promise.all(queries);
-  };
-  // 型は D1 版に合わせる。better-sqlite3 版も同じ問い合わせを組み立て、await で結果を返す
-  const db = Object.assign(drizzle(sqlite, { schema }), { batch }) as unknown as Database;
-  return { sqlite, db };
-};
+const testDb = useD1TestDb();
 
-describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () => {
+beforeEach(async () => {
+  await testDb.seed(
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_staff",
+      "事務局スタッフ",
+      "staff@osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      1,
+    ],
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_student_1",
+      "阪大太郎",
+      "taro@ecs.osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
+      "usr_student_2",
+      "阪大花子",
+      "hanako@ecs.osaka-u.ac.jp",
+      1,
+      0,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "grp_alpha",
+      "アルファ部",
+      "enabled",
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "fac_room_a",
+      "会議室A",
+      1,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
+      "fac_room_b",
+      "会議室B",
+      1,
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      "rsv_target",
+      "grp_alpha",
+      "fac_room_a",
+      1700000000000,
+      1700003600000,
+      4,
+      "provisional",
+      "usr_student_1",
+      0,
+      0,
+    ],
+    [
+      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      "rsv_other",
+      "grp_alpha",
+      "fac_room_b",
+      1700000000000,
+      1700003600000,
+      4,
+      "provisional",
+      "usr_student_2",
+      0,
+      0,
+    ],
+  );
+});
+
+describe("ReservationAuditLogListQuery (本物の D1 を使用したテスト)", () => {
   it("別の予約の記録と、target_id が同じでも target_type が予約でない記録は混ざらない", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createReservationAuditLogListQuery(db);
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 対象の予約の記録
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_target_1",
       1000,
       "usr_student_1",
@@ -125,10 +114,11 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       "grp_alpha",
       JSON.stringify({ head_count: { before: null, after: 4 } }),
-    );
+    ]);
 
     // 別の予約の記録
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_other_rsv",
       2000,
       "usr_student_2",
@@ -138,10 +128,11 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_other",
       "grp_alpha",
       JSON.stringify({ head_count: { before: null, after: 2 } }),
-    );
+    ]);
 
     // target_id が同じ文字列でも target_type が予約でない記録（例: 施設）
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_facility_same_id",
       3000,
       "usr_staff",
@@ -151,7 +142,7 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       null,
       JSON.stringify({ name: { before: "旧", after: "新" } }),
-    );
+    ]);
 
     const result = await query.findByReservationId("rsv_target", 1);
     expect(result.isOk()).toBe(true);
@@ -161,15 +152,13 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
   });
 
   it("新しい順。同じ occurred_at は id の降順", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createReservationAuditLogListQuery(db);
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 時刻違いと同時刻の複数レコード
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_1",
       1000,
       "usr_student_1",
@@ -179,8 +168,9 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       "grp_alpha",
       "{}",
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_a",
       2000,
       "usr_staff",
@@ -190,8 +180,9 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       "grp_alpha",
       "{}",
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_z",
       2000,
       "usr_staff",
@@ -201,8 +192,9 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       "grp_alpha",
       "{}",
-    );
-    insertLog.run(
+    ]);
+    await testDb.seed([
+      insertLogSql,
       "log_3",
       3000,
       "usr_student_1",
@@ -212,7 +204,7 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       "grp_alpha",
       "{}",
-    );
+    ]);
 
     const result = await query.findByReservationId("rsv_target", 1);
     expect(result.isOk()).toBe(true);
@@ -222,15 +214,13 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
   });
 
   it("21 件あると 1 ページ目は 20 件・hasNextPage: true、2 ページ目は 1 件・false", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createReservationAuditLogListQuery(db);
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     for (let i = 1; i <= 21; i++) {
-      insertLog.run(
+      await testDb.seed([
+        insertLogSql,
         `log_${String(i).padStart(3, "0")}`,
         1000 + i,
         "usr_student_1",
@@ -240,7 +230,7 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
         "rsv_target",
         "grp_alpha",
         "{}",
-      );
+      ]);
     }
 
     const page1Result = await query.findByReservationId("rsv_target", 1);
@@ -259,14 +249,12 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
   });
 
   it("操作者が user に無ければ actorName: null", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createReservationAuditLogListQuery(db);
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
-
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_deleted_user",
       1000,
       "usr_deleted", // 存在しないユーザーID
@@ -276,7 +264,7 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       "grp_alpha",
       "{}",
-    );
+    ]);
 
     const result = await query.findByReservationId("rsv_target", 1);
     expect(result.isOk()).toBe(true);
@@ -286,15 +274,13 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
   });
 
   it("changes の user_id・facility_id が userNames・facilityNames に名前で入る。存在しない ID は辞書に入らない。ID が無ければ両方 {}", async () => {
-    const { sqlite, db } = createTestDb();
+    const db = testDb.db;
     const query = createReservationAuditLogListQuery(db);
-
-    const insertLog = sqlite.prepare(
-      `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    );
+    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 1. ID が無い場合
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_no_ids",
       1000,
       "usr_student_1",
@@ -304,7 +290,7 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
       "rsv_target",
       "grp_alpha",
       JSON.stringify({ head_count: { before: 2, after: 4 } }),
-    );
+    ]);
 
     const result1 = await query.findByReservationId("rsv_target", 1);
     expect(result1.isOk()).toBe(true);
@@ -313,7 +299,8 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
     expect(list1.facilityNames).toEqual({});
 
     // 2. 存在する user_id と facility_id、および存在しない ID を含む場合
-    insertLog.run(
+    await testDb.seed([
+      insertLogSql,
       "log_with_ids",
       2000,
       "usr_staff",
@@ -326,7 +313,7 @@ describe("ReservationAuditLogListQuery (SQLite を使用したテスト)", () =>
         user_id: { before: "usr_student_1", after: "usr_nonexistent" },
         facility_id: { before: "fac_room_a", after: "fac_nonexistent" },
       }),
-    );
+    ]);
 
     const result2 = await query.findByReservationId("rsv_target", 1);
     expect(result2.isOk()).toBe(true);

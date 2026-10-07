@@ -12,7 +12,7 @@
  * 並びが定義とずれていると読む人が対応を追えなくなるので、並び順もあわせて確かめる。
  *
  * なお、ここで見ているのは「文の形」だけである。実際にどの行が書かれるかは
- * `invitation-accept-sqlite.test.ts` が本物の SQLite に対して確かめている。
+ * `invitation-accept-d1.test.ts` がローカルの本物の D1 に対して確かめている。
  */
 import { drizzle } from "drizzle-orm/d1";
 import { describe, expect, it } from "vitest";
