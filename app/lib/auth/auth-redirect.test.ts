@@ -64,7 +64,8 @@ describe("isPublicPath", () => {
     ["ログイン画面", "/login"],
     ["お名前の登録画面", "/welcome"],
     ["Better Auth の API", "/api/auth/email-otp/send-verification-otp"],
-    ["開発専用ルート", "/dev/flush-mail"],
+    ["開発専用ルート（メールの送信）", "/dev/flush-mail"],
+    ["開発専用ルート（カレンダーの同期）", "/dev/sync-calendar"],
   ])("%s はログインなしで開ける", (_, pathname) => {
     expect(isPublicPath(pathname)).toBe(true);
   });

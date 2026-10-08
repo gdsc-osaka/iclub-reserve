@@ -1,6 +1,7 @@
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
+import { toCalendarSyncDraft } from "~/domain/calendar";
 import type { FacilityRepository } from "~/domain/facility";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { directEditMailEvent } from "~/domain/mail/reservation-mail";
@@ -135,6 +136,22 @@ export const editReservationDirectlyUseCase = (
       }),
     };
 
+    const calendarSyncDraft = toCalendarSyncDraft(
+      reservation.id,
+      {
+        status: reservation.status,
+        facilityId: reservation.facilityId,
+        startAt: reservation.startAt,
+        endAt: reservation.endAt,
+      },
+      {
+        status,
+        facilityId: content.facilityId,
+        startAt: content.startAt,
+        endAt: content.endAt,
+      },
+    );
+
     const result = yield* deps.reservationRepository.applyContentEdit(
       {
         id: reservation.id,
@@ -151,6 +168,7 @@ export const editReservationDirectlyUseCase = (
       },
       mailDrafts,
       auditLog,
+      calendarSyncDraft,
     );
 
     /*

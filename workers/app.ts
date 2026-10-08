@@ -1,8 +1,12 @@
 import { createRequestHandler } from "react-router";
+import { createCalendarClient } from "~/infra/calendar/calendar-client-factory.server";
+import { createD1CalendarSyncQuery } from "~/infra/calendar/d1-calendar-sync-query";
+import { createD1CalendarSyncTasks } from "~/infra/calendar/d1-calendar-sync-tasks";
 import { createDb } from "~/infra/db";
 import { createD1MailOutbox } from "~/infra/mail/d1-mail-outbox";
 import type { MailQueueMessage } from "~/infra/mail/mail-queue.server";
 import { createMailSender, getMailFrom } from "~/infra/mail/mail-sender-factory.server";
+import { processCalendarSyncTasksUseCase } from "~/usecases/calendar/process-calendar-sync-tasks";
 import {
   flushMailOutboxByIdsUseCase,
   flushMailOutboxUseCase,
@@ -19,25 +23,54 @@ export default {
   },
 
   /**
-   * 毎分の取りこぼし回収（ADR-002 実装ガイド 4）。
-   * 送信待ち（pending）およびクラッシュ等で放置された（sending）メールを回収して送信する。
+   * 毎分の定期処理。
+   * 1. メールの取りこぼし回収（ADR-002 実装ガイド 4）
+   * 2. カレンダー同期タスクの反映（ADR-008 実装方針）
+   *
+   * 片方が例外を投げてももう片方を巻き込まないよう、それぞれ独立して実行する。
    */
   async scheduled(_controller, env, _ctx) {
     const db = createDb(env.DB);
-    const mailOutbox = createD1MailOutbox(db);
-    const mailSender = createMailSender();
-    const from = getMailFrom();
 
-    const result = await flushMailOutboxUseCase({
-      mailOutbox,
-      mailSender,
-      from,
-    });
+    // 1. メールの回収
+    try {
+      const mailOutbox = createD1MailOutbox(db);
+      const mailSender = createMailSender();
+      const from = getMailFrom();
 
-    // 毎分動くので、送るものが無かった回は何も残さない。
-    // stateUpdateFailed が 0 でない回は、同じメールが再送される可能性がある。
-    if (result.claimed > 0) {
-      console.info("mail outbox flushed by cron:", result);
+      const mailResult = await flushMailOutboxUseCase({
+        mailOutbox,
+        mailSender,
+        from,
+      });
+
+      // 毎分動くので、送るものが無かった回は何も残さない。
+      // stateUpdateFailed が 0 でない回は、同じメールが再送される可能性がある。
+      if (mailResult.claimed > 0) {
+        console.info("mail outbox flushed by cron:", mailResult);
+      }
+    } catch (error) {
+      console.error("Scheduled mail outbox flush failed:", error);
+    }
+
+    // 2. カレンダー同期タスクの反映
+    try {
+      const calendarSyncTasks = createD1CalendarSyncTasks(db);
+      const query = createD1CalendarSyncQuery(db);
+      const calendarClient = createCalendarClient();
+
+      const calendarResult = await processCalendarSyncTasksUseCase({
+        calendarSyncTasks,
+        query,
+        calendarClient,
+      });
+
+      // 毎分動くので、処理するタスクが無かった回は何も残さない。
+      if (calendarResult.claimed > 0) {
+        console.info("calendar sync tasks processed by cron:", calendarResult);
+      }
+    } catch (error) {
+      console.error("Scheduled calendar sync failed:", error);
     }
   },
 

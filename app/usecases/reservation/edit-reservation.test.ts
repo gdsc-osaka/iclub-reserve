@@ -121,8 +121,12 @@ const createDeps = (
     okAsync(overrides.hasApprovedOverlap ?? false),
   );
   const applyContentEdit = vi.fn(
-    (_args: ApplyContentEditArgs, _mails: readonly MailDraft[], _auditLog?: unknown) =>
-      okAsync({ applied, enqueuedMailIds: applied ? ["outbox_01", "outbox_02"] : [] }),
+    (
+      _args: ApplyContentEditArgs,
+      _mails: readonly MailDraft[],
+      _auditLog?: unknown,
+      _calendarSync?: unknown,
+    ) => okAsync({ applied, enqueuedMailIds: applied ? ["outbox_01", "outbox_02"] : [] }),
   );
 
   const reservationRepository: ReservationRepository = {
@@ -258,6 +262,7 @@ describe("editReservationUseCase", () => {
             note: { before: null, after: "機材を持ち込みます" },
           },
         },
+        null,
       );
       expect(spies.notifyEnqueued).toHaveBeenCalledWith(["outbox_01", "outbox_02"]);
     });
@@ -596,6 +601,72 @@ describe("editReservationUseCase", () => {
       const result = await editReservationUseCase(deps, argsWith({ headCount: 6 }));
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.DatabaseError);
+    });
+  });
+
+  describe("カレンダー同期タスク草稿の作成（toCalendarSyncDraft）", () => {
+    it("承認済みの施設・日時の変更で仮予約に戻る際（UC-005）、施設変更があれば previousFacilityId 付きで積む", async () => {
+      const { deps, spies } = createDeps();
+      const startAt = new Date("2026-09-25T11:00:00+09:00");
+      const endAt = new Date("2026-09-25T13:00:00+09:00");
+
+      await editReservationUseCase(deps, argsWith({ facilityId: "fac_room_b", startAt, endAt }));
+
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        {
+          reservationId: "res_01",
+          previousFacilityId: "fac_room_a",
+        },
+      );
+    });
+
+    it("承認済みの日時変更で仮予約に戻る際（UC-005）、施設が同じなら previousFacilityId なしで積む", async () => {
+      const { deps, spies } = createDeps();
+      const startAt = new Date("2026-09-25T11:00:00+09:00");
+      const endAt = new Date("2026-09-25T13:00:00+09:00");
+
+      await editReservationUseCase(deps, argsWith({ startAt, endAt }));
+
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        {
+          reservationId: "res_01",
+          previousFacilityId: null,
+        },
+      );
+    });
+
+    it("仮予約の編集時（UC-017）は同期タスクを積まない（null）", async () => {
+      const { deps, spies } = createDeps({ reservation: provisionalReservation });
+      const startAt = new Date("2026-09-25T11:00:00+09:00");
+      const endAt = new Date("2026-09-25T13:00:00+09:00");
+
+      await editReservationUseCase(deps, argsWith({ startAt, endAt }));
+
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        null,
+      );
+    });
+
+    it("使用人数・備考だけの変更では同期タスクを積まない（null）", async () => {
+      const { deps, spies } = createDeps();
+
+      await editReservationUseCase(deps, argsWith({ headCount: 8, note: "人数のみ変更" }));
+
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        null,
+      );
     });
   });
 });

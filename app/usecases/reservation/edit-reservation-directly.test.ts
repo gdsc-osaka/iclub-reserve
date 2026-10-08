@@ -119,8 +119,13 @@ const createDeps = (
   const existsApprovedOverlap = vi.fn((_args: ReservationOverlapArgs) =>
     okAsync(overrides.hasApprovedOverlap ?? false),
   );
-  const applyContentEdit = vi.fn((_args: ApplyContentEditArgs, _mails: readonly MailDraft[]) =>
-    okAsync({ applied, enqueuedMailIds: applied ? ["outbox_01"] : [] }),
+  const applyContentEdit = vi.fn(
+    (
+      _args: ApplyContentEditArgs,
+      _mails: readonly MailDraft[],
+      _auditLog?: unknown,
+      _calendarSync?: unknown,
+    ) => okAsync({ applied, enqueuedMailIds: applied ? ["outbox_01"] : [] }),
   );
 
   const reservationRepository: ReservationRepository = {
@@ -375,6 +380,10 @@ describe("editReservationDirectlyUseCase", () => {
           action: AuditLogAction.ReservationDirectChange,
           actedAsStaff: true,
         }),
+        {
+          reservationId: approvedReservation.id,
+          previousFacilityId: null,
+        },
       );
 
       // 即時配送が呼ばれたこと
@@ -406,6 +415,7 @@ describe("editReservationDirectlyUseCase", () => {
           action: AuditLogAction.ReservationDirectChange,
           actedAsStaff: true,
         }),
+        null,
       );
     });
 
@@ -433,6 +443,7 @@ describe("editReservationDirectlyUseCase", () => {
           action: AuditLogAction.ReservationDirectChange,
           actedAsStaff: true,
         }),
+        null,
       );
     });
 
@@ -524,6 +535,70 @@ describe("editReservationDirectlyUseCase", () => {
       );
       expect(mails[0]?.subject).toBe(
         "【i-Club予約システム】施設・設備の利用予約が事務局により変更されました",
+      );
+    });
+  });
+
+  describe("カレンダー同期タスク草稿の作成（toCalendarSyncDraft）", () => {
+    it("事務局の直接変更で日時だけ変えたときは同期タスクを積む（previousFacilityId なし）", async () => {
+      const { deps, spies } = createDeps();
+
+      await editReservationDirectlyUseCase(
+        deps,
+        argsWith({
+          startAt: new Date("2026-09-25T14:00:00+09:00"),
+          endAt: new Date("2026-09-25T16:00:00+09:00"),
+        }),
+      );
+
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        {
+          reservationId: approvedReservation.id,
+          previousFacilityId: null,
+        },
+      );
+    });
+
+    it("事務局の直接変更で施設を変えたときは previousFacilityId ありで同期タスクを積む", async () => {
+      const { deps, spies } = createDeps();
+
+      await editReservationDirectlyUseCase(
+        deps,
+        argsWith({
+          facilityId: "fac_room_b",
+        }),
+      );
+
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        {
+          reservationId: approvedReservation.id,
+          previousFacilityId: "fac_room_a",
+        },
+      );
+    });
+
+    it("事務局の直接変更で使用人数・備考だけを変えたときは同期タスクを積まない（null）", async () => {
+      const { deps, spies } = createDeps();
+
+      await editReservationDirectlyUseCase(
+        deps,
+        argsWith({
+          headCount: 10,
+          note: "直接変更備考",
+        }),
+      );
+
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        null,
       );
     });
   });

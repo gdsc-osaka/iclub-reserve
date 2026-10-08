@@ -2,6 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
+import { toCalendarSyncDraft } from "~/domain/calendar";
 import type { FacilityRepository } from "~/domain/facility";
 import type { GroupRepository } from "~/domain/group";
 import type { MembershipRepository } from "~/domain/membership";
@@ -118,7 +119,18 @@ export const createDirectReservationUseCase = (
       }),
     };
 
-    const outcome = yield* deps.reservationRepository.createApproved(reservation, auditLog);
+    const calendarSyncDraft = toCalendarSyncDraft(id, null, {
+      status: ReservationStatus.Approved,
+      facilityId: reservation.facilityId,
+      startAt: reservation.startAt,
+      endAt: reservation.endAt,
+    });
+
+    const outcome = yield* deps.reservationRepository.createApproved(
+      reservation,
+      auditLog,
+      calendarSyncDraft,
+    );
 
     // 確認のあとに、同じ時間帯の別の予約が承認されていた
     if (!outcome.applied) {

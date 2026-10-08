@@ -26,6 +26,7 @@ const BUILD_SERVER_DIR = "build/server";
  * ここを E2E 用の値で上書きしておくと、手元の `.dev.vars` に何が書いてあっても
  * E2E は同じ設定で動く。とくに SMTP の認証情報を空にすることで、
  * テスト中のメールが実際に送られることはなく、ターミナルに出るだけになる。
+ * Google の Service Account も同じく空にし、Google Calendar には書き込まない（ADR-008）。
  */
 function writeDevVars(): void {
   if (!fs.existsSync(path.join(BUILD_SERVER_DIR, "wrangler.json"))) {
@@ -39,6 +40,8 @@ function writeDevVars(): void {
     `BETTER_AUTH_URL="${E2E_BASE_URL}"`,
     'SMTP_USER=""',
     'SMTP_PASSWORD=""',
+    'GOOGLE_SERVICE_ACCOUNT_EMAIL=""',
+    'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=""',
   ].join("\n");
 
   fs.writeFileSync(path.join(BUILD_SERVER_DIR, ".dev.vars"), `${devVars}\n`, "utf-8");

@@ -98,4 +98,7 @@ export default [
 
   // 開発専用ルート（ローカルでの outbox 手動送信確認用 / ADR-002 実装ガイド 5）
   route("dev/flush-mail", "routes/dev/flush-mail/route.ts"),
+
+  // 開発専用ルート（ローカルでのカレンダー同期手動実行確認用 / ADR-008）
+  route("dev/sync-calendar", "routes/dev/sync-calendar/route.ts"),
 ] satisfies RouteConfig;

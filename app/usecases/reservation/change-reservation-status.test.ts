@@ -106,8 +106,9 @@ const createMockDeps = (options?: {
   );
 
   const existsApprovedOverlap = vi.fn((_args: unknown) => okAsync(hasOverlap));
-  const applyStatusTransition = vi.fn((_args: unknown, _mails: unknown) =>
-    okAsync({ applied, enqueuedMailIds }),
+  const applyStatusTransition = vi.fn(
+    (_args: unknown, _mails: unknown, _auditLog?: unknown, _calendarSync?: unknown) =>
+      okAsync({ applied, enqueuedMailIds }),
   );
   const create = vi.fn((_res: unknown, _mails: unknown) => okAsync({ enqueuedMailIds: [] }));
   // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
@@ -223,6 +224,7 @@ describe("changeReservationStatusUseCase", () => {
             status_reason: { before: null, after: "都合がつかなくなったため" },
           },
         },
+        null,
       );
     });
 
@@ -302,6 +304,10 @@ describe("changeReservationStatusUseCase", () => {
             status_reason: { before: null, after: "イベント延期のため" },
           },
         },
+        {
+          reservationId: "res_approved_01",
+          previousFacilityId: null,
+        },
       );
     });
 
@@ -363,6 +369,10 @@ describe("changeReservationStatusUseCase", () => {
             status_reason: { before: null, after: null },
           },
         },
+        {
+          reservationId: "res_provisional_01",
+          previousFacilityId: null,
+        },
       );
     });
 
@@ -411,6 +421,10 @@ describe("changeReservationStatusUseCase", () => {
           action: AuditLogAction.ReservationApprove,
           actedAsStaff: true,
         }),
+        {
+          reservationId: "res_provisional_01",
+          previousFacilityId: null,
+        },
       );
       const passedMails = (spies.applyStatusTransition.mock.calls[0] as unknown[])[1] as unknown[];
       expect(passedMails).toHaveLength(3);
@@ -465,6 +479,7 @@ describe("changeReservationStatusUseCase", () => {
             status_reason: { before: null, after: "設備点検のため利用できません" },
           },
         },
+        null,
       );
     });
 
@@ -517,6 +532,10 @@ describe("changeReservationStatusUseCase", () => {
             status: { before: "approved", after: "cancelled_by_staff" },
             status_reason: { before: null, after: "大学の公式行事のため" },
           },
+        },
+        {
+          reservationId: "res_approved_01",
+          previousFacilityId: null,
         },
       );
     });
@@ -829,6 +848,100 @@ describe("changeReservationStatusUseCase", () => {
       const result = await changeReservationStatusUseCase(deps, args);
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap().status).toBe(ReservationStatus.Approved);
+    });
+  });
+
+  describe("カレンダー同期タスク草稿の作成（toCalendarSyncDraft）", () => {
+    it("承認時は同期タスク草稿が渡される", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        now: testNow,
+      };
+
+      await changeReservationStatusUseCase(deps, args);
+
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        {
+          reservationId: "res_provisional_01",
+          previousFacilityId: null,
+        },
+      );
+    });
+
+    it("却下時は同期タスク草稿が null になる", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Reject,
+        reason: "施設利用基準を満たしていないため",
+        now: testNow,
+      };
+
+      await changeReservationStatusUseCase(deps, args);
+
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        null,
+      );
+    });
+
+    it("承認済みのキャンセル時は同期タスク草稿が渡される", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseApprovedReservation });
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_approved_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition: ReservationTransition.Cancel,
+        reason: "都合によりキャンセル",
+        now: testNow,
+      };
+
+      await changeReservationStatusUseCase(deps, args);
+
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        {
+          reservationId: "res_approved_01",
+          previousFacilityId: null,
+        },
+      );
+    });
+
+    it("事務局キャンセル時は同期タスク草稿が渡される", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseApprovedReservation });
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_approved_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.StaffCancel,
+        reason: "緊急メンテナンスのため",
+        now: testNow,
+      };
+
+      await changeReservationStatusUseCase(deps, args);
+
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        {
+          reservationId: "res_approved_01",
+          previousFacilityId: null,
+        },
+      );
     });
   });
 });

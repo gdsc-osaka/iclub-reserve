@@ -20,7 +20,9 @@ import {
   type ReservationOverlapArgs,
   type ReservationRepository,
 } from "~/domain/reservation";
+import type { CalendarSyncTaskDraft } from "~/domain/calendar";
 import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { guardedCalendarSyncTaskInserts } from "../calendar/calendar-sync-task-writes";
 import type { Database } from "../db";
 import { guardedMailOutboxInserts, mailOutboxInserts } from "../mail/mail-outbox-writes";
 
@@ -120,6 +122,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
     written: { readonly id: string; readonly status: ReservationStatus; readonly updatedAt: Date },
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
+    calendarSync: CalendarSyncTaskDraft | null,
     subject: string,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
     const auditStatement = guardedAuditLogInsert(db, auditLog, {
@@ -127,20 +130,27 @@ export const createReservationRepository = (db: Database): ReservationRepository
       where: condition,
     });
 
+    const guardCondition = and(
+      eq(reservationTable.id, written.id),
+      eq(reservationTable.status, written.status),
+      eq(reservationTable.updatedAt, written.updatedAt),
+    );
+
     const outbox = guardedMailOutboxInserts(db, mails, {
       from: reservationTable,
-      where: and(
-        eq(reservationTable.id, written.id),
-        eq(reservationTable.status, written.status),
-        eq(reservationTable.updatedAt, written.updatedAt),
-      ),
+      where: guardCondition,
+    });
+
+    const calendarSyncStatements = guardedCalendarSyncTaskInserts(db, calendarSync, {
+      from: reservationTable,
+      where: guardCondition,
     });
 
     return ResultAsync.fromPromise(
-      db.batch([auditStatement, updateQuery, ...outbox.statements]),
+      db.batch([auditStatement, updateQuery, ...outbox.statements, ...calendarSyncStatements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: `${subject}、操作履歴、通知の outbox を書き込めなかった。`,
+        message: `${subject}、操作履歴、通知の outbox、カレンダー同期タスクを書き込めなかった。`,
         cause: error,
       }),
     ).map((results) => {
@@ -219,6 +229,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
   const createApproved = (
     reservation: Reservation,
     auditLog: AuditLogDraft,
+    calendarSync: CalendarSyncTaskDraft | null,
   ): ResultAsync<CreateApprovedReservationOutcome, ReservationError> => {
     const condition = noApprovedOverlapAt(reservation, reservation.id);
     const auditStatement = guardedAuditLogInsert(db, auditLog, {
@@ -250,11 +261,19 @@ export const createReservationRepository = (db: Database): ReservationRepository
       )
       .returning({ id: reservationTable.id });
 
+    const calendarSyncStatements = guardedCalendarSyncTaskInserts(db, calendarSync, {
+      from: reservationTable,
+      where: and(
+        eq(reservationTable.id, reservation.id),
+        eq(reservationTable.createdAt, reservation.createdAt),
+      ),
+    });
+
     return ResultAsync.fromPromise(
-      db.batch([auditStatement, insertQuery]),
+      db.batch([auditStatement, insertQuery, ...calendarSyncStatements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "承認済みの予約と操作履歴を書き込めなかった。",
+        message: "承認済みの予約、操作履歴、カレンダー同期タスクを書き込めなかった。",
         cause: error,
       }),
     ).map((results) => {
@@ -300,6 +319,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
     args: ApplyStatusTransitionArgs,
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
+    calendarSync: CalendarSyncTaskDraft | null,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
     const condition = allOf(
       eq(reservationTable.id, args.id),
@@ -320,13 +340,22 @@ export const createReservationRepository = (db: Database): ReservationRepository
       // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
       .returning({ id: reservationTable.id });
 
-    return runGuardedUpdate(updateQuery, condition, args, mails, auditLog, "予約のステータス");
+    return runGuardedUpdate(
+      updateQuery,
+      condition,
+      args,
+      mails,
+      auditLog,
+      calendarSync,
+      "予約のステータス",
+    );
   };
 
   const applyContentEdit = (
     args: ApplyContentEditArgs,
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
+    calendarSync: CalendarSyncTaskDraft | null,
   ): ResultAsync<ApplyContentEditOutcome, ReservationError> => {
     const condition = allOf(
       eq(reservationTable.id, args.id),
@@ -351,7 +380,15 @@ export const createReservationRepository = (db: Database): ReservationRepository
       // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
       .returning({ id: reservationTable.id });
 
-    return runGuardedUpdate(updateQuery, condition, args, mails, auditLog, "予約の内容");
+    return runGuardedUpdate(
+      updateQuery,
+      condition,
+      args,
+      mails,
+      auditLog,
+      calendarSync,
+      "予約の内容",
+    );
   };
 
   return {

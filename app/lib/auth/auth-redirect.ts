@@ -10,6 +10,9 @@ export const WELCOME_PATH = "/welcome";
 /** 開発専用の、メール outbox を手で送信するエンドポイント（`app/routes/dev/flush-mail`）。 */
 export const DEV_FLUSH_MAIL_PATH = "/dev/flush-mail";
 
+/** 開発専用の、カレンダー同期タスクを手で処理するエンドポイント（`app/routes/dev/sync-calendar`）。 */
+export const DEV_SYNC_CALENDAR_PATH = "/dev/sync-calendar";
+
 /**
  * パスキーの登録を勧める画面。
  *
@@ -37,8 +40,14 @@ const DEFAULT_REDIRECT_TO = "/";
  * `DEV_FLUSH_MAIL_PATH` はローカルで outbox の送信を手で起動するための開発専用ルート。
  * curl から叩けるようログインを免除するが、ローカル以外ではルート自身が
  * `APP_ENV` を見て 404 を返す（ADR-002 実装ガイド 5）。
+ * `DEV_SYNC_CALENDAR_PATH`（カレンダー同期を手で起動する。ADR-008）も同じ扱い。
  */
-const PUBLIC_PATHS: ReadonlySet<string> = new Set([LOGIN_PATH, WELCOME_PATH, DEV_FLUSH_MAIL_PATH]);
+const PUBLIC_PATHS: ReadonlySet<string> = new Set([
+  LOGIN_PATH,
+  WELCOME_PATH,
+  DEV_FLUSH_MAIL_PATH,
+  DEV_SYNC_CALENDAR_PATH,
+]);
 
 /**
  * ログインしていなくても開けるパスの接頭辞（前方一致で判定する）。
