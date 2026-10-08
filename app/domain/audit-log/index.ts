@@ -4,6 +4,8 @@
  * 予約・団体・メンバーシップ・招待・施設・事務局権限に対して人が行った操作を追記する（COND-013）。
  * 記録は無期限に保持され、編集・削除する操作は用意しない（REQ-038）。
  */
+import type { PermissionTable } from "../authz";
+import { canAct, type Actor, type ActorRole } from "../membership";
 
 /**
  * 記録対象の種類（VAR-003）。
@@ -235,6 +237,100 @@ export const parseAuditLogChanges = (value: unknown): AuditLogChanges => {
 
   return result;
 };
+
+/** 業務データと同じ batch で書く、操作履歴 1 件ぶんの値。id と target_type はインフラが決める */
+export interface AuditLogDraft {
+  readonly occurredAt: Date;
+  readonly actorId: string;
+  readonly actedAsStaff: boolean;
+  readonly action: AuditLogAction;
+  readonly targetId: string;
+  readonly groupId: string | null;
+  readonly changes: AuditLogChanges;
+}
+
+export type RawAuditLogValue = Date | string | number | boolean | null;
+
+/**
+ * 変更内容に含める値に変換する。
+ *
+ * Date は toISOString() に変換し、それ以外はそのまま返す。
+ */
+export const toAuditLogValue = (value: RawAuditLogValue): AuditLogValue =>
+  value instanceof Date ? value.toISOString() : value;
+
+/**
+ * 作成の記録の changes を組み立てる。
+ *
+ * 全項目の before を null にし、after に渡された値を入れる。
+ */
+export const toCreatedChanges = (
+  after: Readonly<Record<string, RawAuditLogValue>>,
+): AuditLogChanges => {
+  const result: Record<string, AuditLogFieldChange> = {};
+  for (const [key, value] of Object.entries(after)) {
+    result[key] = {
+      before: null,
+      after: toAuditLogValue(value),
+    };
+  }
+  return result;
+};
+
+/**
+ * 更新の記録の changes を組み立てる。
+ *
+ * toAuditLogValue を通した値で比較し、値が変わった項目だけを残す。
+ */
+export const toUpdatedChanges = (
+  before: Readonly<Record<string, RawAuditLogValue>>,
+  after: Readonly<Record<string, RawAuditLogValue>>,
+): AuditLogChanges => {
+  const result: Record<string, AuditLogFieldChange> = {};
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const key of keys) {
+    const beforeVal = toAuditLogValue(before[key] ?? null);
+    const afterVal = toAuditLogValue(after[key] ?? null);
+    if (beforeVal !== afterVal) {
+      result[key] = {
+        before: beforeVal,
+        after: afterVal,
+      };
+    }
+  }
+  return result;
+};
+
+/**
+ * 対象を特定する項目の changes を組み立てる。
+ *
+ * 削除された対象などを特定できるよう、before と after に同じ値を入れる。
+ */
+export const toIdentityChanges = (
+  values: Readonly<Record<string, RawAuditLogValue>>,
+): AuditLogChanges => {
+  const result: Record<string, AuditLogFieldChange> = {};
+  for (const [key, value] of Object.entries(values)) {
+    const v = toAuditLogValue(value);
+    result[key] = {
+      before: v,
+      after: v,
+    };
+  }
+  return result;
+};
+
+/**
+ * 事務局の横断権限による操作かどうかを判定する（COND-012）。
+ *
+ * 「その操作が団体内のロールでは許されず、事務局の横断権限によって初めて許された場合に true」。
+ */
+export const isActedAsStaff = <A extends string>(
+  table: PermissionTable<ActorRole, A>,
+  actor: Actor,
+  action: A,
+): boolean =>
+  actor.isStaff && !canAct(table, { isStaff: false, membership: actor.membership }, action);
 
 /** 画面に渡す操作者。団体側に伏せるときは名前を持たない形にする（COND-012） */
 export type AuditLogActorView =
