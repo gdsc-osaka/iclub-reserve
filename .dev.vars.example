@@ -18,3 +18,12 @@ BETTER_AUTH_URL=http://localhost:5173
 # 切り捨てられると SMTP 認証に失敗する（送信時に auth_failed になる）。
 SMTP_USER=""
 SMTP_PASSWORD=""
+
+# Google Calendar 連携の Google Service Account 認証情報
+# Google Cloud Console > IAM と管理 > サービス アカウント から作成・秘密鍵（JSON）を発行する。
+# 空のままにしておくと、Google に送らず予定の内容をターミナルに出力する（ローカル開発用）。
+#
+# 【注意】値は必ずダブルクォートで囲むこと。
+# 秘密鍵（PKCS#8 PEM）には改行が含まれるため、1 行に \n で連結した文字列か複数行で指定する。
+GOOGLE_SERVICE_ACCOUNT_EMAIL=""
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=""
