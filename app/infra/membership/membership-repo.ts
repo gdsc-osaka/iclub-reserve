@@ -11,7 +11,7 @@ import {
   type MembershipRepository,
   type UpdateMembershipRoleInput,
 } from "~/domain/membership";
-import { guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { allOf, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { toMembership } from "./membership-converter";
 
@@ -76,7 +76,7 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
      * userId のみで条件を指定すると、他団体の所属行まで意図せず書き換えてしまう脆弱性・不具合につながる。
      * 更新対象を必ず指定された団体 (groupId) 内に閉じ込めるために含める。
      */
-    const condition = and(
+    const condition = allOf(
       eq(groupMemberTable.groupId, input.groupId),
       eq(groupMemberTable.userId, input.userId),
     );
@@ -110,7 +110,7 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
      * updateRole と同様、他団体のメンバー行を誤って削除することを確実に防ぎ、
      * 操作の対象を URL に含まれる団体に限定するため。
      */
-    const condition = and(
+    const condition = allOf(
       eq(groupMemberTable.groupId, groupId),
       eq(groupMemberTable.userId, userId),
     );

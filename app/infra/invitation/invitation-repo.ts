@@ -13,7 +13,7 @@ import {
 } from "~/domain/invitation";
 import type { AuditLogDraft } from "~/domain/audit-log";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
-import { auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { mailOutboxInserts } from "../mail/mail-outbox-writes";
 import { toInvitation } from "./invitation-converter";
@@ -79,7 +79,7 @@ export const invitationAcceptStatements = (
    * 承諾できる招待かどうかを決める条件。3 文で必ず同じものを使う（COND-013）。
    * 条件を 1 か所にまとめているのは、2 文・3 文に書き分けると食い違いに気付けないため。
    */
-  const acceptable = and(
+  const acceptable = allOf(
     eq(groupInvitationTable.id, input.invitationId),
     // 取り消し済み・承諾済み・辞退済みの招待を蒸し返さない
     eq(groupInvitationTable.status, InvitationStatus.Pending),
@@ -207,7 +207,7 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
     invitationId: string,
     auditLog: AuditLogDraft,
   ): ResultAsync<number, GroupError> => {
-    const condition = and(
+    const condition = allOf(
       eq(groupInvitationTable.id, invitationId),
       /*
        * 他団体の招待を取り消せないよう、必ず団体 ID で絞る。
@@ -268,7 +268,7 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
     input: RejectInvitationInput,
     auditLog: AuditLogDraft,
   ): ResultAsync<number, GroupError> => {
-    const condition = and(
+    const condition = allOf(
       eq(groupInvitationTable.id, input.invitationId),
       // 承諾済み・取り消し済みの招待を蒸し返さない
       eq(groupInvitationTable.status, InvitationStatus.Pending),
