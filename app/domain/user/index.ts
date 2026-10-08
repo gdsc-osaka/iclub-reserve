@@ -33,6 +33,10 @@ export const UserErrorCode = {
   SessionNotFound: "SESSION_NOT_FOUND",
   /** 利用中のセッションをログアウトしようとした */
   CurrentSession: "CURRENT_SESSION",
+  /** 利用規約への同意の印が付いていない（REQ-033） */
+  TermsNotAgreed: "TERMS_NOT_AGREED",
+  /** 画面を開いた後に規約が改定され、同意しようとした版が今の版ではない（REQ-033） */
+  TermsOutdated: "TERMS_OUTDATED",
 } as const;
 export type UserErrorCode = (typeof UserErrorCode)[keyof typeof UserErrorCode];
 
@@ -47,6 +51,8 @@ export const userErrorKind: Record<UserErrorCode, ErrorKind> = {
   [UserErrorCode.DatabaseError]: ErrorKind.Internal,
   [UserErrorCode.SessionNotFound]: ErrorKind.NotFound,
   [UserErrorCode.CurrentSession]: ErrorKind.Conflict,
+  [UserErrorCode.TermsNotAgreed]: ErrorKind.InvalidInput,
+  [UserErrorCode.TermsOutdated]: ErrorKind.Conflict,
 };
 
 /**
@@ -75,6 +81,26 @@ export interface UserRepository {
    * - DB アクセスに失敗した場合: err(DATABASE_ERROR)
    */
   findById(id: string): ResultAsync<User, UserError>;
+}
+
+/**
+ * 利用規約への同意（REQ-033）を記録する窓口 (ポート)。
+ */
+export interface TermsAcceptanceRepository {
+  /**
+   * そのユーザーが、指定した版の規約に同意したことを記録する。
+   *
+   * 前に別の版へ同意していた場合は、新しい版と日時で上書きする。
+   *
+   * - 記録できた場合: ok(null)
+   * - ユーザーが見つからない場合: err(USER_NOT_FOUND)
+   * - DB アクセスに失敗した場合: err(DATABASE_ERROR)
+   */
+  recordAcceptance(
+    userId: string,
+    termsVersion: string,
+    acceptedAt: Date,
+  ): ResultAsync<null, UserError>;
 }
 
 /**
