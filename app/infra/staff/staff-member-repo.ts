@@ -3,7 +3,7 @@ import { ResultAsync } from "neverthrow";
 import { user } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
 import { type StaffError, StaffErrorCode, type StaffMemberRepository } from "~/domain/staff";
-import { guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { allOf, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 
 const databaseError =
@@ -48,7 +48,7 @@ export const createStaffMemberRepository = (db: Database): StaffMemberRepository
     now: Date,
     auditLog: AuditLogDraft,
   ): ResultAsync<number, StaffError> => {
-    const revokeCondition = and(
+    const revokeCondition = allOf(
       eq(user.id, userId),
       eq(user.is_staff, true),
       sql`(SELECT COUNT(*) FROM ${user} WHERE ${user.is_staff} = 1) >= 2`,

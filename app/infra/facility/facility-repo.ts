@@ -12,7 +12,7 @@ import {
   type UpdateFacilityInput,
 } from "~/domain/facility";
 import { ReservationStatus } from "~/domain/reservation";
-import { auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 
 const toFacility = (row: typeof facilityTable.$inferSelect): Facility => ({
@@ -86,7 +86,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
     input: UpdateFacilityInput,
     auditLog: AuditLogDraft,
   ): ResultAsync<Facility, FacilityError> => {
-    const updateWhere = and(
+    const updateWhere = allOf(
       eq(facilityTable.id, input.id),
       // 読んだときから写真が変わっていたら書かない（UpdateFacilityInput.expectedPhotoUrl）
       input.expectedPhotoUrl === null
@@ -199,10 +199,10 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
         ),
     );
 
-    const updateWhere = and(
+    const updateWhere = allOf(
       eq(facilityTable.id, id),
       eq(facilityTable.isActive, from),
-      to ? undefined : hasNoBlockingReservations,
+      ...(to ? [] : [hasNoBlockingReservations]),
     );
 
     const auditStatement = guardedAuditLogInsert(db, auditLog, {

@@ -13,7 +13,7 @@ import {
   type StaffInvitation,
   type StaffInvitationRepository,
 } from "~/domain/staff";
-import { auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { mailOutboxInserts } from "../mail/mail-outbox-writes";
 
@@ -41,7 +41,7 @@ const toStaffInvitation = (row: typeof staffInvitationTable.$inferSelect): Staff
  * 画面に出ていない招待を古いフォームの再送信で辞退できてしまう、といったことが起きる。
  */
 const respondableInvitation = (input: RejectInvitationInput) =>
-  and(
+  allOf(
     eq(staffInvitationTable.id, input.invitationId),
     // 取り消し済み・承諾済み・辞退済みの招待を蒸し返さない
     eq(staffInvitationTable.status, InvitationStatus.Pending),
@@ -159,7 +159,7 @@ export const createStaffInvitationRepository = (db: Database): StaffInvitationRe
     invitationId: string,
     auditLog: AuditLogDraft,
   ): ResultAsync<number, StaffError> => {
-    const cancelCondition = and(
+    const cancelCondition = allOf(
       eq(staffInvitationTable.id, invitationId),
       eq(staffInvitationTable.status, InvitationStatus.Pending),
     );
