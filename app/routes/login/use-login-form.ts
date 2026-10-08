@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { type LoginMethod, toLoginMethodOrder } from "~/domain/authn/login-method";
-import { isProfileCompleted } from "~/domain/authn/user-profile";
+import { isOnboardingCompleted, type OnboardingUser } from "~/domain/authn/onboarding";
 import { authClient } from "~/lib/auth/auth-client";
 import { isPasskeyCancelledError, toAuthErrorMessage } from "~/lib/auth/auth-error-message";
 import {
@@ -68,13 +68,13 @@ export const resolveLoginNextPath = async ({
   detectPasskeySupportFn = detectPasskeySupport,
   shouldSuggestPasskeyFn = shouldSuggestPasskeyOnThisDevice,
 }: {
-  readonly user: { readonly name: string };
+  readonly user: OnboardingUser;
   readonly method: LoginMethod;
   readonly redirectTo: string;
   readonly detectPasskeySupportFn?: () => Promise<{ canRegisterOnThisDevice: boolean }>;
   readonly shouldSuggestPasskeyFn?: () => boolean;
 }): Promise<string> => {
-  if (!isProfileCompleted(user)) return withRedirectTo(WELCOME_PATH, redirectTo);
+  if (!isOnboardingCompleted(user)) return withRedirectTo(WELCOME_PATH, redirectTo);
 
   // パスキーでログインできた人は、当然すでにパスキーを持っている。
   if (method === "passkey") return redirectTo;
@@ -157,7 +157,8 @@ export const useLoginForm = ({
   /**
    * ログインを終えた人を、次にどの画面へ送るかを決める。
    *
-   * 1. お名前がまだの人（アカウントができたばかりの人）はセットアップ画面へ。
+   * 1. 本登録が済んでいない人（アカウントができたばかりの人・今の版の利用規約に
+   *    同意していない人）はセットアップ画面へ。
    *    パスキーの登録もその画面が続けて勧めるので、ここでは何もしない。
    * 2. 戻り先のパスが /account のときは、パスキーを勧める画面（SCR-015）を挟まない（COND-019）。
    * 3. この端末にパスキーを保存できて、勧める頃合いなら、勧める画面へ。
@@ -167,7 +168,7 @@ export const useLoginForm = ({
    * 端末の判定は待ってから見る。描画に合わせて受け取る形（`usePasskeySupport`）だと、
    * 判定が終わる前に認証を終えた人に、勧めそこねてしまう。
    */
-  const toNextPath = (user: { readonly name: string }, method: LoginMethod): Promise<string> =>
+  const toNextPath = (user: OnboardingUser, method: LoginMethod): Promise<string> =>
     resolveLoginNextPath({ user, method, redirectTo });
 
   /**
@@ -176,7 +177,7 @@ export const useLoginForm = ({
    * @param user ログインした人
    * @param method 実際に使ったログイン方法
    */
-  const finishLogin = async (user: { readonly name: string }, method: LoginMethod) => {
+  const finishLogin = async (user: OnboardingUser, method: LoginMethod) => {
     // 次に来たとき、この方法を先頭に出せるよう覚えておく。
     rememberLastLoginMethod(method);
     // 画面が切り替わるまで操作させたくないので、待っている状態のままにする。
@@ -229,7 +230,7 @@ export const useLoginForm = ({
    * 入力された認証コードで認証する。
    *
    * 未登録のメールアドレスならこの時点でアカウントが作られる。
-   * その場合は名前が空になるので、セットアップ画面へ送る。
+   * その場合は利用規約への同意も名前も無いので、セットアップ画面へ送る。
    */
   const verifyOtp = async (otp: string) => {
     setPendingMethod("email-otp");

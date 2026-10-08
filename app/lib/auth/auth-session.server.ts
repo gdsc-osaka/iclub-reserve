@@ -1,7 +1,7 @@
 import { createContext, redirect } from "react-router";
 import type { MiddlewareFunction, RouterContextProvider } from "react-router";
 
-import { isProfileCompleted } from "~/domain/authn/user-profile";
+import { isOnboardingCompleted } from "~/domain/authn/onboarding";
 import {
   isPublicPath,
   LOGIN_PATH,
@@ -67,9 +67,9 @@ const getAuthSession = async (request: Request): Promise<AuthSessionData> => {
 /**
  * ログインを必須にする。していなければログイン画面へ送る。
  *
- * さらに、ログイン直後でお名前がまだ空の人はセットアップ画面へ送る。
- * 認証コードでのログインは未登録のメールアドレスならその場でアカウントを作るため、
- * 名前が空のままアプリに入れてしまうのを防いでいる。
+ * さらに、本登録が済んでいない人（利用規約に同意していない人・お名前がまだ空の人）は
+ * セットアップ画面へ送る。認証コードでのログインは未登録のメールアドレスなら
+ * その場でアカウントを作るため、同意も名前も無いままアプリに入れてしまうのを防いでいる（REQ-033）。
  */
 const requireProfileCompletedSession = async (
   request: Request,
@@ -79,7 +79,7 @@ const requireProfileCompletedSession = async (
 
   const data = await getAuthSession(request);
   if (!data) throw redirect(withRedirectTo(LOGIN_PATH, redirectTo));
-  if (!isProfileCompleted(data.user)) throw redirect(withRedirectTo(WELCOME_PATH, redirectTo));
+  if (!isOnboardingCompleted(data.user)) throw redirect(withRedirectTo(WELCOME_PATH, redirectTo));
 
   return data;
 };

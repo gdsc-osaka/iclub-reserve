@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as schema from "~/db/schema";
+import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
 import { GroupStatus } from "~/domain/group";
 import { InvitationStatus } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
@@ -32,7 +33,10 @@ type StaffInvitationRow = typeof schema.staffInvitationTable.$inferSelect;
 /** 呼ぶたびに違う、短い印 */
 export const uniqueSuffix = (): string => randomUUID().slice(0, 8);
 
-/** 利用者を作る。氏名が入っているので、初回設定（SCR-014）を通らずに画面を開ける */
+/**
+ * 利用者を作る。氏名が入っていて利用規約にも同意済みなので、初回設定（SCR-014）を通らずに画面を開ける。
+ * 同意していない人を作るときは `{ terms_version: null, terms_accepted_at: null }` を渡す。
+ */
 export async function createUser(
   db: E2eDb,
   overrides: Partial<typeof schema.user.$inferInsert> = {},
@@ -46,6 +50,8 @@ export async function createUser(
       email: `e2e-${suffix}@ecs.osaka-u.ac.jp`,
       emailVerified: true,
       is_staff: false,
+      terms_version: TERMS_OF_SERVICE.version,
+      terms_accepted_at: new Date(),
       ...overrides,
     })
     .returning();

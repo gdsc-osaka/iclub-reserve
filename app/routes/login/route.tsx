@@ -3,7 +3,7 @@ import { redirect } from "react-router";
 import { AuthCard } from "~/components/auth/auth-card";
 import { OtpCodeForm } from "~/components/auth/otp-code-form";
 import { Alert, AlertDescription } from "~/components/ui/alert";
-import { isProfileCompleted } from "~/domain/authn/user-profile";
+import { isOnboardingCompleted } from "~/domain/authn/onboarding";
 import { readRedirectTo, WELCOME_PATH, withRedirectTo } from "~/lib/auth/auth-redirect";
 import { getRequestUser } from "~/lib/auth/auth-session.server";
 import { readLastLoginMethod } from "~/lib/auth/last-login-method-cookie";
@@ -19,7 +19,7 @@ export function meta() {
 /**
  * すでにログインしている人をログイン画面に留めない。
  *
- * お名前がまだ空の人（アカウントを作った直後に離脱した人）は
+ * 本登録が済んでいない人（アカウントを作った直後に離脱した人など）は
  * セットアップ画面へ、それ以外の人は元いたページへ送る。
  *
  * 併せて、前回このブラウザで使ったログイン方法も読んでおく。
@@ -32,7 +32,7 @@ export function loader({ request, context }: Route.LoaderArgs) {
 
   if (user) {
     throw redirect(
-      isProfileCompleted(user) ? redirectTo : withRedirectTo(WELCOME_PATH, redirectTo),
+      isOnboardingCompleted(user) ? redirectTo : withRedirectTo(WELCOME_PATH, redirectTo),
     );
   }
 

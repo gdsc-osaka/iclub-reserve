@@ -14,7 +14,7 @@ import { E2E_AUTH_SECRET, E2E_BASE_URL } from "./e2e-env.js";
  * ここでは Cookie の署名に要る部分だけを同じにした、別のインスタンスを作る。
  * - 秘密鍵と URL は E2E のアプリと同じ値（`e2e-env.ts`）
  * - DB は E2E のアプリと同じもの
- * - `user` の独自の列（`is_staff`）も本体に合わせる
+ * - `user` の独自の列（`is_staff`・`terms_version`・`terms_accepted_at`）も本体に合わせる
  */
 const createTestAuth = (db: E2eDb) =>
   betterAuth({
@@ -24,6 +24,8 @@ const createTestAuth = (db: E2eDb) =>
     user: {
       additionalFields: {
         is_staff: { type: "boolean", defaultValue: false, input: false, required: true },
+        terms_version: { type: "string", input: false, required: false },
+        terms_accepted_at: { type: "date", input: false, required: false },
       },
     },
     plugins: [testUtils()],
