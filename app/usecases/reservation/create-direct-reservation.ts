@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import type { FacilityRepository } from "~/domain/facility";
 import type { GroupRepository } from "~/domain/group";
 import type { MembershipRepository } from "~/domain/membership";
@@ -13,6 +14,7 @@ import {
   type ReservationError,
   type ReservationRepository,
 } from "~/domain/reservation";
+import { toReservationCreatedChanges } from "~/domain/reservation/audit-log";
 import { validateReservationDraft } from "~/domain/reservation/validation";
 import { APPROVED_OVERLAP_MESSAGE, ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
@@ -99,7 +101,24 @@ export const createDirectReservationUseCase = (
     yield* ensureFacilityIsAvailable(deps, args.reservation.facilityId);
     yield* ensureNoApprovedOverlap(deps, args.reservation, APPROVED_OVERLAP_MESSAGE);
 
-    const outcome = yield* deps.reservationRepository.createApproved(reservation);
+    const auditLog: AuditLogDraft = {
+      occurredAt: now,
+      actorId: args.actorUserId,
+      actedAsStaff: true, // 事務局だけの操作なので常に true（COND-012）
+      action: AuditLogAction.ReservationDirectCreate,
+      targetId: id,
+      groupId: args.reservation.groupId,
+      changes: toReservationCreatedChanges({
+        facilityId: args.reservation.facilityId,
+        startAt: args.reservation.startAt,
+        endAt: args.reservation.endAt,
+        headCount: args.reservation.headCount,
+        note: args.reservation.note,
+        status: ReservationStatus.Approved,
+      }),
+    };
+
+    const outcome = yield* deps.reservationRepository.createApproved(reservation, auditLog);
 
     // 確認のあとに、同じ時間帯の別の予約が承認されていた
     if (!outcome.applied) {

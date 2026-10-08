@@ -1,6 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction } from "~/domain/audit-log";
 import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { ReservationMailEvent, type ReservationMailAudience } from "~/domain/mail/reservation-mail";
@@ -370,6 +371,10 @@ describe("editReservationDirectlyUseCase", () => {
           requireNoApprovedOverlap: true,
         }),
         expect.any(Array),
+        expect.objectContaining({
+          action: AuditLogAction.ReservationDirectChange,
+          actedAsStaff: true,
+        }),
       );
 
       // 即時配送が呼ばれたこと
@@ -397,6 +402,10 @@ describe("editReservationDirectlyUseCase", () => {
           note: "新備考",
         }),
         expect.any(Array),
+        expect.objectContaining({
+          action: AuditLogAction.ReservationDirectChange,
+          actedAsStaff: true,
+        }),
       );
     });
 
@@ -420,6 +429,10 @@ describe("editReservationDirectlyUseCase", () => {
           status: ReservationStatus.Provisional,
         }),
         expect.any(Array),
+        expect.objectContaining({
+          action: AuditLogAction.ReservationDirectChange,
+          actedAsStaff: true,
+        }),
       );
     });
 

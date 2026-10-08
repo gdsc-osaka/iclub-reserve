@@ -1,5 +1,6 @@
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import type { FacilityRepository } from "~/domain/facility";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { editMailEvent } from "~/domain/mail/reservation-mail";
@@ -10,6 +11,10 @@ import {
   type ReservationRepository,
   type ReservationStatus,
 } from "~/domain/reservation";
+import {
+  groupEditAuditLogAction,
+  toReservationContentEditChanges,
+} from "~/domain/reservation/audit-log";
 import {
   canEditReservation,
   changedContentFields,
@@ -147,6 +152,21 @@ export const editReservationUseCase = (
     });
 
     const status = editTargetStatus[outcome];
+    const auditLog: AuditLogDraft = {
+      occurredAt: now,
+      actorId: args.actorUserId,
+      actedAsStaff: false,
+      action: groupEditAuditLogAction[outcome],
+      targetId: reservation.id,
+      groupId: reservation.groupId,
+      // 内容の変更では理由（status_reason）を書き換えないので、変更後も今の値のまま
+      changes: toReservationContentEditChanges(reservation, {
+        ...content,
+        status,
+        statusReason: reservation.statusReason,
+      }),
+    };
+
     const result = yield* deps.reservationRepository.applyContentEdit(
       {
         id: reservation.id,
@@ -162,6 +182,7 @@ export const editReservationUseCase = (
         requireNoApprovedOverlap: checksOverlap,
       },
       mailDrafts,
+      auditLog,
     );
 
     if (!result.applied) {

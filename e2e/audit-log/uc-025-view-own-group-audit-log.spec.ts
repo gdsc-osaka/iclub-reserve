@@ -195,4 +195,49 @@ test.describe("UC-025 自団体の操作履歴を閲覧する", { tag: "@UC-025"
     // 他団体の人には操作履歴欄（リスト）が存在しない
     await expect(page.getByRole("list", { name: "操作履歴" })).toHaveCount(0);
   });
+
+  test("団体に所属しない事務局が仮予約を承認すると、メンバーが開いた予約詳細の履歴欄に操作者「事務局」で記録が出る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const member = await createUser(db);
+    const staff = await createUser(db, { is_staff: true });
+    const group = await createGroup(db, {
+      members: [{ userId: member.id, role: MembershipRole.Member }],
+    });
+    const facility = await createFacility(db);
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const startAt = new Date(tomorrow);
+    startAt.setHours(10, 0, 0, 0);
+    const endAt = new Date(tomorrow);
+    endAt.setHours(12, 0, 0, 0);
+    const reservation = await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: member.id,
+      startAt,
+      endAt,
+    });
+
+    // 団体に所属しない事務局として予約詳細を開き、承認する
+    await signInAs(staff.id);
+    await openPage(page, `/reservations/${reservation.id}`);
+    await page.getByRole("button", { name: "承認" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
+    await dialog.getByRole("button", { name: "承認する" }).click();
+    await expect(page.getByText("承認済み", { exact: true })).toBeVisible();
+
+    // 団体のメンバーとしてサインインし、予約詳細を開く
+    await signInAs(member.id);
+    await openPage(page, `/reservations/${reservation.id}`);
+
+    // 操作履歴欄に「承認」が表示され、操作者は「事務局」と表示されて staff の個人名は伏せられる
+    const approveRecord = recordOf(page, "承認");
+    await expect(approveRecord).toBeVisible();
+    await expect(approveRecord).toContainText("事務局");
+    await expect(approveRecord).toContainText("状態: 仮予約 → 承認済み");
+    await expect(page.getByRole("list", { name: "操作履歴" })).not.toContainText(staff.name);
+  });
 });
