@@ -2,6 +2,7 @@ import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import { normalizeInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { StaffError, StaffInvitationRepository } from "~/domain/staff";
+import { toStaffRoleAcceptAuditLog } from "~/domain/staff/audit-log";
 import { staffInvitationNotFound } from "./_shared/staff-invitation-visibility";
 
 export interface AcceptStaffInvitationDeps {
@@ -13,6 +14,8 @@ export interface AcceptStaffInvitationArgs {
   readonly actorUserId: string;
   /** ログイン中の人のメールアドレス（未正規化） */
   readonly actorEmail: string;
+  /** ログイン中の人の is_staff（操作前の状態） */
+  readonly actorIsStaff: boolean;
   readonly now: Date;
 }
 
@@ -22,6 +25,7 @@ export interface AcceptStaffInvitationArgs {
  * 【処理の流れと設計上の配慮】
  * 1. invitationId を trim し、空なら DB を引かずに staffInvitationNotFound() を返す。
  * 2. staffInvitationRepository.accept を呼び出して条件付き更新を実行する。
+ *    操作履歴も同じ条件で直前に書き込む（COND-013）。
  * 3. 承諾対象が見つからず false が返った場合は staffInvitationNotFound() を返し、成功時は null を返す。
  *
  * 【事前 SELECT による存在確認を行わない理由】
@@ -46,13 +50,25 @@ export const acceptStaffInvitationUseCase = (
       return errAsync(staffInvitationNotFound("承諾する事務局招待の ID が空である。"));
     }
 
+    const auditLog = toStaffRoleAcceptAuditLog(
+      {
+        invitationId,
+        userId: args.actorUserId,
+        actorIsStaff: args.actorIsStaff,
+      },
+      args.now,
+    );
+
     // 2. 条件付き UPDATE による承諾を実行（事前 SELECT は行わない）
-    const accepted = yield* deps.staffInvitationRepository.accept({
-      invitationId,
-      email: normalizeInvitationEmail(args.actorEmail),
-      userId: args.actorUserId,
-      now: args.now,
-    });
+    const accepted = yield* deps.staffInvitationRepository.accept(
+      {
+        invitationId,
+        email: normalizeInvitationEmail(args.actorEmail),
+        userId: args.actorUserId,
+        now: args.now,
+      },
+      auditLog,
+    );
 
     // 3. 対象の招待が無かった（条件に合致しなかった）場合
     if (!accepted) {

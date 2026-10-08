@@ -24,6 +24,7 @@ interface FakeStaffInvitationRepoOptions {
 const createFakeStaffInvitationRepository = (options: FakeStaffInvitationRepoOptions = {}) => {
   let acceptCallCount = 0;
   let lastAcceptInput: AcceptStaffInvitationInput | null = null;
+  let lastAuditLog: unknown = null;
   let findByIdCallCount = 0;
 
   const repository: StaffInvitationRepository = {
@@ -49,9 +50,10 @@ const createFakeStaffInvitationRepository = (options: FakeStaffInvitationRepoOpt
         message: "findById should not be called",
       });
     },
-    accept: (input) => {
+    accept: (input, auditLog) => {
       acceptCallCount += 1;
       lastAcceptInput = input;
+      lastAuditLog = auditLog;
       if (options.acceptResult) {
         return options.acceptResult(input);
       }
@@ -68,6 +70,7 @@ const createFakeStaffInvitationRepository = (options: FakeStaffInvitationRepoOpt
     repository,
     acceptCallCount: () => acceptCallCount,
     lastAcceptInput: () => lastAcceptInput,
+    lastAuditLog: () => lastAuditLog,
     findByIdCallCount: () => findByIdCallCount,
   };
 };
@@ -77,10 +80,11 @@ describe("acceptStaffInvitationUseCase", () => {
     invitationId: testInvitationId,
     actorUserId: testUserId,
     actorEmail: testEmail,
+    actorIsStaff: false,
     now: baseNow,
   };
 
-  it("成功時に ok(null) が返る", async () => {
+  it("成功時に ok(null) が返り、操作履歴が渡される", async () => {
     const fakeRepo = createFakeStaffInvitationRepository();
 
     const result = await acceptStaffInvitationUseCase(
@@ -90,6 +94,18 @@ describe("acceptStaffInvitationUseCase", () => {
 
     expect(result.isOk()).toBe(true);
     expect(fakeRepo.acceptCallCount()).toBe(1);
+    expect(fakeRepo.lastAuditLog()).toEqual({
+      occurredAt: baseNow,
+      actorId: testUserId,
+      actedAsStaff: true,
+      action: "staff_role.accept",
+      targetId: testUserId,
+      groupId: null,
+      changes: {
+        is_staff: { before: false, after: true },
+        staff_invitation_id: { before: testInvitationId, after: testInvitationId },
+      },
+    });
   });
 
   it("accept に正しい引数が渡り、メールアドレスは正規化される", async () => {

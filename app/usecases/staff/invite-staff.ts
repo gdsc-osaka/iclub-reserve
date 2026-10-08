@@ -12,6 +12,7 @@ import {
   type StaffMemberRepository,
   validateStaffInvitationEmail,
 } from "~/domain/staff";
+import { toStaffRoleInviteAuditLog } from "~/domain/staff/audit-log";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureStaffPermission } from "./_shared/staff-authorization";
 
@@ -88,6 +89,13 @@ export const inviteStaffUseCase = (
       appBaseUrl: args.appBaseUrl,
     });
 
+    const auditLog = toStaffRoleInviteAuditLog(
+      invitationId,
+      normalizedEmail,
+      args.actorUserId,
+      args.now,
+    );
+
     const outcome = yield* deps.staffInvitationRepository.create(
       {
         id: invitationId,
@@ -97,6 +105,7 @@ export const inviteStaffUseCase = (
         createdAt: args.now,
       },
       [mailDraft],
+      auditLog,
     );
 
     // 6. 即時配送の依頼

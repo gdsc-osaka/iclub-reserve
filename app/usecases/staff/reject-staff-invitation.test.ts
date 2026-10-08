@@ -19,6 +19,7 @@ interface FakeStaffInvitationRepoOptions {
 const createFakeStaffInvitationRepository = (options: FakeStaffInvitationRepoOptions = {}) => {
   let rejectCallCount = 0;
   let lastRejectInput: RejectInvitationInput | null = null;
+  let lastAuditLog: unknown = null;
   let findByIdCallCount = 0;
 
   const repository: StaffInvitationRepository = {
@@ -49,9 +50,10 @@ const createFakeStaffInvitationRepository = (options: FakeStaffInvitationRepoOpt
         code: StaffErrorCode.DatabaseError,
         message: "accept is not used in this test",
       }),
-    reject: (input) => {
+    reject: (input, auditLog) => {
       rejectCallCount += 1;
       lastRejectInput = input;
+      lastAuditLog = auditLog;
       if (options.rejectResult) {
         return options.rejectResult(input);
       }
@@ -63,6 +65,7 @@ const createFakeStaffInvitationRepository = (options: FakeStaffInvitationRepoOpt
     repository,
     rejectCallCount: () => rejectCallCount,
     lastRejectInput: () => lastRejectInput,
+    lastAuditLog: () => lastAuditLog,
     findByIdCallCount: () => findByIdCallCount,
   };
 };
@@ -70,11 +73,12 @@ const createFakeStaffInvitationRepository = (options: FakeStaffInvitationRepoOpt
 describe("rejectStaffInvitationUseCase", () => {
   const validArgs: RejectStaffInvitationArgs = {
     invitationId: testInvitationId,
+    actorUserId: "usr_actor",
     actorEmail: testEmail,
     now: baseNow,
   };
 
-  it("成功時に ok(null) が返る", async () => {
+  it("成功時に ok(null) が返り、操作履歴が渡される", async () => {
     const fakeRepo = createFakeStaffInvitationRepository();
 
     const result = await rejectStaffInvitationUseCase(
@@ -84,6 +88,18 @@ describe("rejectStaffInvitationUseCase", () => {
 
     expect(result.isOk()).toBe(true);
     expect(fakeRepo.rejectCallCount()).toBe(1);
+    expect(fakeRepo.lastAuditLog()).toEqual({
+      occurredAt: baseNow,
+      actorId: "usr_actor",
+      actedAsStaff: true,
+      action: "staff_role.decline",
+      targetId: testInvitationId,
+      groupId: null,
+      changes: {
+        email: { before: testEmail, after: testEmail },
+        status: { before: "pending", after: "rejected" },
+      },
+    });
   });
 
   it("reject に正しい引数が渡り、メールアドレスは正規化される", async () => {

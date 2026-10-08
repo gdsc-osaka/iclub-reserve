@@ -1,7 +1,9 @@
 import { and, count, eq, sql } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 import { user } from "~/db/schema";
+import type { AuditLogDraft } from "~/domain/audit-log";
 import { type StaffError, StaffErrorCode, type StaffMemberRepository } from "~/domain/staff";
+import { allOf, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 
 const databaseError =
@@ -41,21 +43,34 @@ export const createStaffMemberRepository = (db: Database): StaffMemberRepository
       databaseError("件数取得"),
     ).map((rows) => rows.at(0)?.total ?? 0);
 
-  const revoke = (userId: string, now: Date): ResultAsync<number, StaffError> =>
-    ResultAsync.fromPromise(
-      db
-        .update(user)
-        .set({ is_staff: false, updatedAt: now })
-        .where(
-          and(
-            eq(user.id, userId),
-            eq(user.is_staff, true),
-            sql`(SELECT COUNT(*) FROM ${user} WHERE ${user.is_staff} = 1) >= 2`,
-          ),
-        )
-        .returning({ id: user.id }),
+  const revoke = (
+    userId: string,
+    now: Date,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<number, StaffError> => {
+    const revokeCondition = allOf(
+      eq(user.id, userId),
+      eq(user.is_staff, true),
+      sql`(SELECT COUNT(*) FROM ${user} WHERE ${user.is_staff} = 1) >= 2`,
+    );
+    const auditLogStatement = guardedAuditLogInsert(db, auditLog, {
+      from: user,
+      where: revokeCondition,
+    });
+    const updateStatement = db
+      .update(user)
+      .set({ is_staff: false, updatedAt: now })
+      .where(revokeCondition)
+      .returning({ id: user.id });
+
+    return ResultAsync.fromPromise(
+      db.batch([auditLogStatement, updateStatement]),
       databaseError("剥奪"),
-    ).map((rows) => rows.length);
+    ).map((results) => {
+      const rows = results[1] as { id: string }[];
+      return rows.length;
+    });
+  };
 
   return { findStaffByEmail, findStaffById, countStaff, revoke };
 };
