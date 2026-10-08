@@ -145,15 +145,18 @@ const insertReservation = (id: string, status: ReservationStatus) =>
     createdBy: "usr_staff",
   });
 
+/**
+ * 毎分の同期を 1 回だけ動かす。
+ *
+ * 時刻は渡さず本物の時計に任せる。同期タスクを積む文は next_attempt_at に本物の時計を使うため、
+ * ここで固定の時刻を渡すと、その時刻を過ぎた日からタスクが「まだ期限前」とみなされて取り出されなくなる。
+ */
 const syncOnce = (calendarClient: CalendarClient) =>
-  processCalendarSyncTasksUseCase(
-    {
-      calendarSyncTasks: createD1CalendarSyncTasks(testDb.db),
-      query: createD1CalendarSyncQuery(testDb.db),
-      calendarClient,
-    },
-    { now: testNow },
-  );
+  processCalendarSyncTasksUseCase({
+    calendarSyncTasks: createD1CalendarSyncTasks(testDb.db),
+    query: createD1CalendarSyncQuery(testDb.db),
+    calendarClient,
+  });
 
 const remainingTasks = () => testDb.db.select().from(calendarSyncTaskTable);
 
