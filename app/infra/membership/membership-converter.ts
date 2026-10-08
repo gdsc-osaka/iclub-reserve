@@ -1,5 +1,5 @@
 import { groupMemberTable } from "~/db/schema";
-import { isMembershipRole, MembershipRole, type Membership } from "~/domain/membership";
+import { isMembershipRole, MembershipRole, type StoredMembership } from "~/domain/membership";
 
 type GroupMemberRow = typeof groupMemberTable.$inferSelect;
 
@@ -17,7 +17,8 @@ export const toMembershipRole = (raw: string): MembershipRole => {
 /**
  * DB の group_member 行をドメインモデルへ変換する。
  */
-export const toMembership = (row: GroupMemberRow): Membership => ({
+export const toMembership = (row: GroupMemberRow): StoredMembership => ({
+  id: row.id,
   groupId: row.groupId,
   userId: row.userId,
   role: toMembershipRole(row.role),

@@ -11,6 +11,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { InvitationStatus, type AcceptInvitationInput } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
 import { invitationAcceptStatements } from "./invitation-repo";
@@ -24,6 +25,16 @@ const ALREADY_EXPIRED = new Date("2026-03-30T10:00:00.000Z");
 
 const INVITEE_EMAIL = "hanako@ecs.osaka-u.ac.jp";
 const OTHER_EMAIL = "jiro@ecs.osaka-u.ac.jp";
+
+const dummyAuditLog: AuditLogDraft = {
+  occurredAt: NOW,
+  actorId: "usr_invitee",
+  actedAsStaff: false,
+  action: AuditLogAction.InvitationAccept,
+  targetId: "inv_1",
+  groupId: "grp_1",
+  changes: {},
+};
 
 beforeEach(async () => {
   await testDb.seed(
@@ -87,10 +98,10 @@ const insertInvitation = async (options: {
 };
 
 const runAccept = async (input: AcceptInvitationInput): Promise<string | null> => {
-  const statements = invitationAcceptStatements(testDb.db, input);
-  const results = await testDb.db.batch([statements[0], statements[1]]);
-  // acceptInvitation の結果 (UPDATE) は 2 番目 (インデックス 1)
-  const accepted = results[1] as { groupId: string }[];
+  const statements = invitationAcceptStatements(testDb.db, input, dummyAuditLog);
+  const results = await testDb.db.batch([statements[0], statements[1], statements[2]]);
+  // acceptInvitation の結果 (UPDATE) は 3 番目 (インデックス 2)
+  const accepted = results[2] as { groupId: string }[];
   return accepted.at(0)?.groupId ?? null;
 };
 
@@ -105,6 +116,13 @@ const invitationStatusOf = async () =>
       .first()) as { status: string }
   ).status;
 
+const auditLogsCount = async () =>
+  (
+    (await testDb.d1.prepare(`SELECT count(*) as count FROM "audit_log"`).first()) as {
+      count: number;
+    }
+  ).count;
+
 const acceptAsInvitee: AcceptInvitationInput = {
   invitationId: "inv_1",
   email: INVITEE_EMAIL,
@@ -112,8 +130,8 @@ const acceptAsInvitee: AcceptInvitationInput = {
   membershipId: "mem_new",
   now: NOW,
 };
-describe("承諾の 2 文を D1 で実行する", () => {
-  it("承諾待ち・宛先本人・期限内なら、メンバーが作られ招待が accepted になる", async () => {
+describe("承諾の 3 文を D1 で実行する", () => {
+  it("承諾待ち・宛先本人・期限内なら、メンバーが作られ招待が accepted になり、操作履歴が 1 件記録される", async () => {
     await insertInvitation({
       status: InvitationStatus.Pending,
       email: INVITEE_EMAIL,
@@ -124,6 +142,7 @@ describe("承諾の 2 文を D1 で実行する", () => {
     // 役割は招待の行から読むので、招待したときの役割がそのまま入る
     expect(await membersOf()).toEqual([{ user_id: "usr_invitee", role: MembershipRole.Admin }]);
     expect(await invitationStatusOf()).toBe(InvitationStatus.Accepted);
+    expect(await auditLogsCount()).toBe(1);
     expect((await testDb.d1.prepare("PRAGMA foreign_key_check").all()).results).toEqual([]);
   });
 
@@ -131,13 +150,17 @@ describe("承諾の 2 文を D1 で実行する", () => {
     ["取り消し済み", InvitationStatus.Canceled, NOT_EXPIRED],
     ["辞退済み", InvitationStatus.Rejected, NOT_EXPIRED],
     ["期限切れ", InvitationStatus.Pending, ALREADY_EXPIRED],
-  ])("%s の招待では、メンバーが作られない", async (_name, status, expiresAt) => {
-    await insertInvitation({ status, email: INVITEE_EMAIL, expiresAt });
+  ])(
+    "%s の招待では、メンバーが作られず、操作履歴も記録されない",
+    async (_name, status, expiresAt) => {
+      await insertInvitation({ status, email: INVITEE_EMAIL, expiresAt });
 
-    expect(await runAccept(acceptAsInvitee)).toBeNull();
-    expect(await membersOf()).toEqual([]);
-    expect(await invitationStatusOf()).toBe(status);
-  });
+      expect(await runAccept(acceptAsInvitee)).toBeNull();
+      expect(await membersOf()).toEqual([]);
+      expect(await invitationStatusOf()).toBe(status);
+      expect(await auditLogsCount()).toBe(0);
+    },
+  );
 
   it("宛先が違う人（転送されたリンク）では、メンバーが作られない", async () => {
     await insertInvitation({
@@ -181,6 +204,23 @@ describe("承諾の 2 文を D1 で実行する", () => {
 
     expect(result).toBeNull();
     expect(await membersOf()).toEqual([{ user_id: "usr_invitee", role: MembershipRole.Admin }]);
+  });
+
+  /*
+   * 退行テスト（COND-013）。
+   * 記録の条件を「書き込み後の状態（status = 'accepted'）」にすると、
+   * group_invitation には書き込みのたびに変わる列が無いので、2 度目の承諾でも記録が入ってしまう。
+   */
+  it("本人が同じ招待を 2 度承諾しても、操作履歴は 1 件だけ", async () => {
+    await insertInvitation({
+      status: InvitationStatus.Pending,
+      email: INVITEE_EMAIL,
+      expiresAt: NOT_EXPIRED,
+    });
+
+    expect(await runAccept(acceptAsInvitee)).toBe("grp_1");
+    expect(await runAccept({ ...acceptAsInvitee, membershipId: "mem_again" })).toBeNull();
+    expect(await auditLogsCount()).toBe(1);
   });
 
   /*

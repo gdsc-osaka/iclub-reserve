@@ -1,19 +1,25 @@
 import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
+import { AuditLogAction, isActedAsStaff, type AuditLogDraft } from "~/domain/audit-log";
 import type { GroupError, GroupRepository } from "~/domain/group";
-import { GroupAction, GroupErrorCode, GroupField } from "~/domain/group";
+import { GroupAction, GroupErrorCode, GroupField, groupPermissions } from "~/domain/group";
 import {
   invitationExpiresAt,
   type CreateInvitationInput,
   type InvitationRepository,
 } from "~/domain/invitation";
+import { toInvitationSendChanges } from "~/domain/invitation/audit-log";
 import { validateInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createInvitationMailDraft } from "~/domain/mail/invitation-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
-import { ensureGroupPermission, groupNotFound } from "./_shared/group-authorization";
+import {
+  ensureActorCan,
+  groupNotFound,
+  resolveGroupActorWithMembership,
+} from "./_shared/group-authorization";
 import { validateMembershipRole } from "./_shared/member-role";
 
 export interface InviteMemberDeps {
@@ -49,7 +55,7 @@ export interface InviteMemberResult {
  * 入力の検証（メールアドレス・役割）を認可より先に置いている。検証の結果は特定の団体に
  * 依存しないので、先に返しても団体の有無は漏れず、無効なリクエストで D1 を往復せずに済む。
  * 認可そのものの判断（事務局を通す・存在を秘匿する・足りない権限を伝える）は
- * ensureGroupPermission が持つ（COND-009 / COND-011）。
+ * resolveGroupActorWithMembership と ensureActorCan が持つ（COND-009 / COND-011）。
  *
  * 逆に団体の取得は認可より後に置く。先に引くと、存在する団体のときだけ往復が 1 回増え、
  * 応答時間の差から団体の存在を推測されうる。
@@ -72,7 +78,12 @@ export const inviteMemberUseCase = (
     const email = yield* validateInvitationEmail(args.email);
     const role = yield* validateMembershipRole(args.role);
 
-    yield* ensureGroupPermission(deps, { ...args, groupId }, GroupAction.InviteMember);
+    const actor = yield* resolveGroupActorWithMembership(deps, {
+      groupId,
+      actorUserId: args.actorUserId,
+      isStaff: args.isStaff,
+    });
+    yield* ensureActorCan(actor, GroupAction.InviteMember);
 
     // 団体名はメールの本文に載せるために引く
     const group = yield* deps.groupRepository.findById(groupId);
@@ -112,8 +123,20 @@ export const inviteMemberUseCase = (
       createdAt: args.now,
     };
 
-    // 招待の INSERT と outbox への INSERT は同じ batch で不可分に実行される（ADR-002 決定 3）
-    const outcome = yield* deps.invitationRepository.create(createInput, [mailDraft]);
+    const actedAsStaff = isActedAsStaff(groupPermissions, actor, GroupAction.InviteMember);
+
+    const auditLog: AuditLogDraft = {
+      occurredAt: args.now,
+      actorId: args.actorUserId,
+      actedAsStaff,
+      action: AuditLogAction.InvitationSend,
+      targetId: invitationId,
+      groupId,
+      changes: toInvitationSendChanges({ email, role }),
+    };
+
+    // 招待の INSERT と outbox への INSERT、および操作履歴は同じ batch で不可分に実行される（COND-013 / ADR-002 決定 3）
+    const outcome = yield* deps.invitationRepository.create(createInput, [mailDraft], auditLog);
     requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
 
     return okAsync({ invitationId });

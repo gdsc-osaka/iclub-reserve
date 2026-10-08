@@ -1,5 +1,6 @@
 import { err, errAsync, ok, okAsync, ResultAsync, safeTry, type Result } from "neverthrow";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import {
   GroupAction,
   GroupErrorCode,
@@ -8,6 +9,7 @@ import {
   type GroupError,
   type GroupRepository,
 } from "~/domain/group";
+import { groupStatusAuditLogAction, toGroupStatusChanges } from "~/domain/group/audit-log";
 import {
   canChangeGroupStatus,
   type GroupStatusChangeTarget,
@@ -77,8 +79,9 @@ const ensureStatusTransitionAllowed = (group: Group, to: GroupStatus): Result<nu
  *    存在しなければ NotFound を返す。
  * 5. 状態遷移の検証（ensureStatusTransitionAllowed）:
  *    許されない遷移（同一状態への変更、pending への戻し）の場合は InvalidTransition を返す。
- * 6. 楽観的ロックを伴う更新（updateStatus）:
+ * 6. 楽観的ロックを伴う更新と操作履歴記録（updateStatus / COND-013）:
  *    WHERE id = ? AND status = from 条件で更新し、競合して 0 行更新なら InvalidTransition を返す。
+ *    事務局専用の操作であるため、acted_as_staff は常に true（COND-012）。
  */
 export const changeGroupStatusUseCase = (
   deps: ChangeGroupStatusDeps,
@@ -99,12 +102,25 @@ export const changeGroupStatusUseCase = (
 
     yield* ensureStatusTransitionAllowed(group, targetStatus);
 
-    const updated = yield* deps.groupRepository.updateStatus({
-      id: groupId,
-      from: group.status,
-      to: targetStatus,
-      updatedAt: args.now,
-    });
+    const auditLog: AuditLogDraft = {
+      occurredAt: args.now,
+      actorId: args.actorUserId,
+      actedAsStaff: true, // 事務局だけの操作なので常に true（COND-012）
+      action: groupStatusAuditLogAction[targetStatus],
+      targetId: groupId,
+      groupId,
+      changes: toGroupStatusChanges(group.status, targetStatus),
+    };
+
+    const updated = yield* deps.groupRepository.updateStatus(
+      {
+        id: groupId,
+        from: group.status,
+        to: targetStatus,
+        updatedAt: args.now,
+      },
+      auditLog,
+    );
 
     return okAsync(updated);
   });

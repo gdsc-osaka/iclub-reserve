@@ -11,7 +11,9 @@ import {
   type InvitationRepository,
   type RejectInvitationInput,
 } from "~/domain/invitation";
+import type { AuditLogDraft } from "~/domain/audit-log";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { mailOutboxInserts } from "../mail/mail-outbox-writes";
 import { toInvitation } from "./invitation-converter";
@@ -68,12 +70,16 @@ const memberParam = <K extends keyof GroupMemberValues>(key: K, value: GroupMemb
  * `(group_id, user_id)` の一意制約に当たるので、既存の所属をそのまま残す
  * （招待の役割で上書きすると、あとから役割を下げられてしまう）。
  */
-export const invitationAcceptStatements = (db: Database, input: AcceptInvitationInput) => {
+export const invitationAcceptStatements = (
+  db: Database,
+  input: AcceptInvitationInput,
+  auditLog: AuditLogDraft,
+) => {
   /*
-   * 承諾できる招待かどうかを決める条件。2 文で必ず同じものを使う。
-   * 条件を 1 か所にまとめているのは、2 文に書き分けると食い違いに気付けないため。
+   * 承諾できる招待かどうかを決める条件。3 文で必ず同じものを使う（COND-013）。
+   * 条件を 1 か所にまとめているのは、2 文・3 文に書き分けると食い違いに気付けないため。
    */
-  const acceptable = and(
+  const acceptable = allOf(
     eq(groupInvitationTable.id, input.invitationId),
     // 取り消し済み・承諾済み・辞退済みの招待を蒸し返さない
     eq(groupInvitationTable.status, InvitationStatus.Pending),
@@ -101,13 +107,21 @@ export const invitationAcceptStatements = (db: Database, input: AcceptInvitation
       target: [groupMemberTable.groupId, groupMemberTable.userId],
     });
 
+  /*
+   * 操作履歴の記録を UPDATE の直前に配置し、同じ条件を共有する（COND-013）。
+   */
+  const auditStatement = guardedAuditLogInsert(db, auditLog, {
+    from: groupInvitationTable,
+    where: acceptable,
+  });
+
   const acceptInvitation = db
     .update(groupInvitationTable)
     .set({ status: InvitationStatus.Accepted })
     .where(acceptable)
     .returning({ groupId: groupInvitationTable.groupId });
 
-  return [insertMember, acceptInvitation];
+  return [insertMember, auditStatement, acceptInvitation] as const;
 };
 
 /** DB アクセスの失敗をこの層のエラーに包む。文言を 1 か所にまとめるためのもの */
@@ -157,6 +171,7 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
   const create = (
     input: CreateInvitationInput,
     mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
   ): ResultAsync<CreateInvitationOutcome, GroupError> => {
     const insertInvitationQuery = db.insert(groupInvitationTable).values({
       id: input.id,
@@ -169,50 +184,54 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
       inviterId: input.inviterUserId,
     });
 
-    // メールが無い場合は batch を使わず INSERT 単体で実行する（Drizzle の batch は空配列を受け付けないため）
-    if (mails.length === 0) {
-      return ResultAsync.fromPromise(insertInvitationQuery, databaseError("作成")).map(() => ({
-        enqueuedMailIds: [],
-      }));
-    }
-
     /*
-     * 招待の INSERT と outbox への INSERT を原子的に行う（ADR-002 決定 3）。
+     * 招待の INSERT と outbox への INSERT、および操作履歴を原子的に行う（COND-013 / ADR-002 決定 3）。
      *
      * ここでは guardedMailOutboxInserts は使わない。
-     * 予約のステータス遷移のような「条件付き UPDATE」とは異なり、招待の INSERT は条件付きではないため、
-     * INSERT が失敗すれば batch 全体が巻き戻り、outbox へのメールも積まれない。
+     * 招待の INSERT は条件付きではないため、INSERT が失敗すれば batch 全体が巻き戻る。
+     * 操作履歴は無条件の INSERT として後ろに配置する。
      */
     const outbox = mailOutboxInserts(db, mails);
+    const auditStatement = auditLogInsert(db, auditLog);
 
     return ResultAsync.fromPromise(
-      db.batch([insertInvitationQuery, ...outbox.statements]),
+      db.batch([insertInvitationQuery, ...outbox.statements, auditStatement]),
       databaseError("作成および通知メールの登録"),
     ).map(() => ({
       enqueuedMailIds: outbox.ids,
     }));
   };
 
-  const cancel = (groupId: string, invitationId: string): ResultAsync<number, GroupError> =>
-    ResultAsync.fromPromise(
-      db
-        .update(groupInvitationTable)
-        .set({ status: InvitationStatus.Canceled })
-        .where(
-          and(
-            eq(groupInvitationTable.id, invitationId),
-            /*
-             * 他団体の招待を取り消せないよう、必ず団体 ID で絞る。
-             * 操作者が意図しない団体の招待 ID を指定しても、団体の外へ影響が漏れないようにするため。
-             */
-            eq(groupInvitationTable.groupId, groupId),
-            // 承諾済み・取り消し済みの招待を蒸し返さない
-            eq(groupInvitationTable.status, InvitationStatus.Pending),
-          ),
-        )
-        .returning({ id: groupInvitationTable.id }),
+  const cancel = (
+    groupId: string,
+    invitationId: string,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<number, GroupError> => {
+    const condition = allOf(
+      eq(groupInvitationTable.id, invitationId),
+      /*
+       * 他団体の招待を取り消せないよう、必ず団体 ID で絞る。
+       * 操作者が意図しない団体の招待 ID を指定しても、団体の外へ影響が漏れないようにするため。
+       */
+      eq(groupInvitationTable.groupId, groupId),
+      // 承諾済み・取り消し済みの招待を蒸し返さない
+      eq(groupInvitationTable.status, InvitationStatus.Pending),
+    );
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: groupInvitationTable,
+      where: condition,
+    });
+    const updateStatement = db
+      .update(groupInvitationTable)
+      .set({ status: InvitationStatus.Canceled })
+      .where(condition)
+      .returning({ id: groupInvitationTable.id });
+
+    return ResultAsync.fromPromise(
+      db.batch([auditStatement, updateStatement]),
       databaseError("取り消し"),
-    ).map((rows) => rows.length);
+    ).map((results) => results[1].length);
+  };
 
   const findById = (invitationId: string): ResultAsync<Invitation | null, GroupError> =>
     ResultAsync.fromPromise(
@@ -230,36 +249,48 @@ export const createInvitationRepository = (db: Database): InvitationRepository =
       return ok(toInvitation(row));
     });
 
-  const accept = (input: AcceptInvitationInput): ResultAsync<string | null, GroupError> => {
-    const statements = invitationAcceptStatements(db, input);
+  const accept = (
+    input: AcceptInvitationInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<string | null, GroupError> => {
+    const statements = invitationAcceptStatements(db, input, auditLog);
     return ResultAsync.fromPromise(
-      db.batch([statements[0], statements[1]]),
+      db.batch([statements[0], statements[1], statements[2]]),
       databaseError("承諾"),
     ).map((results) => {
-      // 2 文目（条件付き UPDATE）の RETURNING。0 行なら承諾できる招待が無かった
-      const acceptedRows = results[1] as { groupId: string }[];
+      // 3 文目（条件付き UPDATE）の RETURNING。0 行なら承諾できる招待が無かった
+      const acceptedRows = results[2] as { groupId: string }[];
       return acceptedRows.at(0)?.groupId ?? null;
     });
   };
 
-  const reject = (input: RejectInvitationInput): ResultAsync<number, GroupError> =>
-    ResultAsync.fromPromise(
-      db
-        .update(groupInvitationTable)
-        .set({ status: InvitationStatus.Rejected })
-        .where(
-          and(
-            eq(groupInvitationTable.id, input.invitationId),
-            // 承諾済み・取り消し済みの招待を蒸し返さない
-            eq(groupInvitationTable.status, InvitationStatus.Pending),
-            // 招待メールを転送されただけの人が辞退できないよう、宛先本人に限る（COND-011）
-            eq(groupInvitationTable.email, input.email),
-            gt(groupInvitationTable.expiresAt, input.now),
-          ),
-        )
-        .returning({ id: groupInvitationTable.id }),
+  const reject = (
+    input: RejectInvitationInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<number, GroupError> => {
+    const condition = allOf(
+      eq(groupInvitationTable.id, input.invitationId),
+      // 承諾済み・取り消し済みの招待を蒸し返さない
+      eq(groupInvitationTable.status, InvitationStatus.Pending),
+      // 招待メールを転送されただけの人が辞退できないよう、宛先本人に限る（COND-011）
+      eq(groupInvitationTable.email, input.email),
+      gt(groupInvitationTable.expiresAt, input.now),
+    );
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: groupInvitationTable,
+      where: condition,
+    });
+    const updateStatement = db
+      .update(groupInvitationTable)
+      .set({ status: InvitationStatus.Rejected })
+      .where(condition)
+      .returning({ id: groupInvitationTable.id });
+
+    return ResultAsync.fromPromise(
+      db.batch([auditStatement, updateStatement]),
       databaseError("辞退"),
-    ).map((rows) => rows.length);
+    ).map((results) => results[1].length);
+  };
 
   return { findPendingByGroupAndEmail, create, cancel, findById, accept, reject };
 };

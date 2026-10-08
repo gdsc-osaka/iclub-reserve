@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { groupMemberTable, groupTable } from "~/db/schema";
+import type { AuditLogDraft } from "~/domain/audit-log";
 import {
   GroupErrorCode,
   GroupStatus,
@@ -12,6 +13,7 @@ import {
   type UpdateGroupStatusInput,
 } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { toGroup } from "./group-converter";
 
@@ -43,15 +45,26 @@ export const createGroupRepository = (db: Database): GroupRepository => {
       return ok(toGroup(row));
     });
 
-  const updateName = ({
-    id,
-    name,
-    updatedAt,
-  }: UpdateGroupNameInput): ResultAsync<Group, GroupError> =>
-    ResultAsync.fromPromise(
-      db.update(groupTable).set({ name, updatedAt }).where(eq(groupTable.id, id)).returning(),
+  const updateName = (
+    { id, name, updatedAt }: UpdateGroupNameInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Group, GroupError> => {
+    const condition = eq(groupTable.id, id);
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: groupTable,
+      where: condition,
+    });
+    const updateStatement = db
+      .update(groupTable)
+      .set({ name, updatedAt })
+      .where(condition)
+      .returning();
+
+    return ResultAsync.fromPromise(
+      db.batch([auditStatement, updateStatement]),
       databaseError,
-    ).andThen((rows) => {
+    ).andThen((results) => {
+      const rows = results[1];
       const row = rows.at(0);
 
       /*
@@ -65,21 +78,28 @@ export const createGroupRepository = (db: Database): GroupRepository => {
 
       return ok(toGroup(row));
     });
+  };
 
-  const updateStatus = ({
-    id,
-    from,
-    to,
-    updatedAt,
-  }: UpdateGroupStatusInput): ResultAsync<Group, GroupError> =>
-    ResultAsync.fromPromise(
-      db
-        .update(groupTable)
-        .set({ status: to, updatedAt })
-        .where(and(eq(groupTable.id, id), eq(groupTable.status, from)))
-        .returning(),
+  const updateStatus = (
+    { id, from, to, updatedAt }: UpdateGroupStatusInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Group, GroupError> => {
+    const condition = allOf(eq(groupTable.id, id), eq(groupTable.status, from));
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: groupTable,
+      where: condition,
+    });
+    const updateStatement = db
+      .update(groupTable)
+      .set({ status: to, updatedAt })
+      .where(condition)
+      .returning();
+
+    return ResultAsync.fromPromise(
+      db.batch([auditStatement, updateStatement]),
       databaseError,
-    ).andThen((rows) => {
+    ).andThen((results) => {
+      const rows = results[1];
       const row = rows.at(0);
 
       /*
@@ -96,16 +116,14 @@ export const createGroupRepository = (db: Database): GroupRepository => {
 
       return ok(toGroup(row));
     });
+  };
 
-  const create = ({
-    id,
-    name,
-    ownerUserId,
-    membershipId,
-    now,
-  }: CreateGroupInput): ResultAsync<Group, GroupError> => {
+  const create = (
+    { id, name, ownerUserId, membershipId, now }: CreateGroupInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Group, GroupError> => {
     /*
-     * 団体と初期管理者を 1 回の batch で同時に挿入する。
+     * 団体と初期管理者、および操作履歴を 1 回の batch で同時に挿入する（COND-013）。
      *
      * 【1 往復にする理由】
      * Cloudflare D1 はネットワーク往復ごとにレイテンシとコストが生じるため、
@@ -113,7 +131,7 @@ export const createGroupRepository = (db: Database): GroupRepository => {
      *
      * 【トランザクション整合性】
      * D1 の batch は単一のトランザクションとして実行されるため、
-     * 「団体だけが作成されて管理者が付かない」という不整合な状態は起こらない。
+     * 「団体だけが作成されて管理者が付かない」「記録が残らない」という不整合な状態は起こらない。
      *
      * 【実行順序】
      * group_member.group_id は group.id を参照する外部キーであるため、
@@ -139,23 +157,26 @@ export const createGroupRepository = (db: Database): GroupRepository => {
       updatedAt: now,
     });
 
-    return ResultAsync.fromPromise(db.batch([insertGroup, insertMember]), databaseError).andThen(
-      (results) => {
-        // 1 文目（insertGroup）の RETURNING 結果を取り出す
-        const insertedGroupRows = results[0];
-        const row = insertedGroupRows.at(0);
+    const insertAudit = auditLogInsert(db, auditLog);
 
-        /*
-         * INSERT ... RETURNING なので通常 row が undefined になることはないが、
-         * 型の整合性担保および万が一の欠損時に安全にエラーを返す。
-         */
-        if (row === undefined) {
-          return err(databaseError(new Error("作成された団体の行を取得できませんでした。")));
-        }
+    return ResultAsync.fromPromise(
+      db.batch([insertGroup, insertMember, insertAudit]),
+      databaseError,
+    ).andThen((results) => {
+      // 1 文目（insertGroup）の RETURNING 結果を取り出す
+      const insertedGroupRows = results[0];
+      const row = insertedGroupRows.at(0);
 
-        return ok(toGroup(row));
-      },
-    );
+      /*
+       * INSERT ... RETURNING なので通常 row が undefined になることはないが、
+       * 型の整合性担保および万が一の欠損時に安全にエラーを返す。
+       */
+      if (row === undefined) {
+        return err(databaseError(new Error("作成された団体の行を取得できませんでした。")));
+      }
+
+      return ok(toGroup(row));
+    });
   };
 
   return { findById, updateName, updateStatus, create };

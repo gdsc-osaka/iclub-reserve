@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import type { Group, GroupRepository } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
-import type { Membership, MembershipRepository } from "~/domain/membership";
+import type { StoredMembership, MembershipRepository } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
 import type {
   GroupAuditLogItem,
@@ -27,13 +27,15 @@ const testGroup: Group = {
   updatedAt: new Date("2026-01-02T00:00:00.000Z"),
 };
 
-const adminMembership: Membership = {
+const adminMembership: StoredMembership = {
+  id: "gm_adminMembership",
   groupId: testGroup.id,
   userId: "usr_admin",
   role: MembershipRole.Admin,
 };
 
-const memberMembership: Membership = {
+const memberMembership: StoredMembership = {
+  id: "gm_memberMembership",
   groupId: testGroup.id,
   userId: "usr_member",
   role: MembershipRole.Member,
@@ -96,7 +98,7 @@ const createFakeGroupRepository = (groups: readonly Group[]) => {
 };
 
 /** D1 を使わないダミーのメンバーシップリポジトリ */
-const createFakeMembershipRepository = (memberships: readonly Membership[]) => {
+const createFakeMembershipRepository = (memberships: readonly StoredMembership[]) => {
   let callCount = 0;
 
   const repository: MembershipRepository = {

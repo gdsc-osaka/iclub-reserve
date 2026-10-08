@@ -77,6 +77,24 @@ export interface GroupAccessRequest {
 }
 
 /**
+ * 団体での操作する人を、事務局であっても必ず所属を引いて組み立てる。
+ *
+ * `resolveGroupActor` は「事務局なら全団体を管理できるため所属を引かない」最適化を行うが、
+ * 操作履歴の書き込み（COND-012 / COND-013）では「その操作が団体内のロールでは許されず、
+ * 事務局の横断権限によって初めて許されたか」（acted_as_staff）を判定するため、
+ * 事務局であっても必ず所属を確認する必要がある。
+ * 所属を省くと、その団体の管理者でもある事務局員の操作まで誤って `acted_as_staff: true` になってしまう。
+ */
+export const resolveGroupActorWithMembership = (
+  deps: GroupAuthorizationDeps,
+  request: GroupAccessRequest,
+): ResultAsync<Actor, GroupError> =>
+  deps.membershipRepository
+    .findByGroupAndUser(request.groupId, request.actorUserId)
+    .mapErr(toGroupDatabaseError)
+    .map((membership): Actor => ({ isStaff: request.isStaff, membership }));
+
+/**
  * 操作する人を組み立てる。
  *
  * 事務局のときは所属を引かない。事務局は所属に関わらず全団体を管理でき（COND-009）、
@@ -137,6 +155,10 @@ export const ensureActorCan = (
  *
  * 団体を操作するユースケースの認可は、この 1 本を通すこと。
  * 同じ判定を各ユースケースに書き写すと、存在秘匿の扱いが少しずつ食い違っていく。
+ *
+ * ただし操作履歴に acted_as_staff を書くユースケースは、判定に使った操作する人（Actor）が
+ * あとで要るので、`resolveGroupActorWithMembership` → `ensureActorCan` と分けて呼ぶ。
+ * 判定そのものは同じ `ensureActorCan` を通るので、存在秘匿の扱いは食い違わない。
  */
 export const ensureGroupPermission = (
   deps: GroupAuthorizationDeps,

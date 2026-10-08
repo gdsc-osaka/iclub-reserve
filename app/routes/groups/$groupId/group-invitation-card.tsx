@@ -62,7 +62,7 @@ export function GroupInvitationCard({
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul aria-label="承諾待ちの招待" className="divide-y divide-border">
             {invitations.map((invitation) => (
               <li
                 key={invitation.id}

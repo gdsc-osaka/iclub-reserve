@@ -8,7 +8,7 @@ import type { ReservationMailAudience } from "~/domain/mail/reservation-mail";
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import {
@@ -42,7 +42,8 @@ const activeFacility: Facility = {
   updatedAt: new Date("2026-04-01T00:00:00+09:00"),
 };
 
-const membership: Membership = {
+const membership: StoredMembership = {
+  id: "gm_membership",
   groupId: "grp_robotics",
   userId: "usr_student_01",
   role: MembershipRole.Member,
@@ -75,7 +76,7 @@ const defaultAudience: ReservationMailAudience = {
 
 const createDeps = (
   overrides: {
-    membership?: Membership | null;
+    membership?: StoredMembership | null;
     group?: Group;
     groupNotFound?: boolean;
     facility?: Facility;

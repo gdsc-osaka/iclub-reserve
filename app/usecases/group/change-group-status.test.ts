@@ -1,6 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction } from "~/domain/audit-log";
 import {
   GroupErrorCode,
   GroupStatus,
@@ -8,7 +9,11 @@ import {
   type GroupError,
   type GroupRepository,
 } from "~/domain/group";
-import { MembershipRole, type Membership, type MembershipRepository } from "~/domain/membership";
+import {
+  MembershipRole,
+  type StoredMembership,
+  type MembershipRepository,
+} from "~/domain/membership";
 import { changeGroupStatusUseCase, type ChangeGroupStatusDeps } from "./change-group-status";
 
 const dummyNow = new Date("2026-09-23T12:00:00Z");
@@ -23,7 +28,7 @@ const createFakeGroup = (status: GroupStatus = GroupStatus.Pending): Group => ({
 
 const createDeps = (overrides?: {
   group?: Group | null;
-  membership?: Membership | null;
+  membership?: StoredMembership | null;
   updateStatusResult?: Group | null;
   groupError?: GroupError;
 }) => {
@@ -77,11 +82,31 @@ const createDeps = (overrides?: {
 describe("changeGroupStatusUseCase（UC-014: 団体の有効化・無効化）", () => {
   describe("事務局による有効な状態遷移（4 パターン）", () => {
     it.each([
-      { from: GroupStatus.Pending, to: "enabled", expected: GroupStatus.Enabled },
-      { from: GroupStatus.Pending, to: "disabled", expected: GroupStatus.Disabled },
-      { from: GroupStatus.Enabled, to: "disabled", expected: GroupStatus.Disabled },
-      { from: GroupStatus.Disabled, to: "enabled", expected: GroupStatus.Enabled },
-    ])("$from から $to への変更が成功する", async ({ from, to, expected }) => {
+      {
+        from: GroupStatus.Pending,
+        to: "enabled",
+        expected: GroupStatus.Enabled,
+        expectedAction: AuditLogAction.GroupEnable,
+      },
+      {
+        from: GroupStatus.Pending,
+        to: "disabled",
+        expected: GroupStatus.Disabled,
+        expectedAction: AuditLogAction.GroupDisable,
+      },
+      {
+        from: GroupStatus.Enabled,
+        to: "disabled",
+        expected: GroupStatus.Disabled,
+        expectedAction: AuditLogAction.GroupDisable,
+      },
+      {
+        from: GroupStatus.Disabled,
+        to: "enabled",
+        expected: GroupStatus.Enabled,
+        expectedAction: AuditLogAction.GroupEnable,
+      },
+    ])("$from から $to への変更が成功する", async ({ from, to, expected, expectedAction }) => {
       const { deps, groupRepository } = createDeps({ group: createFakeGroup(from) });
 
       const result = await changeGroupStatusUseCase(deps, {
@@ -95,12 +120,25 @@ describe("changeGroupStatusUseCase（UC-014: 団体の有効化・無効化）",
       expect(result.isOk()).toBe(true);
       const updated = result._unsafeUnwrap();
       expect(updated.status).toBe(expected);
-      expect(groupRepository.updateStatus).toHaveBeenCalledWith({
-        id: "grp_01",
-        from,
-        to: expected,
-        updatedAt: dummyNow,
-      });
+      expect(groupRepository.updateStatus).toHaveBeenCalledWith(
+        {
+          id: "grp_01",
+          from,
+          to: expected,
+          updatedAt: dummyNow,
+        },
+        {
+          occurredAt: dummyNow,
+          actorId: "usr_staff",
+          actedAsStaff: true,
+          action: expectedAction,
+          targetId: "grp_01",
+          groupId: "grp_01",
+          changes: {
+            status: { before: from, after: expected },
+          },
+        },
+      );
     });
   });
 
@@ -168,7 +206,12 @@ describe("changeGroupStatusUseCase（UC-014: 団体の有効化・無効化）",
   describe("認可と存在秘匿", () => {
     it("管理者は事務局ではないため Forbidden を返し、findById は呼ばれない", async () => {
       const { deps, groupRepository } = createDeps({
-        membership: { groupId: "grp_01", userId: "usr_admin", role: MembershipRole.Admin },
+        membership: {
+          id: "gm_test",
+          groupId: "grp_01",
+          userId: "usr_admin",
+          role: MembershipRole.Admin,
+        },
       });
 
       const result = await changeGroupStatusUseCase(deps, {

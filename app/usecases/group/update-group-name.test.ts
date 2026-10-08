@@ -1,9 +1,10 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import type { Group, GroupError, GroupRepository, UpdateGroupNameInput } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
-import type { Membership, MembershipRepository } from "~/domain/membership";
+import type { StoredMembership, MembershipRepository } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
 import { updateGroupNameUseCase } from "./update-group-name";
 
@@ -15,20 +16,26 @@ const testGroup: Group = {
   updatedAt: new Date("2026-01-02T00:00:00.000Z"),
 };
 
-const adminMembership: Membership = {
+const adminMembership: StoredMembership = {
+  id: "gm_adminMembership",
   groupId: testGroup.id,
   userId: "usr_admin",
   role: MembershipRole.Admin,
 };
 
-const memberMembership: Membership = {
+const memberMembership: StoredMembership = {
+  id: "gm_memberMembership",
   groupId: testGroup.id,
   userId: "usr_member",
   role: MembershipRole.Member,
 };
 
 interface FakeGroupRepositoryOptions {
-  readonly updateNameResult?: (input: UpdateGroupNameInput) => ResultAsync<Group, GroupError>;
+  readonly updateNameResult?: (
+    input: UpdateGroupNameInput,
+    auditLog: AuditLogDraft,
+  ) => ResultAsync<Group, GroupError>;
+  readonly findByIdResult?: (id: string) => ResultAsync<Group, GroupError>;
 }
 
 /** D1 を使わないダミーのグループリポジトリ。呼び出し回数と引数を自前で記録する */
@@ -36,20 +43,22 @@ const createFakeGroupRepository = (options: FakeGroupRepositoryOptions = {}) => 
   let findByIdCallCount = 0;
   let updateNameCallCount = 0;
   let lastUpdateNameInput: UpdateGroupNameInput | null = null;
+  let lastAuditLog: AuditLogDraft | null = null;
 
   const repository: GroupRepository = {
-    findById: (_id) => {
+    findById: (id) => {
       findByIdCallCount += 1;
-      return errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは findById は使わない",
-      });
+      if (options.findByIdResult) {
+        return options.findByIdResult(id);
+      }
+      return okAsync(testGroup);
     },
-    updateName: (input) => {
+    updateName: (input, auditLog) => {
       updateNameCallCount += 1;
       lastUpdateNameInput = input;
+      lastAuditLog = auditLog;
       if (options.updateNameResult) {
-        return options.updateNameResult(input);
+        return options.updateNameResult(input, auditLog);
       }
       return okAsync({
         id: input.id,
@@ -76,11 +85,12 @@ const createFakeGroupRepository = (options: FakeGroupRepositoryOptions = {}) => 
     updateNameCallCount: () => updateNameCallCount,
     findByIdCallCount: () => findByIdCallCount,
     lastUpdateNameInput: () => lastUpdateNameInput,
+    lastAuditLog: () => lastAuditLog,
   };
 };
 
 /** D1 を使わないダミーのメンバーシップリポジトリ */
-const createFakeMembershipRepository = (memberships: readonly Membership[]) => {
+const createFakeMembershipRepository = (memberships: readonly StoredMembership[]) => {
   let callCount = 0;
 
   const repository: MembershipRepository = {
@@ -133,10 +143,15 @@ describe("updateGroupNameUseCase", () => {
     const updatedGroup = result._unsafeUnwrap();
     expect(updatedGroup.name).toBe("新しい団体名");
     expect(updatedGroup.updatedAt).toEqual(baseNow);
+    const auditLog = groups.lastAuditLog();
+    expect(auditLog?.actedAsStaff).toBe(false);
+    expect(auditLog?.changes).toEqual({
+      name: { before: testGroup.name, after: "新しい団体名" },
+    });
   });
 
-  // 2. 事務局（isStaff: true）は所属していなくても変更でき、membershipRepository が 1 度も呼ばれていない
-  it("事務局（isStaff: true）は所属していなくても変更でき、membershipRepository が 1 度も呼ばれない", async () => {
+  // 2. 事務局（isStaff: true）は所属していなくても変更でき、actedAsStaff が true になる（COND-012）
+  it("事務局（isStaff: true）は所属していなくても変更でき、actedAsStaff が true になる", async () => {
     const groups = createFakeGroupRepository();
     const memberships = createFakeMembershipRepository([]);
 
@@ -152,9 +167,32 @@ describe("updateGroupNameUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(memberships.callCount()).toBe(0);
+    // acted_as_staff 判定のため所属を 1 回引く（COND-012）
+    expect(memberships.callCount()).toBe(1);
     expect(groups.updateNameCallCount()).toBe(1);
     expect(groups.lastUpdateNameInput()?.name).toBe("事務局による変更名");
+    const auditLog = groups.lastAuditLog();
+    expect(auditLog?.actedAsStaff).toBe(true);
+  });
+
+  // 2b. 名前が変わっていない場合は書き込まず成功する（COND-013）
+  it("名前が変わっていない場合は updateName を呼ばずに成功する", async () => {
+    const groups = createFakeGroupRepository();
+    const memberships = createFakeMembershipRepository([adminMembership]);
+
+    const result = await updateGroupNameUseCase(
+      { groupRepository: groups.repository, membershipRepository: memberships.repository },
+      {
+        groupId: testGroup.id,
+        actorUserId: adminMembership.userId,
+        isStaff: false,
+        name: testGroup.name,
+        now: baseNow,
+      },
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(groups.updateNameCallCount()).toBe(0);
   });
 
   // 3. 一般メンバーは Forbidden になり、updateName が 1 度も呼ばれていない

@@ -5,7 +5,7 @@ import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import {
@@ -80,7 +80,8 @@ const groupInfo: Group = {
   updatedAt: new Date("2026-09-01T00:00:00+09:00"),
 };
 
-const memberMembership: Membership = {
+const memberMembership: StoredMembership = {
+  id: "gm_memberMembership",
   groupId: "grp_robotics",
   userId: "usr_student_01",
   role: MembershipRole.Member,
@@ -104,7 +105,7 @@ const nowAfter = new Date("2026-09-16T10:30:00+09:00");
 const createDeps = (
   overrides: {
     reservation?: Reservation | null;
-    membership?: Membership | null;
+    membership?: StoredMembership | null;
     group?: Group | null;
     reservations?: readonly ReservationFormReservationRow[];
     groups?: UserGroupList;
@@ -290,6 +291,7 @@ describe("getReservationEditFormUseCase", () => {
     // 所属している事務局（自団体の予約でも直接変更として扱う）
     const memberDeps = createDeps({
       membership: {
+        id: "gm_test",
         groupId: "grp_robotics",
         userId: "usr_staff_01",
         role: MembershipRole.Member,
