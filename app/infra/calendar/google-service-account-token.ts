@@ -195,7 +195,17 @@ export const createGoogleTokenSource = ({
           }
 
           if (status !== 200) {
-            return errAsync(classifyGoogleCalendarError(status, parsedJson));
+            // トークンエンドポイントは、鍵やメールアドレスの誤り・時計のずれを 400（invalid_grant）や
+            // 401（invalid_client）で返す。どちらも設定の誤りなので、再試行しない AuthFailed にそろえる。
+            // 429 と 5xx だけは一時的な失敗として Calendar API と同じ分類に任せる
+            if (status === 429 || status >= 500) {
+              return errAsync(classifyGoogleCalendarError(status, parsedJson));
+            }
+            return errAsync<string, CalendarError>({
+              code: CalendarErrorCode.AuthFailed,
+              message: `Google OAuth 2.0 トークンエンドポイントが ${status} を返しました。`,
+              cause: parsedJson,
+            });
           }
 
           const tokenData = parsedJson as TokenResponse;

@@ -2,14 +2,13 @@ import { describe, expect, it } from "vitest";
 import { ReservationStatus } from "~/domain/reservation";
 import {
   calendarSyncRangeStart,
-  extractReservationIdFromEventId,
   toCalendarEventId,
   toCalendarSyncDraft,
   toDesiredCalendarEvent,
 } from "./calendar-event";
 
 describe("calendar-event domain functions", () => {
-  describe("toCalendarEventId & extractReservationIdFromEventId", () => {
+  describe("toCalendarEventId", () => {
     it("base32hex の文字（0-9, a-v）だけで構成される", () => {
       const reservationId = "clx1234567890abcdef";
       const eventId = toCalendarEventId(reservationId);
@@ -38,24 +37,10 @@ describe("calendar-event domain functions", () => {
       expect(eventId.includes("_")).toBe(false);
     });
 
-    it("extractReservationIdFromEventId で元の予約 ID を復元できる", () => {
-      const testCases = [
-        "clx0123456789",
-        "xyz_reservation-42",
-        "予約ID日本語テスト",
-        "cuid2_special_w_x_y_z",
-      ];
-      for (const original of testCases) {
-        const eventId = toCalendarEventId(original);
-        expect(extractReservationIdFromEventId(eventId)).toBe(original);
-      }
-    });
-
-    it("不正な形式の eventId は null を返す", () => {
-      expect(extractReservationIdFromEventId("invalid_prefix")).toBeNull();
-      expect(extractReservationIdFromEventId("iclub1")).toBeNull(); // 奇数長
-      expect(extractReservationIdFromEventId("iclubzz")).toBeNull(); // hex ではない
-      expect(extractReservationIdFromEventId("")).toBeNull();
+    it("違う予約 ID からは違う予定 ID になる", () => {
+      expect(toCalendarEventId("res_1")).not.toBe(toCalendarEventId("res_2"));
+      // 16 進表記の連結なので、日本語を含む ID でも衝突しない
+      expect(toCalendarEventId("予約A")).not.toBe(toCalendarEventId("予約B"));
     });
   });
 

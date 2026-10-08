@@ -148,7 +148,7 @@ describe("google-service-account-token", () => {
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
-    it("OAuth エンドポイントがエラーを返した場合は CalendarError を返す", async () => {
+    it("鍵の誤りなどで OAuth エンドポイントが 400 を返したら、再試行しない AuthFailed を返す", async () => {
       const keyPair = await generateTestKeyPair();
       const pkcs8Der = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
       const privateKeyPem = derToPem(pkcs8Der, "PRIVATE KEY", "PRIVATE KEY");
@@ -171,7 +171,27 @@ describe("google-service-account-token", () => {
 
       const result = await tokenSource.getAccessToken();
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().code).toBe(CalendarErrorCode.Rejected);
+      expect(result._unsafeUnwrapErr().code).toBe(CalendarErrorCode.AuthFailed);
+    });
+
+    it("OAuth エンドポイントが 503 を返したら、再試行する Unavailable を返す", async () => {
+      const keyPair = await generateTestKeyPair();
+      const pkcs8Der = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+      const privateKeyPem = derToPem(pkcs8Der, "PRIVATE KEY", "PRIVATE KEY");
+
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValue(new Response("Service Unavailable", { status: 503 }));
+
+      const tokenSource = createGoogleTokenSource({
+        serviceAccountEmail: "sa@example.com",
+        privateKeyPem,
+        fetchFn: mockFetch as unknown as typeof fetch,
+      });
+
+      const result = await tokenSource.getAccessToken();
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(CalendarErrorCode.Unavailable);
     });
   });
 });

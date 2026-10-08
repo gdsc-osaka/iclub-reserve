@@ -16,8 +16,8 @@ Google カレンダーは購読 URL（iCal 形式）を通じて学内外に広�
    予約の承認・キャンセル・日時変更・施設変更などの業務トランザクションと、外部の Google Calendar API への書き込みは不可分（atomic）に行えない。同期呼び出しでカレンダーに書き込もうとすると、Google 側の障害や一時的なレート制限で予約操作そのものが巻き戻るか、あるいは「DB の予約は承認されたがカレンダーに予定が無い」という不整合が恒久化する。
 2. **Cloudflare Workers の制約**:
    Google 公式の SDK（`googleapis` や `google-auth-library`）は Node.js 固有のモジュールに依存しており、Cloudflare Workers では動作しない。標準の Web API（`fetch` および `crypto.subtle`）で OAuth 2.0 JWT Bearer 認証と Calendar REST API の呼び出しを自前で実装する必要がある。
-3. **リソース上限（Subrequests / D1）**:
-   Workers の 1 回の実行（Cron Trigger / Request）における外部サブリクエスト数には上限がある（Free プランで 50 件、Paid プランで 10,000 件）。D1 へのクエリ数にも上限（Free 1,000 件）があるため、1 回のバッチ処理で扱う同期タスク量に明確な上限を設ける必要がある。
+3. **リソース上限（Subrequests / D1 / Cron Triggers）**:
+   Workers の 1 回の実行（Cron Trigger / Request）におけるサブリクエスト数には上限がある（Free プランで 50 件、Paid プランで 10,000 件）。D1 への問い合わせにも 1 回の実行あたりの上限（Free 50 件、Paid 1,000 件）があり、**D1 の問い合わせはサブリクエストの上限にも数えられる**。毎分の Cron はメールの回収と同じ実行の中で動くため、1 回で扱う同期タスクの量に明確な上限を設ける必要がある。また Cron Trigger の数はアカウント全体で Free 5 個、Paid 250 個までである（2026-10 時点の Cloudflare のドキュメント）。
 4. **反映遅延と冪等性の要求**:
    利用者が購読する Google カレンダーや iCal クライアントは、もともと数十分〜数時間のキャッシュや同期間隔を持っており、秒単位の即時反映は求められていない（最大 1 分程度の遅延は実用上完全に許容される）。一方で、予約の変更やキャンセルが連続して行われたり、リトライが走った場合でも、最終的に「DB の最新の予約状態」にカレンダーが正しく収束（自己修復・冪等）しなければならない（COND-024）。
 
@@ -36,7 +36,7 @@ Google カレンダーは購読 URL（iCal 形式）を通じて学内外に広�
 
 [cron 毎分 (* * * * *)]
    │
-   ├─ status='pending' かつ next_attempt_at <= now のタスクを上限件数（10件）取得
+   ├─ status='pending' かつ next_attempt_at <= now のタスク（と、processing のまま 5 分以上放置されたタスク）を上限件数（5件）取得
    ├─ reservation_id ごとにタスクを束ね、処理時点の DB の予約・施設状態を取得
    ├─ toDesiredCalendarEvent で「あるべき予定」を判定
    │    ├─ 承認済み＋カレンダーIDあり → upsertEvent（PUT / 404時POST）
@@ -54,8 +54,8 @@ Google カレンダーは購読 URL（iCal 形式）を通じて学内外に広�
 
 メール送信（ADR-002）では、メッセージ送信のテンポを落とさないために Cloudflare Queues による即時配送（近道）を併用した。しかしカレンダー連携では **Queues も `waitUntil` も一切使わず、毎分の Cron のみ** で同期を行う。
 
-- **iCal / カレンダー購読の特性**:
-  Google カレンダーの公開 iCal 購読は数時間〜半日おきにしか更新されず、ユーザーのカレンダーアプリへの反映は本質的に遅い。1 分以内の即時反映に実質的な価値が無い。
+- **カレンダー購読の特性**:
+  iCal の URL で購読するカレンダーアプリの多くは、数時間おきにしか読み直さない。Google カレンダーに直接追加した人には早く反映されるが、それでも予約の操作から 1 分以内に見たい情報ではない。即時反映の価値は小さい。
 - **並行競合の防止**:
   同じ予約に対して短時間に「承認 → 直後に日時変更」などの操作が行われた場合、`waitUntil` やキューで即時実行すると別々の Worker が並行して Google API を叩き、順番の反転や競合が発生しやすい。Cron の 1 箇所でのみ処理すれば、同じ予約へのタスクを「その時点の最新状態」に束ねて 1 回で同期できる。
 - **インフラ構成の簡素化**:
@@ -106,7 +106,7 @@ export const calendarSyncTaskTable = sqliteTable(
 - **予定 ID（決定論的生成）**:
   Google Calendar の予定 ID には base32hex（小文字 `0-9`, `a-v`）かつ 5〜1024 文字という制約がある（RFC 2938 準拠）。予約 ID（cuid2）は `w-z` を含みうるため、予約 ID の UTF-8 バイト列を 16 進表記（小文字 `0-9`, `a-f`）にし、先頭に `"iclub"`（すべて base32hex 内）を付与した文字列とする：
   `toCalendarEventId(reservationId) = "iclub" + hex(reservationId)`
-  これにより、予約テーブルに予定 ID を持たずとも常に同じ ID を導出でき、逆変換も可能となる。
+  これにより、予約テーブルに予定 ID を持たずとも常に同じ ID を導出できる。予定から予約を引くときは、ID を逆変換せず `extendedProperties` の予約 ID を使う（ID と目印の両方が合う予定だけをシステムの予定とみなすため）。
 - **環境と予約の目印**:
   Google 側の予定の `extendedProperties.private` に以下を記録する。
   - `iclubReserveReservationId`: 予約 ID
@@ -121,13 +121,15 @@ export const calendarSyncTaskTable = sqliteTable(
 - **認証**:
   Service Account の秘密鍵（PKCS#8 PEM）を用い、WebCrypto（`crypto.subtle`）で RS256 JWT を署名。OAuth 2.0 JWT Bearer フロー（`https://oauth2.googleapis.com/token`）でアクセストークンを取得。スコープは `https://www.googleapis.com/auth/calendar.events` に絞る。トークンはモジュールスコープに保持し、有効期限の 60 秒前まで使い回す。401 が返った場合はトークンを破棄して 1 回だけ再取得・再試行する。
 - **upsertEvent**:
-  まず `events.update`（PUT）を呼び出す。404 Not Found であれば `events.insert`（POST、ID 指定）を呼ぶ。insert が 409 Conflict を返した場合（Google Calendar では削除済みの予定の ID が墓標として残るため、同じ ID で insert すると 409 になる）、再度 `events.update` で `status: "confirmed"` を送信して予定を生き返らせる（undelete）。
+  まず `events.update`（PUT）を `status: "confirmed"` 付きで呼び出す。404 Not Found であれば `events.insert`（POST、ID 指定）を呼び、insert が 409 Conflict を返した場合（同じ ID の予定が先にできていた）は、もう一度 update する。
+  削除した予定は `status: "cancelled"` として一定期間残り、その間は同じ ID で insert すると 409 になる（Google のエラーの手引きは、409 のときは update を使うよう案内している）。最初に update から試すのは、削除済みの予定を `status: "confirmed"` で上書きして生き返らせるためである。
+  **削除済みの予定に update が 200 を返して生き返ること、および完全に消えた後の ID の扱いは、公式のドキュメントでは確かめられなかった。** 本物のカレンダーを使えるようになる PR 2 で、「登録 → 削除 → 再登録」を実際に流して確かめ、結果をここに書き足す。
 - **deleteEvent**:
   DELETE を呼び出す。404 Not Found および 410 Gone（すでに削除済み）は成功として扱う。
 - **listManagedEvents**:
   `privateExtendedProperty=iclubReserveEnv=<appEnv>`、`timeMin=endAfter`、`singleEvents=true`、`showDeleted=false` でページネーションをたどって全件取得。`iclubReserveReservationId` が欠落している予定、および予定 ID が `toCalendarEventId(reservationId)` と一致しない予定は除外する。
 - **checkWriteAccess**:
-  `events.list` を `maxResults=1` で呼び出し、レスポンスのルートにある `accessRole` を確認する。`writer` または `owner` であれば `writable`、それ以外は `not_writable`、404 は `not_found` を返す。確認用のダミー予定を登録・削除しないため、一般公開カレンダーに一瞬でも不要な予定が露出しない。
+  `events.list` を `maxResults=1` で呼び出し、レスポンスのルートにある `accessRole` を確認する。`writer` または `owner` であれば `writable`、それ以外（`reader` や `writerWithoutPrivateAccess` など）とレート制限ではない 403 は `not_writable`、404 は `not_found` を返す。`writerWithoutPrivateAccess` を書き込めるとみなさないのは、共有の手順（「予定の変更」の権限）で付くのが `writer` だからで、手順と違う共有を通さないため。確認用のダミー予定を登録・削除しないため、一般公開カレンダーに一瞬でも不要な予定が露出しない。
 
 ### 6. リトライと失敗の扱い
 
@@ -141,17 +143,26 @@ export const calendarSyncTaskTable = sqliteTable(
 
 ### 7. 実行量の上限（Workers 制限の遵守）
 
-Cloudflare Workers の現在の制限（Free: 外部サブリクエスト 50 件 / D1 クエリ 1,000 件、Paid: 外部サブリクエスト 10,000 件）を踏まえ、**1 回の Cron で処理する同期タスクの上限を 10 件** とする。
-1 件の予約同期で発生する外部 fetch は最大 2〜3 回（update/insert/token）、D1 クエリは 2〜3 回であるため、10 件であれば最大でも外部サブリクエスト 30 件程度となり、Free プランの上限（50 件）内に確実に収まる。
+Free プランの上限（サブリクエスト 50 件。D1 の問い合わせもここに数える）に収まるよう、**1 回の Cron で処理する同期タスクの上限を 5 件（予約 5 件分）** とする。
+
+| 内訳                             | 1 回の Cron あたり                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| Google への呼び出し（予約 1 件） | 最悪 4 回（update → insert → update と、変更前の施設のカレンダーからの削除）           |
+| Google への呼び出し（5 件）      | 最悪 20 回                                                                             |
+| access token の取得              | 最大 1 回（isolate ごとに保持して使い回す）                                            |
+| D1 の問い合わせ                  | 6 回前後（取り出し・予約と施設の読み込み・変更前の施設の読み込み・成功と失敗の後始末） |
+| 合計                             | 30 回弱                                                                                |
+
+残りの 20 回強を、同じ実行の中で動くメールの回収に残す。毎分 5 件なので 1 時間に 300 件まで反映でき、施設の名称の変更で数十件をまとめて積んでも数分で片付く。Paid プランに移ったら上限を上げてよい。
 
 ### 8. 今後の PR での実装方針
 
 - **PR 2（予約 1 件の同期）**:
-  予約の状態遷移（承認・キャンセル・差し戻し）および内容変更の各ユースケースで、`toCalendarSyncDraft` を用いて同期タスクを `db.batch()` に積む。毎分の cron（`workers/app.ts` の `scheduled`）から呼び出される `flushCalendarSyncOutbox` ユースケースを実装する。
+  予約の状態遷移（承認・キャンセル・差し戻し）および内容変更の各ユースケースで、`toCalendarSyncDraft` を用いて同期タスクを `db.batch()` に積む。毎分の cron（`workers/app.ts` の `scheduled`）から呼び出される `processCalendarSyncTasksUseCase` を実装する。
 - **PR 3（施設の変更）**:
   施設編集画面で Google Calendar ID を変更した際、保存前に `checkWriteAccess` で書き込み権限を検証（COND-025）。保存時は施設の更新と同じ batch で、範囲内（`calendarSyncRangeStart`）の承認済み予約のタスクを `INSERT ... SELECT` で積む。
 - **PR 4（日次の突き合わせ）**:
-  毎朝 4:00（JST）の Cron で、施設ごとに `listManagedEvents` と DB 内の承認済み予約を突き合わせ、差異がある予約のタスクを `calendar_sync_task` に積む。実際の反映は毎分の Cron に委ねる。
+  毎朝 4:00（JST）の Cron（`0 19 * * *`）で、施設ごとに `listManagedEvents` と DB 内の承認済み予約を突き合わせ、差異がある予約のタスクを `calendar_sync_task` に積む。実際の反映は毎分の Cron に委ねる。Cron Trigger は本番とプレビューの Worker でそれぞれ 2 個（毎分と日次）になり、アカウント全体で 4 個と Free プランの上限（5 個）に収まる。
 - **PR 5（カレンダー購読画面）**:
   ログインユーザー向けにカレンダー購読 URL（Google Calendar 追加ボタン / iCal URL）を一覧表示する画面（SCR-010 / UC-018）を実装する。
 
@@ -185,7 +196,7 @@ Cloudflare Workers の現在の制限（Free: 外部サブリクエスト 50 件
 | -------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | 最大 1 分の反映遅延                    | 操作直後にカレンダーを見てもまだ反映されていない場合がある           | iCal 購読側の更新頻度はもともと数時間単位であり、1 分の遅延は実害なし。キュー不要による簡潔性と安定性を優先。            |
 | 外部 SDK の不使用                      | Google 公式 SDK のバージョンアップに自動追従できない                 | 標準の WebCrypto と REST API のみで記述することで、Workers エッジランタイムでの完全な動作と軽量性を保証。                |
-| 1 回のバッチ件数制限（10件）           | 大量の予約変更が発生した際、すべて反映されるまで数分〜十数分を要する | 毎分 10 件ずつ確実に消費され、日次突き合わせでも修復されるため、システムダウンや制限超過を確実に回避できる。             |
+| 1 回のバッチ件数制限（5件）            | 大量の予約変更が発生した際、すべて反映されるまで数分〜十数分を要する | 毎分 5 件ずつ確実に消費され、日次突き合わせでも修復されるため、システムダウンや制限超過を確実に回避できる。              |
 | 削除済み予定の復活（409 ハンドリング） | insert 失敗時に update を再試行するためリクエスト数が 1 回増える     | Google Calendar の仕様（削除後も ID が保持される）に合わせた必須の処理。通常は update から試行するため滅多に発生しない。 |
 
 ## 適用範囲

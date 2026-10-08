@@ -5,21 +5,22 @@ import type { CalendarEvent, ManagedCalendarEvent } from "./calendar-event";
 /**
  * Google Calendar API 操作のエラーコード。
  *
- * 各種エラーの性質に応じた正規化を行う。
+ * 文字列の値に `CALENDAR_` を付けているのは、メールの `MailSendErrorCode`（`AUTH_FAILED` など）と
+ * ログの上で見分けるため。一度ログに出たら値は変えないこと（ADR-004 決定 1）。
  */
 export const CalendarErrorCode = {
   /** 認証の失敗（Service Account の鍵やメールの誤りなど。再試行しない） */
-  AuthFailed: "AUTH_FAILED",
+  AuthFailed: "CALENDAR_AUTH_FAILED",
   /** レート制限または一時的なクォータ超過（403 rateLimitExceeded, 429 など。再試行する） */
-  RateLimited: "RATE_LIMITED",
+  RateLimited: "CALENDAR_RATE_LIMITED",
   /** 権限が無い（書き込み権限が無い、アクセス拒否など。再試行しない） */
-  Forbidden: "FORBIDDEN",
+  Forbidden: "CALENDAR_FORBIDDEN",
   /** カレンダーまたは予定が見つからない（404 など。再試行しない） */
-  NotFound: "NOT_FOUND",
+  NotFound: "CALENDAR_NOT_FOUND",
   /** 一時的に使えない（5xx, 接続断, タイムアウトなど。再試行する） */
-  Unavailable: "UNAVAILABLE",
+  Unavailable: "CALENDAR_UNAVAILABLE",
   /** その他の拒否（不正なリクエスト、パラメータの誤りなど。再試行しない） */
-  Rejected: "REJECTED",
+  Rejected: "CALENDAR_REJECTED",
 } as const;
 export type CalendarErrorCode = (typeof CalendarErrorCode)[keyof typeof CalendarErrorCode];
 
@@ -35,16 +36,14 @@ export const calendarErrorKind: Record<CalendarErrorCode, ErrorKind> = {
   [CalendarErrorCode.Rejected]: ErrorKind.Internal,
 };
 
-/** 入力欄との対応付け用フィールド */
-export const CalendarField = {
-  GoogleCalendarId: "google_calendar_id",
-} as const;
-export type CalendarField = (typeof CalendarField)[keyof typeof CalendarField];
-
-/** カレンダー連携のエラー */
+/**
+ * カレンダー連携のエラー。
+ *
+ * `field`（どの入力欄の失敗か）は持たせない。このエラーの多くは毎分の同期の中で起き、入力欄が無い。
+ * Calendar ID の入力欄に出すかどうかは、施設の画面（`FacilityField.GoogleCalendarId`）の側で決める。
+ */
 export interface CalendarError extends BaseError {
   readonly code: CalendarErrorCode;
-  readonly field?: CalendarField;
 }
 
 /**

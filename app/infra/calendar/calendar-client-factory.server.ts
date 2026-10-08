@@ -24,6 +24,14 @@ let sharedTokenSource: GoogleTokenSource | null = null;
 let currentEmail: string | null = null;
 let currentKey: string | null = null;
 
+/**
+ * fetch を包んで渡す。
+ *
+ * Workers の fetch は、グローバル以外の `this` で呼ばれると Illegal invocation で落ちる。
+ * 渡した先でオブジェクトのプロパティとして呼ばれても落ちないよう、関数で包んでおく。
+ */
+const workerFetch: typeof fetch = (input, init) => fetch(input, init);
+
 /** Google Calendar と通信せずコンソールに出力する実装へフォールバックする */
 const fallbackToConsole = (reason: string): CalendarClient => {
   console.warn(`${reason}のため、Google Calendar と連携せずコンソールに出力します。`);
@@ -53,11 +61,12 @@ export const createCalendarClient = (): CalendarClient => {
     sharedTokenSource = createGoogleTokenSource({
       serviceAccountEmail: email,
       privateKeyPem: privateKey,
+      fetchFn: workerFetch,
     });
   }
 
   return createGoogleCalendarClient({
-    fetchFn: fetch,
+    fetchFn: workerFetch,
     getAccessToken: (options) => sharedTokenSource!.getAccessToken(options),
     appEnv: env.APP_ENV ?? "local",
   });

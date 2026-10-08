@@ -13,7 +13,7 @@ export interface CalendarEvent {
   readonly startAt: Date;
   readonly endAt: Date;
   /** 予約の ID。クライアントが目印（extendedProperties）を付与する際に参照する */
-  readonly reservationId?: string;
+  readonly reservationId: string;
 }
 
 /**
@@ -40,30 +40,6 @@ export const toCalendarEventId = (reservationId: string): string => {
   const bytes = new TextEncoder().encode(reservationId);
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   return `iclub${hex}`;
-};
-
-/**
- * 予定 ID から元の予約 ID を復元する純粋関数。
- *
- * 不正な形式の場合は null を返す。
- */
-export const extractReservationIdFromEventId = (eventId: string): string | null => {
-  if (!eventId.startsWith("iclub")) {
-    return null;
-  }
-  const hex = eventId.slice(5);
-  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-f]+$/.test(hex)) {
-    return null;
-  }
-  try {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-      bytes[i / 2] = Number.parseInt(hex.slice(i, i + 2), 16);
-    }
-    return new TextDecoder().decode(bytes);
-  } catch {
-    return null;
-  }
 };
 
 /** toDesiredCalendarEvent の引数 */

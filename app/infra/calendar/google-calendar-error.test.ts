@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CalendarErrorCode, CalendarField, isRetryableCalendarError } from "~/domain/calendar";
+import { CalendarErrorCode, isRetryableCalendarError } from "~/domain/calendar";
 import { classifyGoogleCalendarError } from "./google-calendar-error";
 
 describe("classifyGoogleCalendarError", () => {
@@ -72,7 +72,6 @@ describe("classifyGoogleCalendarError", () => {
       };
       const error = classifyGoogleCalendarError(403, body);
       expect(error.code).toBe(CalendarErrorCode.Forbidden);
-      expect(error.field).toBe(CalendarField.GoogleCalendarId);
       expect(isRetryableCalendarError(error)).toBe(false);
     });
 
@@ -86,7 +85,6 @@ describe("classifyGoogleCalendarError", () => {
   it("404 は NotFound に分類され、再試行不可である", () => {
     const error = classifyGoogleCalendarError(404, { error: { message: "Not Found" } });
     expect(error.code).toBe(CalendarErrorCode.NotFound);
-    expect(error.field).toBe(CalendarField.GoogleCalendarId);
     expect(isRetryableCalendarError(error)).toBe(false);
   });
 

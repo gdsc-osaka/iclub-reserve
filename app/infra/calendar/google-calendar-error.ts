@@ -1,4 +1,4 @@
-import { CalendarErrorCode, CalendarField, type CalendarError } from "~/domain/calendar";
+import { CalendarErrorCode, type CalendarError } from "~/domain/calendar";
 
 /** Google API の標準エラーレスポンス形式 */
 interface GoogleApiErrorBody {
@@ -115,7 +115,6 @@ export const classifyGoogleCalendarError = (
       message: "Google Calendar の操作権限がありません。",
       userMessage:
         "Google Calendar への書き込み権限がありません。カレンダーの共有設定を確認してください。",
-      field: CalendarField.GoogleCalendarId,
       cause,
     };
   }
@@ -127,7 +126,6 @@ export const classifyGoogleCalendarError = (
       message: "Google Calendar の予定またはカレンダーが見つかりません。",
       userMessage:
         "指定された Google カレンダーが見つかりません。カレンダー ID を確認してください。",
-      field: CalendarField.GoogleCalendarId,
       cause,
     };
   }

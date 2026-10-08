@@ -1,5 +1,6 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 import {
+  CalendarErrorCode,
   toCalendarEventId,
   type CalendarClient,
   type CalendarError,
@@ -7,7 +8,6 @@ import {
   type CalendarWriteAccess,
   type ManagedCalendarEvent,
 } from "~/domain/calendar";
-import { extractReservationIdFromEventId } from "~/domain/calendar/calendar-event";
 import { classifyGoogleCalendarError } from "./google-calendar-error";
 
 export interface GoogleCalendarClientOptions {
@@ -107,9 +107,6 @@ export const createGoogleCalendarClient = ({
 
   return {
     upsertEvent(event: CalendarEvent): ResultAsync<null, CalendarError> {
-      const reservationId =
-        event.reservationId ?? extractReservationIdFromEventId(event.eventId) ?? "";
-
       const eventPayload = {
         id: event.eventId,
         summary: event.summary,
@@ -124,7 +121,7 @@ export const createGoogleCalendarClient = ({
         },
         extendedProperties: {
           private: {
-            iclubReserveReservationId: reservationId,
+            iclubReserveReservationId: event.reservationId,
             iclubReserveEnv: appEnv,
           },
         },
@@ -282,9 +279,13 @@ export const createGoogleCalendarClient = ({
           return okAsync<CalendarWriteAccess, CalendarError>("not_writable");
         }
 
-        return errAsync<CalendarWriteAccess, CalendarError>(
-          classifyGoogleCalendarError(res.status, res.body),
-        );
+        const error = classifyGoogleCalendarError(res.status, res.body);
+        // レート制限ではない 403 は、カレンダーを読む権限すら無いということ。
+        // 共有の設定を直せば通るので、エラーではなく「書き込めない」として返す
+        if (error.code === CalendarErrorCode.Forbidden) {
+          return okAsync<CalendarWriteAccess, CalendarError>("not_writable");
+        }
+        return errAsync<CalendarWriteAccess, CalendarError>(error);
       });
     },
   };

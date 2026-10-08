@@ -1,6 +1,6 @@
 import { okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
-import { toCalendarEventId, type CalendarEvent } from "~/domain/calendar";
+import { CalendarErrorCode, toCalendarEventId, type CalendarEvent } from "~/domain/calendar";
 import { createGoogleCalendarClient } from "./google-calendar-client";
 
 describe("createGoogleCalendarClient", () => {
@@ -311,6 +311,46 @@ describe("createGoogleCalendarClient", () => {
       const result = await client.checkWriteAccess("cal_id");
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap()).toBe("not_found");
+    });
+
+    it("レート制限ではない 403 の場合は not_writable を返す", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { code: 403, errors: [{ reason: "forbidden", message: "Forbidden" }] },
+          }),
+          { status: 403 },
+        ),
+      );
+      const client = createGoogleCalendarClient({
+        fetchFn: mockFetch as unknown as typeof fetch,
+        getAccessToken,
+        appEnv,
+      });
+
+      const result = await client.checkWriteAccess("cal_id");
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap()).toBe("not_writable");
+    });
+
+    it("レート制限の 403 はエラーとして返す（確かめられなかったので、書き込めないとは言わない）", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { code: 403, errors: [{ reason: "rateLimitExceeded", message: "Rate Limit" }] },
+          }),
+          { status: 403 },
+        ),
+      );
+      const client = createGoogleCalendarClient({
+        fetchFn: mockFetch as unknown as typeof fetch,
+        getAccessToken,
+        appEnv,
+      });
+
+      const result = await client.checkWriteAccess("cal_id");
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(CalendarErrorCode.RateLimited);
     });
   });
 
