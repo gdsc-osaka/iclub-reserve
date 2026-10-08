@@ -21,7 +21,6 @@ const recordOf = (page: Page, text: string) =>
  * UC-024 操作履歴を閲覧する（事務局）（`rdra/contexts/audit-log.md`）
  *
  * 事務局が全件の操作履歴を新しい順に見て、対象の種類・団体・操作者・期間で絞り込む（SCR-018）。
- * 記録の書き込み（COND-013）はまだ無いので、記録はテストの中で直接入れる。
  * 絞り込みの条件ごとの分岐は、Query のテスト（`audit-log-search-d1.test.ts`）で押さえている。
  */
 test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-024" }, () => {
@@ -184,5 +183,42 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
     const record = recordOf(page, "承認");
     await expect(record).toContainText(staffActor.name);
     await expect(record).toContainText("事務局権限");
+  });
+
+  test("団体の管理者がメンバーの役割を変えると、事務局の操作履歴画面に管理者の氏名でロールの変更が出る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const admin = await createUser(db);
+    const member = await createUser(db);
+    const staff = await createUser(db, { is_staff: true });
+    const group = await createGroup(db, {
+      members: [
+        { userId: admin.id, role: MembershipRole.Admin },
+        { userId: member.id, role: MembershipRole.Member },
+      ],
+    });
+
+    // 管理者としてサインインしてメンバーを管理者に昇格する
+    await signInAs(admin.id);
+    await openPage(page, `/groups/${group.id}`);
+    const row = page.getByRole("listitem").filter({ hasText: member.name });
+    await row.getByRole("button", { name: "管理者にする" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "管理者にしますか？" });
+    await dialog.getByRole("button", { name: "管理者にする" }).click();
+    await expect(row.getByText("管理者", { exact: true })).toBeVisible();
+
+    // 事務局としてサインインして操作履歴画面を開く
+    await signInAs(staff.id);
+    await openPage(page, `/staff/audit-log?group=${group.id}`);
+
+    // 管理者の氏名で「ロールの変更」が記録されている
+    const record = recordOf(page, "ロールの変更");
+    await expect(record).toBeVisible();
+    await expect(record).toContainText(admin.name);
+    await expect(record).toContainText("役割: メンバー → 管理者");
+    // acted_as_staff ではないので「事務局権限」バッジは付かない
+    await expect(record).not.toContainText("事務局権限");
   });
 });
