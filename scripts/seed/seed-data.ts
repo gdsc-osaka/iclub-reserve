@@ -1,4 +1,5 @@
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
+import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
 import { InvitationStatus, invitationExpiresAt } from "~/domain/invitation";
 import { ReservationStatus } from "~/domain/reservation";
 import { GroupStatus } from "~/domain/group";
@@ -118,7 +119,17 @@ export const seedPersonas = {
   },
 } as const satisfies Record<string, typeof schema.user.$inferInsert>;
 
-export const seedUsers: (typeof schema.user.$inferInsert)[] = Object.values(seedPersonas);
+/**
+ * 投入するユーザー。全員、今の版の利用規約に同意済みとして入れる（REQ-033）。
+ * 同意していないと、ログインのたびに初回設定（SCR-014）の同意の段階へ案内されてしまうため。
+ */
+export const seedUsers: (typeof schema.user.$inferInsert)[] = Object.values(seedPersonas).map(
+  (persona) => ({
+    ...persona,
+    terms_version: TERMS_OF_SERVICE.version,
+    terms_accepted_at: new Date(),
+  }),
+);
 
 /**
  * サンプル団体のシードデータ

@@ -15,6 +15,8 @@ export const user = sqliteTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   is_staff: integer("is_staff", { mode: "boolean" }).default(false).notNull(),
+  terms_version: text("terms_version"),
+  terms_accepted_at: integer("terms_accepted_at", { mode: "timestamp_ms" }),
 });
 
 export const session = sqliteTable(

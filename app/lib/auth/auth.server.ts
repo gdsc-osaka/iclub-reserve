@@ -143,6 +143,24 @@ const createAuth = () => {
           input: false,
           required: true,
         },
+        /**
+         * 同意した利用規約の版（REQ-033）。まだ同意していなければ null。
+         *
+         * 同意は初回セットアップ画面（SCR-014）のアクションだけが書き込む。
+         * `updateUser` から書き換えられると同意を経ずに本登録を終えられてしまうため、
+         * クライアントからの書き込みは禁じる。
+         */
+        terms_version: {
+          type: "string",
+          input: false,
+          required: false,
+        },
+        /** 利用規約に同意した日時（REQ-033）。まだ同意していなければ null。 */
+        terms_accepted_at: {
+          type: "date",
+          input: false,
+          required: false,
+        },
       },
 
       /**

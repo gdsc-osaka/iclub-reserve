@@ -1,16 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
 import { ACCOUNT_PATH, PASSKEY_SUGGEST_PATH, WELCOME_PATH } from "~/lib/auth/auth-redirect";
 import { resolveLoginNextPath } from "./use-login-form";
 
 describe("resolveLoginNextPath", () => {
-  const completedUser = { name: "阪大 太郎" };
-  const incompleteUser = { name: "" };
+  const completedUser = { name: "阪大 太郎", terms_version: TERMS_OF_SERVICE.version };
+  const incompleteUser = { name: "", terms_version: null };
 
   it("名前が未設定のユーザーは WELCOME_PATH へ送られる", async () => {
     const nextPath = await resolveLoginNextPath({
       user: incompleteUser,
       method: "email-otp",
+      redirectTo: "/reservations",
+    });
+
+    expect(nextPath).toContain(WELCOME_PATH);
+  });
+
+  it("今の版の利用規約に同意していないユーザーは、パスキーでログインしても WELCOME_PATH へ送られる（REQ-033）", async () => {
+    const nextPath = await resolveLoginNextPath({
+      user: { name: "阪大 太郎", terms_version: "2000-01-01" },
+      method: "passkey",
       redirectTo: "/reservations",
     });
 
