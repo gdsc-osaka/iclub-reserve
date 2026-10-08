@@ -313,6 +313,14 @@ entities:
         type: "boolean"
         required: true
         description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。true にするのは事務局招待の承諾（UC-027）、false に戻すのは事務局による剥奪（UC-028）である。最初の1人だけは DB またはシードで設定する。事務局が0人になる変更はできない（COND-014）。"
+      - name: "terms_version"
+        type: "string"
+        required: false
+        description: "同意したi-Club利用規約の版（規約の施行日。例: 2022-04-01）。未同意は NULL。今の版と一致しなければ本登録が済んでいないものとして SCR-014 へ案内する（REQ-033）。書き込むのは SCR-014 での同意だけで、利用者が直接書き換えることはできない。"
+      - name: "terms_accepted_at"
+        type: "datetime"
+        required: false
+        description: "i-Club利用規約に同意した日時（サーバーの時刻）。未同意は NULL。改定後の版に同意し直すと上書きする（REQ-033）。"
       - name: "created_at"
         type: "datetime"
         required: true
