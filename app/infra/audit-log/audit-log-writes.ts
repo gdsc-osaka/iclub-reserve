@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { getTableColumns, sql, type SQL } from "drizzle-orm";
+import { and, getTableColumns, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 
@@ -70,9 +70,23 @@ const toAuditLogProjection = (values: AuditLogValues) => ({
 export interface AuditLogGuard {
   /** 確かめる先の表または式（業務データを書き換える対象） */
   readonly from: SQLiteTable | SQL;
-  /** 書き込み**前**の状態と突き合わせる条件。合う行が無ければ記録は入らない */
-  readonly where: SQL | undefined;
+  /**
+   * 書き込み**前**の状態と突き合わせる条件。合う行が無ければ記録は入らない。
+   *
+   * 省略できない。条件が無いと `guard.from` の行の数だけ記録が入ってしまうため。
+   * 複数の条件を重ねるときは、Drizzle の `and()`（型が `SQL | undefined`）ではなく `allOf` を使う。
+   */
+  readonly where: SQL;
 }
+
+/**
+ * 渡した条件をすべて満たす、という 1 つの条件を作る。
+ *
+ * Drizzle の `and()` は、引数がすべて `undefined` のときに `undefined` を返すため、型が `SQL | undefined` になる。
+ * それをそのまま `AuditLogGuard.where` に渡せないよう、1 つ以上の条件を必ず受け取り、`SQL` を返す。
+ * 業務データの書き込みも同じ条件を使うので、条件付きの書き込みの条件はこれで組む。
+ */
+export const allOf = (first: SQL, ...rest: readonly SQL[]): SQL => and(first, ...rest) ?? first;
 
 /**
  * 操作履歴への無条件の INSERT 文を組む。

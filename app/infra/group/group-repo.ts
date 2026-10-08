@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { groupMemberTable, groupTable } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
@@ -13,7 +13,7 @@ import {
   type UpdateGroupStatusInput,
 } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
-import { auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { toGroup } from "./group-converter";
 
@@ -84,7 +84,7 @@ export const createGroupRepository = (db: Database): GroupRepository => {
     { id, from, to, updatedAt }: UpdateGroupStatusInput,
     auditLog: AuditLogDraft,
   ): ResultAsync<Group, GroupError> => {
-    const condition = and(eq(groupTable.id, id), eq(groupTable.status, from));
+    const condition = allOf(eq(groupTable.id, id), eq(groupTable.status, from));
     const auditStatement = guardedAuditLogInsert(db, auditLog, {
       from: groupTable,
       where: condition,
