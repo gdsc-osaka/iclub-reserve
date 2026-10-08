@@ -92,7 +92,8 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     await expect(page.getByText("予約を変更しました。")).toBeVisible();
     await expect(page.getByText("承認済み", { exact: true })).toBeVisible();
     await expect(page.getByText("6名")).toBeVisible();
-    await expect(page.getByText("事務局による直接変更の備考")).toBeVisible();
+    // 操作履歴欄にも「備考: 変更前の備考 → …」と出るので、値だけの要素に絞る
+    await expect(page.getByText("事務局による直接変更の備考", { exact: true })).toBeVisible();
 
     // 申請者（管理者）へ EVT-017 が積まれている
     const applicantMails = await findQueuedMails(db, applicant.email);

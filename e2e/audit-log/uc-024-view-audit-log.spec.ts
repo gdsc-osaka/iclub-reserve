@@ -203,7 +203,10 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
     // 管理者としてサインインしてメンバーを管理者に昇格する
     await signInAs(admin.id);
     await openPage(page, `/groups/${group.id}`);
-    const row = page.getByRole("listitem").filter({ hasText: member.name });
+    const row = page
+      .getByRole("list", { name: "メンバー" })
+      .getByRole("listitem")
+      .filter({ hasText: member.name });
     await row.getByRole("button", { name: "管理者にする" }).click();
     const dialog = page.getByRole("alertdialog", { name: "管理者にしますか？" });
     await dialog.getByRole("button", { name: "管理者にする" }).click();

@@ -48,7 +48,7 @@ export function GroupMemberCard({
           </Alert>
         )}
 
-        <ul className="divide-y divide-border">
+        <ul aria-label="メンバー" className="divide-y divide-border">
           {view.canManage
             ? view.members.map((member) => {
                 const isAdmin = member.role === MembershipRole.Admin;

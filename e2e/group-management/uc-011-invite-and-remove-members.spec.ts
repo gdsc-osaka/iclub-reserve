@@ -31,7 +31,13 @@ test.describe("UC-011 メンバーを招待・削除する", { tag: "@UC-011" },
 
     // 承諾待ちの招待に並ぶ
     await expect(page.getByText("承諾待ちの招待（1 件）")).toBeVisible();
-    await expect(page.getByRole("listitem").filter({ hasText: inviteeEmail })).toBeVisible();
+    // 同じアドレスは操作履歴欄にも出るので、承諾待ちの一覧の中で探す
+    await expect(
+      page
+        .getByRole("list", { name: "承諾待ちの招待" })
+        .getByRole("listitem")
+        .filter({ hasText: inviteeEmail }),
+    ).toBeVisible();
 
     // 招待された人への通知（EVT-014）が積まれている
     const mails = await findQueuedMails(db, inviteeEmail);
@@ -85,7 +91,13 @@ test.describe("UC-011 メンバーを招待・削除する", { tag: "@UC-011" },
     // ダイアログが開いている間は、画面の残りが読み上げの対象から外れ、行が「見えない」扱いになる。
     // 削除が終わってダイアログが閉じるのを待ってから、一覧を確かめる
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole("listitem").filter({ hasText: member.name })).toBeHidden();
+    // 削除した人の名前は操作履歴欄には残るので、メンバー一覧の中で探す
+    await expect(
+      page
+        .getByRole("list", { name: "メンバー" })
+        .getByRole("listitem")
+        .filter({ hasText: member.name }),
+    ).toBeHidden();
 
     const memberships = await db
       .select()

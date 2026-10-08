@@ -76,7 +76,8 @@ test.describe("UC-017 仮予約の内容を編集する", { tag: "@UC-017" }, ()
     await expect(page.getByText("予約を変更しました。")).toBeVisible();
     await expect(page.getByText("仮予約", { exact: true })).toBeVisible();
     await expect(page.getByText("6名")).toBeVisible();
-    await expect(page.getByText("変更後の備考")).toBeVisible();
+    // 操作履歴欄にも「備考: 変更前の備考 → 変更後の備考」と出るので、値だけの要素に絞る
+    await expect(page.getByText("変更後の備考", { exact: true })).toBeVisible();
 
     // 事務局へ仮予約変更通知（EVT-012）が積まれている
     const mails = await findQueuedMails(db, personas.staff.email);
