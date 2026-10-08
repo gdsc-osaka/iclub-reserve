@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { auditLogTable, groupTable } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";
 import { useD1TestDb } from "../d1-test-db";
-import { auditLogInsert, guardedAuditLogInsert } from "./audit-log-writes";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "./audit-log-writes";
 
 const testDb = useD1TestDb();
 
@@ -140,6 +140,37 @@ describe("audit-log-writes", () => {
 
       rows = await testDb.db.select().from(auditLogTable);
       expect(rows).toHaveLength(1);
+    });
+
+    it("allOf で重ねた条件は、すべてに合う行があるときだけ記録される", async () => {
+      const draft: AuditLogDraft = {
+        occurredAt: dummyOccurredAt,
+        actorId: "usr_actor",
+        actedAsStaff: true,
+        action: AuditLogAction.GroupDisable,
+        targetId: "grp_alpha",
+        groupId: "grp_alpha",
+        changes: {
+          status: { before: "enabled", after: "disabled" },
+        },
+      };
+
+      // 状態が違う（disabled ではない）ので、ID が合っても記録されない
+      await testDb.db.batch([
+        guardedAuditLogInsert(testDb.db, draft, {
+          from: groupTable,
+          where: allOf(eq(groupTable.id, "grp_alpha"), eq(groupTable.status, "disabled")),
+        }),
+      ]);
+      expect(await testDb.db.select().from(auditLogTable)).toHaveLength(0);
+
+      await testDb.db.batch([
+        guardedAuditLogInsert(testDb.db, draft, {
+          from: groupTable,
+          where: allOf(eq(groupTable.id, "grp_alpha"), eq(groupTable.status, "enabled")),
+        }),
+      ]);
+      expect(await testDb.db.select().from(auditLogTable)).toHaveLength(1);
     });
   });
 });
