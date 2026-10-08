@@ -2,6 +2,7 @@ import type { ResultAsync } from "neverthrow";
 
 import type { AuditLogDraft } from "../audit-log";
 import type { PermissionTable } from "../authz";
+import type { CalendarSyncTaskDraft } from "../calendar";
 import { ErrorKind, type BaseError } from "../error";
 import type { MailDraft } from "../mail/mail-outbox";
 import { MembershipRole, StaffRole, type ActorRole } from "../membership";
@@ -367,6 +368,7 @@ export interface ReservationRepository {
   createApproved(
     reservation: Reservation,
     auditLog: AuditLogDraft,
+    calendarSync: CalendarSyncTaskDraft | null,
   ): ResultAsync<CreateApprovedReservationOutcome, ReservationError>;
   /**
    * 同一施設・同一時間帯に**承認済み**の予約があるかを調べる（COND-001）。
@@ -382,30 +384,36 @@ export interface ReservationRepository {
   existsApprovedOverlap(args: ReservationOverlapArgs): ResultAsync<boolean, ReservationError>;
   /**
    * 予約のステータス・理由・更新日時を条件付きで更新し、通知メールがあれば同じトランザクション（db.batch）で outbox に積み、操作履歴を書き込む。
+   * カレンダー同期タスクがあれば同じトランザクションで積む。
    *
    * @param args ステータス更新の条件と値
    * @param mails 同時に outbox に積むメール（承認時の通知など）。不可分に書く手段として同じメソッドで受け取る。
    * @param auditLog 同じ batch で書き込む操作履歴の草稿
+   * @param calendarSync 同じ batch で書き込むカレンダー同期タスクの草稿（同期不要なら null）
    * @returns 更新結果と積まれたメール ID の配列。条件に合わず 0 件だったら applied: false（競合）。
    */
   applyStatusTransition(
     args: ApplyStatusTransitionArgs,
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
+    calendarSync: CalendarSyncTaskDraft | null,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError>;
   /**
    * 予約の内容（施設・日時・使用人数・備考）とステータス・更新日時を条件付きで更新し、
    * 通知メールがあれば同じトランザクション（db.batch）で outbox に積み、操作履歴を書き込む（UC-005 / UC-017）。
+   * カレンダー同期タスクがあれば同じトランザクションで積む。
    *
    * @param args 更新の条件と値
    * @param mails 同時に outbox に積むメール（EVT-004 / EVT-012）
    * @param auditLog 同じ batch で書き込む操作履歴の草稿
+   * @param calendarSync 同じ batch で書き込むカレンダー同期タスクの草稿（同期不要なら null）
    * @returns 更新結果と積まれたメール ID の配列。条件に合わず 0 件だったら applied: false（競合）。
    */
   applyContentEdit(
     args: ApplyContentEditArgs,
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
+    calendarSync: CalendarSyncTaskDraft | null,
   ): ResultAsync<ApplyContentEditOutcome, ReservationError>;
 }
 

@@ -75,8 +75,9 @@ const createDeps = (
     blockedOnWrite?: boolean;
   } = {},
 ) => {
-  const createApproved = vi.fn((_reservation: Reservation, _auditDraft: unknown) =>
-    okAsync({ applied: overrides.blockedOnWrite !== true }),
+  const createApproved = vi.fn(
+    (_reservation: Reservation, _auditDraft: unknown, _calendarSync?: unknown) =>
+      okAsync({ applied: overrides.blockedOnWrite !== true }),
   );
 
   const reservationRepository: ReservationRepository = {
@@ -152,7 +153,7 @@ describe("createDirectReservationUseCase", () => {
     expect(value.reservationId).toBeDefined();
 
     expect(createApproved).toHaveBeenCalledTimes(1);
-    const [created, auditDraft] = createApproved.mock.calls[0] ?? [];
+    const [created, auditDraft, calendarSyncDraft] = createApproved.mock.calls[0] ?? [];
     expect(created).toMatchObject({
       status: ReservationStatus.Approved,
       statusReason: null,
@@ -177,6 +178,10 @@ describe("createDirectReservationUseCase", () => {
         note: { before: null, after: "事務局主催説明会" },
         status: { before: null, after: "approved" },
       },
+    });
+    expect(calendarSyncDraft).toEqual({
+      reservationId: value.reservationId,
+      previousFacilityId: null,
     });
   });
 

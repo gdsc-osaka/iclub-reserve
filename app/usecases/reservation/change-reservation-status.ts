@@ -1,6 +1,7 @@
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
+import { toCalendarSyncDraft } from "~/domain/calendar";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createReservationMailDrafts, transitionMailEvent } from "~/domain/mail/reservation-mail";
 import type { MembershipRepository } from "~/domain/membership";
@@ -172,6 +173,22 @@ export const changeReservationStatusUseCase = (
       }),
     };
 
+    const calendarSyncDraft = toCalendarSyncDraft(
+      reservation.id,
+      {
+        status: reservation.status,
+        facilityId: reservation.facilityId,
+        startAt: reservation.startAt,
+        endAt: reservation.endAt,
+      },
+      {
+        status: targetStatus,
+        facilityId: reservation.facilityId,
+        startAt: reservation.startAt,
+        endAt: reservation.endAt,
+      },
+    );
+
     const outcome = yield* deps.reservationRepository.applyStatusTransition(
       {
         id: reservation.id,
@@ -184,6 +201,7 @@ export const changeReservationStatusUseCase = (
       },
       mailDrafts,
       auditLog,
+      calendarSyncDraft,
     );
 
     if (!outcome.applied) {

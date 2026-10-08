@@ -14,8 +14,9 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { auditLogTable } from "~/db/schema";
+import { auditLogTable, calendarSyncTaskTable } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";
+import type { CalendarSyncTaskDraft } from "~/domain/calendar";
 import {
   ReservationStatus,
   type ApplyContentEditArgs,
@@ -149,6 +150,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap()).toEqual({ applied: true, enqueuedMailIds: [] });
@@ -193,6 +195,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         editArgs({ headCount: 8 }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap().applied).toBe(false);
@@ -218,6 +221,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         editArgs({ note: "備考を追記" }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap().applied).toBe(false);
@@ -247,6 +251,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         editArgs({ startAt: at("15:00"), endAt: at("17:00"), requireNoApprovedOverlap: true }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap().applied).toBe(false);
@@ -276,6 +281,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         editArgs({ startAt: at("14:00"), endAt: at("16:00"), requireNoApprovedOverlap: true }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -300,6 +306,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -328,6 +335,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         editArgs({ startAt: at("14:00"), endAt: at("16:00"), requireNoApprovedOverlap: true }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -352,6 +360,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         editArgs({ startAt: at("13:00"), endAt: at("15:00"), requireNoApprovedOverlap: true }),
         [],
         dummyAuditLog(),
+        null,
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -388,7 +397,7 @@ describe("applyStatusTransition を SQLite で実行する", () => {
         status_reason: { before: null, after: null },
       },
     });
-    const result = await repository.applyStatusTransition(approveArgs, [], auditLog);
+    const result = await repository.applyStatusTransition(approveArgs, [], auditLog, null);
 
     expect(result._unsafeUnwrap().applied).toBe(true);
     expect(await rowOf("res_target")).toMatchObject({
@@ -422,7 +431,7 @@ describe("applyStatusTransition を SQLite で実行する", () => {
       updatedAt: new Date("2026-09-20T09:30:00+09:00"),
     });
 
-    const result = await repository.applyStatusTransition(approveArgs, [], dummyAuditLog());
+    const result = await repository.applyStatusTransition(approveArgs, [], dummyAuditLog(), null);
 
     expect(result._unsafeUnwrap().applied).toBe(false);
     expect(await rowOf("res_target")).toMatchObject({ status: ReservationStatus.Provisional });
@@ -486,7 +495,7 @@ describe("createApproved を SQLite で実行する", () => {
       },
     });
 
-    const result = await repository.createApproved(directReservation(), auditLog);
+    const result = await repository.createApproved(directReservation(), auditLog, null);
 
     expect(result._unsafeUnwrap()).toEqual({ applied: true });
     expect((await repository.findById("res_direct"))._unsafeUnwrap()).toEqual(directReservation());
@@ -514,6 +523,7 @@ describe("createApproved を SQLite で実行する", () => {
     const result = await repository.createApproved(
       directReservation(),
       dummyAuditLog({ targetId: "res_direct" }),
+      null,
     );
 
     expect(result._unsafeUnwrap()).toEqual({ applied: false });
@@ -542,6 +552,7 @@ describe("createApproved を SQLite で実行する", () => {
     const result = await repository.createApproved(
       directReservation(),
       dummyAuditLog({ targetId: "res_direct" }),
+      null,
     );
 
     expect(result._unsafeUnwrap()).toEqual({ applied: true });
@@ -562,12 +573,189 @@ describe("createApproved を SQLite で実行する", () => {
     const result = await repository.createApproved(
       directReservation(),
       dummyAuditLog({ targetId: "res_direct" }),
+      null,
     );
 
     expect(result._unsafeUnwrap()).toEqual({ applied: true });
     expect(await rowOf("res_direct")).toMatchObject({
       status: ReservationStatus.Approved,
     });
+  });
+});
+
+describe("カレンダー同期タスクの書き込み", () => {
+  const directReservation = (overrides?: Partial<Reservation>): Reservation => ({
+    id: "res_direct_sync",
+    groupId: "grp_robotics",
+    facilityId: "fac_a",
+    startAt: at("10:00"),
+    endAt: at("12:00"),
+    headCount: 4,
+    note: "カレンダー同期テスト",
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    createdBy: "usr_taro",
+    createdAt: at("09:00"),
+    updatedAt: at("09:00"),
+    ...overrides,
+  });
+
+  it("applyStatusTransition で書けたときは 1 行積まれる", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_sync_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+    });
+
+    const calendarSync: CalendarSyncTaskDraft = {
+      reservationId: "res_sync_target",
+      previousFacilityId: null,
+    };
+
+    const approveArgs: ApplyStatusTransitionArgs = {
+      id: "res_sync_target",
+      expectedStatus: ReservationStatus.Provisional,
+      expectedUpdatedAt: READ_AT,
+      status: ReservationStatus.Approved,
+      statusReason: null,
+      updatedAt: EDITED_AT,
+      requireNoApprovedOverlap: true,
+    };
+
+    const result = await repository.applyStatusTransition(
+      approveArgs,
+      [],
+      dummyAuditLog({ targetId: "res_sync_target", action: AuditLogAction.ReservationApprove }),
+      calendarSync,
+    );
+
+    expect(result._unsafeUnwrap().applied).toBe(true);
+    const syncRows = await testDb.db.select().from(calendarSyncTaskTable);
+    expect(syncRows).toHaveLength(1);
+    expect(syncRows[0]).toMatchObject({
+      reservationId: "res_sync_target",
+      previousFacilityId: null,
+      status: "pending",
+      attemptCount: 0,
+    });
+  });
+
+  it("applyStatusTransition で競合して書けなかったときは積まれない", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_sync_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+      updatedAt: new Date("2026-09-20T09:30:00+09:00"),
+    });
+
+    const calendarSync: CalendarSyncTaskDraft = {
+      reservationId: "res_sync_target",
+      previousFacilityId: null,
+    };
+
+    const approveArgs: ApplyStatusTransitionArgs = {
+      id: "res_sync_target",
+      expectedStatus: ReservationStatus.Provisional,
+      expectedUpdatedAt: READ_AT,
+      status: ReservationStatus.Approved,
+      statusReason: null,
+      updatedAt: EDITED_AT,
+      requireNoApprovedOverlap: true,
+    };
+
+    const result = await repository.applyStatusTransition(
+      approveArgs,
+      [],
+      dummyAuditLog({ targetId: "res_sync_target" }),
+      calendarSync,
+    );
+
+    expect(result._unsafeUnwrap().applied).toBe(false);
+    const syncRows = await testDb.db.select().from(calendarSyncTaskTable);
+    expect(syncRows).toHaveLength(0);
+  });
+
+  it("applyStatusTransition で calendarSync が null なら積まれない", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_sync_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+    });
+
+    const approveArgs: ApplyStatusTransitionArgs = {
+      id: "res_sync_target",
+      expectedStatus: ReservationStatus.Provisional,
+      expectedUpdatedAt: READ_AT,
+      status: ReservationStatus.Approved,
+      statusReason: null,
+      updatedAt: EDITED_AT,
+      requireNoApprovedOverlap: true,
+    };
+
+    const result = await repository.applyStatusTransition(
+      approveArgs,
+      [],
+      dummyAuditLog({ targetId: "res_sync_target" }),
+      null,
+    );
+
+    expect(result._unsafeUnwrap().applied).toBe(true);
+    const syncRows = await testDb.db.select().from(calendarSyncTaskTable);
+    expect(syncRows).toHaveLength(0);
+  });
+
+  it("createApproved で書けたときは 1 行積まれる", async () => {
+    const repository = createReservationRepository(testDb.db);
+    const calendarSync: CalendarSyncTaskDraft = {
+      reservationId: "res_direct_sync",
+      previousFacilityId: null,
+    };
+
+    const result = await repository.createApproved(
+      directReservation(),
+      dummyAuditLog({ targetId: "res_direct_sync" }),
+      calendarSync,
+    );
+
+    expect(result._unsafeUnwrap().applied).toBe(true);
+    const syncRows = await testDb.db.select().from(calendarSyncTaskTable);
+    expect(syncRows).toHaveLength(1);
+    expect(syncRows[0]).toMatchObject({
+      reservationId: "res_direct_sync",
+      previousFacilityId: null,
+      status: "pending",
+    });
+  });
+
+  it("createApproved で競合して書けなかったときは積まれない", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_existing",
+      status: ReservationStatus.Approved,
+      startAt: at("11:00"),
+      endAt: at("13:00"),
+    });
+
+    const calendarSync: CalendarSyncTaskDraft = {
+      reservationId: "res_direct_sync",
+      previousFacilityId: null,
+    };
+
+    const result = await repository.createApproved(
+      directReservation(),
+      dummyAuditLog({ targetId: "res_direct_sync" }),
+      calendarSync,
+    );
+
+    expect(result._unsafeUnwrap().applied).toBe(false);
+    const syncRows = await testDb.db.select().from(calendarSyncTaskTable);
+    expect(syncRows).toHaveLength(0);
   });
 });
 
