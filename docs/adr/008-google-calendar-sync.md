@@ -123,7 +123,13 @@ export const calendarSyncTaskTable = sqliteTable(
 - **upsertEvent**:
   まず `events.update`（PUT）を `status: "confirmed"` 付きで呼び出す。404 Not Found であれば `events.insert`（POST、ID 指定）を呼び、insert が 409 Conflict を返した場合（同じ ID の予定が先にできていた）は、もう一度 update する。
   削除した予定は `status: "cancelled"` として一定期間残り、その間は同じ ID で insert すると 409 になる（Google のエラーの手引きは、409 のときは update を使うよう案内している）。最初に update から試すのは、削除済みの予定を `status: "confirmed"` で上書きして生き返らせるためである。
-  **削除済みの予定に update が 200 を返して生き返ること、および完全に消えた後の ID の扱いは、公式のドキュメントでは確かめられなかった。** 本物のカレンダーを使えるようになる PR 2 で、「登録 → 削除 → 再登録」を実際に流して確かめ、結果をここに書き足す。
+  削除済みの予定に update が 200 を返して生き返ることは、公式のドキュメントでは確かめられなかったため、PR 2 で本物のカレンダー（Service Account 自身のカレンダー）に対して「登録 → 更新 → 削除 → 再登録」を流して確かめた（2026-10-08）。結果は次のとおりで、上の手順で足りている。
+  - 初回: update（PUT）が 404 → insert（POST、ID 指定）が 200
+  - 2 回目: update が 200（タイトル・時刻が変わる）
+  - 削除: DELETE が 204。直後に同じ ID を GET すると 200 で `status: "cancelled"` が返り、`listManagedEvents`（`showDeleted=false`）には出てこない
+  - もう一度の削除: DELETE が 410（成功として扱う）
+  - 削除後の再登録: update が 200 を返し、`status: "confirmed"` に戻って `listManagedEvents` にも出てくる。insert と 409 の経路は通らなかった
+  - **完全に消えた後（`cancelled` の行が Google から消えた後）の ID の扱いは確かめられていない。** そのときも update が 404 を返して insert に進む想定で、手順は変わらない。
 - **deleteEvent**:
   DELETE を呼び出す。404 Not Found および 410 Gone（すでに削除済み）は成功として扱う。
 - **listManagedEvents**:
