@@ -310,6 +310,7 @@ describe("editReservationUseCase", () => {
           start_at: { before: "2026-09-25T01:00:00.000Z", after: "2026-09-25T02:00:00.000Z" },
           end_at: { before: "2026-09-25T03:00:00.000Z", after: "2026-09-25T04:00:00.000Z" },
           status: { before: "approved", after: "provisional" },
+          status_reason: { before: null, after: null },
         },
       });
     });

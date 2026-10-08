@@ -128,7 +128,11 @@ export const editReservationDirectlyUseCase = (
       action: AuditLogAction.ReservationDirectChange,
       targetId: reservation.id,
       groupId: reservation.groupId,
-      changes: toReservationContentEditChanges(reservation, { ...content, status }),
+      changes: toReservationContentEditChanges(reservation, {
+        ...content,
+        status,
+        statusReason: reservation.statusReason,
+      }),
     };
 
     const result = yield* deps.reservationRepository.applyContentEdit(

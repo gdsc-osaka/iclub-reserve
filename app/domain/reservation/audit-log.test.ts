@@ -112,6 +112,7 @@ describe("reservation/audit-log", () => {
         headCount: 2,
         note: "メモ1",
         status: ReservationStatus.Approved,
+        statusReason: null,
       };
       const after = {
         facilityId: "fac_1",
@@ -120,6 +121,7 @@ describe("reservation/audit-log", () => {
         headCount: 4,
         note: "メモ1",
         status: ReservationStatus.Approved,
+        statusReason: null,
       };
 
       const changes = toReservationContentEditChanges(before, after);
@@ -128,7 +130,7 @@ describe("reservation/audit-log", () => {
       });
     });
 
-    it("Reapproval の場合は status（approved -> provisional）も含まれる", () => {
+    it("Reapproval の場合は status（approved -> provisional）と status_reason も含まれる", () => {
       const startAt1 = new Date("2026-10-10T10:00:00.000Z");
       const startAt2 = new Date("2026-10-10T11:00:00.000Z");
       const endAt1 = new Date("2026-10-10T12:00:00.000Z");
@@ -139,6 +141,7 @@ describe("reservation/audit-log", () => {
         headCount: 2,
         note: "メモ1",
         status: ReservationStatus.Approved,
+        statusReason: null,
       };
       const after = {
         facilityId: "fac_1",
@@ -147,6 +150,7 @@ describe("reservation/audit-log", () => {
         headCount: 2,
         note: "メモ1",
         status: ReservationStatus.Provisional,
+        statusReason: null,
       };
 
       const changes = toReservationContentEditChanges(before, after);
@@ -159,6 +163,7 @@ describe("reservation/audit-log", () => {
           before: "approved",
           after: "provisional",
         },
+        status_reason: { before: null, after: null },
       });
     });
   });
