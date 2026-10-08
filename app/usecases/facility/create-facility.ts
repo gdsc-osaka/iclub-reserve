@@ -21,12 +21,16 @@ import {
   validateFacilityPhoto,
   type FacilityPhotoStorage,
 } from "~/domain/facility/facility-photo";
+import type { CalendarClient } from "~/domain/calendar";
 import { ensureFacilityPermission } from "./_shared/facility-authorization";
+import { ensureCalendarWritable } from "./_shared/facility-calendar";
 import { deleteFacilityPhotoQuietly, resolveFacilityPhotoHead } from "./_shared/facility-photo";
 
 export interface CreateFacilityDeps {
   readonly facilityRepository: FacilityRepository;
   readonly facilityPhotoStorage: FacilityPhotoStorage;
+  readonly calendarClient: CalendarClient;
+  readonly calendarWriterEmail: string | null;
 }
 
 export interface CreateFacilityArgs {
@@ -65,7 +69,17 @@ export const createFacilityUseCase = (
     const googleCalendarId = yield* validateGoogleCalendarId(args.googleCalendarId);
     const calendarUrl = toCalendarUrl(googleCalendarId);
 
-    // 写真の検証
+    // 3. Calendar ID が設定されている場合は書き込み権限を確認（COND-025）
+    // 写真を R2 に上げる前に確認し、権限不足で写真を上げてから消す無駄を防ぐ
+    if (googleCalendarId !== null) {
+      yield* ensureCalendarWritable({
+        calendarClient: deps.calendarClient,
+        googleCalendarId,
+        calendarWriterEmail: deps.calendarWriterEmail,
+      });
+    }
+
+    // 4. 写真の検証とアップロード
     let photoUrl: string | null = null;
     let uploadedPhotoName: string | null = null;
 

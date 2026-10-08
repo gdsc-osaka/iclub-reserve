@@ -61,12 +61,13 @@ const insertReservation = async (
   status: string,
   startHoursFromNow: number,
   endHoursFromNow: number,
+  facilityId = "fac_no_photo",
 ) => {
   await testDb.seed([
     `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
     id,
     "grp_robotics",
-    "fac_no_photo",
+    facilityId,
     NOW.getTime() + startHoursFromNow * HOUR,
     NOW.getTime() + endHoursFromNow * HOUR,
     1,
@@ -101,6 +102,17 @@ const countAuditLogs = async (targetId: string): Promise<number> => {
     .bind(targetId)
     .first<{ count: number }>();
   return row?.count ?? 0;
+};
+
+const fetchCalendarSyncTasks = async (): Promise<
+  { reservationId: string; previousFacilityId: string | null; status: string }[]
+> => {
+  const result = await testDb.d1
+    .prepare(
+      `SELECT reservation_id as reservationId, previous_facility_id as previousFacilityId, status FROM "calendar_sync_task" ORDER BY id`,
+    )
+    .all<{ reservationId: string; previousFacilityId: string | null; status: string }>();
+  return result.results ?? [];
 };
 
 const updateInput = (overrides: Partial<UpdateFacilityInput>): UpdateFacilityInput => ({
@@ -163,7 +175,7 @@ describe("施設の更新（update）", () => {
       name: { before: "写真のある施設", after: "新しい名前" },
     });
 
-    const result = await createFacilityRepository(db).update(input, auditLog);
+    const result = await createFacilityRepository(db).update(input, auditLog, null);
 
     expect(result._unsafeUnwrap()).toMatchObject({
       name: "新しい名前",
@@ -179,7 +191,7 @@ describe("施設の更新（update）", () => {
       name: { before: "写真の無い施設", after: "新しい名前" },
     });
 
-    const result = await createFacilityRepository(db).update(input, auditLog);
+    const result = await createFacilityRepository(db).update(input, auditLog, null);
 
     expect(result._unsafeUnwrap().name).toBe("新しい名前");
     expect(await countAuditLogs(input.id)).toBe(1);
@@ -196,7 +208,7 @@ describe("施設の更新（update）", () => {
 
     const input = updateInput({});
     const auditLog = dummyAuditLog("facility.update", input.id);
-    const result = await createFacilityRepository(db).update(input, auditLog);
+    const result = await createFacilityRepository(db).update(input, auditLog, null);
 
     expect(result._unsafeUnwrapErr().code).toBe(FacilityErrorCode.Conflict);
     const row = await testDb.d1
@@ -217,7 +229,7 @@ describe("施設の更新（update）", () => {
 
     const input = updateInput({ id: "fac_no_photo", photoUrl: null, expectedPhotoUrl: null });
     const auditLog = dummyAuditLog("facility.update", input.id);
-    const result = await createFacilityRepository(db).update(input, auditLog);
+    const result = await createFacilityRepository(db).update(input, auditLog, null);
 
     expect(result._unsafeUnwrapErr().code).toBe(FacilityErrorCode.Conflict);
     expect(await countAuditLogs(input.id)).toBe(0);
@@ -228,10 +240,79 @@ describe("施設の更新（update）", () => {
     const input = updateInput({ id: "fac_missing" });
     const auditLog = dummyAuditLog("facility.update", input.id);
 
-    const result = await createFacilityRepository(db).update(input, auditLog);
+    const result = await createFacilityRepository(db).update(input, auditLog, null);
 
     expect(result._unsafeUnwrapErr().code).toBe(FacilityErrorCode.NotFound);
     expect(await countAuditLogs(input.id)).toBe(0);
+  });
+
+  it("calendarResync が null のときは calendar_sync_task にタスクを積まない", async () => {
+    const db = testDb.db;
+    await insertReservation("rsv_approved", "approved", 1, 2, "fac_with_photo");
+
+    const input = updateInput({});
+    const auditLog = dummyAuditLog("facility.update", input.id);
+    const result = await createFacilityRepository(db).update(input, auditLog, null);
+
+    expect(result.isOk()).toBe(true);
+    expect(await fetchCalendarSyncTasks()).toHaveLength(0);
+  });
+
+  it("calendarResync があるとき、範囲内の承認済み予約だけが積まれ（範囲外・仮予約・キャンセル・他施設は積まれない）、previousFacilityId は null になる", async () => {
+    const db = testDb.db;
+    const rangeStart = new Date(NOW.getTime() - 24 * HOUR);
+
+    // 1. 対象施設の範囲内の承認済み予約（積まれる）
+    await insertReservation("rsv_target_1", "approved", 1, 2, "fac_with_photo");
+    await insertReservation("rsv_target_2", "approved", -12, -6, "fac_with_photo");
+
+    // 2. 対象施設だが範囲外の承認済み予約（終了が rangeStart より前、積まれない）
+    await insertReservation("rsv_out_of_range", "approved", -30, -25, "fac_with_photo");
+
+    // 3. 対象施設だが承認済みでない予約（仮予約・キャンセル済み、積まれない）
+    await insertReservation("rsv_provisional", "provisional", 1, 2, "fac_with_photo");
+    await insertReservation("rsv_cancelled", "cancelled", 1, 2, "fac_with_photo");
+    await insertReservation("rsv_rejected", "rejected", 1, 2, "fac_with_photo");
+
+    // 4. 他の施設の承認済み予約（積まれない）
+    await insertReservation("rsv_other_fac", "approved", 1, 2, "fac_no_photo");
+
+    const input = updateInput({});
+    const auditLog = dummyAuditLog("facility.update", input.id);
+    const result = await createFacilityRepository(db).update(input, auditLog, { rangeStart });
+
+    expect(result.isOk()).toBe(true);
+    const tasks = await fetchCalendarSyncTasks();
+    expect(tasks).toHaveLength(2);
+    expect(tasks.map((t) => t.reservationId).sort()).toEqual(["rsv_target_1", "rsv_target_2"]);
+    expect(tasks[0]).toMatchObject({
+      previousFacilityId: null,
+      status: "pending",
+    });
+    expect(tasks[1]).toMatchObject({
+      previousFacilityId: null,
+      status: "pending",
+    });
+  });
+
+  it("写真の競合で更新できなかったら calendar_sync_task にも積まれない", async () => {
+    const db = testDb.db;
+    const rangeStart = new Date(NOW.getTime() - 24 * HOUR);
+    await insertReservation("rsv_target_1", "approved", 1, 2, "fac_with_photo");
+
+    // 別の人が先に写真を差し替えて競合を起こす
+    await testDb.seed([
+      `UPDATE "facility" SET photo_url = ? WHERE id = ?`,
+      "/facility-photos/p1.jpg",
+      "fac_with_photo",
+    ]);
+
+    const input = updateInput({});
+    const auditLog = dummyAuditLog("facility.update", input.id);
+    const result = await createFacilityRepository(db).update(input, auditLog, { rangeStart });
+
+    expect(result._unsafeUnwrapErr().code).toBe(FacilityErrorCode.Conflict);
+    expect(await fetchCalendarSyncTasks()).toHaveLength(0);
   });
 });
 

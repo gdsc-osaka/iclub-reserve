@@ -27,6 +27,7 @@ export interface FacilityFormProps {
     readonly formError?: string | null;
   };
   readonly isSubmitting?: boolean;
+  readonly calendarWriterEmail?: string | null;
 }
 
 /**
@@ -40,6 +41,7 @@ export function FacilityForm({
   initialValues = {},
   errors = {},
   isSubmitting = false,
+  calendarWriterEmail = null,
 }: Readonly<FacilityFormProps>) {
   return (
     <div className="flex flex-col gap-6">
@@ -171,6 +173,23 @@ export function FacilityForm({
               "border-destructive focus-visible:ring-destructive",
           )}
         />
+        <p className="text-xs text-muted-foreground">
+          {calendarWriterEmail ? (
+            <>
+              共有の Google アカウントで作って一般公開したカレンダーを、
+              <span className="font-mono font-medium text-foreground">
+                {calendarWriterEmail}
+              </span>{" "}
+              に「予定の変更」の権限で共有してから ID を入力してください。
+            </>
+          ) : (
+            <>
+              共有の Google アカウントで作って一般公開したカレンダーを、
+              システムのサービスアカウントに「予定の変更」の権限で共有してから ID
+              を入力してください。
+            </>
+          )}
+        </p>
         <p className="text-xs text-muted-foreground">
           施設用の Google カレンダー ID（@ を含む形式）を指定すると、iCal 購読用 URL
           が自動生成されます。

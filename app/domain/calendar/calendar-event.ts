@@ -147,3 +147,30 @@ export const toCalendarSyncDraft = (
  * 処理する日の前日 0 時（日本時間）＝ startOfTokyoDay(addDays(now, -1))（COND-024 (5)）。
  */
 export const calendarSyncRangeStart = (now: Date): Date => startOfTokyoDay(addDays(now, -1));
+
+/** 施設のカレンダー同期再反映の判定対象となる施設情報 */
+export interface FacilityCalendarResyncTarget {
+  readonly name: string;
+  readonly googleCalendarId: string | null;
+}
+
+/**
+ * 施設の変更前後の情報から、その施設の承認済み予約を Google Calendar にまとめて反映すべきかを判定する純粋関数。
+ *
+ * - 名称が変わった → 真（EVT-011。予定のタイトルを新しい名称にする）
+ * - Calendar ID が変わって変更後が null でない → 真（EVT-009。新しいカレンダーに登録する）
+ * - Calendar ID を外した（変更後が null）だけ → 偽（元のカレンダーに残った予定は消さない。COND-024 (3)）
+ * - どちらも変わらない（説明や写真だけの変更）→ 偽
+ */
+export const toFacilityCalendarResync = (
+  before: FacilityCalendarResyncTarget,
+  after: FacilityCalendarResyncTarget,
+): boolean => {
+  if (before.name !== after.name) {
+    return true;
+  }
+  if (before.googleCalendarId !== after.googleCalendarId && after.googleCalendarId !== null) {
+    return true;
+  }
+  return false;
+};

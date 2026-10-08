@@ -22,12 +22,20 @@ import {
   validateFacilityPhoto,
   type FacilityPhotoStorage,
 } from "~/domain/facility/facility-photo";
+import {
+  calendarSyncRangeStart,
+  toFacilityCalendarResync,
+  type CalendarClient,
+} from "~/domain/calendar";
 import { ensureFacilityPermission } from "./_shared/facility-authorization";
+import { ensureCalendarWritable } from "./_shared/facility-calendar";
 import { deleteFacilityPhotoQuietly, resolveFacilityPhotoHead } from "./_shared/facility-photo";
 
 export interface UpdateFacilityDeps {
   readonly facilityRepository: FacilityRepository;
   readonly facilityPhotoStorage: FacilityPhotoStorage;
+  readonly calendarClient: CalendarClient;
+  readonly calendarWriterEmail: string | null;
 }
 
 export interface UpdateFacilityArgs {
@@ -87,7 +95,17 @@ export const updateFacilityUseCase = (
     // 3. 既存施設の取得
     const existing = yield* deps.facilityRepository.findById(facilityId);
 
-    // 4. 写真の処理
+    // 4. Calendar ID を変更して保存する場合（かつ変更後が null でない場合）のみ書き込み権限を確認（COND-025）
+    // 写真を R2 に上げる前に確認し、権限不足で写真を上げてから消す無駄を防ぐ
+    if (existing.googleCalendarId !== googleCalendarId && googleCalendarId !== null) {
+      yield* ensureCalendarWritable({
+        calendarClient: deps.calendarClient,
+        googleCalendarId,
+        calendarWriterEmail: deps.calendarWriterEmail,
+      });
+    }
+
+    // 5. 写真の処理
     let newPhotoUrl: string | null = existing.photoUrl;
     let uploadedPhotoName: string | null = null;
     let oldPhotoToDelete: string | null = null;
@@ -135,7 +153,16 @@ export const updateFacilityUseCase = (
       changes,
     };
 
-    // 5. DB 更新
+    // 6. まとめて反映するかの判定（COND-024 (3)）
+    const shouldResyncCalendar = toFacilityCalendarResync(
+      { name: existing.name, googleCalendarId: existing.googleCalendarId },
+      { name, googleCalendarId },
+    );
+    const calendarResync = shouldResyncCalendar
+      ? { rangeStart: calendarSyncRangeStart(args.now) }
+      : null;
+
+    // 7. DB 更新
     const updateResult = await deps.facilityRepository.update(
       {
         id: facilityId,
@@ -148,6 +175,7 @@ export const updateFacilityUseCase = (
         updatedAt: args.now,
       },
       auditLog,
+      calendarResync,
     );
 
     if (updateResult.isErr()) {

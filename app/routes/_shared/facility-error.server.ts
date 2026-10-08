@@ -55,6 +55,21 @@ export const facilityErrorView: Record<FacilityErrorCode, ErrorView> = {
   [FacilityErrorCode.DatabaseError]: {
     message: "処理を完了できませんでした。時間をおいて、もう一度お試しください。",
   },
+  [FacilityErrorCode.CalendarNotWritable]: {
+    message: "Google カレンダーへの書き込み権限がありません。",
+  },
+  /*
+   * Google カレンダー API との一時的な通信エラー。
+   * Google 側の障害・瞬断であるため 503 にする。
+   */
+  [FacilityErrorCode.CalendarUnavailable]: {
+    status: 503,
+    message: "Google カレンダーに接続できませんでした。時間をおいて、もう一度お試しください。",
+  },
+  [FacilityErrorCode.CalendarSystemError]: {
+    message:
+      "Google カレンダーの連携処理でエラーが発生しました。時間をおいて、もう一度お試しください。",
+  },
 };
 
 const facilityErrorTables: ErrorTables<FacilityErrorCode> = {

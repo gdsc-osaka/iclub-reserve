@@ -7,6 +7,10 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { FacilityField } from "~/domain/facility";
 import { createDb } from "~/infra/db";
+import {
+  createCalendarClient,
+  getCalendarWriterEmail,
+} from "~/infra/calendar/calendar-client-factory.server";
 import { createR2FacilityPhotoStorage } from "~/infra/facility/r2-facility-photo-storage";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
@@ -46,7 +50,9 @@ export async function loader({ context }: Route.LoaderArgs) {
     );
   }
 
-  return {};
+  return {
+    calendarWriterEmail: getCalendarWriterEmail(),
+  };
 }
 
 /**
@@ -89,10 +95,14 @@ export async function action({ request, context }: Route.ActionArgs) {
   // 3. ユースケース実行
   const db = createDb(env.DB);
   const photoStorage = createR2FacilityPhotoStorage(env.MEDIA);
+  const calendarClient = createCalendarClient();
+  const calendarWriterEmail = getCalendarWriterEmail();
   const result = await createFacilityUseCase(
     {
       facilityRepository: createFacilityRepository(db),
       facilityPhotoStorage: photoStorage,
+      calendarClient,
+      calendarWriterEmail,
     },
     {
       actorUserId: user.id,
@@ -130,7 +140,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   return redirect("/staff/facilities");
 }
 
-export default function NewFacilityPage({ actionData }: Route.ComponentProps) {
+export default function NewFacilityPage({ loaderData, actionData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -160,6 +170,7 @@ export default function NewFacilityPage({ actionData }: Route.ComponentProps) {
               initialValues={actionData?.initialValues}
               errors={errors}
               isSubmitting={isSubmitting}
+              calendarWriterEmail={loaderData.calendarWriterEmail}
             />
           </Form>
         </CardContent>

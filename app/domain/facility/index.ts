@@ -32,6 +32,12 @@ export const FacilityErrorCode = {
   Conflict: "FACILITY_CONFLICT",
   HasUpcomingReservations: "FACILITY_HAS_UPCOMING_RESERVATIONS",
   PhotoStorageError: "FACILITY_PHOTO_STORAGE_ERROR",
+  /** カレンダーへの書き込み権限が無い、またはカレンダーが存在しない（COND-025） */
+  CalendarNotWritable: "FACILITY_CALENDAR_NOT_WRITABLE",
+  /** カレンダーサービスへの接続が一時的に利用できない（COND-025） */
+  CalendarUnavailable: "FACILITY_CALENDAR_UNAVAILABLE",
+  /** カレンダー連携の設定の誤りなど内部エラー（COND-025） */
+  CalendarSystemError: "FACILITY_CALENDAR_SYSTEM_ERROR",
   DatabaseError: "DATABASE_ERROR",
 } as const;
 export type FacilityErrorCode = (typeof FacilityErrorCode)[keyof typeof FacilityErrorCode];
@@ -49,6 +55,9 @@ export const facilityErrorKind: Record<FacilityErrorCode, ErrorKind> = {
   [FacilityErrorCode.Conflict]: ErrorKind.Conflict,
   [FacilityErrorCode.HasUpcomingReservations]: ErrorKind.Conflict,
   [FacilityErrorCode.PhotoStorageError]: ErrorKind.Internal,
+  [FacilityErrorCode.CalendarNotWritable]: ErrorKind.InvalidInput,
+  [FacilityErrorCode.CalendarUnavailable]: ErrorKind.Internal,
+  [FacilityErrorCode.CalendarSystemError]: ErrorKind.Internal,
   [FacilityErrorCode.DatabaseError]: ErrorKind.Internal,
 };
 
@@ -142,7 +151,11 @@ export interface UpdateFacilityActiveStatusInput {
 export interface FacilityRepository {
   findById(id: string): ResultAsync<Facility, FacilityError>;
   create(input: CreateFacilityInput, auditLog: AuditLogDraft): ResultAsync<Facility, FacilityError>;
-  update(input: UpdateFacilityInput, auditLog: AuditLogDraft): ResultAsync<Facility, FacilityError>;
+  update(
+    input: UpdateFacilityInput,
+    auditLog: AuditLogDraft,
+    calendarResync: { rangeStart: Date } | null,
+  ): ResultAsync<Facility, FacilityError>;
   countBlockingReservations(facilityId: string, now: Date): ResultAsync<number, FacilityError>;
   updateActiveStatus(
     input: UpdateFacilityActiveStatusInput,

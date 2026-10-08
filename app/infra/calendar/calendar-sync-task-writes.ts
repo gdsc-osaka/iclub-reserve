@@ -1,9 +1,10 @@
-import { getTableColumns, sql, type SQL } from "drizzle-orm";
+import { and, eq, exists, getTableColumns, gte, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 
-import { calendarSyncTaskTable } from "~/db/schema";
+import { calendarSyncTaskTable, reservationTable } from "~/db/schema";
 import { CalendarSyncStatus, type CalendarSyncTaskDraft } from "~/domain/calendar";
+import { ReservationStatus } from "~/domain/reservation";
 
 import type { Database } from "../db";
 
@@ -94,6 +95,72 @@ export const guardedCalendarSyncTaskInserts = (
   const statement = db
     .insert(calendarSyncTaskTable)
     .select(db.select(toCalendarSyncTaskProjection(values)).from(guard.from).where(guard.where));
+
+  return [statement];
+};
+
+/**
+ * 施設変更時にまとめて同期タスクを積む際の SELECT 側に並べる列。
+ */
+const toFacilityCalendarSyncTaskProjection = (now: Date) => ({
+  id: sql<number>`NULL`.as(calendarSyncTaskColumns.id.name),
+  reservationId: sql<string>`${reservationTable.id}`.as(calendarSyncTaskColumns.reservationId.name),
+  previousFacilityId: sql<string | null>`NULL`.as(calendarSyncTaskColumns.previousFacilityId.name),
+
+  status:
+    sql<CalendarSyncStatus>`${sql.param(CalendarSyncStatus.Pending, calendarSyncTaskColumns.status)}`.as(
+      calendarSyncTaskColumns.status.name,
+    ),
+  attemptCount: sql<number>`${sql.param(0, calendarSyncTaskColumns.attemptCount)}`.as(
+    calendarSyncTaskColumns.attemptCount.name,
+  ),
+  nextAttemptAt: sql<Date>`${sql.param(now, calendarSyncTaskColumns.nextAttemptAt)}`.as(
+    calendarSyncTaskColumns.nextAttemptAt.name,
+  ),
+  lastError: sql<string | null>`NULL`.as(calendarSyncTaskColumns.lastError.name),
+  createdAt: sql<Date>`${sql.param(now, calendarSyncTaskColumns.createdAt)}`.as(
+    calendarSyncTaskColumns.createdAt.name,
+  ),
+  updatedAt: sql<Date>`${sql.param(now, calendarSyncTaskColumns.updatedAt)}`.as(
+    calendarSyncTaskColumns.updatedAt.name,
+  ),
+});
+
+/**
+ * 施設の更新時に、その施設の承認済み予約をまとめてカレンダー同期タスクに積む INSERT を組む。
+ *
+ * resync が null の場合は何も積まない（空配列を返す）。
+ * 施設の条件付き更新が失敗（0 件）したときは guard の条件を満たす行が存在しないため、
+ * EXISTS 句によって INSERT ... SELECT も 0 件となりタスクは積まれない。
+ */
+export const guardedFacilityCalendarSyncTaskInserts = (
+  db: Database,
+  resync: { readonly facilityId: string; readonly rangeStart: Date } | null,
+  guard: CalendarSyncTaskGuard,
+): readonly BatchItem<"sqlite">[] => {
+  if (resync === null) {
+    return [];
+  }
+
+  const now = new Date();
+  const statement = db.insert(calendarSyncTaskTable).select(
+    db
+      .select(toFacilityCalendarSyncTaskProjection(now))
+      .from(reservationTable)
+      .where(
+        and(
+          eq(reservationTable.facilityId, resync.facilityId),
+          eq(reservationTable.status, ReservationStatus.Approved),
+          gte(reservationTable.endAt, resync.rangeStart),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(guard.from)
+              .where(guard.where),
+          ),
+        ),
+      ),
+  );
 
   return [statement];
 };
