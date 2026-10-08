@@ -159,7 +159,12 @@ export const editReservationUseCase = (
       action: groupEditAuditLogAction[outcome],
       targetId: reservation.id,
       groupId: reservation.groupId,
-      changes: toReservationContentEditChanges(reservation, { ...content, status }),
+      // 内容の変更では理由（status_reason）を書き換えないので、変更後も今の値のまま
+      changes: toReservationContentEditChanges(reservation, {
+        ...content,
+        status,
+        statusReason: reservation.statusReason,
+      }),
     };
 
     const result = yield* deps.reservationRepository.applyContentEdit(

@@ -70,7 +70,7 @@ export const toReservationStatusChanges = (
 /** 内容変更の記録で比べる予約の項目。ステータスも含める（UC-005 で仮予約に戻ることがあるため） */
 type ReservationEditedFields = Pick<
   Reservation,
-  "facilityId" | "startAt" | "endAt" | "headCount" | "note" | "status"
+  "facilityId" | "startAt" | "endAt" | "headCount" | "note" | "status" | "statusReason"
 >;
 
 /**
@@ -78,12 +78,13 @@ type ReservationEditedFields = Pick<
  *
  * 変わった項目だけを残す。承認済みの予約の施設・日時を変えて仮予約に戻るとき（Reapproval）は、
  * status（approved → provisional）も変わった項目として入る。
+ * 状態が変わるときは、ほかの状態の変更と同じく status_reason も含める（INFO-008）。
  */
 export const toReservationContentEditChanges = (
   before: ReservationEditedFields,
   after: ReservationEditedFields,
-): AuditLogChanges =>
-  toUpdatedChanges(
+): AuditLogChanges => {
+  const changes = toUpdatedChanges(
     {
       facility_id: before.facilityId,
       start_at: before.startAt,
@@ -101,3 +102,12 @@ export const toReservationContentEditChanges = (
       status: after.status,
     },
   );
+
+  if (before.status === after.status) {
+    return changes;
+  }
+  return {
+    ...changes,
+    status_reason: { before: before.statusReason, after: after.statusReason },
+  };
+};
