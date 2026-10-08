@@ -63,7 +63,7 @@ describe("guardedCalendarSyncTaskInserts", () => {
     expect(params.at(-1)).toBe("res_test_123");
   });
 
-  it("SELECT 側の列も定義順（id を除く）にそろえる", () => {
+  it("SELECT 側の列も定義順（id を含む）にそろえる", () => {
     const [statement] = guardedCalendarSyncTaskInserts(db, draft, guard);
     const { sql } = toSQL(statement!);
 

@@ -8,10 +8,10 @@ import { CalendarSyncStatus, type CalendarSyncTaskDraft } from "~/domain/calenda
 import type { Database } from "../db";
 
 /**
- * calendar_sync_task に積む 1 行ぶんの値（id は autoIncrement のため除く）。
+ * calendar_sync_task に積む 1 行ぶんの値。
  *
- * 既定値のある列も省略できないよう Omit<..., "id"> を使っているのは、
- * テーブルに列を足したときにコンパイルエラーにして漏れを防ぐため。
+ * 既定値のある列も省略できない `$inferSelect` を使っているのは、
+ * テーブルに列を足したときに `toCalendarSyncTaskValues` をコンパイルエラーにして漏れを防ぐため。
  */
 type CalendarSyncTaskValues = typeof calendarSyncTaskTable.$inferSelect;
 
@@ -20,7 +20,8 @@ const calendarSyncTaskColumns = getTableColumns(calendarSyncTaskTable);
 /**
  * CalendarSyncTaskDraft を calendar_sync_task の 1 行に写す。
  *
- * id は null を指定することで SQLite の autoIncrement に任せる。
+ * id は null を入れて SQLite の自動採番に任せる（INTEGER PRIMARY KEY に null を入れると採番される）。
+ * Drizzle の `insert().select()` は表の全列を並べることを求めるため、id も省略できない。
  */
 const toCalendarSyncTaskValues = (
   draft: CalendarSyncTaskDraft,

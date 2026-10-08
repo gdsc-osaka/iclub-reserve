@@ -162,6 +162,44 @@ describe("processCalendarSyncTasksUseCase", () => {
     expect(calendarSyncTasks.complete).toHaveBeenCalledWith([10]);
   });
 
+  it("同じ予約のタスクは 1 回だけ同期し、成功したタスクは最後に 1 回でまとめて消す", async () => {
+    const calendarSyncTasks = createMockCalendarSyncTasks();
+    vi.mocked(calendarSyncTasks.claimDue).mockReturnValue(
+      okAsync([
+        createMockTask({ id: 11, reservationId: "res_a" }),
+        createMockTask({ id: 12, reservationId: "res_b" }),
+        createMockTask({ id: 13, reservationId: "res_a" }),
+      ]),
+    );
+
+    const query = createMockQuery();
+    vi.mocked(query.fetchReservationStates).mockReturnValue(
+      okAsync(
+        ["res_a", "res_b"].map((id) => ({
+          id,
+          status: ReservationStatus.Approved,
+          facilityId: "fac_1",
+          startAt,
+          endAt,
+          facility: { name: "会議室1", googleCalendarId: "cal_1@group.calendar.google.com" },
+        })),
+      ),
+    );
+
+    const calendarClient = createMockCalendarClient();
+
+    const result = await processCalendarSyncTasksUseCase({
+      calendarSyncTasks,
+      query,
+      calendarClient,
+    });
+
+    expect(result).toEqual({ claimed: 3, completed: 3, failed: 0, retried: 0, dead: 0 });
+    expect(calendarClient.upsertEvent).toHaveBeenCalledTimes(2);
+    expect(calendarSyncTasks.complete).toHaveBeenCalledTimes(1);
+    expect(calendarSyncTasks.complete).toHaveBeenCalledWith([11, 13, 12]);
+  });
+
   it("施設変更（承認済み予約）: 新カレンダーへ upsert し、旧カレンダーから delete する", async () => {
     const task = createMockTask({
       id: 20,

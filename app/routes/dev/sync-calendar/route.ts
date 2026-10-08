@@ -31,5 +31,3 @@ export async function action() {
 
   return data(result);
 }
-
-export const loader = action;

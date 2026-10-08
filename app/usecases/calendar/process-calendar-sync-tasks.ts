@@ -180,7 +180,8 @@ export const processCalendarSyncTasksUseCase = async (
     facilityCalendarIdsResult.value.map((f) => [f.id, f.googleCalendarId]),
   );
 
-  let completed = 0;
+  /** 同期に成功した予約のタスク ID。最後に 1 回でまとめて消す（D1 の問い合わせを件数に比例させない） */
+  const completedTaskIds: number[] = [];
   let failed = 0;
   let retried = 0;
   let dead = 0;
@@ -253,12 +254,7 @@ export const processCalendarSyncTasksUseCase = async (
           }
         }
       } else {
-        const completeResult = await deps.calendarSyncTasks.complete(group.taskIds);
-        if (completeResult.isErr()) {
-          console.error("Failed to complete calendar sync tasks:", completeResult.error);
-        } else {
-          completed += group.tasks.length;
-        }
+        completedTaskIds.push(...group.taskIds);
       }
     } catch (unexpectedError) {
       console.error(
@@ -284,6 +280,18 @@ export const processCalendarSyncTasksUseCase = async (
           dead++;
         }
       }
+    }
+  }
+
+  // 5. 成功したタスクをまとめて消す。
+  // 消せなかった行は processing のまま残り、5 分後に取り出し直される（同期は冪等なので、もう一度反映しても害は無い）。
+  let completed = 0;
+  if (completedTaskIds.length > 0) {
+    const completeResult = await deps.calendarSyncTasks.complete(completedTaskIds);
+    if (completeResult.isErr()) {
+      console.error("Failed to complete calendar sync tasks:", completeResult.error);
+    } else {
+      completed = completedTaskIds.length;
     }
   }
 
