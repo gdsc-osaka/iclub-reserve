@@ -2,6 +2,7 @@ import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import { normalizeInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { StaffError, StaffInvitationRepository } from "~/domain/staff";
+import { toStaffRoleDeclineAuditLog } from "~/domain/staff/audit-log";
 import { staffInvitationNotFound } from "./_shared/staff-invitation-visibility";
 
 export interface RejectStaffInvitationDeps {
@@ -10,6 +11,7 @@ export interface RejectStaffInvitationDeps {
 
 export interface RejectStaffInvitationArgs {
   readonly invitationId: string;
+  readonly actorUserId: string;
   /** ログイン中の人のメールアドレス（未正規化） */
   readonly actorEmail: string;
   readonly now: Date;
@@ -21,6 +23,7 @@ export interface RejectStaffInvitationArgs {
  * 【処理の流れと設計上の配慮】
  * 1. invitationId を trim し、空なら DB を引かずに staffInvitationNotFound() を返す。
  * 2. staffInvitationRepository.reject を呼び出して条件付き UPDATE を実行する。
+ *    操作履歴も同じ条件で直前に書き込む（COND-013）。
  * 3. 辞退件数が 0 件の場合は staffInvitationNotFound() を返し、成功時は null を返す。
  *
  * 【事前 SELECT による存在確認を行わない理由】
@@ -41,12 +44,23 @@ export const rejectStaffInvitationUseCase = (
       return errAsync(staffInvitationNotFound("辞退する事務局招待の ID が空である。"));
     }
 
-    // 2. 条件付き UPDATE による辞退を実行（事前 SELECT は行わない）
-    const rejectedCount = yield* deps.staffInvitationRepository.reject({
+    const normalizedEmail = normalizeInvitationEmail(args.actorEmail);
+    const auditLog = toStaffRoleDeclineAuditLog(
       invitationId,
-      email: normalizeInvitationEmail(args.actorEmail),
-      now: args.now,
-    });
+      normalizedEmail,
+      args.actorUserId,
+      args.now,
+    );
+
+    // 2. 条件付き UPDATE による辞退を実行（事前 SELECT は行わない）
+    const rejectedCount = yield* deps.staffInvitationRepository.reject(
+      {
+        invitationId,
+        email: normalizedEmail,
+        now: args.now,
+      },
+      auditLog,
+    );
 
     // 3. 辞退できた行数が 0 件なら、対象の招待が無かったか条件不一致
     if (rejectedCount === 0) {

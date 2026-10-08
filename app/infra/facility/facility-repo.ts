@@ -1,6 +1,7 @@
 import { and, count, eq, gt, isNull, notExists, or } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { facilityTable, reservationTable } from "~/db/schema";
+import type { AuditLogDraft } from "~/domain/audit-log";
 import {
   FacilityErrorCode,
   type CreateFacilityInput,
@@ -11,6 +12,7 @@ import {
   type UpdateFacilityInput,
 } from "~/domain/facility";
 import { ReservationStatus } from "~/domain/reservation";
+import { auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 
 const toFacility = (row: typeof facilityTable.$inferSelect): Facility => ({
@@ -47,56 +49,76 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
       return ok(toFacility(row));
     });
 
-  const create = (input: CreateFacilityInput): ResultAsync<Facility, FacilityError> =>
-    ResultAsync.fromPromise(
-      db
-        .insert(facilityTable)
-        .values({
-          name: input.name,
-          description: input.description,
-          photoUrl: input.photoUrl,
-          googleCalendarId: input.googleCalendarId,
-          calendarUrl: input.calendarUrl,
-          isActive: input.isActive,
-          createdAt: input.createdAt,
-          updatedAt: input.updatedAt,
-        })
-        .returning(),
+  const create = (
+    input: CreateFacilityInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Facility, FacilityError> => {
+    const insertStatement = db
+      .insert(facilityTable)
+      .values({
+        id: input.id,
+        name: input.name,
+        description: input.description,
+        photoUrl: input.photoUrl,
+        googleCalendarId: input.googleCalendarId,
+        calendarUrl: input.calendarUrl,
+        isActive: input.isActive,
+        createdAt: input.createdAt,
+        updatedAt: input.updatedAt,
+      })
+      .returning();
+    const auditStatement = auditLogInsert(db, auditLog);
+
+    return ResultAsync.fromPromise(
+      db.batch([insertStatement, auditStatement]),
       (error): FacilityError => ({
         code: FacilityErrorCode.DatabaseError,
         message: "施設テーブルに登録できなかった。",
         cause: error,
       }),
-    ).map((rows) => toFacility(rows[0]));
+    ).map((results) => {
+      const rows = results[0] as (typeof facilityTable.$inferSelect)[];
+      return toFacility(rows[0]);
+    });
+  };
 
-  const update = (input: UpdateFacilityInput): ResultAsync<Facility, FacilityError> =>
-    ResultAsync.fromPromise(
-      db
-        .update(facilityTable)
-        .set({
-          name: input.name,
-          description: input.description,
-          photoUrl: input.photoUrl,
-          googleCalendarId: input.googleCalendarId,
-          calendarUrl: input.calendarUrl,
-          updatedAt: input.updatedAt,
-        })
-        .where(
-          and(
-            eq(facilityTable.id, input.id),
-            // 読んだときから写真が変わっていたら書かない（UpdateFacilityInput.expectedPhotoUrl）
-            input.expectedPhotoUrl === null
-              ? isNull(facilityTable.photoUrl)
-              : eq(facilityTable.photoUrl, input.expectedPhotoUrl),
-          ),
-        )
-        .returning(),
+  const update = (
+    input: UpdateFacilityInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Facility, FacilityError> => {
+    const updateWhere = and(
+      eq(facilityTable.id, input.id),
+      // 読んだときから写真が変わっていたら書かない（UpdateFacilityInput.expectedPhotoUrl）
+      input.expectedPhotoUrl === null
+        ? isNull(facilityTable.photoUrl)
+        : eq(facilityTable.photoUrl, input.expectedPhotoUrl),
+    );
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: facilityTable,
+      where: updateWhere,
+    });
+    const updateStatement = db
+      .update(facilityTable)
+      .set({
+        name: input.name,
+        description: input.description,
+        photoUrl: input.photoUrl,
+        googleCalendarId: input.googleCalendarId,
+        calendarUrl: input.calendarUrl,
+        updatedAt: input.updatedAt,
+      })
+      .where(updateWhere)
+      .returning();
+
+    return ResultAsync.fromPromise(
+      db.batch([auditStatement, updateStatement]),
       (error): FacilityError => ({
         code: FacilityErrorCode.DatabaseError,
         message: "施設テーブルを更新できなかった。",
         cause: error,
       }),
-    ).andThen((rows) => {
+    ).andThen((results) => {
+      const rows = results[1] as (typeof facilityTable.$inferSelect)[];
       const row = rows.at(0);
       if (row !== undefined) {
         return ok(toFacility(row));
@@ -112,6 +134,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
         }),
       );
     });
+  };
 
   /*
    * NOTE: この SQL 条件は app/domain/facility/deactivation.ts の
@@ -151,13 +174,10 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
    * NOTE: この SQL 条件は app/domain/facility/deactivation.ts の
    * isBlockingReservation を書き写したものである。片方を変えたらもう片方も必ず直すこと。
    */
-  const updateActiveStatus = ({
-    id,
-    from,
-    to,
-    updatedAt,
-    now,
-  }: UpdateFacilityActiveStatusInput): ResultAsync<Facility, FacilityError> => {
+  const updateActiveStatus = (
+    { id, from, to, updatedAt, now }: UpdateFacilityActiveStatusInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Facility, FacilityError> => {
     const hasNoBlockingReservations = notExists(
       db
         .select({ id: reservationTable.id })
@@ -185,21 +205,28 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
       to ? undefined : hasNoBlockingReservations,
     );
 
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: facilityTable,
+      where: updateWhere,
+    });
+    const updateStatement = db
+      .update(facilityTable)
+      .set({
+        isActive: to,
+        updatedAt,
+      })
+      .where(updateWhere)
+      .returning();
+
     return ResultAsync.fromPromise(
-      db
-        .update(facilityTable)
-        .set({
-          isActive: to,
-          updatedAt,
-        })
-        .where(updateWhere)
-        .returning(),
+      db.batch([auditStatement, updateStatement]),
       (error): FacilityError => ({
         code: FacilityErrorCode.DatabaseError,
         message: "施設ステータスを更新できなかった。",
         cause: error,
       }),
-    ).andThen((rows) => {
+    ).andThen((results) => {
+      const rows = results[1] as (typeof facilityTable.$inferSelect)[];
       const row = rows.at(0);
       if (row === undefined) {
         return err({

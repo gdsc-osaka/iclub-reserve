@@ -98,6 +98,12 @@ describe("updateFacilityUseCase", () => {
         name: "更新後の名前",
         photoUrl: expect.stringMatching(/^\/facility-photos\/[a-z0-9]+\.png$/),
       }),
+      expect.objectContaining({
+        action: "facility.update",
+        actorId: "usr_staff_01",
+        actedAsStaff: true,
+        targetId: "fac_existing",
+      }),
     );
     // 古い写真の削除が呼ばれたこと
     expect(deleteMock).toHaveBeenCalledWith("oldphoto123.jpg");
@@ -140,6 +146,10 @@ describe("updateFacilityUseCase", () => {
       expect.objectContaining({
         photoUrl: null,
       }),
+      expect.objectContaining({
+        action: "facility.update",
+        targetId: "fac_existing",
+      }),
     );
     expect(deleteMock).toHaveBeenCalledWith("oldphoto123.jpg");
   });
@@ -180,6 +190,10 @@ describe("updateFacilityUseCase", () => {
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         photoUrl: "/facility-photos/oldphoto123.jpg",
+      }),
+      expect.objectContaining({
+        action: "facility.update",
+        targetId: "fac_existing",
       }),
     );
     expect(deleteMock).not.toHaveBeenCalled();
@@ -304,6 +318,10 @@ describe("updateFacilityUseCase", () => {
         photoUrl: "/facility-photos/oldphoto123.jpg",
         expectedPhotoUrl: "/facility-photos/oldphoto123.jpg",
       }),
+      expect.objectContaining({
+        action: "facility.update",
+        targetId: "fac_existing",
+      }),
     );
   });
 
@@ -380,6 +398,37 @@ describe("updateFacilityUseCase", () => {
         googleCalendarId: null,
         calendarUrl: null,
       }),
+      expect.objectContaining({
+        action: "facility.update",
+        targetId: "fac_existing",
+      }),
     );
+  });
+
+  it("変更差分が無い場合、DB 更新を行わずに成功する（COND-013）", async () => {
+    const updateMock = vi.fn();
+    const facilityRepository = {
+      findById: vi.fn().mockReturnValue(okAsync(existingFacility)),
+      update: updateMock,
+    } as unknown as FacilityRepository;
+    const facilityPhotoStorage = {} as unknown as FacilityPhotoStorage;
+
+    const result = await updateFacilityUseCase(
+      { facilityRepository, facilityPhotoStorage },
+      {
+        facilityId: "fac_existing",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        name: existingFacility.name,
+        description: existingFacility.description,
+        googleCalendarId: existingFacility.googleCalendarId,
+        photo: null,
+        removePhoto: false,
+        now,
+      },
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });

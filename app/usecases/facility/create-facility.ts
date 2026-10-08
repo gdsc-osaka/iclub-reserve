@@ -1,11 +1,14 @@
+import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import {
   FacilityAction,
   type Facility,
   type FacilityError,
   type FacilityRepository,
 } from "~/domain/facility";
+import { toFacilityCreateChanges } from "~/domain/facility/audit-log";
 import {
   toCalendarUrl,
   validateFacilityDescription,
@@ -45,7 +48,7 @@ export interface CreateFacilityArgs {
  * 1. 認可判定: 事務局スタッフのみに許可（COND-009）。
  * 2. 入力検証: 名称、説明、Google Calendar ID、写真を順次検証。
  * 3. 写真アップロード: 写真が指定されている場合、R2 に先行して配置する。
- * 4. DB 登録: facility テーブルにレコードを挿入。
+ * 4. DB 登録: facility テーブルにレコードを挿入。同じ batch で操作履歴を記録する（COND-013）。
  * 5. ロールバック: DB 登録が失敗した場合、先行配置した R2 オブジェクトを削除して整合性を保つ。
  */
 export const createFacilityUseCase = (
@@ -82,17 +85,40 @@ export const createFacilityUseCase = (
       photoUrl = toFacilityPhotoUrl(photoName);
     }
 
+    const facilityId = createId();
+
+    const auditLog: AuditLogDraft = {
+      occurredAt: args.now,
+      actorId: args.actorUserId,
+      actedAsStaff: true, // 事務局だけの操作なので常に true（COND-012）
+      action: AuditLogAction.FacilityCreate,
+      targetId: facilityId,
+      groupId: null,
+      changes: toFacilityCreateChanges({
+        name,
+        description,
+        photoUrl,
+        googleCalendarId,
+        calendarUrl,
+        isActive: args.isActive,
+      }),
+    };
+
     // 3. DB 登録
-    const createResult = await deps.facilityRepository.create({
-      name,
-      description,
-      photoUrl,
-      googleCalendarId,
-      calendarUrl,
-      isActive: args.isActive,
-      createdAt: args.now,
-      updatedAt: args.now,
-    });
+    const createResult = await deps.facilityRepository.create(
+      {
+        id: facilityId,
+        name,
+        description,
+        photoUrl,
+        googleCalendarId,
+        calendarUrl,
+        isActive: args.isActive,
+        createdAt: args.now,
+        updatedAt: args.now,
+      },
+      auditLog,
+    );
 
     if (createResult.isErr()) {
       // DB 登録失敗時は、アップロードした写真を削除してロールバックする

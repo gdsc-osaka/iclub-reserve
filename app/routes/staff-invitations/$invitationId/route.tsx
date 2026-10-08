@@ -83,6 +83,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         invitationId: params.invitationId,
         actorUserId: user.id,
         actorEmail: user.email,
+        actorIsStaff: user.is_staff,
         now,
       },
     );
@@ -111,6 +112,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       },
       {
         invitationId: params.invitationId,
+        actorUserId: user.id,
         actorEmail: user.email,
         now,
       },

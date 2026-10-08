@@ -6,6 +6,7 @@ import {
   type StaffMemberRepository,
   wouldRemoveLastStaff,
 } from "~/domain/staff";
+import { toStaffRoleRevokeAuditLog } from "~/domain/staff/audit-log";
 import { ensureStaffPermission } from "./_shared/staff-authorization";
 
 export interface RevokeStaffDeps {
@@ -76,8 +77,9 @@ export const revokeStaffUseCase = (
       });
     }
 
-    // 5. 剥奪の実行（条件付き UPDATE）
-    const revokedCount = yield* deps.staffMemberRepository.revoke(targetUserId, args.now);
+    // 5. 剥奪の実行（条件付き UPDATE と操作履歴の記録）
+    const auditLog = toStaffRoleRevokeAuditLog(targetUserId, args.actorUserId, args.now);
+    const revokedCount = yield* deps.staffMemberRepository.revoke(targetUserId, args.now, auditLog);
     if (revokedCount === 0) {
       return errAsync<never, StaffError>({
         code: StaffErrorCode.Conflict,

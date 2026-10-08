@@ -21,7 +21,7 @@ describe("createFacilityUseCase", () => {
   const now = new Date("2026-10-01T10:00:00Z");
 
   const mockCreatedFacility = (input: CreateFacilityInput): Facility => ({
-    id: "fac_new_01",
+    id: input.id ?? "fac_new_01",
     name: input.name,
     description: input.description,
     photoUrl: input.photoUrl,
@@ -260,6 +260,16 @@ describe("createFacilityUseCase", () => {
         calendarUrl:
           "https://calendar.google.com/calendar/ical/toyonaka%40group.calendar.google.com/public/basic.ics",
         isActive: true,
+      }),
+      expect.objectContaining({
+        action: "facility.create",
+        actorId: "usr_staff_01",
+        actedAsStaff: true,
+        groupId: null,
+        targetId: expect.any(String),
+        changes: expect.objectContaining({
+          name: { before: null, after: "豊中試作室" },
+        }),
       }),
     );
   });

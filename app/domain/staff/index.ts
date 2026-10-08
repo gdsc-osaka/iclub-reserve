@@ -1,4 +1,5 @@
 import type { Result, ResultAsync } from "neverthrow";
+import type { AuditLogDraft } from "../audit-log";
 import type { PermissionTable } from "../authz";
 import { ErrorKind, type BaseError } from "../error";
 import type { InvitationStatus, RejectInvitationInput } from "../invitation";
@@ -171,13 +172,14 @@ export interface AcceptStaffInvitationInput {
 export interface StaffInvitationRepository {
   /** 宛先（正規化済み）の承諾待ちの招待のうち、expires_at が最も遅いもの。無ければ null。期限切れも返す（判定はユースケース） */
   findPendingByEmail(email: string): ResultAsync<StaffInvitation | null, StaffError>;
-  /** 招待の INSERT と outbox の INSERT を同じ db.batch で行う（ADR-002 決定 3） */
+  /** 招待の INSERT と outbox の INSERT、操作履歴の INSERT を同じ db.batch で行う（ADR-002 決定 3 / COND-013） */
   create(
     input: CreateStaffInvitationInput,
     mailDrafts: readonly MailDraft[],
+    auditLog: AuditLogDraft,
   ): ResultAsync<CreateStaffInvitationOutcome, StaffError>;
-  /** status = pending のものだけを canceled にする。更新した件数を返す */
-  cancel(invitationId: string): ResultAsync<number, StaffError>;
+  /** status = pending のものだけを canceled にし、操作履歴を同じ batch で書く。更新した件数を返す */
+  cancel(invitationId: string, auditLog: AuditLogDraft): ResultAsync<number, StaffError>;
   /**
    * 招待を 1 件引く。無ければ ok(null)。
    *
@@ -189,16 +191,20 @@ export interface StaffInvitationRepository {
   /**
    * 招待を承諾し、承諾できた場合は true、できなければ false を返す。
    *
-   * 「承諾できる招待か」の判定（承諾待ち・期限内・宛先が本人）は UPDATE の WHERE に畳み込む。
+   * 「承諾できる招待か」の判定（承諾待ち・期限内・宛先が本人）は UPDATE の WHERE に畳み込み、
+   * 操作履歴も同じ条件で直前に書き込む（COND-013）。
    * false は「対象の招待が無かった」ということであり、DB アクセス自体の異常ではない。
    */
-  accept(input: AcceptStaffInvitationInput): ResultAsync<boolean, StaffError>;
+  accept(
+    input: AcceptStaffInvitationInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<boolean, StaffError>;
   /**
    * 招待を辞退し、辞退できた行数を返す。
    *
-   * 判定の条件は `accept` とそろえる。
+   * 判定の条件は `accept` とそろえ、操作履歴も同じ条件で直前に書き込む（COND-013）。
    */
-  reject(input: RejectInvitationInput): ResultAsync<number, StaffError>;
+  reject(input: RejectInvitationInput, auditLog: AuditLogDraft): ResultAsync<number, StaffError>;
 }
 
 /**
@@ -215,7 +221,8 @@ export interface StaffMemberRepository {
   /**
    * is_staff を false にし、updated_at を now にする。COND-014 を更新文の条件にも入れる:
    * WHERE id = ? AND is_staff = 1 AND (SELECT COUNT(*) FROM user WHERE is_staff = 1) >= 2
+   * 操作履歴も同じ条件で直前に書き込む（COND-013）。
    * 更新した件数を返す
    */
-  revoke(userId: string, now: Date): ResultAsync<number, StaffError>;
+  revoke(userId: string, now: Date, auditLog: AuditLogDraft): ResultAsync<number, StaffError>;
 }

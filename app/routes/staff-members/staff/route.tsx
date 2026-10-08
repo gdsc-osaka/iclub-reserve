@@ -118,6 +118,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         actorUserId: user.id,
         isStaff: user.is_staff,
         invitationId,
+        now: new Date(),
       },
     );
 

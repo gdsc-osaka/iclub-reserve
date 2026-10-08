@@ -182,13 +182,25 @@ describe("changeFacilityStatusUseCase", () => {
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap().isActive).toBe(false);
     expect(countMock).toHaveBeenCalledWith("fac_active", now);
-    expect(updateActiveStatusMock).toHaveBeenCalledWith({
-      id: "fac_active",
-      from: true,
-      to: false,
-      updatedAt: now,
-      now,
-    });
+    expect(updateActiveStatusMock).toHaveBeenCalledWith(
+      {
+        id: "fac_active",
+        from: true,
+        to: false,
+        updatedAt: now,
+        now,
+      },
+      expect.objectContaining({
+        action: "facility.deactivate",
+        actorId: "usr_staff_01",
+        actedAsStaff: true,
+        targetId: "fac_active",
+        groupId: null,
+        changes: {
+          is_active: { before: true, after: false },
+        },
+      }),
+    );
   });
 
   it("再有効化（inactive -> active）時、予約件数を数えずに直接更新する", async () => {
@@ -216,13 +228,25 @@ describe("changeFacilityStatusUseCase", () => {
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap().isActive).toBe(true);
     expect(countMock).not.toHaveBeenCalled();
-    expect(updateActiveStatusMock).toHaveBeenCalledWith({
-      id: "fac_inactive",
-      from: false,
-      to: true,
-      updatedAt: now,
-      now,
-    });
+    expect(updateActiveStatusMock).toHaveBeenCalledWith(
+      {
+        id: "fac_inactive",
+        from: false,
+        to: true,
+        updatedAt: now,
+        now,
+      },
+      expect.objectContaining({
+        action: "facility.reactivate",
+        actorId: "usr_staff_01",
+        actedAsStaff: true,
+        targetId: "fac_inactive",
+        groupId: null,
+        changes: {
+          is_active: { before: false, after: true },
+        },
+      }),
+    );
   });
 
   it("更新件数が 0 行のとき（競合）、InvalidTransition を返す", async () => {
