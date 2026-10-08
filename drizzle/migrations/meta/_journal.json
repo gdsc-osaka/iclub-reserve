@@ -141,6 +141,13 @@
       "when": 1791443426775,
       "tag": "0019_overrated_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791454992651,
+      "tag": "0020_wooden_starhawk",
+      "breakpoints": true
     }
   ]
 }
