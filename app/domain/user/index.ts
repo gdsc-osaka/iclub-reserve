@@ -91,6 +91,7 @@ export interface TermsAcceptanceRepository {
    * そのユーザーが、指定した版の規約に同意したことを記録する。
    *
    * 前に別の版へ同意していた場合は、新しい版と日時で上書きする。
+   * 同じ版にもう一度同意した場合は、最初に同意した日時を残す。
    *
    * - 記録できた場合: ok(null)
    * - ユーザーが見つからない場合: err(USER_NOT_FOUND)

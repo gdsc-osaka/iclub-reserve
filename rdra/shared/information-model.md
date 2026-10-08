@@ -320,7 +320,7 @@ entities:
       - name: "terms_accepted_at"
         type: "datetime"
         required: false
-        description: "i-Club利用規約に同意した日時（サーバーの時刻）。未同意は NULL。改定後の版に同意し直すと上書きする（REQ-033）。"
+        description: "i-Club利用規約に同意した日時（サーバーの時刻）。未同意は NULL。改定後の版に同意し直すと上書きし、同じ版への再度の同意では最初の日時を残す（REQ-033）。"
       - name: "created_at"
         type: "datetime"
         required: true

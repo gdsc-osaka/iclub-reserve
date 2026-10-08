@@ -2,7 +2,8 @@
  * 利用規約への同意（REQ-033）の書き込みを、本物の D1 に対して実行して確かめるテスト。
  *
  * ユースケースのテストは Repository を偽物に差し替えるので、更新文の条件の誤りは素通りする。
- * ここでは、本人の行だけに版と日時が入ること、無いユーザーを NotFound として返すことを押さえる。
+ * ここでは、本人の行だけに版と日時が入ること、同じ版の再送信では最初の日時が残ること、
+ * 無いユーザーを NotFound として返すことを押さえる。
  */
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -73,6 +74,23 @@ describe("createTermsAcceptanceRepository.recordAcceptance", () => {
     await repository.recordAcceptance("usr_taro", "2027-04-01", later);
 
     expect(await readTerms("usr_taro")).toEqual({ version: "2027-04-01", acceptedAt: later });
+  });
+
+  it("同じ版にもう一度同意しても、最初に同意した日時を残す", async () => {
+    const repository = createTermsAcceptanceRepository(testDb.db);
+
+    await repository.recordAcceptance("usr_taro", "2022-04-01", ACCEPTED_AT);
+    const result = await repository.recordAcceptance(
+      "usr_taro",
+      "2022-04-01",
+      new Date("2026-10-09T00:00:00Z"),
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(await readTerms("usr_taro")).toEqual({
+      version: "2022-04-01",
+      acceptedAt: ACCEPTED_AT,
+    });
   });
 
   it("ユーザーが無ければ NotFound を返す", async () => {
