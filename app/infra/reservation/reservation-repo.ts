@@ -20,7 +20,7 @@ import {
   type ReservationOverlapArgs,
   type ReservationRepository,
 } from "~/domain/reservation";
-import { auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { guardedMailOutboxInserts, mailOutboxInserts } from "../mail/mail-outbox-writes";
 
@@ -116,7 +116,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
    */
   const runGuardedUpdate = (
     updateQuery: RunnableQuery<{ id: string }[], "sqlite"> & PromiseLike<{ id: string }[]>,
-    condition: SQL | undefined,
+    condition: SQL,
     written: { readonly id: string; readonly status: ReservationStatus; readonly updatedAt: Date },
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
@@ -301,12 +301,12 @@ export const createReservationRepository = (db: Database): ReservationRepository
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
-    const condition = and(
+    const condition = allOf(
       eq(reservationTable.id, args.id),
       // 読んだときから変わっていないことを、更新の条件に入れる（ApplyStatusTransitionArgs を参照）
       eq(reservationTable.status, args.expectedStatus),
       eq(reservationTable.updatedAt, args.expectedUpdatedAt),
-      args.requireNoApprovedOverlap ? noApprovedOverlap : undefined,
+      ...(args.requireNoApprovedOverlap ? [noApprovedOverlap] : []),
     );
 
     const updateQuery = db
@@ -328,12 +328,12 @@ export const createReservationRepository = (db: Database): ReservationRepository
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
   ): ResultAsync<ApplyContentEditOutcome, ReservationError> => {
-    const condition = and(
+    const condition = allOf(
       eq(reservationTable.id, args.id),
       // 読んだときから変わっていないことを、更新の条件に入れる（ApplyContentEditArgs を参照）
       eq(reservationTable.status, args.expectedStatus),
       eq(reservationTable.updatedAt, args.expectedUpdatedAt),
-      args.requireNoApprovedOverlap ? noApprovedOverlapAt(args, args.id) : undefined,
+      ...(args.requireNoApprovedOverlap ? [noApprovedOverlapAt(args, args.id)] : []),
     );
 
     const updateQuery = db
