@@ -1,5 +1,6 @@
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { createReservationMailDrafts, transitionMailEvent } from "~/domain/mail/reservation-mail";
 import type { MembershipRepository } from "~/domain/membership";
@@ -10,8 +11,13 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 import {
+  toReservationStatusChanges,
+  transitionAuditLogAction,
+} from "~/domain/reservation/audit-log";
+import {
   canPerformTransition,
   canTransition,
+  isStaffTransition,
   ReservationTransition,
   transitionAuthority,
   transitionSourceStatus,
@@ -153,6 +159,19 @@ export const changeReservationStatusUseCase = (
     const [, mailDrafts] = yield* ResultAsync.combine([overlapCheck, mailDraftsCheck]);
 
     const targetStatus = transitionTargetStatus[args.transition];
+    const auditLog: AuditLogDraft = {
+      occurredAt: now,
+      actorId: args.actorUserId,
+      actedAsStaff: isStaffTransition(args.transition),
+      action: transitionAuditLogAction[args.transition],
+      targetId: reservation.id,
+      groupId: reservation.groupId,
+      changes: toReservationStatusChanges(reservation, {
+        status: targetStatus,
+        statusReason,
+      }),
+    };
+
     const outcome = yield* deps.reservationRepository.applyStatusTransition(
       {
         id: reservation.id,
@@ -164,6 +183,7 @@ export const changeReservationStatusUseCase = (
         requireNoApprovedOverlap: args.transition === ReservationTransition.Approve,
       },
       mailDrafts,
+      auditLog,
     );
 
     if (!outcome.applied) {

@@ -1,6 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~/domain/group";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
@@ -87,10 +88,11 @@ const createDeps = (
     enqueuedMailIds?: readonly string[];
   } = {},
 ) => {
-  const create = vi.fn((_reservation: Reservation, _mails: readonly MailDraft[]) =>
-    okAsync({
-      enqueuedMailIds: overrides.enqueuedMailIds ?? ["mail_01", "mail_02", "mail_03"],
-    }),
+  const create = vi.fn(
+    (_reservation: Reservation, _mails: readonly MailDraft[], _auditLog: AuditLogDraft) =>
+      okAsync({
+        enqueuedMailIds: overrides.enqueuedMailIds ?? ["mail_01", "mail_02", "mail_03"],
+      }),
   );
 
   const reservationRepository: ReservationRepository = {
@@ -213,6 +215,25 @@ describe("createProvisionalReservationUseCase", () => {
     expect(mails?.[2]?.idempotencyKey).toMatch(keyOf("usr_staff_01"));
     expect(mails?.[0]?.subject).toBe("【i-Club予約システム】施設・設備の利用予約が申請されました");
     expect(mails?.[0]?.text).toContain("施設・設備の利用予約が申請されました。");
+
+    // COND-013: 操作履歴の草稿が渡ること
+    const auditLog = create.mock.calls[0]?.[2];
+    expect(auditLog).toEqual({
+      occurredAt: now,
+      actorId: "usr_student_01",
+      actedAsStaff: false,
+      action: AuditLogAction.ReservationApply,
+      targetId: value.reservationId,
+      groupId: "grp_robotics",
+      changes: {
+        facility_id: { before: null, after: "fac_meeting_a" },
+        start_at: { before: null, after: args.reservation.startAt.toISOString() },
+        end_at: { before: null, after: args.reservation.endAt.toISOString() },
+        head_count: { before: null, after: 4 },
+        note: { before: null, after: "週次定例" },
+        status: { before: null, after: "provisional" },
+      },
+    });
   });
 
   it("所属していない団体では申請できず、宛先クエリも呼ばれない", async () => {
@@ -238,6 +259,35 @@ describe("createProvisionalReservationUseCase", () => {
     expect(result.isOk()).toBe(true);
     expect(create.mock.calls[0]?.[0]).toMatchObject({ createdBy: "usr_staff_01" });
     expect(findForNewReservation).toHaveBeenCalled();
+    expect(create.mock.calls[0]?.[2]).toMatchObject({
+      actorId: "usr_staff_01",
+      actedAsStaff: true,
+      action: AuditLogAction.ReservationApply,
+    });
+  });
+
+  it("その団体の管理者でもある事務局が申請した場合、actedAsStaff は false になる", async () => {
+    const { deps, create } = createDeps({
+      membership: {
+        id: "gm_test",
+        groupId: "grp_robotics",
+        userId: "usr_staff_admin",
+        role: MembershipRole.Admin,
+      },
+    });
+
+    const result = await createProvisionalReservationUseCase(deps, {
+      ...args,
+      actorUserId: "usr_staff_admin",
+      isStaff: true,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(create.mock.calls[0]?.[2]).toMatchObject({
+      actorId: "usr_staff_admin",
+      actedAsStaff: false,
+      action: AuditLogAction.ReservationApply,
+    });
   });
 
   it("承認待ちの団体からは申請できず、宛先クエリも呼ばれない", async () => {

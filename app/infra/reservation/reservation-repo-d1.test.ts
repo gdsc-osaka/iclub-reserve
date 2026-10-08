@@ -14,6 +14,8 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { auditLogTable } from "~/db/schema";
+import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";
 import {
   ReservationStatus,
   type ApplyContentEditArgs,
@@ -29,6 +31,19 @@ const testDb = useD1TestDb();
 const READ_AT = new Date("2026-09-19T09:00:00+09:00");
 /** 変更を書き込む日時 */
 const EDITED_AT = new Date("2026-09-20T10:00:00+09:00");
+
+const dummyAuditLog = (overrides?: Partial<AuditLogDraft>): AuditLogDraft => ({
+  occurredAt: EDITED_AT,
+  actorId: "usr_taro",
+  actedAsStaff: false,
+  action: AuditLogAction.ReservationChange,
+  targetId: "res_target",
+  groupId: "grp_robotics",
+  changes: {
+    head_count: { before: 4, after: 8 },
+  },
+  ...overrides,
+});
 
 /** 2026-09-25（日本時間）の指定した時刻 */
 const at = (time: string) => new Date(`2026-09-25T${time}:00+09:00`);
@@ -133,6 +148,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
           status: ReservationStatus.Provisional,
         }),
         [],
+        dummyAuditLog(),
       );
 
       expect(result._unsafeUnwrap()).toEqual({ applied: true, enqueuedMailIds: [] });
@@ -144,6 +160,19 @@ describe("applyContentEdit を SQLite で実行する", () => {
         note: "機材あり",
         status: ReservationStatus.Provisional,
         updated_at: EDITED_AT.getTime(),
+      });
+      const auditRows = await testDb.db.select().from(auditLogTable);
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]).toMatchObject({
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_target",
+        groupId: "grp_robotics",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationChange,
+      });
+
+      expect(auditRows[0].changes).toEqual({
+        head_count: { before: 4, after: 8 },
       });
     });
 
@@ -160,7 +189,11 @@ describe("applyContentEdit を SQLite で実行する", () => {
         endAt: at("12:00"),
       });
 
-      const result = await repository.applyContentEdit(editArgs({ headCount: 8 }), []);
+      const result = await repository.applyContentEdit(
+        editArgs({ headCount: 8 }),
+        [],
+        dummyAuditLog(),
+      );
 
       expect(result._unsafeUnwrap().applied).toBe(false);
       expect(await rowOf("res_target")).toMatchObject({
@@ -181,10 +214,16 @@ describe("applyContentEdit を SQLite で実行する", () => {
         updatedAt: new Date("2026-09-20T09:30:00+09:00"),
       });
 
-      const result = await repository.applyContentEdit(editArgs({ note: "備考を追記" }), []);
+      const result = await repository.applyContentEdit(
+        editArgs({ note: "備考を追記" }),
+        [],
+        dummyAuditLog(),
+      );
 
       expect(result._unsafeUnwrap().applied).toBe(false);
       expect(await rowOf("res_target")).toMatchObject({ head_count: 6, note: null });
+      const auditRows = await testDb.db.select().from(auditLogTable);
+      expect(auditRows).toHaveLength(0);
     });
   });
 
@@ -207,6 +246,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
       const result = await repository.applyContentEdit(
         editArgs({ startAt: at("15:00"), endAt: at("17:00"), requireNoApprovedOverlap: true }),
         [],
+        dummyAuditLog(),
       );
 
       expect(result._unsafeUnwrap().applied).toBe(false);
@@ -235,6 +275,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
       const result = await repository.applyContentEdit(
         editArgs({ startAt: at("14:00"), endAt: at("16:00"), requireNoApprovedOverlap: true }),
         [],
+        dummyAuditLog(),
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -258,6 +299,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
           requireNoApprovedOverlap: true,
         }),
         [],
+        dummyAuditLog(),
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -285,6 +327,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
       const result = await repository.applyContentEdit(
         editArgs({ startAt: at("14:00"), endAt: at("16:00"), requireNoApprovedOverlap: true }),
         [],
+        dummyAuditLog(),
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -308,6 +351,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
       const result = await repository.applyContentEdit(
         editArgs({ startAt: at("13:00"), endAt: at("15:00"), requireNoApprovedOverlap: true }),
         [],
+        dummyAuditLog(),
       );
 
       expect(result._unsafeUnwrap().applied).toBe(true);
@@ -336,12 +380,30 @@ describe("applyStatusTransition を SQLite で実行する", () => {
       endAt: at("12:00"),
     });
 
-    const result = await repository.applyStatusTransition(approveArgs, []);
+    const auditLog = dummyAuditLog({
+      action: AuditLogAction.ReservationApprove,
+      actedAsStaff: true,
+      changes: {
+        status: { before: "provisional", after: "approved" },
+        status_reason: { before: null, after: null },
+      },
+    });
+    const result = await repository.applyStatusTransition(approveArgs, [], auditLog);
 
     expect(result._unsafeUnwrap().applied).toBe(true);
     expect(await rowOf("res_target")).toMatchObject({
       status: ReservationStatus.Approved,
       updated_at: EDITED_AT.getTime(),
+    });
+
+    const auditRows = await testDb.db.select().from(auditLogTable);
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({
+      targetType: AuditLogTargetType.Reservation,
+      targetId: "res_target",
+      groupId: "grp_robotics",
+      actedAsStaff: true,
+      action: AuditLogAction.ReservationApprove,
     });
   });
 
@@ -360,10 +422,12 @@ describe("applyStatusTransition を SQLite で実行する", () => {
       updatedAt: new Date("2026-09-20T09:30:00+09:00"),
     });
 
-    const result = await repository.applyStatusTransition(approveArgs, []);
+    const result = await repository.applyStatusTransition(approveArgs, [], dummyAuditLog());
 
     expect(result._unsafeUnwrap().applied).toBe(false);
     expect(await rowOf("res_target")).toMatchObject({ status: ReservationStatus.Provisional });
+    const auditRows = await testDb.db.select().from(auditLogTable);
+    expect(auditRows).toHaveLength(0);
   });
 });
 
@@ -412,10 +476,30 @@ describe("createApproved を SQLite で実行する", () => {
   it("(1) 重なりが無ければ承認済みで入り、読み戻すと同じ予約になる", async () => {
     const repository = createReservationRepository(testDb.db);
 
-    const result = await repository.createApproved(directReservation());
+    const auditLog = dummyAuditLog({
+      action: AuditLogAction.ReservationDirectCreate,
+      targetId: "res_direct",
+      actedAsStaff: true,
+      changes: {
+        facility_id: { before: null, after: "fac_a" },
+        status: { before: null, after: "approved" },
+      },
+    });
+
+    const result = await repository.createApproved(directReservation(), auditLog);
 
     expect(result._unsafeUnwrap()).toEqual({ applied: true });
     expect((await repository.findById("res_direct"))._unsafeUnwrap()).toEqual(directReservation());
+
+    const auditRows = await testDb.db.select().from(auditLogTable);
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({
+      targetType: AuditLogTargetType.Reservation,
+      targetId: "res_direct",
+      groupId: "grp_robotics",
+      actedAsStaff: true,
+      action: AuditLogAction.ReservationDirectCreate,
+    });
   });
 
   it("(2) 承認済みと重なれば何も入らない", async () => {
@@ -427,10 +511,16 @@ describe("createApproved を SQLite で実行する", () => {
       endAt: at("13:00"),
     });
 
-    const result = await repository.createApproved(directReservation());
+    const result = await repository.createApproved(
+      directReservation(),
+      dummyAuditLog({ targetId: "res_direct" }),
+    );
 
     expect(result._unsafeUnwrap()).toEqual({ applied: false });
     expect(await rowOf("res_direct")).toBeNull();
+
+    const auditRows = await testDb.db.select().from(auditLogTable);
+    expect(auditRows).toHaveLength(0);
   });
 
   it("(3) 終了と開始がぴったり接するだけなら作れる", async () => {
@@ -449,7 +539,10 @@ describe("createApproved を SQLite で実行する", () => {
       endAt: at("14:00"),
     });
 
-    const result = await repository.createApproved(directReservation());
+    const result = await repository.createApproved(
+      directReservation(),
+      dummyAuditLog({ targetId: "res_direct" }),
+    );
 
     expect(result._unsafeUnwrap()).toEqual({ applied: true });
     expect(await rowOf("res_direct")).toMatchObject({
@@ -466,11 +559,55 @@ describe("createApproved を SQLite で実行する", () => {
       endAt: at("12:00"),
     });
 
-    const result = await repository.createApproved(directReservation());
+    const result = await repository.createApproved(
+      directReservation(),
+      dummyAuditLog({ targetId: "res_direct" }),
+    );
 
     expect(result._unsafeUnwrap()).toEqual({ applied: true });
     expect(await rowOf("res_direct")).toMatchObject({
       status: ReservationStatus.Approved,
+    });
+  });
+});
+
+describe("create を SQLite で実行する", () => {
+  it("無条件で予約と操作履歴が 1 行ずつ入る", async () => {
+    const repository = createReservationRepository(testDb.db);
+    const reservation: Reservation = {
+      id: "res_new",
+      groupId: "grp_robotics",
+      facilityId: "fac_a",
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+      headCount: 3,
+      note: "申請メモ",
+      status: ReservationStatus.Provisional,
+      statusReason: null,
+      createdBy: "usr_taro",
+      createdAt: at("09:00"),
+      updatedAt: at("09:00"),
+    };
+    const auditLog = dummyAuditLog({
+      action: AuditLogAction.ReservationApply,
+      targetId: "res_new",
+      changes: {
+        facility_id: { before: null, after: "fac_a" },
+        status: { before: null, after: "provisional" },
+      },
+    });
+
+    const result = await repository.create(reservation, [], auditLog);
+    expect(result._unsafeUnwrap()).toEqual({ enqueuedMailIds: [] });
+
+    expect((await repository.findById("res_new"))._unsafeUnwrap()).toEqual(reservation);
+    const auditRows = await testDb.db.select().from(auditLogTable);
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({
+      targetType: AuditLogTargetType.Reservation,
+      targetId: "res_new",
+      groupId: "grp_robotics",
+      action: AuditLogAction.ReservationApply,
     });
   });
 });

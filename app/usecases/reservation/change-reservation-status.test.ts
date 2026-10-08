@@ -1,6 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction } from "~/domain/audit-log";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import {
   MembershipErrorCode,
@@ -210,6 +211,18 @@ describe("changeReservationStatusUseCase", () => {
             text: expect.stringContaining("都合がつかなくなったため"),
           }),
         ],
+        {
+          occurredAt: testNow,
+          actorId: "usr_student_01",
+          actedAsStaff: false,
+          action: AuditLogAction.ReservationWithdraw,
+          targetId: "res_provisional_01",
+          groupId: "grp_robotics",
+          changes: {
+            status: { before: "provisional", after: "withdrawn" },
+            status_reason: { before: null, after: "都合がつかなくなったため" },
+          },
+        },
       );
     });
 
@@ -277,6 +290,18 @@ describe("changeReservationStatusUseCase", () => {
             text: expect.stringContaining("イベント延期のため"),
           }),
         ],
+        {
+          occurredAt: testNow,
+          actorId: "usr_student_01",
+          actedAsStaff: false,
+          action: AuditLogAction.ReservationCancel,
+          targetId: "res_approved_01",
+          groupId: "grp_robotics",
+          changes: {
+            status: { before: "approved", after: "cancelled" },
+            status_reason: { before: null, after: "イベント延期のため" },
+          },
+        },
       );
     });
 
@@ -326,6 +351,18 @@ describe("changeReservationStatusUseCase", () => {
             subject: expect.stringContaining("承認されました"),
           }),
         ],
+        {
+          occurredAt: testNow,
+          actorId: "usr_staff_01",
+          actedAsStaff: true,
+          action: AuditLogAction.ReservationApprove,
+          targetId: "res_provisional_01",
+          groupId: "grp_robotics",
+          changes: {
+            status: { before: "provisional", after: "approved" },
+            status_reason: { before: null, after: null },
+          },
+        },
       );
     });
 
@@ -370,6 +407,10 @@ describe("changeReservationStatusUseCase", () => {
             to: { address: "admin2@example.com", name: "管理者2" },
           }),
         ]),
+        expect.objectContaining({
+          action: AuditLogAction.ReservationApprove,
+          actedAsStaff: true,
+        }),
       );
       const passedMails = (spies.applyStatusTransition.mock.calls[0] as unknown[])[1] as unknown[];
       expect(passedMails).toHaveLength(3);
@@ -412,6 +453,18 @@ describe("changeReservationStatusUseCase", () => {
             text: expect.stringContaining("理由: 設備点検のため利用できません"),
           }),
         ],
+        {
+          occurredAt: testNow,
+          actorId: "usr_staff_01",
+          actedAsStaff: true,
+          action: AuditLogAction.ReservationReject,
+          targetId: "res_provisional_01",
+          groupId: "grp_robotics",
+          changes: {
+            status: { before: "provisional", after: "rejected" },
+            status_reason: { before: null, after: "設備点検のため利用できません" },
+          },
+        },
       );
     });
 
@@ -453,6 +506,18 @@ describe("changeReservationStatusUseCase", () => {
             text: expect.stringContaining("理由: 大学の公式行事のため"),
           }),
         ],
+        {
+          occurredAt: testNow,
+          actorId: "usr_staff_01",
+          actedAsStaff: true,
+          action: AuditLogAction.ReservationStaffCancel,
+          targetId: "res_approved_01",
+          groupId: "grp_robotics",
+          changes: {
+            status: { before: "approved", after: "cancelled_by_staff" },
+            status_reason: { before: null, after: "大学の公式行事のため" },
+          },
+        },
       );
     });
   });

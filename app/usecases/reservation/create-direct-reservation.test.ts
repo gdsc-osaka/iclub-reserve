@@ -1,6 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction } from "~/domain/audit-log";
 import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~/domain/group";
 import {
@@ -74,7 +75,7 @@ const createDeps = (
     blockedOnWrite?: boolean;
   } = {},
 ) => {
-  const createApproved = vi.fn((_reservation: Reservation) =>
+  const createApproved = vi.fn((_reservation: Reservation, _auditDraft: unknown) =>
     okAsync({ applied: overrides.blockedOnWrite !== true }),
   );
 
@@ -151,7 +152,7 @@ describe("createDirectReservationUseCase", () => {
     expect(value.reservationId).toBeDefined();
 
     expect(createApproved).toHaveBeenCalledTimes(1);
-    const created = createApproved.mock.calls[0]?.[0];
+    const [created, auditDraft] = createApproved.mock.calls[0] ?? [];
     expect(created).toMatchObject({
       status: ReservationStatus.Approved,
       statusReason: null,
@@ -160,6 +161,22 @@ describe("createDirectReservationUseCase", () => {
       groupId: "grp_robotics",
       headCount: 4,
       note: "事務局主催説明会",
+    });
+    expect(auditDraft).toEqual({
+      occurredAt: now,
+      actorId: "usr_staff_01",
+      actedAsStaff: true,
+      action: AuditLogAction.ReservationDirectCreate,
+      targetId: expect.any(String),
+      groupId: "grp_robotics",
+      changes: {
+        facility_id: { before: null, after: "fac_meeting_a" },
+        start_at: { before: null, after: args.reservation.startAt.toISOString() },
+        end_at: { before: null, after: args.reservation.endAt.toISOString() },
+        head_count: { before: null, after: 4 },
+        note: { before: null, after: "事務局主催説明会" },
+        status: { before: null, after: "approved" },
+      },
     });
   });
 

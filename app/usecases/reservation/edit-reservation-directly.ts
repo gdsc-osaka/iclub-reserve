@@ -1,5 +1,6 @@
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import type { FacilityRepository } from "~/domain/facility";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { directEditMailEvent } from "~/domain/mail/reservation-mail";
@@ -10,6 +11,7 @@ import {
   type ReservationRepository,
   type ReservationStatus,
 } from "~/domain/reservation";
+import { toReservationContentEditChanges } from "~/domain/reservation/audit-log";
 import {
   canDirectEditReservation,
   changedContentFields,
@@ -119,6 +121,16 @@ export const editReservationDirectlyUseCase = (
 
     // 直接変更ではステータスを変えない（いまのステータスのまま）
     const status = reservation.status;
+    const auditLog: AuditLogDraft = {
+      occurredAt: now,
+      actorId: args.actorUserId,
+      actedAsStaff: true, // 事務局の直接変更なので true（COND-012）
+      action: AuditLogAction.ReservationDirectChange,
+      targetId: reservation.id,
+      groupId: reservation.groupId,
+      changes: toReservationContentEditChanges(reservation, { ...content, status }),
+    };
+
     const result = yield* deps.reservationRepository.applyContentEdit(
       {
         id: reservation.id,
@@ -134,6 +146,7 @@ export const editReservationDirectlyUseCase = (
         requireNoApprovedOverlap: checksOverlap,
       },
       mailDrafts,
+      auditLog,
     );
 
     /*

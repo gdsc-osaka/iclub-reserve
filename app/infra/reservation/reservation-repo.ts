@@ -1,9 +1,10 @@
-import { and, eq, getTableColumns, gt, lt, ne, notExists, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, gt, lt, ne, notExists, sql, type SQL } from "drizzle-orm";
 import type { RunnableQuery } from "drizzle-orm/runnable-query";
 import { alias } from "drizzle-orm/sqlite-core";
 import { err, ok, ResultAsync } from "neverthrow";
 
 import { reservationTable } from "~/db/schema";
+import type { AuditLogDraft } from "~/domain/audit-log";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationErrorCode,
@@ -19,6 +20,7 @@ import {
   type ReservationOverlapArgs,
   type ReservationRepository,
 } from "~/domain/reservation";
+import { auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 import { guardedMailOutboxInserts, mailOutboxInserts } from "../mail/mail-outbox-writes";
 
@@ -96,33 +98,34 @@ export const createReservationRepository = (db: Database): ReservationRepository
     );
 
   /**
-   * 条件付きの UPDATE を実行し、実際に更新できたときだけ通知を outbox に積む（ADR-002 決定 3 / 課題 2.2）。
+   * 条件付きの UPDATE を実行し、実際に更新できたときだけ操作履歴と通知を書く
+   * （COND-013 / ADR-002 決定 3 / 課題 2.2）。
    *
-   * UPDATE は競合したとき 0 件しか更新しないので、メールは「直前の UPDATE が書いた行」が
-   * 実際にあるときだけ積ませる。同じ batch の中なので、条件には**更新後**の
-   * status と updatedAt を渡す。仕組みは guardedMailOutboxInserts の JSDoc を参照。
+   * UPDATE は競合したとき 0 件しか更新しないので、記録とメールは更新できたときだけ書かせる。
+   * 確かめ方は 2 つで違う。
+   * - 操作履歴は UPDATE の**直前**に置き、UPDATE と同じ条件（更新前の状態）を見る。
+   *   仕組みは guardedAuditLogInsert の JSDoc を参照。
+   * - メールは UPDATE の**後**に置き、「直前の UPDATE が書いた行」（更新後の status と updatedAt）を見る。
+   *   仕組みは guardedMailOutboxInserts の JSDoc を参照。
    *
    * @param updateQuery 更新した行の id を返す（`.returning({ id })` 付きの）条件付き UPDATE
+   * @param condition updateQuery と同じ WHERE の条件。操作履歴の INSERT と共有する
    * @param written 更新後の行を見分ける値
+   * @param auditLog 更新できたときに書く操作履歴
    * @param subject エラーの説明に入れる、何を書き込もうとしたか
    */
   const runGuardedUpdate = (
     updateQuery: RunnableQuery<{ id: string }[], "sqlite"> & PromiseLike<{ id: string }[]>,
+    condition: SQL | undefined,
     written: { readonly id: string; readonly status: ReservationStatus; readonly updatedAt: Date },
     mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
     subject: string,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
-    // メールが無い場合は batch を使わず UPDATE 単体で実行する（Drizzle の batch は空配列を受け付けないため）
-    if (mails.length === 0) {
-      return ResultAsync.fromPromise(updateQuery, (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: `${subject}を書き込めなかった。`,
-        cause: error,
-      })).map((rows) => ({
-        applied: rows.length > 0,
-        enqueuedMailIds: [],
-      }));
-    }
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: reservationTable,
+      where: condition,
+    });
 
     const outbox = guardedMailOutboxInserts(db, mails, {
       from: reservationTable,
@@ -134,14 +137,14 @@ export const createReservationRepository = (db: Database): ReservationRepository
     });
 
     return ResultAsync.fromPromise(
-      db.batch([updateQuery, ...outbox.statements]),
+      db.batch([auditStatement, updateQuery, ...outbox.statements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: `${subject}と通知の outbox を書き込めなかった。`,
+        message: `${subject}、操作履歴、通知の outbox を書き込めなかった。`,
         cause: error,
       }),
     ).map((results) => {
-      const updateRows = results[0] as { id: string }[];
+      const updateRows = results[1] as { id: string }[];
       const applied = updateRows.length > 0;
       return {
         applied,
@@ -175,32 +178,25 @@ export const createReservationRepository = (db: Database): ReservationRepository
   const create = (
     reservation: Reservation,
     mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
   ): ResultAsync<CreateReservationOutcome, ReservationError> => {
     const insertReservationQuery = db.insert(reservationTable).values(reservation);
 
-    // メールが無い場合は batch を使わず INSERT 単体で実行する（Drizzle の batch は空配列を受け付けないため）
-    if (mails.length === 0) {
-      return ResultAsync.fromPromise(insertReservationQuery, (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約を書き込めなかった。",
-        cause: error,
-      })).map(() => ({ enqueuedMailIds: [] }));
-    }
-
     /*
-     * 予約の INSERT と outbox への INSERT を原子的に行う（ADR-002 決定 3）。
+     * 予約の INSERT と操作履歴・outbox への INSERT を原子的に行う（COND-013 / ADR-002 決定 3）。
      *
      * `applyStatusTransition` と違って条件付きの書き込みが無いので、
      * 「業務データが実際に書かれたか」を確かめる必要はない。予約の INSERT が失敗すれば
-     * batch ごと巻き戻り、メールも積まれない。
+     * batch ごと巻き戻り、記録もメールも残らない。
      */
+    const auditStatement = auditLogInsert(db, auditLog);
     const outbox = mailOutboxInserts(db, mails);
 
     return ResultAsync.fromPromise(
-      db.batch([insertReservationQuery, ...outbox.statements]),
+      db.batch([insertReservationQuery, auditStatement, ...outbox.statements]),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
-        message: "予約と通知の outbox を書き込めなかった。",
+        message: "予約、操作履歴、通知の outbox を書き込めなかった。",
         cause: error,
       }),
     ).map(() => ({
@@ -222,7 +218,14 @@ export const createReservationRepository = (db: Database): ReservationRepository
    */
   const createApproved = (
     reservation: Reservation,
+    auditLog: AuditLogDraft,
   ): ResultAsync<CreateApprovedReservationOutcome, ReservationError> => {
+    const condition = noApprovedOverlapAt(reservation, reservation.id);
+    const auditStatement = guardedAuditLogInsert(db, auditLog, {
+      from: sql`(SELECT 1)`,
+      where: condition,
+    });
+
     const insertQuery = db
       .insert(reservationTable)
       .select(
@@ -243,15 +246,21 @@ export const createReservationRepository = (db: Database): ReservationRepository
           })
           // 値はすべてパラメーターなので、FROM には 1 行だけ返す表を置けばよい
           .from(sql`(SELECT 1)`)
-          .where(noApprovedOverlapAt(reservation, reservation.id)),
+          .where(condition),
       )
       .returning({ id: reservationTable.id });
 
-    return ResultAsync.fromPromise(insertQuery, (error): ReservationError => ({
-      code: ReservationErrorCode.DatabaseError,
-      message: "承認済みの予約を書き込めなかった。",
-      cause: error,
-    })).map((rows) => ({ applied: rows.length > 0 }));
+    return ResultAsync.fromPromise(
+      db.batch([auditStatement, insertQuery]),
+      (error): ReservationError => ({
+        code: ReservationErrorCode.DatabaseError,
+        message: "承認済みの予約と操作履歴を書き込めなかった。",
+        cause: error,
+      }),
+    ).map((results) => {
+      const rows = results[1] as { id: string }[];
+      return { applied: rows.length > 0 };
+    });
   };
 
   /**
@@ -290,7 +299,16 @@ export const createReservationRepository = (db: Database): ReservationRepository
   const applyStatusTransition = (
     args: ApplyStatusTransitionArgs,
     mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
+    const condition = and(
+      eq(reservationTable.id, args.id),
+      // 読んだときから変わっていないことを、更新の条件に入れる（ApplyStatusTransitionArgs を参照）
+      eq(reservationTable.status, args.expectedStatus),
+      eq(reservationTable.updatedAt, args.expectedUpdatedAt),
+      args.requireNoApprovedOverlap ? noApprovedOverlap : undefined,
+    );
+
     const updateQuery = db
       .update(reservationTable)
       .set({
@@ -298,25 +316,26 @@ export const createReservationRepository = (db: Database): ReservationRepository
         statusReason: args.statusReason,
         updatedAt: args.updatedAt,
       })
-      .where(
-        and(
-          eq(reservationTable.id, args.id),
-          // 読んだときから変わっていないことを、更新の条件に入れる（ApplyStatusTransitionArgs を参照）
-          eq(reservationTable.status, args.expectedStatus),
-          eq(reservationTable.updatedAt, args.expectedUpdatedAt),
-          args.requireNoApprovedOverlap ? noApprovedOverlap : undefined,
-        ),
-      )
+      .where(condition)
       // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
       .returning({ id: reservationTable.id });
 
-    return runGuardedUpdate(updateQuery, args, mails, "予約のステータス");
+    return runGuardedUpdate(updateQuery, condition, args, mails, auditLog, "予約のステータス");
   };
 
   const applyContentEdit = (
     args: ApplyContentEditArgs,
     mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
   ): ResultAsync<ApplyContentEditOutcome, ReservationError> => {
+    const condition = and(
+      eq(reservationTable.id, args.id),
+      // 読んだときから変わっていないことを、更新の条件に入れる（ApplyContentEditArgs を参照）
+      eq(reservationTable.status, args.expectedStatus),
+      eq(reservationTable.updatedAt, args.expectedUpdatedAt),
+      args.requireNoApprovedOverlap ? noApprovedOverlapAt(args, args.id) : undefined,
+    );
+
     const updateQuery = db
       .update(reservationTable)
       .set({
@@ -328,19 +347,11 @@ export const createReservationRepository = (db: Database): ReservationRepository
         status: args.status,
         updatedAt: args.updatedAt,
       })
-      .where(
-        and(
-          eq(reservationTable.id, args.id),
-          // 読んだときから変わっていないことを、更新の条件に入れる（ApplyContentEditArgs を参照）
-          eq(reservationTable.status, args.expectedStatus),
-          eq(reservationTable.updatedAt, args.expectedUpdatedAt),
-          args.requireNoApprovedOverlap ? noApprovedOverlapAt(args, args.id) : undefined,
-        ),
-      )
+      .where(condition)
       // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
       .returning({ id: reservationTable.id });
 
-    return runGuardedUpdate(updateQuery, args, mails, "予約の内容");
+    return runGuardedUpdate(updateQuery, condition, args, mails, auditLog, "予約の内容");
   };
 
   return {
