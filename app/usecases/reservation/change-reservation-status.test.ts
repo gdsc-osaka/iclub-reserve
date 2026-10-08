@@ -5,7 +5,7 @@ import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import {
@@ -52,7 +52,8 @@ const baseApprovedReservation: Reservation = {
 };
 
 /** 予約の団体（grp_robotics）でのメンバーとしての所属 */
-const memberMembership: Membership = {
+const memberMembership: StoredMembership = {
+  id: "gm_memberMembership",
   groupId: "grp_robotics",
   userId: "usr_student_01",
   role: MembershipRole.Member,
@@ -78,7 +79,7 @@ const defaultAudience: ReservationMailAudience = {
 const createMockDeps = (options?: {
   reservation?: Reservation | null;
   /** 予約の団体での所属。null は所属していないことを表す */
-  membership?: Membership | null;
+  membership?: StoredMembership | null;
   /** 所属の確認が DB エラーになる場合 */
   membershipDbError?: boolean;
   hasOverlap?: boolean;

@@ -1,9 +1,10 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode } from "~/domain/group";
 import type {
-  Membership,
+  StoredMembership,
   MembershipError,
   MembershipRepository,
   UpdateMembershipRoleInput,
@@ -13,19 +14,22 @@ import { updateMemberRoleUseCase } from "./update-member-role";
 
 const testGroupId = "grp_robotics";
 
-const adminMembership1: Membership = {
+const adminMembership1: StoredMembership = {
+  id: "gm_adminMembership1",
   groupId: testGroupId,
   userId: "usr_admin1",
   role: MembershipRole.Admin,
 };
 
-const adminMembership2: Membership = {
+const adminMembership2: StoredMembership = {
+  id: "gm_adminMembership2",
   groupId: testGroupId,
   userId: "usr_admin2",
   role: MembershipRole.Admin,
 };
 
-const regularMember: Membership = {
+const regularMember: StoredMembership = {
+  id: "gm_regularMember",
   groupId: testGroupId,
   userId: "usr_member1",
   role: MembershipRole.Member,
@@ -35,12 +39,13 @@ interface FakeMembershipRepositoryOptions {
   readonly countAdminsResult?: () => ResultAsync<number, MembershipError>;
   readonly updateRoleResult?: (
     input: UpdateMembershipRoleInput,
+    auditLog: AuditLogDraft,
   ) => ResultAsync<number, MembershipError>;
 }
 
 /** D1 を使わないダミーのメンバーシップリポジトリ。呼び出し回数と引数を自前で記録する */
 const createFakeMembershipRepository = (
-  initialMemberships: readonly Membership[],
+  initialMemberships: readonly StoredMembership[],
   options: FakeMembershipRepositoryOptions = {},
 ) => {
   let findByGroupAndUserCallCount = 0;
@@ -48,6 +53,7 @@ const createFakeMembershipRepository = (
   let updateRoleCallCount = 0;
   let removeCallCount = 0;
   let lastUpdateRoleInput: UpdateMembershipRoleInput | null = null;
+  let lastAuditLog: AuditLogDraft | null = null;
 
   const memberships = [...initialMemberships];
 
@@ -65,11 +71,12 @@ const createFakeMembershipRepository = (
       const count = memberships.filter((m) => m.role === MembershipRole.Admin).length;
       return okAsync(count);
     },
-    updateRole: (input) => {
+    updateRole: (input, auditLog) => {
       updateRoleCallCount += 1;
       lastUpdateRoleInput = input;
+      lastAuditLog = auditLog;
       if (options.updateRoleResult) {
-        return options.updateRoleResult(input);
+        return options.updateRoleResult(input, auditLog);
       }
       return okAsync(1);
     },
@@ -89,6 +96,7 @@ const createFakeMembershipRepository = (
     updateRoleCallCount: () => updateRoleCallCount,
     removeCallCount: () => removeCallCount,
     lastUpdateRoleInput: () => lastUpdateRoleInput,
+    lastAuditLog: () => lastAuditLog,
   };
 };
 
@@ -237,8 +245,8 @@ describe("updateMemberRoleUseCase", () => {
     expect(fake.updateRoleCallCount()).toBe(0);
   });
 
-  // 7. 事務局（isStaff: true）は所属していなくても操作でき、操作者の所属を引いていない
-  it("事務局（isStaff: true）は所属していなくても操作でき、操作者の所属を引かない", async () => {
+  // 7. 事務局（isStaff: true）は所属していなくても操作でき、actedAsStaff が true になる（COND-012）
+  it("事務局（isStaff: true）は所属していなくても操作でき、actedAsStaff が true になる", async () => {
     const fake = createFakeMembershipRepository([regularMember]);
 
     const result = await updateMemberRoleUseCase(
@@ -254,9 +262,31 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    // 操作者の所属チェックはスキップされ、対象メンバーの所属チェックのみ（1 回）
-    expect(fake.findByGroupAndUserCallCount()).toBe(1);
+    // COND-012: 操作者の所属確認（1回）+ 対象メンバーの所属確認（1回）の計 2 回
+    expect(fake.findByGroupAndUserCallCount()).toBe(2);
     expect(fake.updateRoleCallCount()).toBe(1);
+    const auditLog = fake.lastAuditLog();
+    expect(auditLog?.actedAsStaff).toBe(true);
+  });
+
+  // 7b. 同じロールへの変更は書き込まず成功する（COND-013）
+  it("同じロールへの変更は updateRole を呼ばずに成功する", async () => {
+    const fake = createFakeMembershipRepository([adminMembership1, regularMember]);
+
+    const result = await updateMemberRoleUseCase(
+      { membershipRepository: fake.repository },
+      {
+        groupId: testGroupId,
+        actorUserId: adminMembership1.userId,
+        isStaff: false,
+        targetUserId: regularMember.userId,
+        role: MembershipRole.Member,
+        now: baseNow,
+      },
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(fake.updateRoleCallCount()).toBe(0);
   });
 
   // 8. 一般メンバーが操作すると Forbidden になり、updateRole が 1 度も呼ばれない

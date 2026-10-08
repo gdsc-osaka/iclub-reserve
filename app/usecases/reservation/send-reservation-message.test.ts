@@ -6,7 +6,7 @@ import type { ReservationMessageAudience } from "~/domain/mail/reservation-messa
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import {
@@ -80,7 +80,7 @@ const createDeps = (
   overrides: {
     reservation?: Reservation | null;
     reservationError?: boolean;
-    membership?: Membership | null;
+    membership?: StoredMembership | null;
     membershipError?: boolean;
     audience?: ReservationMessageAudience;
     recipientsQueryError?: QueryError;
@@ -127,6 +127,7 @@ const createDeps = (
       overrides.membership !== undefined
         ? overrides.membership
         : {
+            id: "gm_test",
             groupId: "grp_robotics",
             userId: "usr_member",
             role: MembershipRole.Member,
@@ -206,6 +207,7 @@ describe("sendReservationMessageUseCase", () => {
   it("一般メンバー（管理者でない）が送る場合、sentAsStaff: false で保存され、宛先は事務局のみ、送信者本人に届かず、配送依頼が呼ばれて messageId が返る", async () => {
     const { deps, createMessage, findForMessage, notifyEnqueued } = createDeps({
       membership: {
+        id: "gm_test",
         groupId: "grp_robotics",
         userId: "usr_member",
         role: MembershipRole.Member,
@@ -241,6 +243,7 @@ describe("sendReservationMessageUseCase", () => {
   it("団体管理者が送る場合も sentAsStaff: false で保存され、宛先は事務局のみとなる", async () => {
     const { deps, createMessage } = createDeps({
       membership: {
+        id: "gm_test",
         groupId: "grp_robotics",
         userId: "usr_admin",
         role: MembershipRole.Admin,
@@ -288,6 +291,7 @@ describe("sendReservationMessageUseCase", () => {
   it("その団体に所属する事務局が送る場合、sentAsStaff: false となり、宛先は（自分を除く）事務局となる", async () => {
     const { deps, createMessage } = createDeps({
       membership: {
+        id: "gm_test",
         groupId: "grp_robotics",
         userId: "usr_staff1",
         role: MembershipRole.Member,

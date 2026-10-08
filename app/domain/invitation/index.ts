@@ -1,4 +1,5 @@
 import type { ResultAsync } from "neverthrow";
+import type { AuditLogDraft } from "../audit-log";
 import type { GroupError } from "../group";
 import type { MailDraft } from "../mail/mail-outbox";
 import type { MembershipRole } from "../membership";
@@ -16,6 +17,16 @@ export type InvitationStatus = (typeof InvitationStatus)[keyof typeof Invitation
 /** 文字列がこのアプリの招待状態かどうかを判定する */
 export const isInvitationStatus = (value: string): value is InvitationStatus =>
   (Object.values(InvitationStatus) as readonly string[]).includes(value);
+
+/**
+ * 招待状態の表示用ラベル。
+ */
+export const invitationStatusLabel: Readonly<Record<InvitationStatus, string>> = {
+  [InvitationStatus.Pending]: "承諾待ち",
+  [InvitationStatus.Accepted]: "承諾済み",
+  [InvitationStatus.Rejected]: "辞退済み",
+  [InvitationStatus.Canceled]: "取り消し済み",
+};
 
 /**
  * 招待の有効期限（時間）。
@@ -186,10 +197,11 @@ export interface InvitationRepository {
     email: string,
   ): ResultAsync<Invitation | null, GroupError>;
 
-  /** 招待を作り、同じ batch で通知メールを outbox に積む（ADR-002 決定 3） */
+  /** 招待を作り、同じ batch で通知メールを outbox に積み、操作履歴を記録する（COND-013 / ADR-002 決定 3） */
   create(
     input: CreateInvitationInput,
     mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
   ): ResultAsync<CreateInvitationOutcome, GroupError>;
 
   /**
@@ -199,7 +211,11 @@ export interface InvitationRepository {
    * （画面を開いたあとに別の管理者が先に取り消した場合など）。
    * これをどう扱うかは呼び出し側（ユースケース）が決める。
    */
-  cancel(groupId: string, invitationId: string): ResultAsync<number, GroupError>;
+  cancel(
+    groupId: string,
+    invitationId: string,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<number, GroupError>;
 
   /**
    * 招待を 1 件引く。無ければ ok(null)。
@@ -224,7 +240,10 @@ export interface InvitationRepository {
    * 団体 ID を返すのは、承諾後にその団体の画面へ送るため。
    * 別に引き直さずに済むよう、UPDATE の RETURNING で受け取る。
    */
-  accept(input: AcceptInvitationInput): ResultAsync<string | null, GroupError>;
+  accept(
+    input: AcceptInvitationInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<string | null, GroupError>;
 
   /**
    * 招待を辞退し、辞退できた行数を返す。
@@ -232,5 +251,5 @@ export interface InvitationRepository {
    * 件数の考え方は `cancel` と同じ。判定の条件は `accept` とそろえる
    * （画面に出ていない招待を、古いフォームの再送信で辞退できてしまわないようにするため）。
    */
-  reject(input: RejectInvitationInput): ResultAsync<number, GroupError>;
+  reject(input: RejectInvitationInput, auditLog: AuditLogDraft): ResultAsync<number, GroupError>;
 }

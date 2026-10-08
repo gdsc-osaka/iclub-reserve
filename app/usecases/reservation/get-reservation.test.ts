@@ -5,7 +5,7 @@ import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import { ReservationErrorCode, ReservationStatus } from "~/domain/reservation";
@@ -42,7 +42,8 @@ const defaultRow: ReservationDetailRow = {
   hasProvisionalOverlap: false,
 };
 
-const membership: Membership = {
+const membership: StoredMembership = {
+  id: "gm_membership",
   groupId: "grp_robotics",
   userId: "usr_student_01",
   role: MembershipRole.Member,
@@ -54,7 +55,7 @@ const createDeps = (
   overrides: {
     row?: ReservationDetailRow | null;
     queryError?: boolean;
-    membership?: Membership | null;
+    membership?: StoredMembership | null;
     membershipDbError?: boolean;
     messages?: readonly ReservationMessageRow[];
     messageQueryError?: boolean;

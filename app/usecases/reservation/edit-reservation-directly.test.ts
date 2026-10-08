@@ -7,7 +7,7 @@ import { ReservationMailEvent, type ReservationMailAudience } from "~/domain/mai
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import {
@@ -58,7 +58,8 @@ const currentContent: ReservationContent = {
   note: approvedReservation.note,
 };
 
-const memberMembership: Membership = {
+const memberMembership: StoredMembership = {
+  id: "gm_memberMembership",
   groupId: "grp_robotics",
   userId: "usr_staff_01",
   role: MembershipRole.Member,
@@ -96,7 +97,7 @@ const argsWith = (
 const createDeps = (
   overrides: {
     reservation?: Reservation | null;
-    membership?: Membership | null;
+    membership?: StoredMembership | null;
     membershipDbError?: boolean;
     facility?: Facility;
     facilityNotFound?: boolean;

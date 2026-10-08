@@ -2,9 +2,9 @@
  * 承諾時に生成される SQL の形状を検査するテスト。
  *
  * 【なぜ SQL の形を検査するのか】
- * `db.batch()` による承諾処理は、`INSERT ... SELECT` と条件付き UPDATE の 2 文でできている。
- * `db.batch()` は中の文を無条件に全部実行するため、2 文が同じ条件を見ていないと
- * 「招待は承諾できなかったのにメンバー行だけできる」という重大な不具合になる。
+ * `db.batch()` による承諾処理は、メンバーと操作履歴の `INSERT ... SELECT` と条件付き UPDATE の 3 文でできている。
+ * `db.batch()` は中の文を無条件に全部実行するため、3 文が同じ条件を見ていないと
+ * 「招待は承諾できなかったのにメンバー行や記録だけできる」という重大な不具合になる。
  * 条件が 1 つでも欠けたり食い違ったりしていないことを、ここで押さえる。
  *
  * また、`INSERT ... SELECT` の SELECT 側は、挿入先の列と 1 対 1 に対応していなければならない。
@@ -18,6 +18,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { describe, expect, it } from "vitest";
 
 import * as schema from "~/db/schema";
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { InvitationStatus, type AcceptInvitationInput } from "~/domain/invitation";
 import type { Database } from "../db";
 import { invitationAcceptStatements } from "./invitation-repo";
@@ -37,6 +38,19 @@ const db = drizzle(undefined as unknown as D1Database, { schema }) as unknown as
 
 /** `group_member` の列。SELECT 側がこの並びと一致していることを確かめる */
 const memberColumns = ["id", "group_id", "user_id", "role", "created_at", "updated_at"];
+
+/** `audit_log` の列。SELECT 側がこの並びと一致していることを確かめる */
+const auditLogColumns = [
+  "id",
+  "occurred_at",
+  "actor_id",
+  "acted_as_staff",
+  "action",
+  "target_type",
+  "target_id",
+  "group_id",
+  "changes",
+];
 
 /** 承諾できる招待かどうかを決める 4 つの条件 */
 const acceptableConditions = [
@@ -62,8 +76,18 @@ describe("invitationAcceptStatements", () => {
     now: new Date("2026-04-01T10:00:00.000Z"),
   };
 
+  const sampleAuditLog: AuditLogDraft = {
+    occurredAt: sampleInput.now,
+    actorId: sampleInput.userId,
+    actedAsStaff: false,
+    action: AuditLogAction.InvitationAccept,
+    targetId: sampleInput.invitationId,
+    groupId: "grp_123456",
+    changes: {},
+  };
+
   it("1 文目は group_member への INSERT ... SELECT で、承諾できる条件を持ち on conflict do nothing が付く", () => {
-    const [insertStmt] = invitationAcceptStatements(db, sampleInput);
+    const [insertStmt] = invitationAcceptStatements(db, sampleInput, sampleAuditLog);
     const { sql, params } = toSQL(insertStmt);
 
     expect(sql).toContain(`insert into "group_member"`);
@@ -86,8 +110,27 @@ describe("invitationAcceptStatements", () => {
     expect(sql).toContain("do nothing");
   });
 
-  it("2 文目は group_invitation の UPDATE で、同じ条件を持ち returning に group_id が含まれる", () => {
-    const [, updateStmt] = invitationAcceptStatements(db, sampleInput);
+  it("2 文目は audit_log への INSERT ... SELECT で、同じ条件を持つ", () => {
+    const [, auditStmt] = invitationAcceptStatements(db, sampleInput, sampleAuditLog);
+    const { sql, params } = toSQL(auditStmt);
+
+    expect(sql).toContain(`insert into "audit_log"`);
+    expect(sql).toContain(`from "group_invitation"`);
+
+    for (const condition of acceptableConditions) {
+      expect(sql).toContain(condition);
+    }
+
+    expect(params.slice(-4)).toEqual([
+      sampleInput.invitationId,
+      InvitationStatus.Pending,
+      sampleInput.email,
+      sampleInput.now.getTime(),
+    ]);
+  });
+
+  it("3 文目は group_invitation の UPDATE で、同じ条件を持ち returning に group_id が含まれる", () => {
+    const [, , updateStmt] = invitationAcceptStatements(db, sampleInput, sampleAuditLog);
     const { sql, params } = toSQL(updateStmt);
 
     expect(sql).toContain(`update "group_invitation"`);
@@ -111,19 +154,26 @@ describe("invitationAcceptStatements", () => {
 
   /*
    * この処理でいちばん壊れてはいけない性質。
-   * 2 文の条件が少しでもずれると、承諾できない人がメンバーになる経路ができてしまう。
+   * 3 文の条件が少しでもずれると、承諾できない人がメンバーになる、あるいは誤った履歴が残る経路ができてしまう。
    */
-  it("2 文の WHERE の条件と値が完全に一致する", () => {
-    const [insertStmt, updateStmt] = invitationAcceptStatements(db, sampleInput);
+  it("3 文の WHERE の条件と値が完全に一致する", () => {
+    const [insertStmt, auditStmt, updateStmt] = invitationAcceptStatements(
+      db,
+      sampleInput,
+      sampleAuditLog,
+    );
     const insert = toSQL(insertStmt);
+    const audit = toSQL(auditStmt);
     const update = toSQL(updateStmt);
 
     expect(whereClauseOf(insert.sql)).toBe(whereClauseOf(update.sql));
+    expect(whereClauseOf(audit.sql)).toBe(whereClauseOf(update.sql));
     expect(insert.params.slice(-4)).toEqual(update.params.slice(-4));
+    expect(audit.params.slice(-4)).toEqual(update.params.slice(-4));
   });
 
   it("1 文目の SELECT 側の列が group_member の定義順に並ぶ", () => {
-    const [insertStmt] = invitationAcceptStatements(db, sampleInput);
+    const [insertStmt] = invitationAcceptStatements(db, sampleInput, sampleAuditLog);
     const { sql } = toSQL(insertStmt);
 
     // select から from までの SELECT 句を取り出す
@@ -137,6 +187,20 @@ describe("invitationAcceptStatements", () => {
     expect(positions.every((pos) => pos >= 0)).toBe(true);
 
     // 定義順と一致して昇順に並んでいること
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it("2 文目の SELECT 側の列が audit_log の定義順に並ぶ", () => {
+    const [, auditStmt] = invitationAcceptStatements(db, sampleInput, sampleAuditLog);
+    const { sql } = toSQL(auditStmt);
+
+    const selectClauseMatch = sql.match(/select\s+(.+?)\s+from/i);
+    expect(selectClauseMatch).not.toBeNull();
+    const selectClause = selectClauseMatch![1];
+
+    const positions = auditLogColumns.map((column) => selectClause.indexOf(`"${column}"`));
+
+    expect(positions.every((pos) => pos >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 });

@@ -55,6 +55,43 @@ describe("format-changes", () => {
       expect(text).toBe("状態: 承認待ち → 活動中");
     });
 
+    it("招待の status を invitationStatusLabel で整形する", () => {
+      const text = formatSingleChangeText("status", "pending", "accepted", {
+        targetType: AuditLogTargetType.Invitation,
+      });
+      expect(text).toBe("状態: 承諾待ち → 承諾済み");
+    });
+
+    it("事務局権限の status を invitationStatusLabel で整形する", () => {
+      const text1 = formatSingleChangeText("status", "pending", "canceled", {
+        targetType: AuditLogTargetType.StaffRole,
+      });
+      expect(text1).toBe("状態: 承諾待ち → 取り消し済み");
+
+      const text2 = formatSingleChangeText("status", "pending", "rejected", {
+        targetType: AuditLogTargetType.StaffRole,
+      });
+      expect(text2).toBe("状態: 承諾待ち → 辞退済み");
+    });
+
+    it("calendar_url と staff_invitation_id の日本語ラベルで整形する", () => {
+      const calText = formatSingleChangeText(
+        "calendar_url",
+        null,
+        "https://calendar.google.com/test",
+        defaultOptions,
+      );
+      expect(calText).toBe("カレンダー URL: https://calendar.google.com/test");
+
+      const staffInvText = formatSingleChangeText(
+        "staff_invitation_id",
+        "inv_1",
+        "inv_1",
+        defaultOptions,
+      );
+      expect(staffInvText).toBe("事務局招待: inv_1");
+    });
+
     it("役割（role）を membershipRoleLabel で整形する", () => {
       const text = formatSingleChangeText("role", "member", "admin", {
         targetType: AuditLogTargetType.Membership,

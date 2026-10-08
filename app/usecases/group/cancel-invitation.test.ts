@@ -1,11 +1,12 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import type { GroupError } from "~/domain/group";
 import { GroupErrorCode } from "~/domain/group";
-import type { InvitationRepository } from "~/domain/invitation";
+import { InvitationStatus, type Invitation, type InvitationRepository } from "~/domain/invitation";
 import type {
-  Membership,
+  StoredMembership,
   MembershipError,
   MembershipRepository,
   UpdateMembershipRoleInput,
@@ -15,14 +16,29 @@ import { cancelInvitationUseCase, type CancelInvitationArgs } from "./cancel-inv
 
 const testGroupId = "grp_robotics";
 const testInvitationId = "inv_123456";
+const testEmail = "student@ecs.osaka-u.ac.jp";
+const baseNow = new Date("2026-04-01T10:00:00.000Z");
 
-const adminMembership: Membership = {
+const defaultInvitation: Invitation = {
+  id: testInvitationId,
+  groupId: testGroupId,
+  email: testEmail,
+  role: MembershipRole.Member,
+  inviterUserId: "usr_admin",
+  expiresAt: new Date("2026-04-08T10:00:00.000Z"),
+  createdAt: baseNow,
+  status: InvitationStatus.Pending,
+};
+
+const adminMembership: StoredMembership = {
+  id: "gm_adminMembership",
   groupId: testGroupId,
   userId: "usr_admin",
   role: MembershipRole.Admin,
 };
 
-const regularMember: Membership = {
+const regularMember: StoredMembership = {
+  id: "gm_regularMember",
   groupId: testGroupId,
   userId: "usr_member",
   role: MembershipRole.Member,
@@ -32,11 +48,11 @@ interface FakeMembershipRepoOptions {
   readonly findByGroupAndUserResult?: (
     groupId: string,
     userId: string,
-  ) => ResultAsync<Membership | null, MembershipError>;
+  ) => ResultAsync<StoredMembership | null, MembershipError>;
 }
 
 const createFakeMembershipRepository = (
-  initialMemberships: readonly Membership[],
+  initialMemberships: readonly StoredMembership[],
   options: FakeMembershipRepoOptions = {},
 ) => {
   let findByGroupAndUserCallCount = 0;
@@ -78,13 +94,17 @@ interface FakeInvitationRepoOptions {
   readonly cancelResult?: (
     groupId: string,
     invitationId: string,
+    auditLog: AuditLogDraft,
   ) => ResultAsync<number, GroupError>;
+  readonly findByIdResult?: (invitationId: string) => ResultAsync<Invitation | null, GroupError>;
 }
 
 const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {}) => {
   let cancelCallCount = 0;
   let lastCancelGroupId: string | null = null;
   let lastCancelInvitationId: string | null = null;
+  let lastAuditLog: AuditLogDraft | null = null;
+  let findByIdCallCount = 0;
 
   const repository: InvitationRepository = {
     findPendingByGroupAndEmail: () =>
@@ -97,20 +117,23 @@ const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {})
         code: GroupErrorCode.DatabaseError,
         message: "create is not used in this test",
       }),
-    cancel: (groupId, invitationId) => {
+    cancel: (groupId, invitationId, auditLog) => {
       cancelCallCount += 1;
       lastCancelGroupId = groupId;
       lastCancelInvitationId = invitationId;
+      lastAuditLog = auditLog;
       if (options.cancelResult) {
-        return options.cancelResult(groupId, invitationId);
+        return options.cancelResult(groupId, invitationId, auditLog);
       }
       return okAsync(1);
     },
-    findById: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "findById is not used in this test",
-      }),
+    findById: (invitationId) => {
+      findByIdCallCount += 1;
+      if (options.findByIdResult) {
+        return options.findByIdResult(invitationId);
+      }
+      return okAsync(defaultInvitation);
+    },
     accept: () =>
       errAsync({
         code: GroupErrorCode.DatabaseError,
@@ -128,6 +151,8 @@ const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {})
     cancelCallCount: () => cancelCallCount,
     lastCancelGroupId: () => lastCancelGroupId,
     lastCancelInvitationId: () => lastCancelInvitationId,
+    lastAuditLog: () => lastAuditLog,
+    findByIdCallCount: () => findByIdCallCount,
   };
 };
 
@@ -137,6 +162,7 @@ describe("cancelInvitationUseCase", () => {
     actorUserId: "usr_admin",
     isStaff: false,
     invitationId: testInvitationId,
+    now: baseNow,
   };
 
   // 1. 管理者が取り消すと成功し、cancel に (groupId, invitationId) が渡る
@@ -156,10 +182,12 @@ describe("cancelInvitationUseCase", () => {
     expect(fakeInvitation.cancelCallCount()).toBe(1);
     expect(fakeInvitation.lastCancelGroupId()).toBe(testGroupId);
     expect(fakeInvitation.lastCancelInvitationId()).toBe(testInvitationId);
+    const auditLog = fakeInvitation.lastAuditLog();
+    expect(auditLog?.actedAsStaff).toBe(false);
   });
 
-  // 2. 事務局スタッフは所属していなくても成功し、findByGroupAndUser が呼ばれない
-  it("事務局スタッフは所属していなくても成功し、findByGroupAndUser が呼ばれない", async () => {
+  // 2. 事務局スタッフは所属していなくても成功し、actedAsStaff が true になる（COND-012）
+  it("事務局スタッフは所属していなくても成功し、actedAsStaff が true になる", async () => {
     const fakeMembership = createFakeMembershipRepository([]);
     const fakeInvitation = createFakeInvitationRepository();
 
@@ -176,8 +204,11 @@ describe("cancelInvitationUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
+    // COND-012: acted_as_staff 判定のため、事務局であっても操作者の所属を 1 回引く
+    expect(fakeMembership.findByGroupAndUserCallCount()).toBe(1);
     expect(fakeInvitation.cancelCallCount()).toBe(1);
+    const auditLog = fakeInvitation.lastAuditLog();
+    expect(auditLog?.actedAsStaff).toBe(true);
   });
 
   // 3. 一般メンバーは Forbidden
