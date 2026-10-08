@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { okAsync, safeTry, type ResultAsync } from "neverthrow";
 
+import { AuditLogAction, isActedAsStaff, type AuditLogDraft } from "~/domain/audit-log";
 import type { FacilityRepository } from "~/domain/facility";
 import type { GroupRepository } from "~/domain/group";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
@@ -8,11 +9,13 @@ import { createReservationMailDrafts, ReservationMailEvent } from "~/domain/mail
 import type { MembershipRepository } from "~/domain/membership";
 import {
   ReservationAction,
+  reservationPermissions,
   ReservationStatus,
   type Reservation,
   type ReservationError,
   type ReservationRepository,
 } from "~/domain/reservation";
+import { toReservationCreatedChanges } from "~/domain/reservation/audit-log";
 import { validateReservationDraft } from "~/domain/reservation/validation";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
@@ -20,7 +23,10 @@ import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
 import { ensureGroupIsEnabled } from "./_shared/group-enabled";
 import { toRecipientsError } from "./_shared/mail-recipients";
-import { ensureReservationPermission } from "./_shared/reservation-authorization";
+import {
+  ensureActorCan,
+  resolveReservationActorWithMembership,
+} from "./_shared/reservation-authorization";
 
 export interface CreateProvisionalReservationDeps {
   readonly reservationRepository: ReservationRepository;
@@ -94,13 +100,22 @@ export const createProvisionalReservationUseCase = (
     };
 
     yield* validateReservationDraft(args.reservation, now);
-    yield* ensureReservationPermission(
+    const actor = yield* resolveReservationActorWithMembership(
       deps,
       args.reservation.groupId,
       args,
+    );
+    yield* ensureActorCan(
+      actor,
       ReservationAction.CreateProvisional,
       "この団体で予約を申請する権限がありません。",
     );
+    const actedAsStaff = isActedAsStaff(
+      reservationPermissions,
+      actor,
+      ReservationAction.CreateProvisional,
+    );
+
     yield* ensureGroupIsEnabled(
       deps,
       args.reservation.groupId,
@@ -132,7 +147,24 @@ export const createProvisionalReservationUseCase = (
       audience,
     );
 
-    const outcome = yield* deps.reservationRepository.create(reservation, mails);
+    const auditLog: AuditLogDraft = {
+      occurredAt: now,
+      actorId: args.actorUserId,
+      actedAsStaff,
+      action: AuditLogAction.ReservationApply,
+      targetId: id,
+      groupId: args.reservation.groupId,
+      changes: toReservationCreatedChanges({
+        facilityId: args.reservation.facilityId,
+        startAt: args.reservation.startAt,
+        endAt: args.reservation.endAt,
+        headCount: args.reservation.headCount,
+        note: args.reservation.note,
+        status: ReservationStatus.Provisional,
+      }),
+    };
+
+    const outcome = yield* deps.reservationRepository.create(reservation, mails, auditLog);
     requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
 
     return okAsync({ reservationId: id });

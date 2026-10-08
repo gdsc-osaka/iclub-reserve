@@ -1,5 +1,6 @@
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import {
   FacilityAction,
   FacilityErrorCode,
@@ -7,6 +8,7 @@ import {
   type FacilityError,
   type FacilityRepository,
 } from "~/domain/facility";
+import { toFacilityUpdateChanges } from "~/domain/facility/audit-log";
 import {
   toCalendarUrl,
   validateFacilityDescription,
@@ -52,10 +54,13 @@ export interface UpdateFacilityArgs {
  *    - 新しい写真がある場合: R2 にアップロードし、古い写真は後で削除対象にする。
  *    - 写真がなく removePhoto が指定された場合: photoUrl を null にし、古い写真を削除対象にする。
  *    - いずれでもない場合: 既存の photoUrl をそのまま維持する。
- * 5. DB 更新: facility テーブルを更新。
+ * 5. 変更差分の判定（COND-013）:
+ *    - 変わった項目が無い場合は業務データも記録も書かずに成功。
+ * 6. DB 更新: facility テーブルを更新。同じ batch で操作履歴を記録する（COND-013）。
  *    - 3 で読んだ写真の URL を条件に入れる。その間に別の人が写真を変えていたら Conflict になる。
+ *    - 写真以外の項目は条件に入れていないので、読んでから書くまでに別の人が変えると、記録の変更前が実際とずれることがある。
  *    - 失敗時（Conflict を含む）: 今回新しくアップロードした写真があれば削除（ロールバック）。
- * 6. 古い写真の削除: DB 更新が成功した後に実行。削除失敗時も操作は成功として返しログを残す。
+ * 7. 古い写真の削除: DB 更新が成功した後に実行。削除失敗時も操作は成功として返しログを残す。
  */
 export const updateFacilityUseCase = (
   deps: UpdateFacilityDeps,
@@ -107,17 +112,43 @@ export const updateFacilityUseCase = (
       oldPhotoToDelete = existing.photoUrl;
     }
 
-    // 5. DB 更新
-    const updateResult = await deps.facilityRepository.update({
-      id: facilityId,
+    const changes = toFacilityUpdateChanges(existing, {
       name,
       description,
       photoUrl: newPhotoUrl,
-      expectedPhotoUrl: existing.photoUrl,
       googleCalendarId,
       calendarUrl,
-      updatedAt: args.now,
     });
+
+    // 変更がない場合は業務データも記録も書かずに成功（COND-013）
+    if (Object.keys(changes).length === 0) {
+      return okAsync(existing);
+    }
+
+    const auditLog: AuditLogDraft = {
+      occurredAt: args.now,
+      actorId: args.actorUserId,
+      actedAsStaff: true, // 事務局だけの操作なので常に true（COND-012）
+      action: AuditLogAction.FacilityUpdate,
+      targetId: facilityId,
+      groupId: null,
+      changes,
+    };
+
+    // 5. DB 更新
+    const updateResult = await deps.facilityRepository.update(
+      {
+        id: facilityId,
+        name,
+        description,
+        photoUrl: newPhotoUrl,
+        expectedPhotoUrl: existing.photoUrl,
+        googleCalendarId,
+        calendarUrl,
+        updatedAt: args.now,
+      },
+      auditLog,
+    );
 
     if (updateResult.isErr()) {
       // DB 更新失敗時は新しく置いた写真を削除してロールバック

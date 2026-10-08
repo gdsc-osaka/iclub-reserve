@@ -32,6 +32,7 @@ describe("inviteStaffUseCase", () => {
   ) => {
     let createdInput: CreateStaffInvitationInput | null = null;
     let createdMails: readonly MailDraft[] = [];
+    let createdAuditLog: unknown = null;
     const requestedMailIds: string[] = [];
 
     const staffMemberRepository: StaffMemberRepository = {
@@ -48,9 +49,10 @@ describe("inviteStaffUseCase", () => {
 
     const staffInvitationRepository: StaffInvitationRepository = {
       findPendingByEmail: () => okAsync(options.pendingInvitation ?? null),
-      create: (input, mails) => {
+      create: (input, mails, auditLog) => {
         createdInput = input;
         createdMails = mails;
+        createdAuditLog = auditLog;
         return okAsync<CreateStaffInvitationOutcome>({
           enqueuedMailIds: ["mail_created_1"],
         });
@@ -72,6 +74,7 @@ describe("inviteStaffUseCase", () => {
       deps: { staffMemberRepository, staffInvitationRepository, mailOutboxNotifier },
       getCreatedInput: () => createdInput,
       getCreatedMails: () => createdMails,
+      getCreatedAuditLog: () => createdAuditLog,
       getRequestedMailIds: () => requestedMailIds,
     };
   };
@@ -159,7 +162,8 @@ describe("inviteStaffUseCase", () => {
   });
 
   it("正常に招待が作成され、メール下書き登録と即時配送依頼が行われる", async () => {
-    const { deps, getCreatedInput, getCreatedMails, getRequestedMailIds } = setupDeps();
+    const { deps, getCreatedInput, getCreatedMails, getCreatedAuditLog, getRequestedMailIds } =
+      setupDeps();
     const result = await inviteStaffUseCase(deps, baseArgs);
 
     expect(result.isOk()).toBe(true);
@@ -175,5 +179,16 @@ describe("inviteStaffUseCase", () => {
     expect(mails[0].to.address).toBe(baseArgs.email);
 
     expect(getRequestedMailIds()).toEqual(["mail_created_1"]);
+
+    expect(getCreatedAuditLog()).toMatchObject({
+      action: "staff_role.invite",
+      actorId: baseArgs.actorUserId,
+      actedAsStaff: true,
+      targetId: expect.any(String),
+      groupId: null,
+      changes: {
+        email: { before: null, after: baseArgs.email },
+      },
+    });
   });
 });

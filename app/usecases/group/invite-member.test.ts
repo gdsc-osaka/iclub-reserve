@@ -1,6 +1,7 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import type { Group, GroupError, GroupRepository, UpdateGroupNameInput } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
 import {
@@ -13,7 +14,7 @@ import {
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import type {
-  Membership,
+  StoredMembership,
   MembershipError,
   MembershipRepository,
   UpdateMembershipRoleInput,
@@ -31,13 +32,15 @@ const testGroup: Group = {
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
-const adminMembership: Membership = {
+const adminMembership: StoredMembership = {
+  id: "gm_adminMembership",
   groupId: testGroupId,
   userId: "usr_admin",
   role: MembershipRole.Admin,
 };
 
-const regularMember: Membership = {
+const regularMember: StoredMembership = {
+  id: "gm_regularMember",
   groupId: testGroupId,
   userId: "usr_member",
   role: MembershipRole.Member,
@@ -90,11 +93,11 @@ interface FakeMembershipRepoOptions {
   readonly findByGroupAndUserResult?: (
     groupId: string,
     userId: string,
-  ) => ResultAsync<Membership | null, MembershipError>;
+  ) => ResultAsync<StoredMembership | null, MembershipError>;
 }
 
 const createFakeMembershipRepository = (
-  initialMemberships: readonly Membership[],
+  initialMemberships: readonly StoredMembership[],
   options: FakeMembershipRepoOptions = {},
 ) => {
   let findByGroupAndUserCallCount = 0;
@@ -137,6 +140,7 @@ interface FakeInvitationRepoOptions {
   readonly createResult?: (
     input: CreateInvitationInput,
     mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
   ) => ResultAsync<CreateInvitationOutcome, GroupError>;
 }
 
@@ -145,18 +149,20 @@ const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {})
   let createCallCount = 0;
   let lastCreateInput: CreateInvitationInput | null = null;
   let lastCreateMails: readonly MailDraft[] | null = null;
+  let lastAuditLog: AuditLogDraft | null = null;
 
   const repository: InvitationRepository = {
     findPendingByGroupAndEmail: (_groupId, _email) => {
       findPendingCallCount += 1;
       return okAsync(options.pendingInvitation ?? null);
     },
-    create: (input, mails) => {
+    create: (input, mails, auditLog) => {
       createCallCount += 1;
       lastCreateInput = input;
       lastCreateMails = mails;
+      lastAuditLog = auditLog;
       if (options.createResult) {
-        return options.createResult(input, mails);
+        return options.createResult(input, mails, auditLog);
       }
       return okAsync({ enqueuedMailIds: ["mail_1"] });
     },
@@ -188,6 +194,7 @@ const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {})
     createCallCount: () => createCallCount,
     lastCreateInput: () => lastCreateInput,
     lastCreateMails: () => lastCreateMails,
+    lastAuditLog: () => lastAuditLog,
   };
 };
 
@@ -324,8 +331,8 @@ describe("inviteMemberUseCase", () => {
     expect(fakeNotifier.notifyEnqueuedCallCount()).toBe(1);
   });
 
-  // 5. 事務局スタッフは所属していなくても成功し、membershipRepository.findByGroupAndUser が呼ばれない
-  it("事務局スタッフは所属していなくても成功し、findByGroupAndUser が呼ばれない", async () => {
+  // 5. 事務局スタッフは所属していなくても成功し、actedAsStaff が true になる（COND-012）
+  it("事務局スタッフは所属していなくても成功し、actedAsStaff が true になる", async () => {
     const fakeGroup = createFakeGroupRepository();
     const fakeMembership = createFakeMembershipRepository([]); // 所属なし
     const fakeInvitation = createFakeInvitationRepository();
@@ -346,8 +353,11 @@ describe("inviteMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
+    // COND-012: acted_as_staff 判定のため、事務局であっても操作者の所属を 1 回引く
+    expect(fakeMembership.findByGroupAndUserCallCount()).toBe(1);
     expect(fakeInvitation.createCallCount()).toBe(1);
+    const auditLog = fakeInvitation.lastAuditLog();
+    expect(auditLog?.actedAsStaff).toBe(true);
   });
 
   // 6. 一般メンバー（member）が呼ぶと Forbidden

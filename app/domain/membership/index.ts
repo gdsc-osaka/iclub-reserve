@@ -1,4 +1,5 @@
 import type { ResultAsync } from "neverthrow";
+import type { AuditLogDraft } from "../audit-log";
 import type { PermissionTable } from "../authz";
 import { rolesCan } from "../authz";
 import type { BaseError } from "../error";
@@ -40,6 +41,16 @@ export interface Membership {
   readonly groupId: string;
   readonly userId: string;
   readonly role: MembershipRole;
+}
+
+/**
+ * DB から読んだ所属。`group_member` 行の主キーを持つ。
+ *
+ * 操作履歴（INFO-008）の target_id にはこの ID を入れる。
+ * 認可の判定（`Actor`）には要らないので、`Membership` とは分けてある。
+ */
+export interface StoredMembership extends Membership {
+  readonly id: string;
 }
 
 /**
@@ -158,7 +169,7 @@ export interface MembershipRepository {
   findByGroupAndUser(
     groupId: string,
     userId: string,
-  ): ResultAsync<Membership | null, MembershipError>;
+  ): ResultAsync<StoredMembership | null, MembershipError>;
 
   /**
    * その団体の管理者の人数を数える（最後の管理者の保護に使う）。
@@ -183,12 +194,19 @@ export interface MembershipRepository {
    * また、member テーブルに一意制約はないが、同じユーザーが同じ団体に複数行持つのは異常なデータ状態であり、
    * その場合もまとめて反映されるほうが望ましいため。
    */
-  updateRole(input: UpdateMembershipRoleInput): ResultAsync<number, MembershipError>;
+  updateRole(
+    input: UpdateMembershipRoleInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<number, MembershipError>;
 
   /**
    * 所属を取り消し、削除した行数を返す。
    *
    * 戻り値の件数の考え方および (groupId, userId) の組で指定する理由は updateRole と同様。
    */
-  remove(groupId: string, userId: string): ResultAsync<number, MembershipError>;
+  remove(
+    groupId: string,
+    userId: string,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<number, MembershipError>;
 }

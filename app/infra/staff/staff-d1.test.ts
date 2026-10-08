@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { useD1TestDb } from "../d1-test-db";
 
+import type { AuditLogAction, AuditLogChanges, AuditLogDraft } from "~/domain/audit-log";
 import { InvitationStatus } from "~/domain/invitation";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { createStaffInvitationRepository } from "./staff-invitation-repo";
@@ -12,6 +13,28 @@ import { createStaffMemberRepository } from "./staff-member-repo";
  * ここでは本物の D1 の batch を通るので、どちらかが失敗すれば両方とも巻き戻る、という本番と同じ振る舞いの上で確かめている。
  */
 const testDb = useD1TestDb();
+
+const dummyAuditLog = (
+  action: AuditLogAction,
+  targetId: string,
+  changes: AuditLogChanges = {},
+): AuditLogDraft => ({
+  occurredAt: new Date("2026-10-01T12:00:00Z"),
+  actorId: "usr_staff_01",
+  actedAsStaff: true,
+  action,
+  targetId,
+  groupId: null,
+  changes,
+});
+
+const countAuditLogs = async (targetId: string): Promise<number> => {
+  const row = await testDb.d1
+    .prepare(`SELECT COUNT(*) as count FROM "audit_log" WHERE target_id = ?`)
+    .bind(targetId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+};
 
 describe("Staff Repositories & Query (D1)", () => {
   it("招待の行と outbox のメールが入り、enqueuedMailIds が返る", async () => {
@@ -36,6 +59,10 @@ describe("Staff Repositories & Query (D1)", () => {
       text: "招待本文",
     };
 
+    const auditLog = dummyAuditLog("staff_role.invite", "inv_1", {
+      email: { before: null, after: "new@osaka-u.ac.jp" },
+    });
+
     const result = await repo.create(
       {
         id: "inv_1",
@@ -45,12 +72,14 @@ describe("Staff Repositories & Query (D1)", () => {
         createdAt: new Date(),
       },
       [mailDraft],
+      auditLog,
     );
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
       expect(result.value.enqueuedMailIds).toHaveLength(1);
     }
+    expect(await countAuditLogs("inv_1")).toBe(1);
 
     const invitationRow = (await testDb.d1
       .prepare(`SELECT * FROM "staff_invitation" WHERE id = ?`)
@@ -103,25 +132,40 @@ describe("Staff Repositories & Query (D1)", () => {
     const repo = createStaffInvitationRepository(testDb.db);
 
     // pending のものは取り消せる
-    const cancelPending = await repo.cancel("inv_pending");
+    const cancelPending = await repo.cancel(
+      "inv_pending",
+      dummyAuditLog("staff_role.cancel_invitation", "inv_pending", {
+        email: { before: "p@osaka-u.ac.jp", after: "p@osaka-u.ac.jp" },
+        status: { before: "pending", after: "canceled" },
+      }),
+    );
     expect(cancelPending.isOk()).toBe(true);
     if (cancelPending.isOk()) {
       expect(cancelPending.value).toBe(1);
     }
+    expect(await countAuditLogs("inv_pending")).toBe(1);
 
-    // すでに取り消されたものは 0 件
-    const cancelCanceled = await repo.cancel("inv_canceled");
+    // すでに取り消されたものは 0 件で履歴も書かない
+    const cancelCanceled = await repo.cancel(
+      "inv_canceled",
+      dummyAuditLog("staff_role.cancel_invitation", "inv_canceled"),
+    );
     expect(cancelCanceled.isOk()).toBe(true);
     if (cancelCanceled.isOk()) {
       expect(cancelCanceled.value).toBe(0);
     }
+    expect(await countAuditLogs("inv_canceled")).toBe(0);
 
-    // 存在しないものは 0 件
-    const cancelNonExistent = await repo.cancel("inv_not_exist");
+    // 存在しないものは 0 件で履歴も書かない
+    const cancelNonExistent = await repo.cancel(
+      "inv_not_exist",
+      dummyAuditLog("staff_role.cancel_invitation", "inv_not_exist"),
+    );
     expect(cancelNonExistent.isOk()).toBe(true);
     if (cancelNonExistent.isOk()) {
       expect(cancelNonExistent.value).toBe(0);
     }
+    expect(await countAuditLogs("inv_not_exist")).toBe(0);
   });
 
   it("revoke の条件: 事務局が 2 人のとき片方を剥奪すると 1 件、続けてもう片方を剥奪すると 0 件で is_staff が true のまま残る、事務局でない人は 0 件", async () => {
@@ -134,11 +178,18 @@ describe("Staff Repositories & Query (D1)", () => {
 
     // 事務局が 2 人のとき、片方を剥奪すると 1 件
     const now = new Date("2026-10-05T12:00:00Z");
-    const revoke1 = await repo.revoke("usr_staff_1", now);
+    const revoke1 = await repo.revoke(
+      "usr_staff_1",
+      now,
+      dummyAuditLog("staff_role.revoke", "usr_staff_1", {
+        is_staff: { before: true, after: false },
+      }),
+    );
     expect(revoke1.isOk()).toBe(true);
     if (revoke1.isOk()) {
       expect(revoke1.value).toBe(1);
     }
+    expect(await countAuditLogs("usr_staff_1")).toBe(1);
 
     // 剥奪されたことを確認
     const row1 = (await testDb.d1
@@ -150,11 +201,16 @@ describe("Staff Repositories & Query (D1)", () => {
     expect(row1.is_staff).toBe(0);
 
     // 続けてもう片方を剥奪すると 0 件（最後の事務局保護 COND-014）
-    const revoke2 = await repo.revoke("usr_staff_2", now);
+    const revoke2 = await repo.revoke(
+      "usr_staff_2",
+      now,
+      dummyAuditLog("staff_role.revoke", "usr_staff_2"),
+    );
     expect(revoke2.isOk()).toBe(true);
     if (revoke2.isOk()) {
       expect(revoke2.value).toBe(0);
     }
+    expect(await countAuditLogs("usr_staff_2")).toBe(0);
 
     // is_staff が true のまま残る
     const row2 = (await testDb.d1
@@ -166,11 +222,16 @@ describe("Staff Repositories & Query (D1)", () => {
     expect(row2.is_staff).toBe(1);
 
     // 事務局でない人は 0 件
-    const revokeNormal = await repo.revoke("usr_normal", now);
+    const revokeNormal = await repo.revoke(
+      "usr_normal",
+      now,
+      dummyAuditLog("staff_role.revoke", "usr_normal"),
+    );
     expect(revokeNormal.isOk()).toBe(true);
     if (revokeNormal.isOk()) {
       expect(revokeNormal.value).toBe(0);
     }
+    expect(await countAuditLogs("usr_normal")).toBe(0);
   });
 
   it("事務局の検索: メールアドレスは大文字混じりで登録されていても一致し、事務局でない人は返さない", async () => {
@@ -384,15 +445,23 @@ describe("Staff Repositories & Query (D1)", () => {
       ]);
 
       const repo = createStaffInvitationRepository(testDb.db);
-      const result = await repo.accept({
-        invitationId: "inv_valid",
-        email: targetEmail,
-        userId: "usr_invitee",
-        now,
+      const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee", {
+        is_staff: { before: false, after: true },
+        staff_invitation_id: { before: "inv_valid", after: "inv_valid" },
       });
+      const result = await repo.accept(
+        {
+          invitationId: "inv_valid",
+          email: targetEmail,
+          userId: "usr_invitee",
+          now,
+        },
+        auditLog,
+      );
 
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap()).toBe(true);
+      expect(await countAuditLogs("usr_invitee")).toBe(1);
 
       // user.is_staff が 1 になっている
       const userRow = (await testDb.d1
@@ -409,7 +478,7 @@ describe("Staff Repositories & Query (D1)", () => {
       expect(invRow.status).toBe(InvitationStatus.Accepted);
     });
 
-    it("期限切れの招待は false を返し、is_staff は変わらない", async () => {
+    it("期限切れの招待は false を返し、is_staff は変わらず履歴も書かない", async () => {
       await testDb.seed([
         `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
         "usr_staff_01",
@@ -441,15 +510,20 @@ describe("Staff Repositories & Query (D1)", () => {
       ]);
 
       const repo = createStaffInvitationRepository(testDb.db);
-      const result = await repo.accept({
-        invitationId: "inv_expired",
-        email: targetEmail,
-        userId: "usr_invitee",
-        now,
-      });
+      const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee");
+      const result = await repo.accept(
+        {
+          invitationId: "inv_expired",
+          email: targetEmail,
+          userId: "usr_invitee",
+          now,
+        },
+        auditLog,
+      );
 
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap()).toBe(false);
+      expect(await countAuditLogs("usr_invitee")).toBe(0);
 
       const userRow = (await testDb.d1
         .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
@@ -464,7 +538,7 @@ describe("Staff Repositories & Query (D1)", () => {
       expect(invRow.status).toBe(InvitationStatus.Pending);
     });
 
-    it("取り消し済み・承諾済みの招待は false を返し、is_staff は変わらない", async () => {
+    it("取り消し済み・承諾済みの招待は false を返し、is_staff は変わらず履歴も書かない", async () => {
       await testDb.seed([
         `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
         "usr_staff_01",
@@ -505,22 +579,30 @@ describe("Staff Repositories & Query (D1)", () => {
       ]);
 
       const repo = createStaffInvitationRepository(testDb.db);
+      const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee");
 
-      const resCanceled = await repo.accept({
-        invitationId: "inv_canceled",
-        email: targetEmail,
-        userId: "usr_invitee",
-        now,
-      });
+      const resCanceled = await repo.accept(
+        {
+          invitationId: "inv_canceled",
+          email: targetEmail,
+          userId: "usr_invitee",
+          now,
+        },
+        auditLog,
+      );
       expect(resCanceled._unsafeUnwrap()).toBe(false);
 
-      const resAccepted = await repo.accept({
-        invitationId: "inv_accepted",
-        email: targetEmail,
-        userId: "usr_invitee",
-        now,
-      });
+      const resAccepted = await repo.accept(
+        {
+          invitationId: "inv_accepted",
+          email: targetEmail,
+          userId: "usr_invitee",
+          now,
+        },
+        auditLog,
+      );
       expect(resAccepted._unsafeUnwrap()).toBe(false);
+      expect(await countAuditLogs("usr_invitee")).toBe(0);
 
       const userRow = (await testDb.d1
         .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
@@ -529,7 +611,7 @@ describe("Staff Repositories & Query (D1)", () => {
       expect(userRow.is_staff).toBe(0);
     });
 
-    it("宛先違いの招待は false を返し、is_staff は変わらない", async () => {
+    it("宛先違いの招待は false を返し、is_staff は変わらず履歴も書かない", async () => {
       await testDb.seed([
         `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
         "usr_staff_01",
@@ -561,14 +643,19 @@ describe("Staff Repositories & Query (D1)", () => {
       ]);
 
       const repo = createStaffInvitationRepository(testDb.db);
-      const result = await repo.accept({
-        invitationId: "inv_valid",
-        email: "other@osaka-u.ac.jp",
-        userId: "usr_invitee",
-        now,
-      });
+      const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee");
+      const result = await repo.accept(
+        {
+          invitationId: "inv_valid",
+          email: "other@osaka-u.ac.jp",
+          userId: "usr_invitee",
+          now,
+        },
+        auditLog,
+      );
 
       expect(result._unsafeUnwrap()).toBe(false);
+      expect(await countAuditLogs("usr_invitee")).toBe(0);
       const userRow = (await testDb.d1
         .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
         .bind("usr_invitee")
@@ -576,7 +663,7 @@ describe("Staff Repositories & Query (D1)", () => {
       expect(userRow.is_staff).toBe(0);
     });
 
-    it("すでに事務局の人が承諾しても true になり、招待は accepted になる", async () => {
+    it("すでに事務局の人が承諾しても true になり、招待は accepted になり履歴も 1 行書く", async () => {
       await testDb.seed([
         `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
         "usr_already_staff",
@@ -598,14 +685,22 @@ describe("Staff Repositories & Query (D1)", () => {
       ]);
 
       const repo = createStaffInvitationRepository(testDb.db);
-      const result = await repo.accept({
-        invitationId: "inv_valid",
-        email: targetEmail,
-        userId: "usr_already_staff",
-        now,
+      const auditLog = dummyAuditLog("staff_role.accept", "usr_already_staff", {
+        is_staff: { before: true, after: true },
+        staff_invitation_id: { before: "inv_valid", after: "inv_valid" },
       });
+      const result = await repo.accept(
+        {
+          invitationId: "inv_valid",
+          email: targetEmail,
+          userId: "usr_already_staff",
+          now,
+        },
+        auditLog,
+      );
 
       expect(result._unsafeUnwrap()).toBe(true);
+      expect(await countAuditLogs("usr_already_staff")).toBe(1);
       const userRow = (await testDb.d1
         .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
         .bind("usr_already_staff")
@@ -625,7 +720,7 @@ describe("Staff Repositories & Query (D1)", () => {
     const validExpiresAt = new Date("2026-04-03T12:00:00.000Z");
     const targetEmail = "invitee@osaka-u.ac.jp";
 
-    it("辞退で status が rejected になり、件数 1 が返る", async () => {
+    it("辞退で status が rejected になり、件数 1 が返り履歴も書く", async () => {
       await testDb.seed([
         `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
         "usr_staff_01",
@@ -647,14 +742,22 @@ describe("Staff Repositories & Query (D1)", () => {
       ]);
 
       const repo = createStaffInvitationRepository(testDb.db);
-      const result = await repo.reject({
-        invitationId: "inv_reject",
-        email: targetEmail,
-        now,
+      const auditLog = dummyAuditLog("staff_role.decline", "inv_reject", {
+        email: { before: targetEmail, after: targetEmail },
+        status: { before: "pending", after: "rejected" },
       });
+      const result = await repo.reject(
+        {
+          invitationId: "inv_reject",
+          email: targetEmail,
+          now,
+        },
+        auditLog,
+      );
 
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap()).toBe(1);
+      expect(await countAuditLogs("inv_reject")).toBe(1);
 
       const invRow = (await testDb.d1
         .prepare(`SELECT status FROM "staff_invitation" WHERE id = ?`)
@@ -663,7 +766,7 @@ describe("Staff Repositories & Query (D1)", () => {
       expect(invRow.status).toBe(InvitationStatus.Rejected);
     });
 
-    it("宛先違い・期限切れ・存在しない招待の辞退は件数 0 が返る", async () => {
+    it("宛先違い・期限切れ・存在しない招待の辞退は件数 0 が返り履歴も書かない", async () => {
       await testDb.seed([
         `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
         "usr_staff_01",
@@ -695,19 +798,28 @@ describe("Staff Repositories & Query (D1)", () => {
       ]);
 
       const repo = createStaffInvitationRepository(testDb.db);
-      const diffEmail = await repo.reject({
-        invitationId: "inv_other",
-        email: "wrong@osaka-u.ac.jp",
-        now,
-      });
+      const auditLog = dummyAuditLog("staff_role.decline", "inv_other");
+      const diffEmail = await repo.reject(
+        {
+          invitationId: "inv_other",
+          email: "wrong@osaka-u.ac.jp",
+          now,
+        },
+        auditLog,
+      );
       expect(diffEmail._unsafeUnwrap()).toBe(0);
+      expect(await countAuditLogs("inv_other")).toBe(0);
 
-      const expired = await repo.reject({
-        invitationId: "inv_expired",
-        email: targetEmail,
-        now,
-      });
+      const expired = await repo.reject(
+        {
+          invitationId: "inv_expired",
+          email: targetEmail,
+          now,
+        },
+        dummyAuditLog("staff_role.decline", "inv_expired"),
+      );
       expect(expired._unsafeUnwrap()).toBe(0);
+      expect(await countAuditLogs("inv_expired")).toBe(0);
 
       // 0 件だった招待は、承諾待ちのまま残る
       const statuses = (
@@ -721,12 +833,16 @@ describe("Staff Repositories & Query (D1)", () => {
         InvitationStatus.Pending,
       ]);
 
-      const notFound = await repo.reject({
-        invitationId: "inv_non_exist",
-        email: targetEmail,
-        now,
-      });
+      const notFound = await repo.reject(
+        {
+          invitationId: "inv_non_exist",
+          email: targetEmail,
+          now,
+        },
+        dummyAuditLog("staff_role.decline", "inv_non_exist"),
+      );
       expect(notFound._unsafeUnwrap()).toBe(0);
+      expect(await countAuditLogs("inv_non_exist")).toBe(0);
     });
   });
 });

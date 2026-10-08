@@ -1,9 +1,16 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import type { GroupError } from "~/domain/group";
 import { GroupErrorCode } from "~/domain/group";
-import type { AcceptInvitationInput, Invitation, InvitationRepository } from "~/domain/invitation";
+import {
+  InvitationStatus,
+  type AcceptInvitationInput,
+  type Invitation,
+  type InvitationRepository,
+} from "~/domain/invitation";
+import { MembershipRole } from "~/domain/membership";
 import { acceptInvitationUseCase, type AcceptInvitationArgs } from "./accept-invitation";
 
 const testInvitationId = "inv_123456";
@@ -12,14 +19,29 @@ const testUserId = "usr_student";
 const testEmail = "student@ecs.osaka-u.ac.jp";
 const baseNow = new Date("2026-04-01T10:00:00.000Z");
 
+const defaultInvitation: Invitation = {
+  id: testInvitationId,
+  groupId: testGroupId,
+  email: testEmail,
+  role: MembershipRole.Member,
+  inviterUserId: "usr_inviter",
+  expiresAt: new Date("2026-04-08T10:00:00.000Z"),
+  createdAt: baseNow,
+  status: InvitationStatus.Pending,
+};
+
 interface FakeInvitationRepoOptions {
-  readonly acceptResult?: (input: AcceptInvitationInput) => ResultAsync<string | null, GroupError>;
+  readonly acceptResult?: (
+    input: AcceptInvitationInput,
+    auditLog: AuditLogDraft,
+  ) => ResultAsync<string | null, GroupError>;
   readonly findByIdResult?: (invitationId: string) => ResultAsync<Invitation | null, GroupError>;
 }
 
 const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {}) => {
   let acceptCallCount = 0;
   let lastAcceptInput: AcceptInvitationInput | null = null;
+  let lastAuditLog: AuditLogDraft | null = null;
   let findByIdCallCount = 0;
 
   const repository: InvitationRepository = {
@@ -43,16 +65,14 @@ const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {})
       if (options.findByIdResult) {
         return options.findByIdResult(invitationId);
       }
-      return errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "findById should not be called",
-      });
+      return okAsync(defaultInvitation);
     },
-    accept: (input) => {
+    accept: (input, auditLog) => {
       acceptCallCount += 1;
       lastAcceptInput = input;
+      lastAuditLog = auditLog;
       if (options.acceptResult) {
-        return options.acceptResult(input);
+        return options.acceptResult(input, auditLog);
       }
       return okAsync(testGroupId);
     },
@@ -67,6 +87,7 @@ const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {})
     repository,
     acceptCallCount: () => acceptCallCount,
     lastAcceptInput: () => lastAcceptInput,
+    lastAuditLog: () => lastAuditLog,
     findByIdCallCount: () => findByIdCallCount,
   };
 };
@@ -177,12 +198,23 @@ describe("acceptInvitationUseCase", () => {
     }
   });
 
-  // 6. findById が 1 度も呼ばれない（事前 SELECT をしていないことの確認）
-  it("事前 SELECT を行わず、findById が 1 度も呼ばれない", async () => {
+  // 6. findById が 1 度呼ばれ、操作履歴が正しく渡る（COND-013）
+  it("事前 SELECT で findById が呼ばれ、操作履歴が渡る", async () => {
     const fakeInvitation = createFakeInvitationRepository();
 
     await acceptInvitationUseCase({ invitationRepository: fakeInvitation.repository }, validArgs);
 
-    expect(fakeInvitation.findByIdCallCount()).toBe(0);
+    expect(fakeInvitation.findByIdCallCount()).toBe(1);
+    const auditLog = fakeInvitation.lastAuditLog();
+    expect(auditLog).not.toBeNull();
+    expect(auditLog?.action).toBe(AuditLogAction.InvitationAccept);
+    expect(auditLog?.actorId).toBe(testUserId);
+    expect(auditLog?.targetId).toBe(testInvitationId);
+    expect(auditLog?.groupId).toBe(testGroupId);
+    expect(auditLog?.changes).toEqual({
+      email: { before: testEmail, after: testEmail },
+      role: { before: MembershipRole.Member, after: MembershipRole.Member },
+      status: { before: InvitationStatus.Pending, after: InvitationStatus.Accepted },
+    });
   });
 });

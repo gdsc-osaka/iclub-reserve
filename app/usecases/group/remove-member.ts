@@ -1,12 +1,15 @@
 import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
+import { AuditLogAction, isActedAsStaff, type AuditLogDraft } from "~/domain/audit-log";
 import type { GroupError } from "~/domain/group";
-import { GroupAction } from "~/domain/group";
+import { GroupAction, groupPermissions } from "~/domain/group";
 import type { MembershipRepository } from "~/domain/membership";
 import { MembershipRole } from "~/domain/membership";
+import { toMembershipRemoveChanges } from "~/domain/membership/audit-log";
 import {
-  ensureGroupPermission,
+  ensureActorCan,
   groupNotFound,
+  resolveGroupActorWithMembership,
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import { ensureNotLastAdmin } from "./_shared/last-admin";
@@ -23,6 +26,7 @@ export interface RemoveMemberArgs {
   readonly isStaff: boolean;
   /** 団体から外す相手のユーザー ID */
   readonly targetUserId: string;
+  readonly now: Date;
 }
 
 export interface RemoveMemberResult {
@@ -37,11 +41,12 @@ export interface RemoveMemberResult {
  * 入力の検証を認可より先に置いている。検証の結果は特定の団体に依存しないので、
  * 先に返しても団体の有無は漏れず、無効なリクエストで D1 を往復せずに済む。
  * 認可そのものの判断（事務局を通す・存在を秘匿する・足りない権限を伝える）は
- * ensureGroupPermission が持つ（COND-009 / COND-011）。
+ * resolveGroupActorWithMembership と ensureActorCan が持つ（COND-009 / COND-011）。
  *
  * 【同時実行の限界について】
  * Cloudflare D1 では複数クエリにまたがる厳密なトランザクションを張れないため、
  * 2 人の管理者が同時に互いを削除した場合、管理者が 0 人になる余地が理論上残る。
+ * また楽観ロックが無いため、読んでから書くまでに別の人が変えると記録の変更前が実際とずれることがある。
  * それでも事務局スタッフ（COND-009）が介入してメンバーを追加・管理者に指名できるので、
  * 過剰な排他制御は行わず、この割り切りを許容している。
  */
@@ -57,7 +62,12 @@ export const removeMemberUseCase = (
     const targetUserId = args.targetUserId.trim();
     if (targetUserId === "") return errAsync(memberNotSpecified());
 
-    yield* ensureGroupPermission(deps, { ...args, groupId }, GroupAction.RemoveMember);
+    const actor = yield* resolveGroupActorWithMembership(deps, {
+      groupId,
+      actorUserId: args.actorUserId,
+      isStaff: args.isStaff,
+    });
+    yield* ensureActorCan(actor, GroupAction.RemoveMember);
 
     const target = yield* deps.membershipRepository
       .findByGroupAndUser(groupId, targetUserId)
@@ -71,8 +81,20 @@ export const removeMemberUseCase = (
       "管理者が 0 人になるため、最後の管理者は削除できません。先に別のメンバーを管理者にしてください。",
     );
 
+    const actedAsStaff = isActedAsStaff(groupPermissions, actor, GroupAction.RemoveMember);
+
+    const auditLog: AuditLogDraft = {
+      occurredAt: args.now,
+      actorId: args.actorUserId,
+      actedAsStaff,
+      action: AuditLogAction.MembershipRemove,
+      targetId: target.id,
+      groupId,
+      changes: toMembershipRemoveChanges(targetUserId, target.role),
+    };
+
     const removedCount = yield* deps.membershipRepository
-      .remove(groupId, targetUserId)
+      .remove(groupId, targetUserId, auditLog)
       .mapErr(toGroupDatabaseError);
     // 存在は確認済みだが、そこから削除までの間に別の操作で外されていることがある
     if (removedCount === 0) return errAsync(memberNotFound());

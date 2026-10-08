@@ -1,4 +1,5 @@
 import type { ResultAsync } from "neverthrow";
+import type { AuditLogDraft } from "../audit-log";
 import type { PermissionTable } from "../authz";
 import { ErrorKind, type BaseError } from "../error";
 import { MembershipRole, StaffRole, type ActorRole } from "../membership";
@@ -246,20 +247,23 @@ export interface CreateGroupInput {
 
 export interface GroupRepository {
   findById(id: string): ResultAsync<Group, GroupError>;
-  updateName(input: UpdateGroupNameInput): ResultAsync<Group, GroupError>;
+  updateName(input: UpdateGroupNameInput, auditLog: AuditLogDraft): ResultAsync<Group, GroupError>;
   /**
    * 団体のステータスを変更する。
    *
    * 更新条件として `WHERE id = ? AND status = from` を付与し、
    * 更新された行が 0 件の場合は InvalidTransition を返す。
    */
-  updateStatus(input: UpdateGroupStatusInput): ResultAsync<Group, GroupError>;
+  updateStatus(
+    input: UpdateGroupStatusInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Group, GroupError>;
   /**
-   * 団体と初期メンバーを 1 つの `db.batch()` で作成する。
+   * 団体と初期メンバー、および操作履歴を 1 つの `db.batch()` で作成する（COND-013）。
    *
    * `group_member` も同時に書き込むが、2 つの文を 1 つの batch に載せて
    * トランザクション整合性を保つ必要があるため、GroupRepository のメソッドとして配置している
    * （`invitation-repo.ts` の `accept` と同様の構成）。
    */
-  create(input: CreateGroupInput): ResultAsync<Group, GroupError>;
+  create(input: CreateGroupInput, auditLog: AuditLogDraft): ResultAsync<Group, GroupError>;
 }

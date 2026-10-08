@@ -1,7 +1,9 @@
 import { createId } from "@paralleldrive/cuid2";
 import { errAsync, type ResultAsync } from "neverthrow";
 
-import type { Group, GroupError, GroupRepository } from "~/domain/group";
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
+import { GroupStatus, type Group, type GroupError, type GroupRepository } from "~/domain/group";
+import { toGroupCreatedChanges } from "~/domain/group/audit-log";
 import { validateGroupName } from "~/domain/group/group-name";
 
 export interface CreateGroupDeps {
@@ -46,12 +48,31 @@ export const createGroupUseCase = (
   }
   const validatedName = nameValidationResult.value;
 
-  // 2. 団体と初期管理者を作成する
-  return deps.groupRepository.create({
-    id: createId(),
-    name: validatedName,
-    ownerUserId: args.actorUserId,
-    membershipId: createId(),
-    now: args.now,
-  });
+  const groupId = createId();
+
+  // 2. 操作履歴のドラフトを組み立てる（COND-013 / #11）
+  const auditLog: AuditLogDraft = {
+    occurredAt: args.now,
+    actorId: args.actorUserId,
+    actedAsStaff: false,
+    action: AuditLogAction.GroupCreate,
+    targetId: groupId,
+    groupId,
+    changes: toGroupCreatedChanges({
+      name: validatedName,
+      status: GroupStatus.Pending,
+    }),
+  };
+
+  // 3. 団体と初期管理者、および操作履歴を作成する
+  return deps.groupRepository.create(
+    {
+      id: groupId,
+      name: validatedName,
+      ownerUserId: args.actorUserId,
+      membershipId: createId(),
+      now: args.now,
+    },
+    auditLog,
+  );
 };

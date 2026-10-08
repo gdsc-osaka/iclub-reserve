@@ -1,13 +1,14 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction } from "~/domain/audit-log";
 import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { ReservationMailEvent, type ReservationMailAudience } from "~/domain/mail/reservation-mail";
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import {
@@ -58,7 +59,8 @@ const currentContent: ReservationContent = {
   note: approvedReservation.note,
 };
 
-const memberMembership: Membership = {
+const memberMembership: StoredMembership = {
+  id: "gm_memberMembership",
   groupId: "grp_robotics",
   userId: "usr_staff_01",
   role: MembershipRole.Member,
@@ -96,7 +98,7 @@ const argsWith = (
 const createDeps = (
   overrides: {
     reservation?: Reservation | null;
-    membership?: Membership | null;
+    membership?: StoredMembership | null;
     membershipDbError?: boolean;
     facility?: Facility;
     facilityNotFound?: boolean;
@@ -369,6 +371,10 @@ describe("editReservationDirectlyUseCase", () => {
           requireNoApprovedOverlap: true,
         }),
         expect.any(Array),
+        expect.objectContaining({
+          action: AuditLogAction.ReservationDirectChange,
+          actedAsStaff: true,
+        }),
       );
 
       // 即時配送が呼ばれたこと
@@ -396,6 +402,10 @@ describe("editReservationDirectlyUseCase", () => {
           note: "新備考",
         }),
         expect.any(Array),
+        expect.objectContaining({
+          action: AuditLogAction.ReservationDirectChange,
+          actedAsStaff: true,
+        }),
       );
     });
 
@@ -419,6 +429,10 @@ describe("editReservationDirectlyUseCase", () => {
           status: ReservationStatus.Provisional,
         }),
         expect.any(Array),
+        expect.objectContaining({
+          action: AuditLogAction.ReservationDirectChange,
+          actedAsStaff: true,
+        }),
       );
     });
 

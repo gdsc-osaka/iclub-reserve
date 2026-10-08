@@ -1,13 +1,14 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuditLogAction } from "~/domain/audit-log";
 import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { ReservationMailAudience } from "~/domain/mail/reservation-mail";
 import {
   MembershipErrorCode,
   MembershipRole,
-  type Membership,
+  type StoredMembership,
   type MembershipRepository,
 } from "~/domain/membership";
 import {
@@ -57,7 +58,8 @@ const currentContent: ReservationContent = {
 };
 
 /** 予約の団体（grp_robotics）でのメンバーとしての所属 */
-const memberMembership: Membership = {
+const memberMembership: StoredMembership = {
+  id: "gm_memberMembership",
   groupId: "grp_robotics",
   userId: "usr_member_01",
   role: MembershipRole.Member,
@@ -96,7 +98,7 @@ const createDeps = (
   overrides: {
     reservation?: Reservation | null;
     /** 予約の団体での所属。null は所属していないことを表す */
-    membership?: Membership | null;
+    membership?: StoredMembership | null;
     membershipDbError?: boolean;
     facility?: Facility;
     facilityNotFound?: boolean;
@@ -118,8 +120,9 @@ const createDeps = (
   const existsApprovedOverlap = vi.fn((_args: ReservationOverlapArgs) =>
     okAsync(overrides.hasApprovedOverlap ?? false),
   );
-  const applyContentEdit = vi.fn((_args: ApplyContentEditArgs, _mails: readonly MailDraft[]) =>
-    okAsync({ applied, enqueuedMailIds: applied ? ["outbox_01", "outbox_02"] : [] }),
+  const applyContentEdit = vi.fn(
+    (_args: ApplyContentEditArgs, _mails: readonly MailDraft[], _auditLog?: unknown) =>
+      okAsync({ applied, enqueuedMailIds: applied ? ["outbox_01", "outbox_02"] : [] }),
   );
 
   const reservationRepository: ReservationRepository = {
@@ -243,6 +246,18 @@ describe("editReservationUseCase", () => {
             idempotencyKey: "reservation:approvedEdited:res_01:1789866000000:usr_staff_01",
           }),
         ],
+        {
+          occurredAt: now,
+          actorId: "usr_member_01",
+          actedAsStaff: false,
+          action: AuditLogAction.ReservationChange,
+          targetId: "res_01",
+          groupId: "grp_robotics",
+          changes: {
+            head_count: { before: 4, after: 6 },
+            note: { before: null, after: "機材を持ち込みます" },
+          },
+        },
       );
       expect(spies.notifyEnqueued).toHaveBeenCalledWith(["outbox_01", "outbox_02"]);
     });
@@ -270,7 +285,7 @@ describe("editReservationUseCase", () => {
         excludeReservationId: "res_01",
       });
 
-      const [editArgs, mails] = spies.applyContentEdit.mock.calls[0] ?? [];
+      const [editArgs, mails, auditLog] = spies.applyContentEdit.mock.calls[0] ?? [];
       expect(editArgs).toMatchObject({
         expectedStatus: ReservationStatus.Approved,
         status: ReservationStatus.Provisional,
@@ -284,6 +299,19 @@ describe("editReservationUseCase", () => {
       });
       // 通知には変更後の日時を載せる
       expect(mails?.[0]?.text).toContain("利用開始日時: 2026年9月25日 11:00");
+      expect(auditLog).toEqual({
+        occurredAt: now,
+        actorId: "usr_member_01",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationChange,
+        targetId: "res_01",
+        groupId: "grp_robotics",
+        changes: {
+          start_at: { before: "2026-09-25T01:00:00.000Z", after: "2026-09-25T02:00:00.000Z" },
+          end_at: { before: "2026-09-25T03:00:00.000Z", after: "2026-09-25T04:00:00.000Z" },
+          status: { before: "approved", after: "provisional" },
+        },
+      });
     });
 
     it("施設を変えると、変更先の施設が使えるかを確かめてから仮予約に戻す", async () => {

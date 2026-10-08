@@ -1,4 +1,5 @@
 import type { ResultAsync } from "neverthrow";
+import type { AuditLogDraft } from "../audit-log";
 import type { PermissionTable } from "../authz";
 import { ErrorKind, type BaseError } from "../error";
 import { StaffRole } from "../membership";
@@ -99,6 +100,8 @@ export const facilityPermissions: PermissionTable<typeof StaffRole, FacilityActi
 
 /** 施設の新規登録に必要な入力 */
 export interface CreateFacilityInput {
+  /** 施設 ID。操作履歴（INFO-008）の target_id と同じ値にするため、呼び出し側で決める */
+  readonly id: string;
   readonly name: string;
   readonly description: string | null;
   readonly photoUrl: string | null;
@@ -138,10 +141,13 @@ export interface UpdateFacilityActiveStatusInput {
 
 export interface FacilityRepository {
   findById(id: string): ResultAsync<Facility, FacilityError>;
-  create(input: CreateFacilityInput): ResultAsync<Facility, FacilityError>;
-  update(input: UpdateFacilityInput): ResultAsync<Facility, FacilityError>;
+  create(input: CreateFacilityInput, auditLog: AuditLogDraft): ResultAsync<Facility, FacilityError>;
+  update(input: UpdateFacilityInput, auditLog: AuditLogDraft): ResultAsync<Facility, FacilityError>;
   countBlockingReservations(facilityId: string, now: Date): ResultAsync<number, FacilityError>;
-  updateActiveStatus(input: UpdateFacilityActiveStatusInput): ResultAsync<Facility, FacilityError>;
+  updateActiveStatus(
+    input: UpdateFacilityActiveStatusInput,
+    auditLog: AuditLogDraft,
+  ): ResultAsync<Facility, FacilityError>;
 }
 
 /**

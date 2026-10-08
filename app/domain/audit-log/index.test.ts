@@ -6,11 +6,18 @@ import {
   auditLogActionLabel,
   auditLogActionTargetType,
   auditLogTargetTypeLabel,
+  isActedAsStaff,
   parseAuditLogChanges,
   parseAuditLogTargetType,
   toAuditLogActorView,
   toAuditLogEntryView,
+  toAuditLogValue,
+  toCreatedChanges,
+  toIdentityChanges,
+  toUpdatedChanges,
 } from "./index";
+import { GroupAction, groupPermissions } from "../group";
+import { MembershipRole } from "../membership";
 
 describe("操作履歴のドメイン定義", () => {
   describe("auditLogActionTargetType", () => {
@@ -255,6 +262,122 @@ describe("操作履歴のドメイン定義", () => {
         targetId: "rsv_1",
         changes: dummyChanges,
       });
+    });
+  });
+
+  describe("toAuditLogValue", () => {
+    it("Date は toISOString() の文字列に変換される", () => {
+      const date = new Date("2026-10-07T12:00:00.000Z");
+      expect(toAuditLogValue(date)).toBe("2026-10-07T12:00:00.000Z");
+    });
+
+    it("Date 以外の値（string, number, boolean, null）はそのまま返される", () => {
+      expect(toAuditLogValue("hello")).toBe("hello");
+      expect(toAuditLogValue(42)).toBe(42);
+      expect(toAuditLogValue(true)).toBe(true);
+      expect(toAuditLogValue(false)).toBe(false);
+      expect(toAuditLogValue(null)).toBeNull();
+    });
+  });
+
+  describe("toCreatedChanges", () => {
+    it("すべての項目の before が null になり、after に値が入る", () => {
+      const date = new Date("2026-10-07T12:00:00.000Z");
+      const changes = toCreatedChanges({
+        name: "ロボット部",
+        head_count: 5,
+        created_at: date,
+        is_active: true,
+        note: null,
+      });
+
+      expect(changes).toEqual({
+        name: { before: null, after: "ロボット部" },
+        head_count: { before: null, after: 5 },
+        created_at: { before: null, after: "2026-10-07T12:00:00.000Z" },
+        is_active: { before: null, after: true },
+        note: { before: null, after: null },
+      });
+    });
+  });
+
+  describe("toUpdatedChanges", () => {
+    it("値が変わった項目だけを残す", () => {
+      const date1 = new Date("2026-10-07T12:00:00.000Z");
+      const date2 = new Date("2026-10-07T13:00:00.000Z");
+      const dateSame = new Date("2026-10-07T12:00:00.000Z");
+
+      const before = {
+        name: "旧部名",
+        head_count: 5,
+        unchanged: "そのまま",
+        start_at: date1,
+        time_same: date1,
+        note: null,
+      };
+
+      const after = {
+        name: "新部名",
+        head_count: 10,
+        unchanged: "そのまま",
+        start_at: date2,
+        time_same: dateSame,
+        note: "メモ追加",
+      };
+
+      const changes = toUpdatedChanges(before, after);
+
+      expect(changes).toEqual({
+        name: { before: "旧部名", after: "新部名" },
+        head_count: { before: 5, after: 10 },
+        start_at: {
+          before: "2026-10-07T12:00:00.000Z",
+          after: "2026-10-07T13:00:00.000Z",
+        },
+        note: { before: null, after: "メモ追加" },
+      });
+    });
+  });
+
+  describe("toIdentityChanges", () => {
+    it("before と after に同じ値が入る", () => {
+      const changes = toIdentityChanges({
+        user_id: "usr_1",
+        email: "test@example.com",
+      });
+
+      expect(changes).toEqual({
+        user_id: { before: "usr_1", after: "usr_1" },
+        email: { before: "test@example.com", after: "test@example.com" },
+      });
+    });
+  });
+
+  describe("isActedAsStaff", () => {
+    it("事務局でない人（isStaff: false）は false を返す", () => {
+      const actor = {
+        isStaff: false,
+        membership: { groupId: "grp_1", userId: "usr_1", role: MembershipRole.Admin },
+      };
+      expect(isActedAsStaff(groupPermissions, actor, GroupAction.Update)).toBe(false);
+    });
+
+    it("事務局で所属なし（isStaff: true, membership: null）のとき、事務局として許可される操作は true を返す", () => {
+      const actor = {
+        isStaff: true,
+        membership: null,
+      };
+      // 団体情報の編集は事務局として許可されている
+      expect(isActedAsStaff(groupPermissions, actor, GroupAction.Update)).toBe(true);
+    });
+
+    it("事務局かつ団体の管理者（isStaff: true, membership: Admin）のとき、管理者でも許可される操作は false を返す", () => {
+      const actor = {
+        isStaff: true,
+        membership: { groupId: "grp_1", userId: "usr_1", role: MembershipRole.Admin },
+      };
+      // 団体情報の編集は管理者ロールでも許可されているため actedAsStaff は false
+      expect(isActedAsStaff(groupPermissions, actor, GroupAction.Update)).toBe(false);
     });
   });
 });

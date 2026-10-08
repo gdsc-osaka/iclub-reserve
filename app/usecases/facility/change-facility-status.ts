@@ -1,5 +1,6 @@
 import { err, errAsync, ok, okAsync, ResultAsync, safeTry, type Result } from "neverthrow";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import {
   FacilityAction,
   FacilityErrorCode,
@@ -7,6 +8,7 @@ import {
   type FacilityError,
   type FacilityRepository,
 } from "~/domain/facility";
+import { toFacilityStatusAction, toFacilityStatusChanges } from "~/domain/facility/audit-log";
 import { ensureFacilityPermission } from "./_shared/facility-authorization";
 
 export interface ChangeFacilityStatusDeps {
@@ -59,6 +61,7 @@ const validateTargetStatus = (status: string): Result<boolean, FacilityError> =>
  * 7. 楽観的ロックを伴う更新（updateActiveStatus）:
  *    WHERE id = ? AND is_active = from に加え、無効化時は NOT EXISTS で
  *    競合による予約挿入を防ぐ。0 行更新なら InvalidTransition を返す。
+ *    同じ batch で操作履歴を記録する（COND-013）。
  */
 export const changeFacilityStatusUseCase = (
   deps: ChangeFacilityStatusDeps,
@@ -105,13 +108,26 @@ export const changeFacilityStatusUseCase = (
       }
     }
 
-    const updated = yield* deps.facilityRepository.updateActiveStatus({
-      id: facilityId,
-      from: facility.isActive,
-      to: targetIsActive,
-      updatedAt: args.now,
-      now: args.now,
-    });
+    const auditLog: AuditLogDraft = {
+      occurredAt: args.now,
+      actorId: args.actorUserId,
+      actedAsStaff: true, // 事務局だけの操作なので常に true（COND-012）
+      action: toFacilityStatusAction(targetIsActive),
+      targetId: facilityId,
+      groupId: null,
+      changes: toFacilityStatusChanges(facility.isActive, targetIsActive),
+    };
+
+    const updated = yield* deps.facilityRepository.updateActiveStatus(
+      {
+        id: facilityId,
+        from: facility.isActive,
+        to: targetIsActive,
+        updatedAt: args.now,
+        now: args.now,
+      },
+      auditLog,
+    );
 
     return okAsync(updated);
   });

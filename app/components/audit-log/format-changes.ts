@@ -1,6 +1,7 @@
 import { groupStatusLabel } from "~/components/group/group-status-badge";
 import { reservationStatusLabel } from "~/components/reservation/reservation-status-badge";
 import { AuditLogTargetType, type AuditLogChanges, type AuditLogValue } from "~/domain/audit-log";
+import { invitationStatusLabel } from "~/domain/invitation";
 import { membershipRoleLabel } from "~/domain/membership";
 import { formatDateTime } from "~/lib/date";
 
@@ -24,8 +25,10 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   description: "説明",
   photo_url: "写真",
   google_calendar_id: "Google カレンダー ID",
+  calendar_url: "カレンダー URL",
   is_active: "有効/無効",
   is_staff: "事務局権限",
+  staff_invitation_id: "事務局招待",
 };
 
 export interface FormatChangesOptions {
@@ -70,6 +73,12 @@ export const formatChangeValue = (
     }
     if (options.targetType === AuditLogTargetType.Group) {
       return groupStatusLabel[value as keyof typeof groupStatusLabel] ?? value;
+    }
+    if (
+      options.targetType === AuditLogTargetType.Invitation ||
+      options.targetType === AuditLogTargetType.StaffRole
+    ) {
+      return invitationStatusLabel[value as keyof typeof invitationStatusLabel] ?? value;
     }
     return value;
   }

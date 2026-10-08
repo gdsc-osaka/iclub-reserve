@@ -1,26 +1,31 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
+import type { AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode } from "~/domain/group";
-import type { Membership, MembershipError, MembershipRepository } from "~/domain/membership";
+import type { StoredMembership, MembershipError, MembershipRepository } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
 import { removeMemberUseCase } from "./remove-member";
 
 const testGroupId = "grp_robotics";
+const testNow = new Date("2026-04-01T10:00:00.000Z");
 
-const adminMembership1: Membership = {
+const adminMembership1: StoredMembership = {
+  id: "gm_adminMembership1",
   groupId: testGroupId,
   userId: "usr_admin1",
   role: MembershipRole.Admin,
 };
 
-const adminMembership2: Membership = {
+const adminMembership2: StoredMembership = {
+  id: "gm_adminMembership2",
   groupId: testGroupId,
   userId: "usr_admin2",
   role: MembershipRole.Admin,
 };
 
-const regularMember: Membership = {
+const regularMember: StoredMembership = {
+  id: "gm_regularMember",
   groupId: testGroupId,
   userId: "usr_member1",
   role: MembershipRole.Member,
@@ -28,12 +33,16 @@ const regularMember: Membership = {
 
 interface FakeMembershipRepositoryOptions {
   readonly countAdminsResult?: () => ResultAsync<number, MembershipError>;
-  readonly removeResult?: (groupId: string, userId: string) => ResultAsync<number, MembershipError>;
+  readonly removeResult?: (
+    groupId: string,
+    userId: string,
+    auditLog: AuditLogDraft,
+  ) => ResultAsync<number, MembershipError>;
 }
 
 /** D1 を使わないダミーのメンバーシップリポジトリ。呼び出し回数と引数を自前で記録する */
 const createFakeMembershipRepository = (
-  initialMemberships: readonly Membership[],
+  initialMemberships: readonly StoredMembership[],
   options: FakeMembershipRepositoryOptions = {},
 ) => {
   let findByGroupAndUserCallCount = 0;
@@ -41,6 +50,7 @@ const createFakeMembershipRepository = (
   let updateRoleCallCount = 0;
   let removeCallCount = 0;
   let lastRemoveInput: { groupId: string; userId: string } | null = null;
+  let lastAuditLog: AuditLogDraft | null = null;
 
   const memberships = [...initialMemberships];
 
@@ -65,11 +75,12 @@ const createFakeMembershipRepository = (
         message: "このテストでは updateRole は使わない",
       });
     },
-    remove: (groupId, userId) => {
+    remove: (groupId, userId, auditLog) => {
       removeCallCount += 1;
       lastRemoveInput = { groupId, userId };
+      lastAuditLog = auditLog;
       if (options.removeResult) {
-        return options.removeResult(groupId, userId);
+        return options.removeResult(groupId, userId, auditLog);
       }
       return okAsync(1);
     },
@@ -82,6 +93,7 @@ const createFakeMembershipRepository = (
     updateRoleCallCount: () => updateRoleCallCount,
     removeCallCount: () => removeCallCount,
     lastRemoveInput: () => lastRemoveInput,
+    lastAuditLog: () => lastAuditLog,
   };
 };
 
@@ -97,6 +109,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId: regularMember.userId,
+        now: testNow,
       },
     );
 
@@ -122,6 +135,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId: regularMember.userId,
+        now: testNow,
       },
     );
 
@@ -141,6 +155,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId: adminMembership2.userId,
+        now: testNow,
       },
     );
 
@@ -164,6 +179,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId: adminMembership1.userId,
+        now: testNow,
       },
     );
 
@@ -188,6 +204,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId: adminMembership1.userId,
+        now: testNow,
       },
     );
 
@@ -197,7 +214,7 @@ describe("removeMemberUseCase", () => {
     expect(result._unsafeUnwrap().removedUserId).toBe(adminMembership1.userId);
   });
 
-  // 6. 事務局は所属していなくても削除できる
+  // 6. 事務局は所属していなくても削除でき、actedAsStaff が true になる（COND-012）
   it("事務局は所属していなくても削除できる", async () => {
     const fake = createFakeMembershipRepository([regularMember]);
 
@@ -208,12 +225,16 @@ describe("removeMemberUseCase", () => {
         actorUserId: "usr_staff",
         isStaff: true,
         targetUserId: regularMember.userId,
+        now: testNow,
       },
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fake.findByGroupAndUserCallCount()).toBe(1);
+    // COND-012: 操作者の所属確認（1回）+ 削除対象メンバーの存在確認（1回）の計 2 回
+    expect(fake.findByGroupAndUserCallCount()).toBe(2);
     expect(fake.removeCallCount()).toBe(1);
+    const auditLog = fake.lastAuditLog();
+    expect(auditLog?.actedAsStaff).toBe(true);
   });
 
   // 7. 一般メンバーが操作すると Forbidden になり、remove が 1 度も呼ばれない
@@ -227,6 +248,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: regularMember.userId,
         isStaff: false,
         targetUserId: adminMembership1.userId,
+        now: testNow,
       },
     );
 
@@ -248,6 +270,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: "usr_outsider",
         isStaff: false,
         targetUserId: "usr_target",
+        now: testNow,
       },
     );
 
@@ -258,6 +281,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: "usr_outsider",
         isStaff: false,
         targetUserId: "usr_target",
+        now: testNow,
       },
     );
 
@@ -276,6 +300,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId: "usr_not_in_group",
+        now: testNow,
       },
     );
 
@@ -296,6 +321,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId: regularMember.userId,
+        now: testNow,
       },
     );
 
@@ -314,6 +340,7 @@ describe("removeMemberUseCase", () => {
         actorUserId: adminMembership1.userId,
         isStaff: false,
         targetUserId,
+        now: testNow,
       },
     );
 
