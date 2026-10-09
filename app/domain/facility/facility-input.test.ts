@@ -4,6 +4,7 @@ import {
   FACILITY_NAME_MAX_LENGTH,
   GOOGLE_CALENDAR_ID_MAX_LENGTH,
   toCalendarUrl,
+  toGoogleCalendarAddUrl,
   validateFacilityDescription,
   validateFacilityName,
   validateGoogleCalendarId,
@@ -194,5 +195,35 @@ describe("toCalendarUrl", () => {
 
   it.each([null, ""])("ID が %o のときは null を返す", (id) => {
     expect(toCalendarUrl(id)).toBeNull();
+  });
+});
+
+describe("toGoogleCalendarAddUrl", () => {
+  it("@ を含む Calendar ID が正しくエンコードされて Google カレンダー追加 URL になる", () => {
+    const id = "example_club@group.calendar.google.com";
+    const url = toGoogleCalendarAddUrl(id);
+    expect(url).toBe(
+      "https://calendar.google.com/calendar/render?cid=example_club%40group.calendar.google.com",
+    );
+  });
+
+  it("# を含む Calendar ID が正しく %23 にエンコードされる", () => {
+    const id = "room#123@group.calendar.google.com";
+    const url = toGoogleCalendarAddUrl(id);
+    expect(url).toBe(
+      "https://calendar.google.com/calendar/render?cid=room%23123%40group.calendar.google.com",
+    );
+  });
+
+  it("+ や空白など特殊文字を含む Calendar ID も正しくエンコードされる", () => {
+    const id = "lab+special room@resource.calendar.google.com";
+    const url = toGoogleCalendarAddUrl(id);
+    expect(url).toBe(
+      "https://calendar.google.com/calendar/render?cid=lab%2Bspecial%20room%40resource.calendar.google.com",
+    );
+  });
+
+  it.each([null, ""])("ID が %o のときは null を返す", (id) => {
+    expect(toGoogleCalendarAddUrl(id)).toBeNull();
   });
 });

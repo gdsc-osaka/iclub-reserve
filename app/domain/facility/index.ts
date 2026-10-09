@@ -174,3 +174,5 @@ export interface FacilityRepository {
  */
 export const FACILITY_OPEN_HOUR = 9;
 export const FACILITY_CLOSE_HOUR = 21;
+
+export { toCalendarUrl, toGoogleCalendarAddUrl } from "./facility-input";
