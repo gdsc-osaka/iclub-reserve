@@ -1,5 +1,5 @@
 import { Check, Copy, ExternalLink, Info } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "~/components/ui/button";
@@ -22,6 +22,20 @@ interface CalendarSubscriptionCardProps {
  */
 export function CalendarSubscriptionCard({ facility }: CalendarSubscriptionCardProps) {
   const [copied, setCopied] = useState(false);
+  /*
+   * 「コピー完了」を元に戻すタイマー。
+   * 2 秒以内にもう一度押されたら前のタイマーを止め、最後に押してから 2 秒は表示を残す。
+   * 画面を離れたときにも止める。
+   */
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copiedTimerRef.current !== null) {
+        clearTimeout(copiedTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // Calendar ID と iCal の URL のどちらかが欠けていれば、追加も購読もできないので未設定として扱う
   const googleCalendarAddUrl = toGoogleCalendarAddUrl(facility.googleCalendarId);
@@ -35,7 +49,10 @@ export function CalendarSubscriptionCard({ facility }: CalendarSubscriptionCardP
       await navigator.clipboard.writeText(url);
       setCopied(true);
       toast.success("iCal URL をクリップボードにコピーしました。");
-      setTimeout(() => setCopied(false), 2000);
+      if (copiedTimerRef.current !== null) {
+        clearTimeout(copiedTimerRef.current);
+      }
+      copiedTimerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error("URL のコピーに失敗しました。入力欄の文字を選択して手動でコピーしてください。");
     }
