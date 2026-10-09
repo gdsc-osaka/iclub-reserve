@@ -107,9 +107,6 @@ describe("ensureCalendarWritable", () => {
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(FacilityErrorCode.CalendarUnavailable);
     expect(error.field).toBe(FacilityField.GoogleCalendarId);
-    expect(error.userMessage).toBe(
-      "Google カレンダーに接続できませんでした。時間をおいて、もう一度お試しください。",
-    );
   });
 
   it("再試行可能なエラー（RateLimited）の場合は CalendarUnavailable を返す", async () => {

@@ -58,17 +58,22 @@ export interface UpdateFacilityArgs {
  * 1. 認可判定: 事務局スタッフのみに許可（COND-009）。
  * 2. 入力検証: 名称、説明、Google Calendar ID を検証。
  * 3. 既存施設の取得: 存在しなければ NotFound を返す。
- * 4. 写真の差し替え・取り外し処理:
+ * 4. Calendar ID の書き込み確認（COND-025）:
+ *    - ID を変えて、変更後が空でないときだけ、システムが予定を書き込めることを確かめる。
+ *    - 書き込めなければここで止め、写真を R2 に上げない。
+ * 5. 写真の差し替え・取り外し処理:
  *    - 新しい写真がある場合: R2 にアップロードし、古い写真は後で削除対象にする。
  *    - 写真がなく removePhoto が指定された場合: photoUrl を null にし、古い写真を削除対象にする。
  *    - いずれでもない場合: 既存の photoUrl をそのまま維持する。
- * 5. 変更差分の判定（COND-013）:
+ * 6. 変更差分の判定（COND-013）:
  *    - 変わった項目が無い場合は業務データも記録も書かずに成功。
- * 6. DB 更新: facility テーブルを更新。同じ batch で操作履歴を記録する（COND-013）。
+ * 7. Google Calendar にまとめて反映するかの判定（COND-024 の (3)）:
+ *    - 名称を変えたとき、または ID を変えて変更後が空でないときは、範囲内の承認済み予約を同期し直す。
+ * 8. DB 更新: facility テーブルを更新。同じ batch で操作履歴を記録し（COND-013）、7 が真なら同期タスクも積む。
  *    - 3 で読んだ写真の URL を条件に入れる。その間に別の人が写真を変えていたら Conflict になる。
  *    - 写真以外の項目は条件に入れていないので、読んでから書くまでに別の人が変えると、記録の変更前が実際とずれることがある。
- *    - 失敗時（Conflict を含む）: 今回新しくアップロードした写真があれば削除（ロールバック）。
- * 7. 古い写真の削除: DB 更新が成功した後に実行。削除失敗時も操作は成功として返しログを残す。
+ *    - 失敗時（Conflict を含む）: 今回新しくアップロードした写真があれば削除（ロールバック）。操作履歴も同期タスクも残らない。
+ * 9. 古い写真の削除: DB 更新が成功した後に実行。削除失敗時も操作は成功として返しログを残す。
  */
 export const updateFacilityUseCase = (
   deps: UpdateFacilityDeps,
@@ -138,7 +143,7 @@ export const updateFacilityUseCase = (
       calendarUrl,
     });
 
-    // 変更がない場合は業務データも記録も書かずに成功（COND-013）
+    // 6. 変更がない場合は業務データも記録も書かずに成功（COND-013）
     if (Object.keys(changes).length === 0) {
       return okAsync(existing);
     }
@@ -153,7 +158,7 @@ export const updateFacilityUseCase = (
       changes,
     };
 
-    // 6. まとめて反映するかの判定（COND-024 (3)）
+    // 7. まとめて反映するかの判定（COND-024 (3)）
     const shouldResyncCalendar = toFacilityCalendarResync(
       { name: existing.name, googleCalendarId: existing.googleCalendarId },
       { name, googleCalendarId },
@@ -162,7 +167,7 @@ export const updateFacilityUseCase = (
       ? { rangeStart: calendarSyncRangeStart(args.now) }
       : null;
 
-    // 7. DB 更新
+    // 8. DB 更新
     const updateResult = await deps.facilityRepository.update(
       {
         id: facilityId,
@@ -186,7 +191,7 @@ export const updateFacilityUseCase = (
       return errAsync(updateResult.error);
     }
 
-    // 6. DB 更新成功後、古い写真を静かに削除
+    // 9. DB 更新成功後、古い写真を静かに削除
     const oldPhotoName =
       oldPhotoToDelete !== newPhotoUrl ? toFacilityPhotoNameFromUrl(oldPhotoToDelete) : null;
     if (oldPhotoName !== null) {

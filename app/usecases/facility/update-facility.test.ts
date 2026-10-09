@@ -591,7 +591,6 @@ describe("updateFacilityUseCase", () => {
       const error = result._unsafeUnwrapErr();
       expect(error.code).toBe(FacilityErrorCode.CalendarUnavailable);
       expect(error.field).toBe(FacilityField.GoogleCalendarId);
-      expect(error.userMessage).toContain("時間をおいて");
     });
 
     it("認証エラーなどの設定不備の場合、CalendarSystemError エラーになる", async () => {

@@ -24,13 +24,12 @@ export const ensureCalendarWritable = ({
   calendarClient
     .checkWriteAccess(googleCalendarId)
     .mapErr((error): FacilityError => {
+      // どちらも internal の失敗なので userMessage は付けない。画面には facility-error.server.ts の表の文言が出る
       if (isRetryableCalendarError(error)) {
         return {
           code: FacilityErrorCode.CalendarUnavailable,
           field: FacilityField.GoogleCalendarId,
           message: "Google カレンダーへの接続が一時的に利用できない。",
-          userMessage:
-            "Google カレンダーに接続できませんでした。時間をおいて、もう一度お試しください。",
           cause: error,
         };
       }
@@ -39,7 +38,6 @@ export const ensureCalendarWritable = ({
         code: FacilityErrorCode.CalendarSystemError,
         field: FacilityField.GoogleCalendarId,
         message: "カレンダー連携の設定に誤りがあるため確認できなかった。",
-        userMessage: "処理を完了できませんでした。時間をおいて、もう一度お試しください。",
         cause: error,
       };
     })
