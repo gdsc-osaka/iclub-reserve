@@ -68,23 +68,26 @@ export default function CalendarsPage({ loaderData }: Route.ComponentProps) {
       <Alert className="border-border">
         <Info className="size-4" />
         <AlertTitle className="font-semibold">カレンダーの購読について</AlertTitle>
-        <AlertDescription className="mt-2 text-sm text-muted-foreground space-y-1.5">
-          <p>
-            ・<strong>Google カレンダーをお使いの方</strong>: 各施設の「Google
-            カレンダーに追加」ボタンを押すと、お使いの Google アカウントにカレンダーを追加できます。
-          </p>
-          <p>
-            ・<strong>Apple カレンダー・Outlook などをお使いの方</strong>: iCal の URL
-            をコピーし、カレンダーアプリの「照会」や「URL で追加」に貼り付けて登録してください。
-          </p>
-          <p>
-            ・<strong>公開される情報</strong>:
-            カレンダーに掲載されるのは承認済みの予約の「施設名」と「日時」のみです。利用団体名や個人情報は掲載されません（COND-008）。
-          </p>
-          <p>
-            ・<strong>反映のタイミング</strong>:
-            カレンダーアプリの同期間隔によっては、予約の最新状況が反映されるまでに時間がかかる場合があります。
-          </p>
+        <AlertDescription className="mt-2 text-sm text-muted-foreground">
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              <strong>Google カレンダーをお使いの方</strong>: 各施設の「Google
+              カレンダーに追加」ボタンを押すと、お使いの Google
+              アカウントにカレンダーを追加できます。
+            </li>
+            <li>
+              <strong>Apple カレンダー・Outlook などをお使いの方</strong>: iCal の URL
+              をコピーし、カレンダーアプリの「照会」や「URL で追加」に貼り付けて登録してください。
+            </li>
+            <li>
+              <strong>公開される情報</strong>:
+              カレンダーに掲載されるのは承認済みの予約の「施設名」と「日時」のみです。利用団体名や個人情報は掲載されません。
+            </li>
+            <li>
+              <strong>反映のタイミング</strong>:
+              カレンダーアプリの同期間隔によっては、予約の最新状況が反映されるまでに時間がかかる場合があります。
+            </li>
+          </ul>
         </AlertDescription>
       </Alert>
 

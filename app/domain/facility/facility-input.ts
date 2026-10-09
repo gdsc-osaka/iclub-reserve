@@ -186,14 +186,17 @@ export const toCalendarUrl = (googleCalendarId: string | null): string | null =>
  * 【形式】
  * `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(googleCalendarId)}`
  *
- * 【調査結果と背景】
- * Google カレンダー Web において、公開カレンダーを自身の Google カレンダーに追加・購読させる
- * ディープリンクとして、`https://calendar.google.com/calendar/render?cid=<Calendar ID>` の形式が
- * 長年標準的に使用されている。
- * `cid` パラメータに指定した Calendar ID（例: `xxx@group.calendar.google.com`）をもとに、
- * Google カレンダーの Web 画面上で「カレンダーを追加」の確認ダイアログが開く。
- * Calendar ID 内に含まれる特殊文字（`@` や `#` など）が破損しないよう、
- * `encodeURIComponent` で適切にパーセントエンコーディングを行う。
+ * 【この形式を選んだ理由と、確かめられていないこと】
+ * Google のヘルプには、カレンダーを追加させるリンクの形式は書かれていない（2026-10-09 時点）。
+ * `render?cid=<Calendar ID>` は、Google カレンダーを開いて「カレンダーを追加」の確認を出す
+ * リンクとして広く使われている形式で、ここではそれに従った。
+ * Google カレンダーの設定画面の「共有可能なリンクを取得」が作るリンクは、これとは別の
+ * `https://calendar.google.com/calendar/u/0?cid=<Calendar ID を Base64 にしたもの>` である。
+ * どちらも Google が仕様として約束しているものではないので、追加の画面が開かなくなったら、
+ * まず設定画面が作るリンクの形式と見比べること。
+ *
+ * Calendar ID に含まれる `@` や `#` が URL の区切りとして解釈されないよう、
+ * `encodeURIComponent` でエンコードする。
  *
  * ID が null または空文字の場合は追加 URL を生成できないため null を返す。
  */

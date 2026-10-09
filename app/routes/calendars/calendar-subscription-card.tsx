@@ -23,10 +23,9 @@ interface CalendarSubscriptionCardProps {
 export function CalendarSubscriptionCard({ facility }: CalendarSubscriptionCardProps) {
   const [copied, setCopied] = useState(false);
 
-  const isConfigured = Boolean(facility.googleCalendarId && facility.calendarUrl);
-  const googleCalendarAddUrl = facility.googleCalendarId
-    ? toGoogleCalendarAddUrl(facility.googleCalendarId)
-    : null;
+  // Calendar ID と iCal の URL のどちらかが欠けていれば、追加も購読もできないので未設定として扱う
+  const googleCalendarAddUrl = toGoogleCalendarAddUrl(facility.googleCalendarId);
+  const calendarUrl = facility.calendarUrl;
 
   const handleCopy = async (url: string) => {
     try {
@@ -50,7 +49,7 @@ export function CalendarSubscriptionCard({ facility }: CalendarSubscriptionCardP
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {isConfigured && facility.calendarUrl && googleCalendarAddUrl ? (
+        {googleCalendarAddUrl !== null && calendarUrl !== null ? (
           <div className="flex flex-col gap-4">
             {/* Google カレンダーに追加ボタン */}
             <div>
@@ -74,7 +73,7 @@ export function CalendarSubscriptionCard({ facility }: CalendarSubscriptionCardP
                 <Input
                   id={`ical-url-${facility.id}`}
                   readOnly
-                  value={facility.calendarUrl}
+                  value={calendarUrl}
                   onFocus={(e) => e.currentTarget.select()}
                   className="font-mono text-xs w-full min-w-0 truncate"
                   aria-label={`${facility.name}のiCal URL`}
@@ -83,7 +82,7 @@ export function CalendarSubscriptionCard({ facility }: CalendarSubscriptionCardP
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => handleCopy(facility.calendarUrl!)}
+                  onClick={() => handleCopy(calendarUrl)}
                   className="shrink-0 w-full sm:w-auto"
                 >
                   {copied ? (
