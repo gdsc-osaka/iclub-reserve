@@ -8,49 +8,78 @@ import * as schema from "~/db/schema";
 import { addDays, atTokyoTime, startOfTokyoWeek } from "~/lib/date";
 
 /**
- * 施設・備品のシードデータ
+ * 施設・設備のシードデータ（PRD 3-5 の初期施設・設備の 8 件）。
+ *
+ * 部屋か設備かの種別は持たず、名称に含める（PRD 3-5）。説明は動作確認用の仮の文言。
  */
 export const seedFacilities: (typeof schema.facilityTable.$inferInsert)[] = [
   {
-    id: "fac_meeting_a",
-    name: "ミーティングルーム A",
-    description: "定員8名。ホワイトボード・大型ディスプレイ常設。",
+    id: "fac_suita_c2_event",
+    name: "吹田：C棟2階占有 イベント予約",
+    description: "吹田キャンパス C棟2階を占有して使う。イベントやワークショップ向け。",
     photoUrl: null,
     googleCalendarId: null,
     calendarUrl: null,
     isActive: true,
   },
   {
-    id: "fac_meeting_b",
-    name: "ミーティングルーム B",
-    description: "定員12名。プロジェクター対応。",
+    id: "fac_suita_3dp_fdm",
+    name: "吹田：3Dプリンター 積層タイプ",
+    description: "熱溶解積層方式の3Dプリンター。",
     photoUrl: null,
     googleCalendarId: null,
     calendarUrl: null,
     isActive: true,
   },
   {
-    id: "fac_event_hall",
-    name: "イベントホール",
-    description: "定員50名。全体ミーティングやワークショップ用スペース。",
+    id: "fac_suita_3dp_fdm_2",
+    name: "吹田：3Dプリンター 積層タイプ2",
+    description: "熱溶解積層方式の3Dプリンター（2台目）。",
     photoUrl: null,
     googleCalendarId: null,
     calendarUrl: null,
     isActive: true,
   },
   {
-    id: "fac_projector_1",
-    name: "モバイルプロジェクター 1号機",
-    description: "Anker Nebula Capsule II（可搬式）",
+    id: "fac_suita_3dp_sla",
+    name: "吹田：3Dプリンター 光造形機",
+    description: "光造形方式の3Dプリンター。",
     photoUrl: null,
     googleCalendarId: null,
     calendarUrl: null,
     isActive: true,
   },
   {
-    id: "fac_vr_set",
-    name: "Meta Quest 3 (VR機材)",
-    description: "VR開発・実証実験用ヘッドセット",
+    id: "fac_suita_laser_cutter",
+    name: "吹田：レーザーカッター",
+    description: "レーザーカッター。",
+    photoUrl: null,
+    googleCalendarId: null,
+    calendarUrl: null,
+    isActive: true,
+  },
+  {
+    id: "fac_suita_cad_pc",
+    name: "吹田：CAD用パソコン",
+    description: "CAD 用のパソコン。",
+    photoUrl: null,
+    googleCalendarId: null,
+    calendarUrl: null,
+    isActive: true,
+  },
+  {
+    id: "fac_toyonaka_lab",
+    name: "豊中試作室",
+    description: "豊中キャンパスの試作室。",
+    photoUrl: null,
+    googleCalendarId: null,
+    calendarUrl: null,
+    isActive: true,
+  },
+  {
+    id: "fac_toyonaka_3dp",
+    name: "豊中試作室：3Dプリンター",
+    description: "豊中試作室に置いている3Dプリンター。",
     photoUrl: null,
     googleCalendarId: null,
     calendarUrl: null,
@@ -252,7 +281,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_sample_approved",
     groupId: "grp_robotics",
-    facilityId: "fac_meeting_a",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(1, 10),
     endAt: atWeek(1, 12),
     headCount: 4,
@@ -264,7 +293,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_sample_provisional",
     groupId: "grp_ai_hackers",
-    facilityId: "fac_event_hall",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(3, 13),
     endAt: atWeek(3, 17),
     headCount: 20,
@@ -281,7 +310,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_overlap_robotics",
     groupId: "grp_robotics",
-    facilityId: "fac_meeting_a",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(2, 14),
     endAt: atWeek(2, 16),
     headCount: 6,
@@ -293,7 +322,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_overlap_ai",
     groupId: "grp_ai_hackers",
-    facilityId: "fac_meeting_a",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(2, 15),
     endAt: atWeek(2, 18),
     headCount: 8,
@@ -309,7 +338,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_rejected",
     groupId: "grp_robotics",
-    facilityId: "fac_meeting_a",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(3, 10),
     endAt: atWeek(3, 12),
     headCount: 4,
@@ -324,7 +353,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_future_withdrawn",
     groupId: "grp_robotics",
-    facilityId: "fac_meeting_b",
+    facilityId: "fac_toyonaka_lab",
     startAt: atWeek(4, 10),
     endAt: atWeek(4, 12),
     headCount: 3,
@@ -336,7 +365,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_future_cancelled",
     groupId: "grp_robotics",
-    facilityId: "fac_meeting_a",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(5, 13),
     endAt: atWeek(5, 15),
     headCount: 5,
@@ -348,7 +377,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_future_cancelled_by_staff",
     groupId: "grp_ai_hackers",
-    facilityId: "fac_event_hall",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(6, 14),
     endAt: atWeek(6, 18),
     headCount: 15,
@@ -363,7 +392,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_past_approved",
     groupId: "grp_robotics",
-    facilityId: "fac_meeting_a",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(-7, 10),
     endAt: atWeek(-7, 12),
     headCount: 4,
@@ -375,7 +404,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_past_provisional",
     groupId: "grp_ai_hackers",
-    facilityId: "fac_meeting_b",
+    facilityId: "fac_toyonaka_lab",
     startAt: atWeek(-6, 13),
     endAt: atWeek(-6, 15),
     headCount: 6,
@@ -387,11 +416,11 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_past_withdrawn",
     groupId: "grp_robotics",
-    facilityId: "fac_projector_1",
+    facilityId: "fac_suita_laser_cutter",
     startAt: atWeek(-5, 14),
     endAt: atWeek(-5, 16),
     headCount: 2,
-    note: "過去に取り消した備品予約",
+    note: "過去に取り消した設備の予約",
     status: ReservationStatus.Withdrawn,
     statusReason: null,
     createdBy: "usr_student_01",
@@ -399,7 +428,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_past_rejected",
     groupId: "grp_robotics",
-    facilityId: "fac_event_hall",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(-4, 10),
     endAt: atWeek(-4, 12),
     headCount: 25,
@@ -411,7 +440,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_past_cancelled",
     groupId: "grp_ai_hackers",
-    facilityId: "fac_meeting_a",
+    facilityId: "fac_suita_c2_event",
     startAt: atWeek(-3, 15),
     endAt: atWeek(-3, 17),
     headCount: 4,
@@ -423,7 +452,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
   {
     id: "res_past_cancelled_by_staff",
     groupId: "grp_robotics",
-    facilityId: "fac_vr_set",
+    facilityId: "fac_suita_3dp_sla",
     startAt: atWeek(-2, 13),
     endAt: atWeek(-2, 15),
     headCount: 2,
@@ -437,7 +466,8 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
 /**
  * 操作履歴のシードデータ（SCR-018 の動作確認用）。
  *
- * 記録の書き込み（COND-013）はまだ無いので、上の団体・招待・メンバーシップ・予約・施設に
+ * シードは業務のユースケースを通さずに直接書き込むので、記録は自動では残らない（COND-013 の記録は
+ * ユースケースが業務データと同じ batch で書く）。そのため、上の団体・招待・メンバーシップ・予約・施設に
  * 実際に起きたことにして並べている。対象の種類 6 つがすべて現れ、事務局権限による操作とそうでない操作、
  * 「旧 → 新」が出る記録を含む。`changes` の書き方は `AuditLogChanges` の約束に従う。
  */
@@ -509,10 +539,10 @@ export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
     actedAsStaff: true,
     action: AuditLogAction.FacilityUpdate,
     targetType: AuditLogTargetType.Facility,
-    targetId: "fac_vr_set",
+    targetId: "fac_suita_3dp_sla",
     groupId: null,
     changes: {
-      description: { before: "VR 体験用ヘッドセット", after: "VR開発・実証実験用ヘッドセット" },
+      description: { before: "光造形の3Dプリンター。", after: "光造形方式の3Dプリンター。" },
     },
   },
   {
@@ -522,7 +552,7 @@ export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
     actedAsStaff: true,
     action: AuditLogAction.FacilityDeactivate,
     targetType: AuditLogTargetType.Facility,
-    targetId: "fac_vr_set",
+    targetId: "fac_suita_3dp_sla",
     groupId: null,
     changes: {
       is_active: { before: true, after: false },
@@ -535,7 +565,7 @@ export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
     actedAsStaff: true,
     action: AuditLogAction.FacilityReactivate,
     targetType: AuditLogTargetType.Facility,
-    targetId: "fac_vr_set",
+    targetId: "fac_suita_3dp_sla",
     groupId: null,
     changes: {
       is_active: { before: false, after: true },
@@ -552,7 +582,7 @@ export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
     targetId: "res_sample_approved",
     groupId: "grp_robotics",
     changes: {
-      facility_id: { before: null, after: "fac_meeting_a" },
+      facility_id: { before: null, after: "fac_suita_c2_event" },
       start_at: { before: null, after: atWeek(1, 10).toISOString() },
       end_at: { before: null, after: atWeek(1, 12).toISOString() },
       head_count: { before: null, after: 4 },
