@@ -100,8 +100,9 @@ export const validateReservationPeriod = (
     );
   }
 
-  if (period.startAt < now) {
-    return err(invalidPeriod("開始が現在より前になっている。", "過ぎた日時には申請できません。"));
+  // COND-021 は「開始が現在より後」なので、開始がちょうどいまの枠も受け付けない
+  if (period.startAt <= now) {
+    return err(invalidPeriod("開始が現在より後になっていない。", "過ぎた日時には申請できません。"));
   }
 
   return ok(period);
