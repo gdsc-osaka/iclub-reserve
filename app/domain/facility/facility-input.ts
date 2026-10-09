@@ -179,3 +179,30 @@ export const toCalendarUrl = (googleCalendarId: string | null): string | null =>
   }
   return `https://calendar.google.com/calendar/ical/${encodeURIComponent(googleCalendarId)}/public/basic.ics`;
 };
+
+/**
+ * Google Calendar ID から、Google カレンダーへの追加用 URL を生成する純粋関数。
+ *
+ * 【形式】
+ * `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(googleCalendarId)}`
+ *
+ * 【この形式を選んだ理由と、確かめられていないこと】
+ * Google のヘルプには、カレンダーを追加させるリンクの形式は書かれていない（2026-10-09 時点）。
+ * `render?cid=<Calendar ID>` は、Google カレンダーを開いて「カレンダーを追加」の確認を出す
+ * リンクとして広く使われている形式で、ここではそれに従った。
+ * Google カレンダーの設定画面の「共有可能なリンクを取得」が作るリンクは、これとは別の
+ * `https://calendar.google.com/calendar/u/0?cid=<Calendar ID を Base64 にしたもの>` である。
+ * どちらも Google が仕様として約束しているものではないので、追加の画面が開かなくなったら、
+ * まず設定画面が作るリンクの形式と見比べること。
+ *
+ * Calendar ID に含まれる `@` や `#` が URL の区切りとして解釈されないよう、
+ * `encodeURIComponent` でエンコードする。
+ *
+ * ID が null または空文字の場合は追加 URL を生成できないため null を返す。
+ */
+export const toGoogleCalendarAddUrl = (googleCalendarId: string | null): string | null => {
+  if (googleCalendarId === null || googleCalendarId === "") {
+    return null;
+  }
+  return `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(googleCalendarId)}`;
+};

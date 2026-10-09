@@ -2,6 +2,7 @@ import {
   Building2,
   CalendarCheck,
   CalendarDays,
+  CalendarPlus,
   ClipboardCheck,
   History,
   LayoutDashboard,
@@ -77,6 +78,14 @@ export const commonNavItems: readonly NavItem[] = [
     icon: CalendarCheck,
     enabled: true,
     screen: "SCR-003",
+  },
+  {
+    id: "calendars",
+    label: "カレンダー購読",
+    to: "/calendars",
+    icon: CalendarPlus,
+    enabled: true,
+    screen: "SCR-010",
   },
   {
     id: "facilities",
