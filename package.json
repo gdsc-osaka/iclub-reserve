@@ -43,7 +43,7 @@
     "isbot": "^5.1.36",
     "lucide-react": "^1.21.0",
     "neverthrow": "^8.2.0",
-    "radix-ui": "^1.6.0",
+    "radix-ui": "^1.7.0",
     "react": "^19.3.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.3.0",
