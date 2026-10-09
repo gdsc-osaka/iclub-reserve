@@ -1,5 +1,6 @@
 import { createRequestHandler } from "react-router";
 import { createCalendarClient } from "~/infra/calendar/calendar-client-factory.server";
+import { createD1CalendarReconcileQuery } from "~/infra/calendar/d1-calendar-reconcile-query";
 import { createD1CalendarSyncQuery } from "~/infra/calendar/d1-calendar-sync-query";
 import { createD1CalendarSyncTasks } from "~/infra/calendar/d1-calendar-sync-tasks";
 import { createDb } from "~/infra/db";
@@ -7,10 +8,17 @@ import { createD1MailOutbox } from "~/infra/mail/d1-mail-outbox";
 import type { MailQueueMessage } from "~/infra/mail/mail-queue.server";
 import { createMailSender, getMailFrom } from "~/infra/mail/mail-sender-factory.server";
 import { processCalendarSyncTasksUseCase } from "~/usecases/calendar/process-calendar-sync-tasks";
+import { reconcileCalendarsUseCase } from "~/usecases/calendar/reconcile-calendars";
 import {
   flushMailOutboxByIdsUseCase,
   flushMailOutboxUseCase,
 } from "~/usecases/mail/flush-mail-outbox.server";
+
+/** 毎分の定期処理の cron 式（wrangler.jsonc の triggers.crons と一致させる） */
+export const CRON_EVERY_MINUTE = "* * * * *";
+
+/** 毎日 19:00 UTC（日本時間 4:00）の日次突き合わせ cron 式（wrangler.jsonc の triggers.crons と一致させる） */
+export const CRON_DAILY_RECONCILE = "0 19 * * *";
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
@@ -23,55 +31,84 @@ export default {
   },
 
   /**
-   * 毎分の定期処理。
-   * 1. メールの取りこぼし回収（ADR-002 実装ガイド 4）
-   * 2. カレンダー同期タスクの反映（ADR-008 実装方針）
+   * 定期処理（Cron Triggers）。
+   * controller.cron の値に応じて毎分の処理と日次の突き合わせを振り分ける。
    *
-   * 片方が例外を投げてももう片方を巻き込まないよう、それぞれ独立して実行する。
+   * - `* * * * *`: メールの回収と、カレンダー同期タスクの反映
+   * - `0 19 * * *`: 予約と Google Calendar の日次突き合わせ（タスクを積むのみ）
    */
-  async scheduled(_controller, env, _ctx) {
+  async scheduled(controller, env, _ctx) {
+    const cron = controller.cron;
     const db = createDb(env.DB);
 
-    // 1. メールの回収
-    try {
-      const mailOutbox = createD1MailOutbox(db);
-      const mailSender = createMailSender();
-      const from = getMailFrom();
+    // 1. 毎分の定期処理
+    if (cron === CRON_EVERY_MINUTE) {
+      // 1-1. メールの回収（ADR-002 実装ガイド 4）
+      try {
+        const mailOutbox = createD1MailOutbox(db);
+        const mailSender = createMailSender();
+        const from = getMailFrom();
 
-      const mailResult = await flushMailOutboxUseCase({
-        mailOutbox,
-        mailSender,
-        from,
-      });
+        const mailResult = await flushMailOutboxUseCase({
+          mailOutbox,
+          mailSender,
+          from,
+        });
 
-      // 毎分動くので、送るものが無かった回は何も残さない。
-      // stateUpdateFailed が 0 でない回は、同じメールが再送される可能性がある。
-      if (mailResult.claimed > 0) {
-        console.info("mail outbox flushed by cron:", mailResult);
+        // 毎分動くので、送るものが無かった回は何も残さない。
+        // stateUpdateFailed が 0 でない回は、同じメールが再送される可能性がある。
+        if (mailResult.claimed > 0) {
+          console.info("mail outbox flushed by cron:", mailResult);
+        }
+      } catch (error) {
+        console.error("Scheduled mail outbox flush failed:", error);
       }
-    } catch (error) {
-      console.error("Scheduled mail outbox flush failed:", error);
+
+      // 1-2. カレンダー同期タスクの反映（ADR-008 実装方針）
+      try {
+        const calendarSyncTasks = createD1CalendarSyncTasks(db);
+        const query = createD1CalendarSyncQuery(db);
+        const calendarClient = createCalendarClient();
+
+        const calendarResult = await processCalendarSyncTasksUseCase({
+          calendarSyncTasks,
+          query,
+          calendarClient,
+        });
+
+        // 毎分動くので、処理するタスクが無かった回は何も残さない。
+        if (calendarResult.claimed > 0) {
+          console.info("calendar sync tasks processed by cron:", calendarResult);
+        }
+      } catch (error) {
+        console.error("Scheduled calendar sync failed:", error);
+      }
+
+      return;
     }
 
-    // 2. カレンダー同期タスクの反映
-    try {
-      const calendarSyncTasks = createD1CalendarSyncTasks(db);
-      const query = createD1CalendarSyncQuery(db);
-      const calendarClient = createCalendarClient();
+    // 2. 日次突き合わせ（日本時間 4:00、COND-024 (4)）
+    if (cron === CRON_DAILY_RECONCILE) {
+      try {
+        const query = createD1CalendarReconcileQuery(db);
+        const calendarClient = createCalendarClient();
 
-      const calendarResult = await processCalendarSyncTasksUseCase({
-        calendarSyncTasks,
-        query,
-        calendarClient,
-      });
+        const reconcileResult = await reconcileCalendarsUseCase({
+          query,
+          calendarClient,
+          db,
+        });
 
-      // 毎分動くので、処理するタスクが無かった回は何も残さない。
-      if (calendarResult.claimed > 0) {
-        console.info("calendar sync tasks processed by cron:", calendarResult);
+        console.info("daily calendar reconcile completed by cron:", reconcileResult);
+      } catch (error) {
+        console.error("Scheduled daily calendar reconcile failed:", error);
       }
-    } catch (error) {
-      console.error("Scheduled calendar sync failed:", error);
+
+      return;
     }
+
+    // 未知の cron 式が来た場合は warn を残す
+    console.warn("Unknown cron schedule triggered:", cron);
   },
 
   /**

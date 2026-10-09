@@ -164,3 +164,46 @@ export const guardedFacilityCalendarSyncTaskInserts = (
 
   return [statement];
 };
+
+/**
+ * 1 つの INSERT 文で挿入する同期タスクのチャンクサイズ。
+ *
+ * Cloudflare D1 では 1 クエリあたりのバインド変数が最大 100 個に制限されている。
+ * 1 行あたり 8 個のパラメータ（reservationId, previousFacilityId, status, attemptCount, nextAttemptAt, lastError, createdAt, updatedAt）
+ * を使用するため、1 チャンク最大 10 行（80 パラメータ）に分割することで上限（100 個）を確実に下回るようにする。
+ */
+export const CALENDAR_SYNC_TASK_INSERT_CHUNK_SIZE = 10;
+
+/**
+ * 日次突き合わせで導出した同期タスクの草稿を calendar_sync_task に積む INSERT 文の配列を組み立てる。
+ *
+ * 業務データの更新は伴わないため guard は不要。
+ * D1 の 1 文あたりのバインド変数上限（100 件）を超えないよう、CALENDAR_SYNC_TASK_INSERT_CHUNK_SIZE ごとに文を分割する。
+ */
+export const reconcileCalendarSyncTaskInserts = (
+  db: Database,
+  drafts: readonly CalendarSyncTaskDraft[],
+  now: Date = new Date(),
+): readonly BatchItem<"sqlite">[] => {
+  if (drafts.length === 0) {
+    return [];
+  }
+
+  const statements: BatchItem<"sqlite">[] = [];
+  for (let i = 0; i < drafts.length; i += CALENDAR_SYNC_TASK_INSERT_CHUNK_SIZE) {
+    const chunk = drafts.slice(i, i + CALENDAR_SYNC_TASK_INSERT_CHUNK_SIZE);
+    const values = chunk.map((draft) => ({
+      reservationId: draft.reservationId,
+      previousFacilityId: draft.previousFacilityId,
+      status: CalendarSyncStatus.Pending,
+      attemptCount: 0,
+      nextAttemptAt: now,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    statements.push(db.insert(calendarSyncTaskTable).values(values));
+  }
+
+  return statements;
+};
