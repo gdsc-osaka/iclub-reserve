@@ -84,6 +84,15 @@ pnpm run db:migrate:local
 > その場合は `.wrangler/state/v3/d1/miniflare-D1DatabaseObject` から
 > エラーメッセージに出た古いファイルを削除してください。
 
+### エディタ（VS Code）
+
+型チェックには TypeScript 7 を使っています。
+VS Code に最初から入っている TypeScript の機能は、TypeScript 7 ではなく VS Code に同梱の別の版で型を確かめます。
+拡張機能「[TypeScript 7](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview)」（`TypeScriptTeam.native-preview`）を入れてください。
+入れると自動で切り替わり、`pnpm run typecheck` と同じ版でエラーが出るようになります。
+
+このリポジトリを開くと、推奨の拡張機能として表示されます（`.vscode/extensions.json`）。
+
 ### ローカル開発
 
 開発サーバーの起動（HMR 対応）:
