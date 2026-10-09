@@ -29,18 +29,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const db = createDb(env.DB);
   const calendarClient = createCalendarClient();
-
-  let reconcileResult = null;
-  if (shouldReconcile) {
-    const reconcileQuery = createD1CalendarReconcileQuery(db);
-    reconcileResult = await reconcileCalendarsUseCase({
-      query: reconcileQuery,
-      calendarClient,
-      db,
-    });
-  }
-
   const calendarSyncTasks = createD1CalendarSyncTasks(db);
+
+  const reconcileResult = shouldReconcile
+    ? await reconcileCalendarsUseCase({
+        query: createD1CalendarReconcileQuery(db),
+        calendarClient,
+        calendarSyncTasks,
+      })
+    : null;
+
   const query = createD1CalendarSyncQuery(db);
 
   const syncResult = await processCalendarSyncTasksUseCase({

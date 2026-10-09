@@ -1,6 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 import type { BaseError } from "../error";
 import type { CalendarError } from "./calendar-client";
+import type { CalendarSyncTaskDraft } from "./calendar-event";
 
 /**
  * カレンダー同期タスクの状態。
@@ -73,6 +74,16 @@ export interface CalendarSyncTasks {
   fail(args: {
     readonly ids: readonly number[];
     readonly error: CalendarError;
+    readonly now: Date;
+  }): ResultAsync<void, CalendarSyncTaskError>;
+
+  /**
+   * 日次の突き合わせで見つけた差分を、処理待ちのタスクとして積む。
+   *
+   * 業務データの書き込みを伴わないので、予約や施設のリポジトリで積むときと違って条件（guard）は付けない。
+   */
+  enqueue(args: {
+    readonly drafts: readonly CalendarSyncTaskDraft[];
     readonly now: Date;
   }): ResultAsync<void, CalendarSyncTaskError>;
 }

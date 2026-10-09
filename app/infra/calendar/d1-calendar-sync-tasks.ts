@@ -15,6 +15,7 @@ import {
 } from "~/domain/calendar";
 
 import type { Database } from "../db";
+import { reconcileCalendarSyncTaskInserts } from "./calendar-sync-task-writes";
 
 /** 処理中のまま放置されたとみなすまでの時間（5分）。Worker が途中で落ちた行を救う（ADR-008） */
 export const CALENDAR_SYNC_STUCK_AFTER_MS = 5 * 60 * 1000;
@@ -159,5 +160,17 @@ export const createD1CalendarSyncTasks = (db: Database): CalendarSyncTasks => ({
         () => undefined,
       );
     });
+  },
+
+  enqueue: ({ drafts, now }) => {
+    // D1 のバインド変数の上限に収まるよう、文は calendar-sync-task-writes.ts の側で分けてある
+    const [first, ...rest] = reconcileCalendarSyncTaskInserts(db, drafts, now);
+    if (first === undefined) {
+      return okAsync(undefined);
+    }
+
+    return ResultAsync.fromPromise(db.batch([first, ...rest]), toCalendarSyncTaskError).map(
+      () => undefined,
+    );
   },
 });

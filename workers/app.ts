@@ -15,10 +15,10 @@ import {
 } from "~/usecases/mail/flush-mail-outbox.server";
 
 /** 毎分の定期処理の cron 式（wrangler.jsonc の triggers.crons と一致させる） */
-export const CRON_EVERY_MINUTE = "* * * * *";
+const CRON_EVERY_MINUTE = "* * * * *";
 
 /** 毎日 19:00 UTC（日本時間 4:00）の日次突き合わせ cron 式（wrangler.jsonc の triggers.crons と一致させる） */
-export const CRON_DAILY_RECONCILE = "0 19 * * *";
+const CRON_DAILY_RECONCILE = "0 19 * * *";
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
@@ -92,11 +92,12 @@ export default {
       try {
         const query = createD1CalendarReconcileQuery(db);
         const calendarClient = createCalendarClient();
+        const calendarSyncTasks = createD1CalendarSyncTasks(db);
 
         const reconcileResult = await reconcileCalendarsUseCase({
           query,
           calendarClient,
-          db,
+          calendarSyncTasks,
         });
 
         console.info("daily calendar reconcile completed by cron:", reconcileResult);
