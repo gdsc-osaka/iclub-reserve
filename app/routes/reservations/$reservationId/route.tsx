@@ -207,6 +207,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       transition,
       reason: typeof reason === "string" ? reason : null,
       now: new Date(),
+      appBaseUrl: resolveAppBaseUrl(request),
     },
   );
 

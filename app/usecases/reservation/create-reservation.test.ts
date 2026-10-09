@@ -57,6 +57,7 @@ const args = {
   actorUserId: "usr_student_01",
   isStaff: false,
   now,
+  appBaseUrl: "https://reserve.example.com",
   reservation: {
     facilityId: "fac_meeting_a",
     groupId: "grp_robotics",

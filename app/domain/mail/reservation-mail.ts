@@ -4,6 +4,7 @@ import {
   type AppliedReservationEdit,
   type DirectReservationEditOutcome,
 } from "~/domain/reservation/edit";
+import { reservationDetailPath } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import type { MailDraft } from "./mail-outbox";
 
@@ -170,9 +171,15 @@ export interface ReservationMailSubject {
 /**
  * イベント種別と予約情報から本文を組み立てる純粋関数。
  * 署名と冒頭以外の骨組みは全イベント共通で、理由の有無のみイベントと入力値により分岐する。
+ * 末尾には、どのイベントでも予約詳細（SCR-005）へのリンクを載せる（EVT-001〜007・EVT-012・EVT-017）。
  */
-const buildBody = (event: ReservationMailEvent, reservation: ReservationMailSubject): string => {
+const buildBody = (
+  event: ReservationMailEvent,
+  reservation: ReservationMailSubject,
+  appBaseUrl: string,
+): string => {
   const copy = eventMailCopy[event];
+  const detailUrl = `${appBaseUrl}${reservationDetailPath(reservation.id)}`;
   const lines = [
     "i-Club 予約システムをご利用いただきありがとうございます。",
     "",
@@ -189,7 +196,8 @@ const buildBody = (event: ReservationMailEvent, reservation: ReservationMailSubj
 
   lines.push(
     "",
-    "詳細はシステムにログインしてご確認ください。",
+    "予約の詳細は、次のページでご確認ください。",
+    detailUrl,
     "",
     "----------------------------------------",
     "大阪大学 Innovators' Club (i-Club) 予約システム",
@@ -220,15 +228,17 @@ const buildBody = (event: ReservationMailEvent, reservation: ReservationMailSubj
  * @param event 発生した予約イベント
  * @param reservation 対象の予約情報
  * @param audience 宛先（団体メンバーおよび事務局）
+ * @param appBaseUrl 予約詳細へのリンクを組み立てるための、アプリの URL の起点（例: `https://example.com`）
  * @returns Transactional Outbox に積むための MailDraft の配列
  */
 export const createReservationMailDrafts = (
   event: ReservationMailEvent,
   reservation: ReservationMailSubject,
   audience: ReservationMailAudience,
+  appBaseUrl: string,
 ): readonly MailDraft[] => {
   const copy = eventMailCopy[event];
-  const text = buildBody(event, reservation);
+  const text = buildBody(event, reservation, appBaseUrl);
   const recipients = notifiesStaff[event]
     ? [...audience.groupMembers, ...audience.staff]
     : audience.groupMembers;

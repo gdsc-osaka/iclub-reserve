@@ -25,6 +25,7 @@ import { createReservationFormQuery } from "~/infra/reservation/reservation-form
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
+import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { toTokyoDateKey, tokyoMinutesOfDay } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
@@ -162,6 +163,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     isStaff: user.is_staff,
     now,
     content,
+    appBaseUrl: resolveAppBaseUrl(request),
   };
 
   const result =

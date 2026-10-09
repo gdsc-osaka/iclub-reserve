@@ -173,6 +173,7 @@ describe("予約の操作から Google Calendar への反映まで", () => {
       },
       {
         reservationId: "res_flow_1",
+        appBaseUrl: "https://reserve.example.com",
         actorUserId: "usr_staff",
         isStaff: true,
         transition: ReservationTransition.Approve,
@@ -214,6 +215,7 @@ describe("予約の操作から Google Calendar への反映まで", () => {
       },
       {
         reservationId: "res_flow_2",
+        appBaseUrl: "https://reserve.example.com",
         actorUserId: "usr_staff",
         isStaff: true,
         transition: ReservationTransition.StaffCancel,
@@ -247,6 +249,7 @@ describe("予約の操作から Google Calendar への反映まで", () => {
       },
       {
         reservationId: "res_flow_3",
+        appBaseUrl: "https://reserve.example.com",
         actorUserId: "usr_staff",
         isStaff: true,
         now: testNow,

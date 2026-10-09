@@ -57,6 +57,8 @@ export interface ChangeReservationStatusArgs {
   readonly reason?: string | null;
   /** 更新日時の基準となる日時（テスト容易化のため任意指定可能） */
   readonly now?: Date;
+  /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
+  readonly appBaseUrl: string;
 }
 
 /** 予約ステータス変更ユースケースの返却値 */
@@ -153,6 +155,7 @@ export const changeReservationStatusUseCase = (
             updatedAt: now,
           },
           audience,
+          args.appBaseUrl,
         ),
       );
 

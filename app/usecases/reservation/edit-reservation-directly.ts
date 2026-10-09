@@ -49,6 +49,8 @@ export interface EditReservationDirectlyArgs {
   readonly isStaff: boolean;
   readonly now: Date;
   readonly content: ReservationContent;
+  /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
+  readonly appBaseUrl: string;
 }
 
 /** 事務局が予約の内容を直接変更するユースケースの返却値 */
@@ -118,6 +120,7 @@ export const editReservationDirectlyUseCase = (
       checksOverlap,
       overlapUserMessage: APPROVED_OVERLAP_MESSAGE,
       mailEvent: directEditMailEvent[outcome],
+      appBaseUrl: args.appBaseUrl,
     });
 
     // 直接変更ではステータスを変えない（いまのステータスのまま）
