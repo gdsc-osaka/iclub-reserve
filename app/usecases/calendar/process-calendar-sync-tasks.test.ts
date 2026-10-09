@@ -89,6 +89,7 @@ describe("processCalendarSyncTasksUseCase", () => {
     claimDue: vi.fn().mockReturnValue(okAsync([])),
     complete: vi.fn().mockReturnValue(okAsync(undefined)),
     fail: vi.fn().mockReturnValue(okAsync(undefined)),
+    enqueue: vi.fn().mockReturnValue(okAsync(undefined)),
   });
 
   const createMockQuery = (): CalendarSyncQuery => ({

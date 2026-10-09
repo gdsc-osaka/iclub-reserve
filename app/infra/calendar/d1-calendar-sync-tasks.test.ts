@@ -215,4 +215,67 @@ describe("createD1CalendarSyncTasks", () => {
       expect(updated?.attemptCount).toBe(6);
     });
   });
+
+  describe("enqueue", () => {
+    it("draft を処理待ちの行として積み、すぐに取り出せるようにする", async () => {
+      const tasks = createD1CalendarSyncTasks(testDb.db);
+      const result = await tasks.enqueue({
+        drafts: [
+          { reservationId: "res_1", previousFacilityId: null },
+          { reservationId: "res_1", previousFacilityId: "fac_old" },
+        ],
+        now,
+      });
+      expect(result.isOk()).toBe(true);
+
+      const rows = await testDb.db.select().from(calendarSyncTaskTable);
+      expect(
+        rows.map((row) => ({
+          reservationId: row.reservationId,
+          previousFacilityId: row.previousFacilityId,
+          status: row.status,
+          attemptCount: row.attemptCount,
+          nextAttemptAt: row.nextAttemptAt,
+        })),
+      ).toEqual([
+        {
+          reservationId: "res_1",
+          previousFacilityId: null,
+          status: CalendarSyncStatus.Pending,
+          attemptCount: 0,
+          nextAttemptAt: now,
+        },
+        {
+          reservationId: "res_1",
+          previousFacilityId: "fac_old",
+          status: CalendarSyncStatus.Pending,
+          attemptCount: 0,
+          nextAttemptAt: now,
+        },
+      ]);
+    });
+
+    it("1 文のバインド変数の上限を超える件数でも、すべて積める", async () => {
+      const tasks = createD1CalendarSyncTasks(testDb.db);
+      const drafts = Array.from({ length: 25 }, (_, i) => ({
+        reservationId: `res_${i}`,
+        previousFacilityId: null,
+      }));
+
+      const result = await tasks.enqueue({ drafts, now });
+      expect(result.isOk()).toBe(true);
+
+      const rows = await testDb.db.select().from(calendarSyncTaskTable);
+      expect(rows).toHaveLength(25);
+    });
+
+    it("draft が無ければ何も積まない", async () => {
+      const tasks = createD1CalendarSyncTasks(testDb.db);
+      const result = await tasks.enqueue({ drafts: [], now });
+      expect(result.isOk()).toBe(true);
+
+      const rows = await testDb.db.select().from(calendarSyncTaskTable);
+      expect(rows).toHaveLength(0);
+    });
+  });
 });

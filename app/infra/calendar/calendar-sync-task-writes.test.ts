@@ -10,6 +10,8 @@ import type { CalendarSyncTaskDraft } from "~/domain/calendar";
 import {
   guardedCalendarSyncTaskInserts,
   guardedFacilityCalendarSyncTaskInserts,
+  reconcileCalendarSyncTaskInserts,
+  CALENDAR_SYNC_TASK_INSERT_CHUNK_SIZE,
   type CalendarSyncTaskGuard,
 } from "./calendar-sync-task-writes";
 
@@ -158,5 +160,86 @@ describe("guardedFacilityCalendarSyncTaskInserts", () => {
 
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+});
+
+describe("reconcileCalendarSyncTaskInserts", () => {
+  const now = new Date("2026-10-10T10:00:00.000Z");
+
+  it("draft が空配列のときは空配列を返す", () => {
+    const statements = reconcileCalendarSyncTaskInserts(db, [], now);
+    expect(statements).toHaveLength(0);
+  });
+
+  it("draft があるときは INSERT 文を生成し、各列に正しい値が入る", () => {
+    const drafts: CalendarSyncTaskDraft[] = [
+      { reservationId: "res_1", previousFacilityId: null },
+      { reservationId: "res_2", previousFacilityId: "fac_prev_old" },
+    ];
+
+    const statements = reconcileCalendarSyncTaskInserts(db, drafts, now);
+    expect(statements).toHaveLength(1);
+
+    const { sql, params } = toSQL(statements[0]!);
+    expect(sql).toContain("insert into");
+    expect(sql).toContain(`"calendar_sync_task"`);
+    expect(sql).toContain("values");
+
+    // 1 行あたり 8 パラメータ（reservation_id, previous_facility_id, status, attempt_count, next_attempt_at, last_error, created_at, updated_at）
+    expect(params).toHaveLength(2 * 8);
+
+    // 1行目
+    expect(params.slice(0, 8)).toEqual([
+      "res_1",
+      null,
+      "pending",
+      0,
+      now.getTime(),
+      null,
+      now.getTime(),
+      now.getTime(),
+    ]);
+
+    // 2行目
+    expect(params.slice(8, 16)).toEqual([
+      "res_2",
+      "fac_prev_old",
+      "pending",
+      0,
+      now.getTime(),
+      null,
+      now.getTime(),
+      now.getTime(),
+    ]);
+  });
+
+  it("D1 のバインド変数上限（100個）を超えないよう CHUNK_SIZE ごとに文を分割する", () => {
+    // 25 件の draft を作成
+    const drafts: CalendarSyncTaskDraft[] = Array.from({ length: 25 }, (_, i) => ({
+      reservationId: `res_${i}`,
+      previousFacilityId: i % 2 === 0 ? `fac_${i}` : null,
+    }));
+
+    const statements = reconcileCalendarSyncTaskInserts(db, drafts, now);
+
+    // CHUNK_SIZE が 10 のため、25 件は 10 + 10 + 5 の 3 文に分割される
+    expect(statements).toHaveLength(Math.ceil(25 / CALENDAR_SYNC_TASK_INSERT_CHUNK_SIZE));
+    expect(statements).toHaveLength(3);
+
+    // すべての文においてバインド変数の数が 100 以下であることを検証（D1_ERROR: too many SQL variables を防止）
+    for (const statement of statements) {
+      const { params } = toSQL(statement);
+      expect(params.length).toBeLessThanOrEqual(100);
+      expect(params.length).toBeGreaterThan(0);
+    }
+
+    const { params: params1 } = toSQL(statements[0]!);
+    expect(params1).toHaveLength(10 * 8); // 80 変数
+
+    const { params: params2 } = toSQL(statements[1]!);
+    expect(params2).toHaveLength(10 * 8); // 80 変数
+
+    const { params: params3 } = toSQL(statements[2]!);
+    expect(params3).toHaveLength(5 * 8); // 40 変数
   });
 });
