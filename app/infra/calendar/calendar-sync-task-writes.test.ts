@@ -4,11 +4,12 @@ import type { BatchItem } from "drizzle-orm/batch";
 import { describe, expect, it } from "vitest";
 
 import * as schema from "~/db/schema";
-import { reservationTable } from "~/db/schema";
+import { facilityTable, reservationTable } from "~/db/schema";
 import type { CalendarSyncTaskDraft } from "~/domain/calendar";
 
 import {
   guardedCalendarSyncTaskInserts,
+  guardedFacilityCalendarSyncTaskInserts,
   type CalendarSyncTaskGuard,
 } from "./calendar-sync-task-writes";
 
@@ -99,5 +100,63 @@ describe("guardedCalendarSyncTaskInserts", () => {
     const { params } = toSQL(statement!);
 
     expect(params[2]).toBeNull();
+  });
+});
+
+describe("guardedFacilityCalendarSyncTaskInserts", () => {
+  const guard: CalendarSyncTaskGuard = {
+    from: facilityTable,
+    where: eq(facilityTable.id, "fac_test_123"),
+  };
+  const rangeStart = new Date("2026-10-01T00:00:00Z");
+
+  it("resync が null のときは空配列を返す", () => {
+    const statements = guardedFacilityCalendarSyncTaskInserts(db, null, guard);
+    expect(statements).toHaveLength(0);
+  });
+
+  it("resync があるときは 1 つの文を返す", () => {
+    const statements = guardedFacilityCalendarSyncTaskInserts(
+      db,
+      { facilityId: "fac_test_123", rangeStart },
+      guard,
+    );
+    expect(statements).toHaveLength(1);
+  });
+
+  it("予約テーブルから承認済み・指定施設・終了日時以降を SELECT して INSERT し、guard の EXISTS 条件が付く", () => {
+    const [statement] = guardedFacilityCalendarSyncTaskInserts(
+      db,
+      { facilityId: "fac_test_123", rangeStart },
+      guard,
+    );
+    const { sql, params } = toSQL(statement!);
+
+    expect(sql).toContain("insert into");
+    expect(sql).toContain(`"calendar_sync_task"`);
+    expect(sql).toContain("select");
+    expect(sql).toContain(`from "reservation"`);
+    expect(sql).toContain(`"reservation"."facility_id" = ?`);
+    expect(sql).toContain(`"reservation"."status" = ?`);
+    expect(sql).toContain(`"reservation"."end_at" >= ?`);
+    expect(sql).toContain(`exists (select 1 from "facility" where "facility"."id" = ?)`);
+
+    expect(params).toContain("fac_test_123");
+    expect(params).toContain("approved");
+    expect(params).toContain(rangeStart.getTime());
+  });
+
+  it("SELECT 側の列も定義順（id を含む）にそろえる", () => {
+    const [statement] = guardedFacilityCalendarSyncTaskInserts(
+      db,
+      { facilityId: "fac_test_123", rangeStart },
+      guard,
+    );
+    const { sql } = toSQL(statement!);
+
+    const positions = columns.map((column) => sql.indexOf(`as "${column}"`));
+
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 });

@@ -96,6 +96,39 @@ describe("facilityErrorResponse", () => {
       expect.objectContaining({ level: "error", code: "FACILITY_PHOTO_STORAGE_ERROR" }),
     );
   });
+
+  it("カレンダー書き込み権限なし（CalendarNotWritable）は 400 で、info でログに残る", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const response = facilityErrorResponse(context, errorOf(FacilityErrorCode.CalendarNotWritable));
+
+    expect(response.init?.status).toBe(400);
+    expect(info).toHaveBeenCalledWith(
+      expect.objectContaining({ level: "info", code: "FACILITY_CALENDAR_NOT_WRITABLE" }),
+    );
+  });
+
+  it("Google カレンダー接続エラー（CalendarUnavailable）は 503 で、error でログに残る", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = facilityErrorResponse(context, errorOf(FacilityErrorCode.CalendarUnavailable));
+
+    expect(response.init?.status).toBe(503);
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ level: "error", code: "FACILITY_CALENDAR_UNAVAILABLE" }),
+    );
+  });
+
+  it("カレンダーシステムエラー（CalendarSystemError）は 500 で、error でログに残る", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = facilityErrorResponse(context, errorOf(FacilityErrorCode.CalendarSystemError));
+
+    expect(response.init?.status).toBe(500);
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ level: "error", code: "FACILITY_CALENDAR_SYSTEM_ERROR" }),
+    );
+  });
 });
 
 describe("facilityActionErrors", () => {

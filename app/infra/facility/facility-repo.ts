@@ -13,6 +13,7 @@ import {
 } from "~/domain/facility";
 import { ReservationStatus } from "~/domain/reservation";
 import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
+import { guardedFacilityCalendarSyncTaskInserts } from "../calendar/calendar-sync-task-writes";
 import type { Database } from "../db";
 
 const toFacility = (row: typeof facilityTable.$inferSelect): Facility => ({
@@ -85,6 +86,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
   const update = (
     input: UpdateFacilityInput,
     auditLog: AuditLogDraft,
+    calendarResync: { rangeStart: Date } | null,
   ): ResultAsync<Facility, FacilityError> => {
     const updateWhere = allOf(
       eq(facilityTable.id, input.id),
@@ -92,6 +94,14 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
       input.expectedPhotoUrl === null
         ? isNull(facilityTable.photoUrl)
         : eq(facilityTable.photoUrl, input.expectedPhotoUrl),
+    );
+    const calendarStatements = guardedFacilityCalendarSyncTaskInserts(
+      db,
+      calendarResync ? { facilityId: input.id, rangeStart: calendarResync.rangeStart } : null,
+      {
+        from: facilityTable,
+        where: updateWhere,
+      },
     );
     const auditStatement = guardedAuditLogInsert(db, auditLog, {
       from: facilityTable,
@@ -111,14 +121,14 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
       .returning();
 
     return ResultAsync.fromPromise(
-      db.batch([auditStatement, updateStatement]),
+      db.batch([auditStatement, ...calendarStatements, updateStatement]),
       (error): FacilityError => ({
         code: FacilityErrorCode.DatabaseError,
         message: "施設テーブルを更新できなかった。",
         cause: error,
       }),
     ).andThen((results) => {
-      const rows = results[1] as (typeof facilityTable.$inferSelect)[];
+      const rows = results[results.length - 1] as (typeof facilityTable.$inferSelect)[];
       const row = rows.at(0);
       if (row !== undefined) {
         return ok(toFacility(row));

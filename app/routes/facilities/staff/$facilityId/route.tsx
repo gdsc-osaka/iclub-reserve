@@ -14,6 +14,10 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { FacilityField } from "~/domain/facility";
 import { createDb } from "~/infra/db";
+import {
+  createCalendarClient,
+  getCalendarWriterEmail,
+} from "~/infra/calendar/calendar-client-factory.server";
 import { createR2FacilityPhotoStorage } from "~/infra/facility/r2-facility-photo-storage";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
@@ -60,7 +64,10 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     );
   }
 
-  return { facility: result.value };
+  return {
+    facility: result.value,
+    calendarWriterEmail: getCalendarWriterEmail(),
+  };
 }
 
 /**
@@ -134,10 +141,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const googleCalendarId = typeof rawGoogleCalendarId === "string" ? rawGoogleCalendarId : null;
 
   const photoStorage = createR2FacilityPhotoStorage(env.MEDIA);
+  const calendarClient = createCalendarClient();
+  const calendarWriterEmail = getCalendarWriterEmail();
   const result = await updateFacilityUseCase(
     {
       facilityRepository: createFacilityRepository(db),
       facilityPhotoStorage: photoStorage,
+      calendarClient,
+      calendarWriterEmail,
     },
     {
       facilityId,
@@ -259,6 +270,7 @@ export default function EditFacilityPage({ loaderData, actionData }: Route.Compo
               initialValues={facility}
               errors={formErrors}
               isSubmitting={isSubmitting}
+              calendarWriterEmail={loaderData.calendarWriterEmail}
             />
           </Form>
         </CardContent>

@@ -5,6 +5,7 @@ import {
   toCalendarEventId,
   toCalendarSyncDraft,
   toDesiredCalendarEvent,
+  toFacilityCalendarResync,
 } from "./calendar-event";
 
 describe("calendar-event domain functions", () => {
@@ -282,6 +283,53 @@ describe("calendar-event domain functions", () => {
       const justAfterMidnight = new Date("2026-10-08T15:00:01.000Z");
       const rangeStart = calendarSyncRangeStart(justAfterMidnight);
       expect(rangeStart.toISOString()).toBe("2026-10-07T15:00:00.000Z");
+    });
+  });
+
+  describe("toFacilityCalendarResync", () => {
+    const base = {
+      name: "吹田：3Dプリンター",
+      googleCalendarId: "cal_1@group.calendar.google.com",
+    };
+
+    it("名称が変わったときは真（EVT-011）", () => {
+      const resync = toFacilityCalendarResync(base, {
+        name: "吹田：3Dプリンター 光造形機",
+        googleCalendarId: base.googleCalendarId,
+      });
+      expect(resync).toBe(true);
+    });
+
+    it("Calendar ID が変わって変更後が null でないときは真（EVT-009）", () => {
+      const resync = toFacilityCalendarResync(base, {
+        name: base.name,
+        googleCalendarId: "cal_2@group.calendar.google.com",
+      });
+      expect(resync).toBe(true);
+    });
+
+    it("Calendar ID を外した（変更後が null）だけなら偽（COND-024 (3)）", () => {
+      const resync = toFacilityCalendarResync(base, {
+        name: base.name,
+        googleCalendarId: null,
+      });
+      expect(resync).toBe(false);
+    });
+
+    it("どちらも変わらない（説明や写真だけの変更）ときは偽", () => {
+      const resync = toFacilityCalendarResync(base, {
+        name: base.name,
+        googleCalendarId: base.googleCalendarId,
+      });
+      expect(resync).toBe(false);
+    });
+
+    it("名称を変えつつ Calendar ID を外したときは真（名称が変わったため）", () => {
+      const resync = toFacilityCalendarResync(base, {
+        name: "新しい名称",
+        googleCalendarId: null,
+      });
+      expect(resync).toBe(true);
     });
   });
 });
