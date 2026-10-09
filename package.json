@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.7",
-    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/inter": "^5.3.0",
     "@paralleldrive/cuid2": "^3.3.0",
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
