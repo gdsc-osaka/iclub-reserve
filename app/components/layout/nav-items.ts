@@ -9,7 +9,6 @@ import {
   Settings2,
   UserCog,
   Users,
-  Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -86,14 +85,6 @@ export const commonNavItems: readonly NavItem[] = [
     icon: CalendarPlus,
     enabled: true,
     screen: "SCR-010",
-  },
-  {
-    id: "facilities",
-    label: "施設・設備",
-    to: "/facilities",
-    icon: Wrench,
-    enabled: false,
-    screen: "SCR-009",
   },
   {
     id: "groups",
