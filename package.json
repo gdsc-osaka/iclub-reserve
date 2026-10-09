@@ -41,7 +41,7 @@
     "drizzle-orm": "^0.45.3",
     "input-otp": "^1.5.0",
     "isbot": "^5.1.36",
-    "lucide-react": "^1.21.0",
+    "lucide-react": "^1.52.0",
     "neverthrow": "^8.2.0",
     "radix-ui": "^1.7.0",
     "react": "^19.3.0",
