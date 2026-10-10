@@ -156,22 +156,10 @@ entities:
         type: "string"
         required: true
         description: "団体名"
-      - name: "slug"
-        type: "string"
-        required: true
-        description: "団体を指すための短い識別子（一意）。所属していない人の目に触れうる値として扱うため、id と同じ値にしてはならない。"
       - name: "status"
         type: "enum"
         required: true
         description: "団体の状態: pending（承認待ち）/ enabled（有効）/ disabled（無効）。既定は pending。enabled への変更は事務局のみが行う（REQ-021）。pending・disabled の団体では予約を申請できない（COND-006）。"
-      - name: "logo"
-        type: "string"
-        required: false
-        description: "団体のロゴURL。現時点では利用していない。"
-      - name: "metadata"
-        type: "string"
-        required: false
-        description: "拡張用の予備領域。現時点では利用していない。"
       - name: "created_at"
         type: "datetime"
         required: true
@@ -283,7 +271,7 @@ entities:
       - target: "INFO-003"
         type: "N:1"
         label: "団体"
-    traces_to: ["UC-011", "UC-012", "UC-022", "UC-035", "SCR-007", "SCR-008", "SCR-022"]
+    traces_to: ["UC-011", "UC-012", "UC-022", "UC-035", "SCR-007", "SCR-008", "SCR-018", "SCR-022"]
 
   - id: "INFO-006"
     name: "ユーザー"
@@ -393,8 +381,8 @@ entities:
         description: "招待先のメールアドレス"
       - name: "role"
         type: "enum"
-        required: false
-        description: "承諾後に与えるロール（VAR-001）。未指定の場合は member とする。"
+        required: true
+        description: "承諾後に与えるロール（VAR-001）。招待を送る時点で管理者かメンバーかを決める。"
       - name: "status"
         type: "enum"
         required: true
@@ -418,7 +406,7 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "招待者"
-    traces_to: ["UC-011", "UC-022", "SCR-007", "SCR-016"]
+    traces_to: ["UC-011", "UC-022", "SCR-007", "SCR-016", "SCR-018"]
 
   - id: "INFO-008"
     name: "操作履歴"
@@ -638,16 +626,15 @@ erDiagram
         boolean email_verified
         string image
         boolean is_staff
+        string terms_version
+        datetime terms_accepted_at
         datetime created_at
         datetime updated_at
     }
     INFO_003["INFO-003: 団体"] {
         string id PK
         string name
-        string slug
         enum status "pending/enabled/disabled"
-        string logo
-        string metadata
         datetime created_at
         datetime updated_at
     }
