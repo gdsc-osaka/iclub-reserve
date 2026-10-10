@@ -12,6 +12,8 @@ import { ReservationEditOutcome } from "~/domain/reservation/edit";
 import { ReservationTransition } from "~/domain/reservation/transition";
 
 describe("reservation-mail", () => {
+  const APP_BASE_URL = "https://reserve.example.com";
+
   const baseReservation = {
     id: "res_test_123",
     startAt: new Date("2026-09-25T10:00:00+09:00"),
@@ -29,13 +31,14 @@ describe("reservation-mail", () => {
     staff: [{ userId: "usr_staff", address: "staff@example.com", name: "事務局員" }],
   };
 
-  // --- 承認通知のケース（文面を 1 バイトも変えずに残す。鍵は更新日時を入れる形に改めた） ---
+  // --- 承認通知のケース（文面の全体を固定する。予約詳細へのリンクは 2026-10-09 に加えた） ---
   describe("EVT-005 承認通知（既存仕様の保護）", () => {
     it("件名に承認された旨が含まれる", () => {
       const drafts = createReservationMailDrafts(
         ReservationMailEvent.Approved,
         baseReservation,
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(drafts[0]?.subject).toBe("【i-Club予約システム】施設・設備の利用予約が承認されました");
     });
@@ -45,6 +48,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Approved,
         baseReservation,
         defaultAudience,
+        APP_BASE_URL,
       );
       const body = drafts[0]?.text ?? "";
       expect(body).toContain("res_test_123");
@@ -60,7 +64,8 @@ describe("reservation-mail", () => {
           "利用開始日時: 2026年9月25日 10:00",
           "利用終了日時: 2026年9月25日 12:00",
           "",
-          "詳細はシステムにログインしてご確認ください。",
+          "予約の詳細は、次のページでご確認ください。",
+          "https://reserve.example.com/reservations/res_test_123",
           "",
           "----------------------------------------",
           "大阪大学 Innovators' Club (i-Club) 予約システム",
@@ -74,6 +79,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Approved,
         baseReservation,
         defaultAudience,
+        APP_BASE_URL,
       );
 
       // 承認通知は事務局には送らないため groupMembers の 2 件のみ
@@ -109,6 +115,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Approved,
         baseReservation,
         audience,
+        APP_BASE_URL,
       );
 
       expect(drafts[0]?.idempotencyKey).toBe(
@@ -125,11 +132,13 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Approved,
         baseReservation,
         defaultAudience,
+        APP_BASE_URL,
       );
       const second = createReservationMailDrafts(
         ReservationMailEvent.Approved,
         { ...baseReservation, updatedAt: new Date("2026-09-22T10:00:00+09:00") },
         defaultAudience,
+        APP_BASE_URL,
       );
 
       expect(second[0]?.idempotencyKey).not.toBe(first[0]?.idempotencyKey);
@@ -140,11 +149,13 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Approved,
         baseReservation,
         defaultAudience,
+        APP_BASE_URL,
       );
       const second = createReservationMailDrafts(
         ReservationMailEvent.Approved,
         { ...baseReservation },
         defaultAudience,
+        APP_BASE_URL,
       );
 
       expect(second.map((draft) => draft.idempotencyKey)).toEqual(
@@ -226,13 +237,29 @@ describe("reservation-mail", () => {
     it.each(testCases)(
       "$event の件名と冒頭文と idempotencyKey が規定どおりであること",
       ({ event, expectedSubject, expectedOpening, prefix }) => {
-        const drafts = createReservationMailDrafts(event, baseReservation, defaultAudience);
+        const drafts = createReservationMailDrafts(
+          event,
+          baseReservation,
+          defaultAudience,
+          APP_BASE_URL,
+        );
 
         expect(drafts[0]?.subject).toBe(expectedSubject);
         expect(drafts[0]?.text).toContain(expectedOpening);
         expect(drafts[0]?.idempotencyKey).toBe(`${prefix}usr_student`);
       },
     );
+
+    it.each(testCases)("$event の本文に予約詳細（SCR-005）へのリンクが入ること", ({ event }) => {
+      const drafts = createReservationMailDrafts(
+        event,
+        baseReservation,
+        defaultAudience,
+        APP_BASE_URL,
+      );
+
+      expect(drafts[0]?.text).toContain("https://reserve.example.com/reservations/res_test_123");
+    });
   });
 
   // --- notifiesStaff の固定テスト ---
@@ -269,7 +296,7 @@ describe("reservation-mail", () => {
       ];
 
       for (const event of staffEvents) {
-        const drafts = createReservationMailDrafts(event, baseReservation, audience);
+        const drafts = createReservationMailDrafts(event, baseReservation, audience, APP_BASE_URL);
         expect(drafts).toHaveLength(2);
         expect(drafts.map((d) => d.to.address)).toEqual([
           "student@example.com",
@@ -293,7 +320,7 @@ describe("reservation-mail", () => {
       ];
 
       for (const event of noStaffEvents) {
-        const drafts = createReservationMailDrafts(event, baseReservation, audience);
+        const drafts = createReservationMailDrafts(event, baseReservation, audience, APP_BASE_URL);
         expect(drafts).toHaveLength(1);
         expect(drafts[0]?.to.address).toBe("student@example.com");
       }
@@ -307,6 +334,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Rejected,
         { ...baseReservation, statusReason: null },
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(drafts[0]?.text).not.toContain("理由:");
     });
@@ -316,6 +344,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Rejected,
         { ...baseReservation, statusReason: "設備メンテナンスのため" },
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(drafts[0]?.text).toContain("\n\n理由: 設備メンテナンスのため\n\n");
     });
@@ -325,6 +354,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.CancelledByStaff,
         { ...baseReservation, statusReason: "大学公式行事のため" },
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(drafts[0]?.text).toContain("\n\n理由: 大学公式行事のため\n\n");
     });
@@ -334,6 +364,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Withdrawn,
         { ...baseReservation, statusReason: "日程変更のため" },
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(draftsWithdrawn[0]?.text).toContain("\n\n理由: 日程変更のため\n\n");
 
@@ -341,6 +372,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Cancelled,
         { ...baseReservation, statusReason: "参加者不足のため" },
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(draftsCancelled[0]?.text).toContain("\n\n理由: 参加者不足のため\n\n");
     });
@@ -350,6 +382,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Applied,
         { ...baseReservation, statusReason: "何らかの理由" },
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(draftsApplied[0]?.text).not.toContain("理由:");
 
@@ -357,6 +390,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.Approved,
         { ...baseReservation, statusReason: "何らかの理由" },
         defaultAudience,
+        APP_BASE_URL,
       );
       expect(draftsApproved[0]?.text).not.toContain("理由:");
     });
@@ -368,6 +402,7 @@ describe("reservation-mail", () => {
         ReservationMailEvent.ReapprovalRequested,
         { ...baseReservation, statusReason: "何らかの理由" },
         defaultAudience,
+        APP_BASE_URL,
       );
 
       expect(drafts[0]?.text).toContain("利用開始日時: 2026年9月25日 10:00");

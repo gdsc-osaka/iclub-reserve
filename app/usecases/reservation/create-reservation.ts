@@ -55,6 +55,8 @@ export interface CreateProvisionalReservationArgs {
     headCount: number;
     note: string | null;
   };
+  /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
+  readonly appBaseUrl: string;
 }
 
 export interface CreateProvisionalReservationReturns {
@@ -145,6 +147,7 @@ export const createProvisionalReservationUseCase = (
         updatedAt: now,
       },
       audience,
+      args.appBaseUrl,
     );
 
     const auditLog: AuditLogDraft = {

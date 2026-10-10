@@ -165,7 +165,7 @@ export function FacilityForm({
           type="text"
           maxLength={255}
           defaultValue={initialValues.googleCalendarId ?? ""}
-          placeholder="例: xxx@resource.calendar.google.com"
+          placeholder="例: xxx@group.calendar.google.com"
           aria-invalid={Boolean(errors[FacilityField.GoogleCalendarId])}
           aria-describedby={errors[FacilityField.GoogleCalendarId] ? "cal-id-error" : undefined}
           className={cn(

@@ -35,6 +35,8 @@ export interface ResolveEditOverlapAndMailsArgs {
   readonly overlapUserMessage: string;
   /** 送る変更通知のイベント */
   readonly mailEvent: ReservationMailEvent;
+  /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
+  readonly appBaseUrl: string;
 }
 
 /**
@@ -69,6 +71,7 @@ export const resolveEditOverlapAndMails = (
           updatedAt: args.now,
         },
         audience,
+        args.appBaseUrl,
       ),
     );
 

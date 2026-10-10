@@ -38,7 +38,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 
   const result = await getStaffManagementUseCase(
     { staffManagementQuery: createStaffManagementQuery(db) },
-    { actorUserId: user.id, isStaff: user.is_staff },
+    { actorUserId: user.id, isStaff: user.is_staff, now: new Date() },
   );
 
   if (result.isErr()) {

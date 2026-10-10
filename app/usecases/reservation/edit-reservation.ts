@@ -62,6 +62,8 @@ export interface EditReservationArgs {
    * 空文字のまま渡すと、null の備考と別の値と見なされ、変えていないのに変更として扱われる。
    */
   readonly content: ReservationContent;
+  /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
+  readonly appBaseUrl: string;
 }
 
 /** 予約の内容を変えるユースケースの返却値 */
@@ -150,6 +152,7 @@ export const editReservationUseCase = (
       overlapUserMessage:
         "選んだ時間帯には、すでに承認済みの予約が入っています。別の時間帯を選んでください。",
       mailEvent: editMailEvent[outcome],
+      appBaseUrl: args.appBaseUrl,
     });
 
     const status = editTargetStatus[outcome];

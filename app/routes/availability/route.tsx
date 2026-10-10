@@ -14,6 +14,7 @@ import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
+import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { addDays, parseTokyoDateKey, startOfTokyoWeek } from "~/lib/date";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
@@ -117,6 +118,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       transition,
       reason: typeof reason === "string" ? reason : null,
       now: new Date(),
+      appBaseUrl: resolveAppBaseUrl(request),
     },
   );
 

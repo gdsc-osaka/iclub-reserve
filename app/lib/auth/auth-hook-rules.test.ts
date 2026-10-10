@@ -5,7 +5,60 @@ import {
   applyUpdateUserRule,
   applyVerifyRegistrationRule,
   checkRequestEmailChangeRule,
+  checkSendVerificationOtpRule,
 } from "./auth-hook-rules";
+
+describe("checkSendVerificationOtpRule", () => {
+  /** 引かれた宛先を記録する、アカウントの有無の問い合わせ */
+  const lookupOf = (registered: readonly string[]) => {
+    const asked: string[] = [];
+    const hasAccount = async (email: string) => {
+      asked.push(email);
+      return registered.includes(email);
+    };
+    return { asked, hasAccount };
+  };
+
+  it("大阪大学のドメイン（サブドメインを含む）なら、アカウントを引かずに通す", async () => {
+    const { asked, hasAccount } = lookupOf([]);
+
+    expect((await checkSendVerificationOtpRule("user@osaka-u.ac.jp", hasAccount)).isOk()).toBe(
+      true,
+    );
+    expect((await checkSendVerificationOtpRule("user@ist.osaka-u.ac.jp", hasAccount)).isOk()).toBe(
+      true,
+    );
+    expect(asked).toEqual([]);
+  });
+
+  it("ほかのドメインでも、既にアカウントがあればログインのために通す（COND-004）", async () => {
+    const { asked, hasAccount } = lookupOf(["former@example.com"]);
+
+    const result = await checkSendVerificationOtpRule("Former@Example.com", hasAccount);
+
+    expect(result.isOk()).toBe(true);
+    // 小文字にそろえて引く
+    expect(asked).toEqual(["former@example.com"]);
+  });
+
+  it("ほかのドメインでアカウントも無ければ 403（EMAIL_DOMAIN_NOT_ALLOWED）で拒否する", async () => {
+    const { hasAccount } = lookupOf([]);
+
+    const result = await checkSendVerificationOtpRule("someone@example.com", hasAccount);
+
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      status: 403,
+      code: "EMAIL_DOMAIN_NOT_ALLOWED",
+    });
+  });
+
+  it("宛先が文字列でなければ判定しない（body の検証は Better Auth に任せる）", async () => {
+    const { asked, hasAccount } = lookupOf([]);
+
+    expect((await checkSendVerificationOtpRule(undefined, hasAccount)).isOk()).toBe(true);
+    expect(asked).toEqual([]);
+  });
+});
 
 describe("checkRequestEmailChangeRule", () => {
   it("許可ドメイン（osaka-u.ac.jp）のメールアドレスなら成功する（既存アカウント有無は引数に取らない）", () => {

@@ -19,6 +19,32 @@ export interface HookRuleError {
 }
 
 /**
+ * `/email-otp/send-verification-otp` のフック判定（COND-004 / REQ-008 / UC-020）。
+ *
+ * 認証コードは登録とログインの両方に使うので、入口で止めるのは「アカウントを新しく作れない宛先」だけにする。
+ * - 大阪大学のドメイン（サブドメイン含む）なら通す。
+ * - それ以外でも、既にアカウントがあれば通す。制限したいのは「誰が登録できるか」であって、
+ *   既に登録済みの人をログインから締め出すことではない（COND-004）。
+ * - どちらでもなければ 403（EMAIL_DOMAIN_NOT_ALLOWED）で拒否する。
+ *
+ * アカウントの有無は、大阪大学のドメインでない宛先のときだけ `hasAccount` で引く。
+ * 宛先が文字列でなければ判定せずに通す（body の検証は Better Auth が行う）。
+ */
+export const checkSendVerificationOtpRule = async (
+  email: unknown,
+  hasAccount: (email: string) => Promise<boolean>,
+): Promise<Result<null, HookRuleError>> => {
+  if (typeof email !== "string" || isAllowedEmailAddress(email)) return ok(null);
+  if (await hasAccount(email.toLowerCase())) return ok(null);
+
+  return err({
+    status: 403,
+    code: EMAIL_DOMAIN_NOT_ALLOWED_CODE,
+    message: `${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスでのみご利用いただけます。`,
+  });
+};
+
+/**
  * `/email-otp/request-email-change` のフック判定（COND-004 / COND-018）。
  *
  * メールアドレス変更先は osaka-u.ac.jp ドメイン（サブドメイン含む）のみ許可する。

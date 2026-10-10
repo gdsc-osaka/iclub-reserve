@@ -31,6 +31,7 @@ import {
   applyUpdateUserRule,
   applyVerifyRegistrationRule,
   checkRequestEmailChangeRule,
+  checkSendVerificationOtpRule,
 } from "./auth-hook-rules";
 import { buildPreviewTrustedOrigins } from "./preview-trusted-origins";
 import { createId } from "@paralleldrive/cuid2";
@@ -191,19 +192,20 @@ const createAuth = () => {
          *
          * ただし制限したいのは「誰が登録できるか」であって、
          * 既に登録済みの人を締め出すことではない。
-         * そのため、アカウントが既にある場合はドメインを問わず通す。
+         * そのため、アカウントが既にある場合はドメインを問わず通す（checkSendVerificationOtpRule）。
          */
         if (ctx.path === "/email-otp/send-verification-otp") {
           const email = (ctx.body as { email?: unknown } | undefined)?.email;
-          if (typeof email !== "string" || isAllowedEmailAddress(email)) return;
-
-          const existing = await ctx.context.internalAdapter.findUserByEmail(email.toLowerCase());
-          if (existing) return;
-
-          throw new APIError("FORBIDDEN", {
-            code: EMAIL_DOMAIN_NOT_ALLOWED_CODE,
-            message: NOT_ALLOWED_MESSAGE,
-          });
+          const res = await checkSendVerificationOtpRule(email, async (address) =>
+            Boolean(await ctx.context.internalAdapter.findUserByEmail(address)),
+          );
+          if (res.isErr()) {
+            throw new APIError("FORBIDDEN", {
+              code: res.error.code,
+              message: res.error.message,
+            });
+          }
+          return;
         }
 
         /*

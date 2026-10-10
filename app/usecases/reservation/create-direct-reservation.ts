@@ -59,8 +59,9 @@ export interface CreateDirectReservationReturns {
  * 承認済みに固定し、呼び出し元が任意の状態を指定できないようにするため。
  * 作成者（createdBy）は操作した事務局のユーザー、理由（statusReason）は null。
  *
- * 直接作成ではメールを送信しない（通知イベント EVT-009 は Google Calendar 登録のみで、
- * カレンダー連携は未着手のため。操作履歴への書き込み COND-013 も未実装のため行わない）。
+ * 直接作成ではメールを送信しない。事務局が自ら作るので、団体にも事務局にも知らせる通知イベントが無い。
+ * 承認済みで作るため、Google Calendar への登録（EVT-009）の同期タスクと操作履歴（COND-013）は、
+ * 予約の作成と同じ batch で書き込む（`createApproved`）。
  *
  * 【確かめる順序の理由】
  * DB を引かずに分かる入力の検証（validateReservationDraft）を先に、権限の確認をその次に置く。

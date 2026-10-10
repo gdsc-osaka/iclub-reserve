@@ -88,6 +88,7 @@ const argsWith = (
 ): EditReservationArgs => ({
   reservationId: approvedReservation.id,
   actorUserId: "usr_member_01",
+  appBaseUrl: "https://reserve.example.com",
   isStaff: false,
   now,
   content: { ...currentContent, ...content },

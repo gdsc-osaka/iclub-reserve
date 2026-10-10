@@ -54,9 +54,8 @@ export async function loader({ context }: Route.LoaderArgs) {
  * 団体を切り替えて見る形にしていないのは、複数の団体を掛け持ちしている人が多く、
  * 切り替えを忘れたまま「予約が無い」と勘違いするのを避けたいため。
  *
- * NOTE: 「今後の予約」と「今週の空き状況」はここに並べる予定だが、
- * 予約と施設の読み取りがまだ無いので置いていない。
- * 中身の無いカードを先に並べても、見た人には何も分からない。
+ * NOTE: 「今後の予約」や「今週の空き状況」を並べる案はあるが、画面の定義（RDRA の SCR-022）には
+ * まだ含めていない。足すときは、何をどこまで出すかを先に SCR-022 で決めてから実装すること。
  */
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { groups, isGroupsUnavailable } = loaderData;

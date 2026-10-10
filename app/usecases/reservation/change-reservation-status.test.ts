@@ -183,6 +183,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
         reason: "都合がつかなくなったため",
         now: testNow,
       };
@@ -236,6 +237,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
         reason: null,
         now: testNow,
       };
@@ -257,6 +259,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Cancel,
+        appBaseUrl: "https://reserve.example.com",
         reason: "イベント延期のため",
         now: testNow,
       };
@@ -322,6 +325,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -395,6 +399,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -438,6 +443,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Reject,
+        appBaseUrl: "https://reserve.example.com",
         reason: "設備点検のため利用できません",
         now: testNow,
       };
@@ -491,6 +497,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.StaffCancel,
+        appBaseUrl: "https://reserve.example.com",
         reason: "大学の公式行事のため",
         now: testNow,
       };
@@ -550,6 +557,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         reason: null,
       });
 
@@ -564,6 +572,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_student_01");
@@ -584,6 +593,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
@@ -601,6 +611,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.DatabaseError);
@@ -616,6 +627,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Reject,
+        appBaseUrl: "https://reserve.example.com",
         reason: "   ",
       };
 
@@ -633,6 +645,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.StaffCancel,
+        appBaseUrl: "https://reserve.example.com",
         reason: "",
       };
 
@@ -653,6 +666,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_other_01",
         isStaff: false,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
       };
 
       const result = await changeReservationStatusUseCase(deps, args);
@@ -668,6 +682,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
       };
 
       const result = await changeReservationStatusUseCase(deps, args);
@@ -687,6 +702,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition,
+        appBaseUrl: "https://reserve.example.com",
         reason: "理由",
       });
 
@@ -703,6 +719,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
       };
 
       const fromExisting = await changeReservationStatusUseCase(existing, args);
@@ -722,6 +739,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -740,6 +758,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
       };
 
       const result = await changeReservationStatusUseCase(deps, args);
@@ -759,6 +778,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -778,6 +798,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
       };
 
       const result = await changeReservationStatusUseCase(deps, args);
@@ -796,6 +817,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -817,6 +839,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -842,6 +865,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -859,6 +883,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
 
@@ -882,6 +907,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Reject,
+        appBaseUrl: "https://reserve.example.com",
         reason: "施設利用基準を満たしていないため",
         now: testNow,
       };
@@ -903,6 +929,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_student_01",
         isStaff: false,
         transition: ReservationTransition.Cancel,
+        appBaseUrl: "https://reserve.example.com",
         reason: "都合によりキャンセル",
         now: testNow,
       };
@@ -927,6 +954,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.StaffCancel,
+        appBaseUrl: "https://reserve.example.com",
         reason: "緊急メンテナンスのため",
         now: testNow,
       };

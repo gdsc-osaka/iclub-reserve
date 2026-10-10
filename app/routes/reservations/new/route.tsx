@@ -23,6 +23,7 @@ import { createReservationFormQuery } from "~/infra/reservation/reservation-form
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
+import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import {
   addDays,
@@ -167,7 +168,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     groupRepository: createGroupRepository(db),
     facilityRepository: createFacilityRepository(db),
   };
-  const args = { actorUserId: user.id, isStaff: user.is_staff, now, reservation };
+  const args = {
+    actorUserId: user.id,
+    isStaff: user.is_staff,
+    now,
+    reservation,
+    appBaseUrl: resolveAppBaseUrl(request),
+  };
 
   // 直接作成ではメールを送らないので、通知に使う依存は申請のときだけ渡す
   const result = isDirect

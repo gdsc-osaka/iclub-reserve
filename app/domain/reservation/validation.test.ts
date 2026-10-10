@@ -78,6 +78,13 @@ describe("validateReservationPeriod", () => {
 
     expect(result._unsafeUnwrapErr().userMessage).toContain("過ぎた日時");
   });
+
+  it("開始がちょうどいまの枠も弾く（COND-021: 開始が現在より後であること）", () => {
+    const period = { startAt: now, endAt: new Date("2026-09-14T09:30:00+09:00") };
+    const result = validateReservationPeriod(period, now);
+
+    expect(result._unsafeUnwrapErr().userMessage).toContain("過ぎた日時");
+  });
 });
 
 describe("validateReservationDraft", () => {
