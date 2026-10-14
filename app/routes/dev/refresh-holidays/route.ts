@@ -27,7 +27,9 @@ export async function action() {
   });
 
   if (result.isErr()) {
-    return data({ error: result.error }, { status: 500 });
+    // cause には例外や DB のエラーがそのまま入るので、返すのはコードだけにする。詳しくはログで見る
+    console.error("refresh holidays failed:", result.error);
+    return data({ error: result.error.code }, { status: 500 });
   }
 
   return data({

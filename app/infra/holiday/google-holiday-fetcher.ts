@@ -6,6 +6,14 @@ import { HolidayErrorCode, type HolidayError } from "~/domain/holiday";
 export const GOOGLE_HOLIDAY_ICAL_URL =
   "https://calendar.google.com/calendar/ical/ja.japanese%23holiday%40group.v.calendar.google.com/public/basic.ics";
 
+/**
+ * 取得を諦めるまでの時間（ミリ秒）。
+ *
+ * 指定しないと、Google が応答しないときに日次処理がいつまでも待ち続けてしまう。
+ * 取れなければ前日までのデータを使い続けるので、長く待つ意味はない。
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 export interface FetchHolidayIcalOptions {
   /** HTTP リクエスト用 fetch（テストで差し替え可能） */
   readonly fetchFn?: typeof fetch;
@@ -28,7 +36,7 @@ export const fetchHolidayIcal = (
 
   return ResultAsync.fromPromise(
     (async () => {
-      const response = await fetchFn(url);
+      const response = await fetchFn(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }

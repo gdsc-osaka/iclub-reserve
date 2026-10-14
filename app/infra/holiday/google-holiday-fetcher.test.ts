@@ -16,7 +16,9 @@ describe("fetchHolidayIcal", () => {
 
     expect(result.isOk()).toBe(true);
     expect(result._unsafeUnwrap()).toBe(fakeIcal);
-    expect(fetchFn).toHaveBeenCalledWith(GOOGLE_HOLIDAY_ICAL_URL);
+    expect(fetchFn).toHaveBeenCalledWith(GOOGLE_HOLIDAY_ICAL_URL, {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("HTTP status が 2xx 以外の場合は FetchFailed エラーになる", async () => {
