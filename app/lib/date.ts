@@ -343,3 +343,44 @@ export const parseDateInput = (text: string): string | null => {
  * @example formatDateInput("2026-09-25") // → "2026/09/25"
  */
 export const formatDateInput = (dateKey: string): string => dateKey.replaceAll("-", "/");
+
+/**
+ * 出来事の発生日時を、現在時刻に対する相対的な表示形式に変換する。
+ *
+ * ダッシュボードの「確認が必要なこと」などで使用する。
+ * 判定は日本時間（Asia/Tokyo）を基準に行う。
+ *
+ * - 当日かつ 1 時間未満: 「n 分前」（1 分未満は「0分前」）
+ * - 当日かつ 1 時間以上: 「n 時間前」
+ * - 前日（昨日）: 「昨日 HH:mm」
+ * - それ以前（2日以上前）: 「M/D」
+ *
+ * @example formatRelativeTime(new Date("2026-10-14T14:50:00+09:00"), new Date("2026-10-14T15:00:00+09:00")) // → "10分前"
+ * @example formatRelativeTime(new Date("2026-10-14T12:00:00+09:00"), new Date("2026-10-14T15:00:00+09:00")) // → "3時間前"
+ * @example formatRelativeTime(new Date("2026-10-13T10:30:00+09:00"), new Date("2026-10-14T15:00:00+09:00")) // → "昨日 10:30"
+ * @example formatRelativeTime(new Date("2026-10-10T10:30:00+09:00"), new Date("2026-10-14T15:00:00+09:00")) // → "10/10"
+ */
+export const formatRelativeTime = (targetDate: Date, now: Date = new Date()): string => {
+  const diffMs = now.getTime() - targetDate.getTime();
+
+  // 日本時間で当日かどうか
+  if (isSameTokyoDay(targetDate, now)) {
+    if (diffMs < 60 * MINUTE_MS) {
+      const minutes = Math.max(0, Math.floor(diffMs / MINUTE_MS));
+      return `${minutes}分前`;
+    }
+    const hours = Math.floor(diffMs / (60 * MINUTE_MS));
+    return `${hours}時間前`;
+  }
+
+  // 日本時間で昨日かどうか
+  if (isSameTokyoDay(targetDate, addDays(now, -1))) {
+    return `昨日 ${formatTime(targetDate)}`;
+  }
+
+  // それ以前: M/D
+  const tokyoDate = new Date(targetDate.getTime() + TOKYO_OFFSET_MS);
+  const month = tokyoDate.getUTCMonth() + 1;
+  const day = tokyoDate.getUTCDate();
+  return `${month}/${day}`;
+};

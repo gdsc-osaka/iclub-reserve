@@ -44,6 +44,33 @@ test.describe("UC-022 招待を承諾・辞退する", { tag: "@UC-022" }, () =>
     await expect(ownRow.getByText("メンバー", { exact: true })).toBeVisible();
   });
 
+  test("招待された本人がダッシュボードに出た招待を承諾できる", async ({ page, db, signInAs }) => {
+    const { group, invitee } = await createInvitedUser(db);
+    await signInAs(invitee.id);
+
+    await openPage(page, "/");
+
+    // ダッシュボードの「確認が必要なこと」に招待が出ていること
+    const invitationRow = page
+      .getByRole("listitem")
+      .filter({ hasText: "団体への招待" })
+      .filter({ hasText: group.name });
+    await expect(invitationRow).toBeVisible();
+
+    // 承諾ボタンを押すと招待が消える
+    const responsePromise = page.waitForResponse((res) => res.request().method() === "POST");
+    await invitationRow.getByRole("button", { name: "承諾", exact: true }).click();
+    await responsePromise;
+    await expect(invitationRow).toBeHidden();
+
+    // DB 上でメンバーになっていること
+    const memberships = await db
+      .select()
+      .from(groupMemberTable)
+      .where(and(eq(groupMemberTable.groupId, group.id), eq(groupMemberTable.userId, invitee.id)));
+    expect(memberships).toHaveLength(1);
+  });
+
   test("招待された本人が辞退できる", async ({ page, db, signInAs }) => {
     const { group, invitee, invitation } = await createInvitedUser(db);
     await signInAs(invitee.id);

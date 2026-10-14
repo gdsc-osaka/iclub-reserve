@@ -5,6 +5,7 @@ import {
   atTokyoTime,
   formatDateInput,
   formatMonthDayParts,
+  formatRelativeTime,
   formatTime,
   formatTimeRange,
   fromCalendarDate,
@@ -261,5 +262,46 @@ describe("formatDateInput", () => {
     const dateKey = "2026-01-05";
 
     expect(parseDateInput(formatDateInput(dateKey))).toBe(dateKey);
+  });
+});
+
+describe("formatRelativeTime", () => {
+  const baseNow = new Date("2026-10-14T15:00:00+09:00");
+
+  it("1分未満は「0分前」を返す", () => {
+    const target = new Date("2026-10-14T14:59:30+09:00");
+    expect(formatRelativeTime(target, baseNow)).toBe("0分前");
+  });
+
+  it("当日の1時間未満は「n分前」を返す", () => {
+    const target10m = new Date("2026-10-14T14:50:00+09:00");
+    expect(formatRelativeTime(target10m, baseNow)).toBe("10分前");
+
+    const target59m = new Date("2026-10-14T14:01:00+09:00");
+    expect(formatRelativeTime(target59m, baseNow)).toBe("59分前");
+  });
+
+  it("当日の1時間以上は「n時間前」を返す", () => {
+    const target1h = new Date("2026-10-14T14:00:00+09:00");
+    expect(formatRelativeTime(target1h, baseNow)).toBe("1時間前");
+
+    const target5h = new Date("2026-10-14T10:00:00+09:00");
+    expect(formatRelativeTime(target5h, baseNow)).toBe("5時間前");
+  });
+
+  it("前日の時刻は「昨日 HH:mm」を返す", () => {
+    const targetYesterday = new Date("2026-10-13T10:30:00+09:00");
+    expect(formatRelativeTime(targetYesterday, baseNow)).toBe("昨日 10:30");
+  });
+
+  it("前日以前（2日以上前）は「M/D」を返す", () => {
+    const target2DaysAgo = new Date("2026-10-12T10:30:00+09:00");
+    expect(formatRelativeTime(target2DaysAgo, baseNow)).toBe("10/12");
+
+    const targetSingleDigit = new Date("2026-10-05T09:15:00+09:00");
+    expect(formatRelativeTime(targetSingleDigit, baseNow)).toBe("10/5");
+
+    const targetOtherMonth = new Date("2026-04-01T12:00:00+09:00");
+    expect(formatRelativeTime(targetOtherMonth, baseNow)).toBe("4/1");
   });
 });
