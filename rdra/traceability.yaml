@@ -1,5 +1,5 @@
 version: "1.0"
-generated_at: "2026-10-09T13:00:00Z"
+generated_at: "2026-10-14T09:00:00Z"
 
 elements:
   # ゴール
@@ -316,6 +316,12 @@ elements:
     defined_in: "rdra/contexts/group-management.md"
     traces_to: ["GOAL-001"]
 
+  - id: "REQ-046"
+    type: requirement
+    name: "未確認の動きのまとめ表示"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["GOAL-003", "GOAL-005"]
+
   # ビジネスユースケース
   - id: "BUC-001"
     type: business_usecase
@@ -351,7 +357,7 @@ elements:
     type: business_usecase
     name: "仮予約の承認・却下"
     defined_in: "rdra/contexts/reservation-approval.md"
-    traces_to: ["REQ-005", "REQ-010", "REQ-011", "REQ-013"]
+    traces_to: ["REQ-005", "REQ-010", "REQ-011", "REQ-013", "REQ-046"]
 
   - id: "BUC-007"
     type: business_usecase
@@ -369,7 +375,7 @@ elements:
     type: business_usecase
     name: "予約へのメッセージ送受信"
     defined_in: "rdra/contexts/reservation-approval.md"
-    traces_to: ["REQ-009", "REQ-015"]
+    traces_to: ["REQ-009", "REQ-015", "REQ-046"]
 
   - id: "BUC-010"
     type: business_usecase
@@ -720,14 +726,20 @@ elements:
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["BUC-021"]
 
+  - id: "UC-037"
+    type: usecase
+    name: "確認が必要なことを確認する"
+    defined_in: "rdra/contexts/reservation-approval.md"
+    traces_to: ["BUC-006", "BUC-009"]
+
 coverage:
   total_goals: 7
   goals_with_requirements: 7
-  total_requirements: 45
-  requirements_with_bucs: 45
+  total_requirements: 46
+  requirements_with_bucs: 46
   total_bucs: 31
   bucs_with_ucs: 30
-  total_ucs: 36
+  total_ucs: 37
   orphaned_elements: []
   notes:
     - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=30）"
