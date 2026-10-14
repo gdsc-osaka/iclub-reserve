@@ -34,6 +34,7 @@ export function CalendarCard({
   now,
   canApply,
   canCreateDirectly = false,
+  holidayDateKeys,
 }: Readonly<{
   facility: AvailabilityFacility;
   reservations: readonly AvailabilityReservation[];
@@ -44,8 +45,10 @@ export function CalendarCard({
   canApply: boolean;
   /** 承認済みで直接作成できるか（事務局のみ） */
   canCreateDirectly?: boolean;
+  /** 表示期間内の日本の祝日の日付キー一覧 */
+  holidayDateKeys: readonly string[];
 }>) {
-  const days = buildWeekDays(weekStart, now);
+  const days = buildWeekDays(weekStart, now, holidayDateKeys);
 
   return (
     <Card className="min-h-0 flex-1 gap-0 overflow-hidden py-0">

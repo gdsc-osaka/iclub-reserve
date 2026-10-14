@@ -32,3 +32,4 @@ export * from "./mail";
 export * from "./audit-log";
 export * from "./staff";
 export * from "./calendar";
+export * from "./holiday";

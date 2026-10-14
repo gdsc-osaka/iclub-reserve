@@ -70,6 +70,8 @@ export interface AvailabilityDay {
   readonly isToday: boolean;
   /** 曜日（0 が日曜、6 が土曜）。土日の色分けに使う */
   readonly weekday: number;
+  /** 日本の祝日かどうか。日曜と同じ赤系で目立たせるために使う */
+  readonly isHoliday: boolean;
 }
 
 /**
@@ -78,10 +80,19 @@ export interface AvailabilityDay {
  * `today` を引数で受け取っているのは、「今日」をサーバーとブラウザで
  * 同じ値にするため。ここで `new Date()` を呼ぶと、サーバーで描いた内容と
  * ブラウザで描き直した内容が食い違うおそれがある。
+ *
+ * `holidayDateKeys` に含まれる日付は祝日（`isHoliday = true`）としてマークする。
  */
-export const buildWeekDays = (weekStart: Date, today: Date): readonly AvailabilityDay[] =>
-  Array.from({ length: DAYS_IN_WEEK }, (_, index) => {
+export const buildWeekDays = (
+  weekStart: Date,
+  today: Date,
+  holidayDateKeys: readonly string[],
+): readonly AvailabilityDay[] => {
+  const holidaySet = new Set(holidayDateKeys);
+
+  return Array.from({ length: DAYS_IN_WEEK }, (_, index) => {
     const date = addDays(startOfTokyoDay(weekStart), index);
+    const dateKey = toTokyoDateKey(date);
 
     /*
      * 曜日は index ではなく日付から取る。いまは週が日曜始まりなので
@@ -90,15 +101,38 @@ export const buildWeekDays = (weekStart: Date, today: Date): readonly Availabili
      */
     return {
       date,
-      dateKey: toTokyoDateKey(date),
+      dateKey,
       isToday: isSameTokyoDay(date, today),
       weekday: tokyoDayOfWeek(date),
+      isHoliday: holidaySet.has(dateKey),
     };
   });
+};
+
+/** 曜日だけを取り出すための形式 */
+const weekdayFormatter = new Intl.DateTimeFormat("ja-JP", {
+  weekday: "short",
+  timeZone: "Asia/Tokyo",
+});
 
 /**
- * 曜日ごとの色。土曜を青系、日曜を赤系にしているのは、
+ * 曜日の表記を返す純粋関数。
+ *
+ * 祝日の場合は曜日の後に全角の中黒「・」（U+30FB）と「祝」を付ける（例: 「月・祝」、「日・祝」、「土・祝」）。
+ * 祝日でなければ通常の曜日（例: 「月」、「火」）。
+ */
+export const weekdayLabel = (day: Pick<AvailabilityDay, "date" | "isHoliday">): string => {
+  const shortWeekday = weekdayFormatter.format(day.date);
+  return day.isHoliday ? `${shortWeekday}・祝` : shortWeekday;
+};
+
+/**
+ * 曜日・祝日ごとの色。土曜を青系、日曜と祝日を赤系にしているのは、
  * 紙のカレンダーと同じ見分け方にするため。
+ *
+ * 祝日と土曜が重なる場合は、**祝日（赤系）を優先**する。
+ * 祝日は学校や多くの企業・公的機関が一斉に休業となり、
+ * カレンダーを見る利用者にとって「通常の土曜」以上に休日の性質が強いためである。
  *
  * 色を付けるのは**曜日の文字だけ**（`label`）で、日付の数字には付けない。
  * 「9月13日(日)」をまるごと赤くすると、日付そのものが誤っているように見える。
@@ -106,24 +140,24 @@ export const buildWeekDays = (weekStart: Date, today: Date): readonly Availabili
  * `surface` は日付の見出しと時間帯の列の**両方**に敷く。
  * その日の性質を面の色で表す、という点を「今日」と揃えるため。
  * 片方にしか色が無いと、見出しと列が別のものに見えてしまう。
- * 濃さの差（今日は塗りつぶし、週末は 5%）がそのまま目立たせたい順になる。
+ * 濃さの差（今日は塗りつぶし、週末・祝日は 5%）がそのまま目立たせたい順になる。
  *
  * 面をごく薄くしているのは、予約の帯の色（承認済み = 緑系、仮予約 = 橙系）と
- * ぶつけないため。週末かどうかは曜日の文字色で読めるので、面は
- * 「週末がひとまとまりに見える」程度で足りる。
+ * ぶつけないため。週末・祝日かどうかは曜日の文字色で読めるので、面は
+ * 「週末・祝日がひとまとまりに見える」程度で足りる。
  *
  * 平日は `null` を返す。呼び出し側で「色を付けない」と「今日の色で塗る」を
  * 区別できるようにするため。
  */
 export const weekdayStyle = (
-  weekday: number,
+  day: Pick<AvailabilityDay, "weekday" | "isHoliday">,
 ): { readonly label: string | null; readonly surface: string | null } => {
-  if (weekday === SATURDAY) {
-    return { label: "text-blue-600 dark:text-blue-400", surface: "bg-blue-500/5" };
+  if (day.isHoliday || day.weekday === SUNDAY) {
+    return { label: "text-red-600 dark:text-red-400", surface: "bg-red-500/5" };
   }
 
-  if (weekday === SUNDAY) {
-    return { label: "text-red-600 dark:text-red-400", surface: "bg-red-500/5" };
+  if (day.weekday === SATURDAY) {
+    return { label: "text-blue-600 dark:text-blue-400", surface: "bg-blue-500/5" };
   }
 
   return { label: null, surface: null };

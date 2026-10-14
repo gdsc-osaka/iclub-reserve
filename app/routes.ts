@@ -106,4 +106,7 @@ export default [
 
   // 開発専用ルート（ローカルでのカレンダー同期手動実行確認用 / ADR-008）
   route("dev/sync-calendar", "routes/dev/sync-calendar/route.ts"),
+
+  // 開発専用ルート（ローカルでの祝日同期手動実行確認用 / ADR-010）
+  route("dev/refresh-holidays", "routes/dev/refresh-holidays/route.ts"),
 ] satisfies RouteConfig;

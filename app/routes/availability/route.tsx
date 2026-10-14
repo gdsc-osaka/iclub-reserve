@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facility-availability-calendar-query";
+import { createD1HolidayQuery } from "~/infra/holiday/d1-holiday-query";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
@@ -60,6 +61,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     {
       facilityAvailabilityCalendarQuery: createFacilityAvailabilityCalendarQuery(db),
       userGroupListQuery: createUserGroupListQuery(db),
+      holidayQuery: createD1HolidayQuery(db),
     },
     {
       actorUserId: user.id,
@@ -180,6 +182,7 @@ export default function Availability({ loaderData, actionData }: Route.Component
         now={now}
         canApply={canApplyReservation}
         canCreateDirectly={canCreateDirectly}
+        holidayDateKeys={calendar.holidayDateKeys}
       />
     </main>
   );

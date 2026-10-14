@@ -5,11 +5,13 @@ import type { AvailabilityReservation } from "~/query/facility/facility-availabi
 
 import {
   blockContent,
+  buildWeekDays,
   isPastDay,
   isPastHour,
   slotHours,
   toDayBlocks,
   toOccupiedHours,
+  weekdayLabel,
   weekdayStyle,
   type AvailabilityDay,
 } from "./availability-week";
@@ -20,6 +22,7 @@ const day: AvailabilityDay = {
   isToday: false,
   // 2026-09-14 は月曜日
   weekday: 1,
+  isHoliday: false,
 };
 
 /** 時間帯とステータスだけを変えた予約を作る。他の項目はこの検証に関係しない */
@@ -110,19 +113,78 @@ describe("toOccupiedHours", () => {
 
 describe("weekdayStyle", () => {
   it("土曜は青系、日曜は赤系の色を返す", () => {
-    expect(weekdayStyle(6).label).toContain("blue");
-    expect(weekdayStyle(0).label).toContain("red");
+    expect(weekdayStyle({ weekday: 6, isHoliday: false }).label).toContain("blue");
+    expect(weekdayStyle({ weekday: 0, isHoliday: false }).label).toContain("red");
+  });
+
+  it("祝日は日曜と同じ赤系の色を返す", () => {
+    // 平日の祝日
+    expect(weekdayStyle({ weekday: 1, isHoliday: true }).label).toContain("red");
+    expect(weekdayStyle({ weekday: 1, isHoliday: true }).surface).toContain("red");
+  });
+
+  it("土曜の祝日は赤系になる（祝日を土曜より優先する）", () => {
+    expect(weekdayStyle({ weekday: 6, isHoliday: true }).label).toContain("red");
+    expect(weekdayStyle({ weekday: 6, isHoliday: true }).surface).toContain("red");
   });
 
   it("面の色は曜日の色と同じ系統にする", () => {
     // 見出しと列に同じ色を敷くので、文字の色と系統が違うとちぐはぐに見える
-    expect(weekdayStyle(6).surface).toContain("blue");
-    expect(weekdayStyle(0).surface).toContain("red");
+    expect(weekdayStyle({ weekday: 6, isHoliday: false }).surface).toContain("blue");
+    expect(weekdayStyle({ weekday: 0, isHoliday: false }).surface).toContain("red");
   });
 
   it("平日は色を付けない", () => {
     // null と空文字を取り違えると、今日の色と平日の色の区別がつかなくなる
-    expect(weekdayStyle(3)).toEqual({ label: null, surface: null });
+    expect(weekdayStyle({ weekday: 3, isHoliday: false })).toEqual({ label: null, surface: null });
+  });
+});
+
+describe("weekdayLabel", () => {
+  it("祝日なら「月・祝」のように曜日の後に「・祝」を付ける", () => {
+    // 2026-09-14 は月曜日
+    const holidayDay = {
+      date: new Date("2026-09-14T00:00:00+09:00"),
+      isHoliday: true,
+    };
+    expect(weekdayLabel(holidayDay)).toBe("月・祝");
+  });
+
+  it("祝日でなければ従来どおり「月」を返す", () => {
+    const normalDay = {
+      date: new Date("2026-09-14T00:00:00+09:00"),
+      isHoliday: false,
+    };
+    expect(weekdayLabel(normalDay)).toBe("月");
+  });
+
+  it("日曜や土曜の祝日も「日・祝」「土・祝」になる", () => {
+    const sundayHoliday = {
+      date: new Date("2026-09-13T00:00:00+09:00"), // 日曜
+      isHoliday: true,
+    };
+    const saturdayHoliday = {
+      date: new Date("2026-09-19T00:00:00+09:00"), // 土曜
+      isHoliday: true,
+    };
+    expect(weekdayLabel(sundayHoliday)).toBe("日・祝");
+    expect(weekdayLabel(saturdayHoliday)).toBe("土・祝");
+  });
+});
+
+describe("buildWeekDays", () => {
+  it("指定した日付キーが祝日としてマークされる", () => {
+    const weekStart = new Date("2026-09-13T00:00:00+09:00"); // 日曜
+    const today = new Date("2026-09-14T00:00:00+09:00");
+    const holidayDateKeys = ["2026-09-15"];
+
+    const days = buildWeekDays(weekStart, today, holidayDateKeys);
+
+    expect(days).toHaveLength(7);
+    expect(days[0].dateKey).toBe("2026-09-13");
+    expect(days[0].isHoliday).toBe(false);
+    expect(days[2].dateKey).toBe("2026-09-15");
+    expect(days[2].isHoliday).toBe(true);
   });
 });
 
