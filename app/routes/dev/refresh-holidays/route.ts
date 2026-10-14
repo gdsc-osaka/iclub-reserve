@@ -7,7 +7,7 @@ import { fetchHolidayIcal } from "~/infra/holiday/google-holiday-fetcher";
 import { refreshHolidaysUseCase } from "~/usecases/holiday/refresh-holidays";
 
 /**
- * 開発専用の祝日データ手動同期エンドポイント（ADR-009）。
+ * 開発専用の祝日データ手動同期エンドポイント（ADR-010）。
  *
  * react-router dev では cron が自動では走らないため、
  * 手動で Google から祝日データを取得して D1 に反映できるようにする。
