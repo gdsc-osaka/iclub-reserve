@@ -4,11 +4,14 @@ import { createD1CalendarReconcileQuery } from "~/infra/calendar/d1-calendar-rec
 import { createD1CalendarSyncQuery } from "~/infra/calendar/d1-calendar-sync-query";
 import { createD1CalendarSyncTasks } from "~/infra/calendar/d1-calendar-sync-tasks";
 import { createDb } from "~/infra/db";
+import { createD1HolidayRepository } from "~/infra/holiday/d1-holiday-repository";
+import { fetchHolidayIcal } from "~/infra/holiday/google-holiday-fetcher";
 import { createD1MailOutbox } from "~/infra/mail/d1-mail-outbox";
 import type { MailQueueMessage } from "~/infra/mail/mail-queue.server";
 import { createMailSender, getMailFrom } from "~/infra/mail/mail-sender-factory.server";
 import { processCalendarSyncTasksUseCase } from "~/usecases/calendar/process-calendar-sync-tasks";
 import { reconcileCalendarsUseCase } from "~/usecases/calendar/reconcile-calendars";
+import { refreshHolidaysUseCase } from "~/usecases/holiday/refresh-holidays";
 import {
   flushMailOutboxByIdsUseCase,
   flushMailOutboxUseCase,
@@ -103,6 +106,26 @@ export default {
         console.info("daily calendar reconcile completed by cron:", reconcileResult);
       } catch (error) {
         console.error("Scheduled daily calendar reconcile failed:", error);
+      }
+
+      // 祝日データの更新（カレンダー突き合わせとは別の try/catch で実行）
+      try {
+        const holidayRepository = createD1HolidayRepository(db);
+        const holidayResult = await refreshHolidaysUseCase({
+          fetchHolidayIcal: () => fetchHolidayIcal(),
+          holidayRepository,
+        });
+
+        if (holidayResult.isOk()) {
+          console.info(
+            "daily holiday refresh completed by cron:",
+            holidayResult.value.holidayCount,
+          );
+        } else {
+          console.error("Scheduled daily holiday refresh failed:", holidayResult.error);
+        }
+      } catch (error) {
+        console.error("Scheduled daily holiday refresh encountered unexpected error:", error);
       }
 
       return;
