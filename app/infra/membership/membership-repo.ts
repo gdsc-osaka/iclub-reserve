@@ -1,7 +1,7 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { ok, ResultAsync } from "neverthrow";
 
-import { groupMemberTable } from "~/db/schema";
+import { groupMemberTable, user } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
 import {
   MembershipErrorCode,
@@ -41,6 +41,34 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
       }
 
       return ok(toMembership(row));
+    });
+
+  const findByGroupAndEmail = (
+    groupId: string,
+    normalizedEmail: string,
+  ): ResultAsync<StoredMembership | null, MembershipError> =>
+    ResultAsync.fromPromise(
+      db
+        .select({ member: groupMemberTable })
+        .from(groupMemberTable)
+        .innerJoin(user, eq(groupMemberTable.userId, user.id))
+        .where(
+          and(
+            eq(groupMemberTable.groupId, groupId),
+            // 保存済みのアドレスが小文字とは限らないので、DB 側でも小文字にそろえて突き合わせる
+            sql`lower(${user.email}) = ${normalizedEmail}`,
+          ),
+        )
+        .limit(1),
+      (error): MembershipError => ({
+        code: MembershipErrorCode.DatabaseError,
+        message: "メールアドレスによるメンバーシップの取得に失敗しました。",
+        cause: error,
+      }),
+    ).map((rows) => {
+      const row = rows.at(0);
+      // findByGroupAndUser と同じく、所属していないのは異常ではないので null を返す
+      return row === undefined ? null : toMembership(row.member);
     });
 
   const countAdmins = (groupId: string): ResultAsync<number, MembershipError> =>
@@ -133,5 +161,5 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
     ).map((results) => results[1].length);
   };
 
-  return { findByGroupAndUser, countAdmins, updateRole, remove };
+  return { findByGroupAndUser, findByGroupAndEmail, countAdmins, updateRole, remove };
 };

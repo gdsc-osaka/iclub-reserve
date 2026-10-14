@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
 import type { Group, GroupError, GroupRepository, UpdateGroupNameInput } from "~/domain/group";
-import { GroupErrorCode, GroupStatus } from "~/domain/group";
+import { GroupErrorCode, GroupField, GroupStatus } from "~/domain/group";
 import {
   INVITATION_EXPIRES_IN_HOURS,
   type CreateInvitationInput,
@@ -94,6 +94,12 @@ interface FakeMembershipRepoOptions {
     groupId: string,
     userId: string,
   ) => ResultAsync<StoredMembership | null, MembershipError>;
+  /** メールアドレス（小文字）から所属を引くときの表。宛先がすでにメンバーかの確認に使う */
+  readonly membershipsByEmail?: Readonly<Record<string, StoredMembership>>;
+  readonly findByGroupAndEmailResult?: (
+    groupId: string,
+    normalizedEmail: string,
+  ) => ResultAsync<StoredMembership | null, MembershipError>;
 }
 
 const createFakeMembershipRepository = (
@@ -101,6 +107,7 @@ const createFakeMembershipRepository = (
   options: FakeMembershipRepoOptions = {},
 ) => {
   let findByGroupAndUserCallCount = 0;
+  const findByGroupAndEmailCalls: { groupId: string; normalizedEmail: string }[] = [];
   const memberships = [...initialMemberships];
 
   const repository: MembershipRepository = {
@@ -111,6 +118,14 @@ const createFakeMembershipRepository = (
       }
       const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
       return okAsync(found ?? null);
+    },
+    findByGroupAndEmail: (groupId, normalizedEmail) => {
+      findByGroupAndEmailCalls.push({ groupId, normalizedEmail });
+      if (options.findByGroupAndEmailResult) {
+        return options.findByGroupAndEmailResult(groupId, normalizedEmail);
+      }
+      const found = options.membershipsByEmail?.[normalizedEmail];
+      return okAsync(found !== undefined && found.groupId === groupId ? found : null);
     },
     countAdmins: () =>
       errAsync({
@@ -132,6 +147,7 @@ const createFakeMembershipRepository = (
   return {
     repository,
     findByGroupAndUserCallCount: () => findByGroupAndUserCallCount,
+    findByGroupAndEmailCalls: () => findByGroupAndEmailCalls,
   };
 };
 
@@ -677,6 +693,112 @@ describe("inviteMemberUseCase", () => {
       });
     }
     expect(fakeGroup.findByIdCallCount()).toBe(0);
+    expect(fakeInvitation.createCallCount()).toBe(0);
+  });
+
+  // 16. 宛先がすでにこの団体のメンバーなら InvalidInput で、招待を作らない（COND-022）
+  it("宛先がすでにこの団体のメンバーなら InvalidInput になり、create が呼ばれない", async () => {
+    const existingMember: StoredMembership = {
+      id: "gm_taro",
+      groupId: testGroupId,
+      userId: "usr_taro",
+      role: MembershipRole.Member,
+    };
+    const fakeGroup = createFakeGroupRepository();
+    const fakeMembership = createFakeMembershipRepository([adminMembership, existingMember], {
+      membershipsByEmail: { "taro.handai@osaka-u.ac.jp": existingMember },
+    });
+    const fakeInvitation = createFakeInvitationRepository();
+    const fakeNotifier = createFakeMailOutboxNotifier();
+
+    const result = await inviteMemberUseCase(
+      {
+        groupRepository: fakeGroup.repository,
+        membershipRepository: fakeMembership.repository,
+        invitationRepository: fakeInvitation.repository,
+        mailOutboxNotifier: fakeNotifier.notifier,
+      },
+      validArgs, // 宛先は大文字まじりの "Taro.Handai@osaka-u.ac.jp"
+    );
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
+      expect(result.error.field).toBe(GroupField.InviteeEmail);
+      expect(result.error.userMessage).toBe(
+        "このメールアドレスの方は、すでにこの団体のメンバーです。",
+      );
+      // 宛先のアドレスはログ用の説明に埋め込まない（ADR-004 決定 9）
+      expect(result.error.message).not.toContain("taro.handai");
+    }
+    // 小文字にそろえたアドレスで、この団体に限って引く
+    expect(fakeMembership.findByGroupAndEmailCalls()).toEqual([
+      { groupId: testGroupId, normalizedEmail: "taro.handai@osaka-u.ac.jp" },
+    ]);
+    expect(fakeInvitation.createCallCount()).toBe(0);
+    expect(fakeNotifier.notifyEnqueuedCallCount()).toBe(0);
+  });
+
+  // 17. 宛先が別の団体のメンバーであっても、この団体には招待できる
+  it("宛先が別の団体のメンバーであっても、この団体には招待できる", async () => {
+    const otherGroupMember: StoredMembership = {
+      id: "gm_taro_other",
+      groupId: "grp_other",
+      userId: "usr_taro",
+      role: MembershipRole.Admin,
+    };
+    const fakeGroup = createFakeGroupRepository();
+    const fakeMembership = createFakeMembershipRepository([adminMembership, otherGroupMember], {
+      membershipsByEmail: { "taro.handai@osaka-u.ac.jp": otherGroupMember },
+    });
+    const fakeInvitation = createFakeInvitationRepository();
+    const fakeNotifier = createFakeMailOutboxNotifier();
+
+    const result = await inviteMemberUseCase(
+      {
+        groupRepository: fakeGroup.repository,
+        membershipRepository: fakeMembership.repository,
+        invitationRepository: fakeInvitation.repository,
+        mailOutboxNotifier: fakeNotifier.notifier,
+      },
+      validArgs,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(fakeInvitation.createCallCount()).toBe(1);
+  });
+
+  // 18. findByGroupAndEmail が DB エラーを返したら DatabaseError になり、招待を作らない
+  it("findByGroupAndEmail が DB エラーを返したら DatabaseError になり、create が呼ばれない", async () => {
+    const fakeGroup = createFakeGroupRepository();
+    const fakeMembership = createFakeMembershipRepository([adminMembership], {
+      findByGroupAndEmailResult: () =>
+        errAsync({
+          code: MembershipErrorCode.DatabaseError,
+          message: "D1 connection failed",
+        }),
+    });
+    const fakeInvitation = createFakeInvitationRepository();
+    const fakeNotifier = createFakeMailOutboxNotifier();
+
+    const result = await inviteMemberUseCase(
+      {
+        groupRepository: fakeGroup.repository,
+        membershipRepository: fakeMembership.repository,
+        invitationRepository: fakeInvitation.repository,
+        mailOutboxNotifier: fakeNotifier.notifier,
+      },
+      validArgs,
+    );
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.code).toBe(GroupErrorCode.DatabaseError);
+      expect(result.error.cause).toEqual({
+        code: MembershipErrorCode.DatabaseError,
+        message: "D1 connection failed",
+      });
+    }
     expect(fakeInvitation.createCallCount()).toBe(0);
   });
 });

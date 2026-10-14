@@ -100,6 +100,7 @@ const notUsed = { message: "このテストでは使わない" } as const;
 /** 事務局の操作なので、所属の確認は通らない（所属していない）前提で足りる */
 const membershipRepository: MembershipRepository = {
   findByGroupAndUser: () => okAsync(null),
+  findByGroupAndEmail: () => okAsync(null),
   countAdmins: () => errAsync({ code: MembershipErrorCode.DatabaseError, ...notUsed }),
   updateRole: () => errAsync({ code: MembershipErrorCode.DatabaseError, ...notUsed }),
   remove: () => errAsync({ code: MembershipErrorCode.DatabaseError, ...notUsed }),

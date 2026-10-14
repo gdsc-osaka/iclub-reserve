@@ -137,6 +137,7 @@ const createDeps = (
 
   const membershipRepository: MembershipRepository = {
     findByGroupAndUser,
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: vi.fn(() => okAsync(1)),
     updateRole: vi.fn(),
     remove: vi.fn(),
