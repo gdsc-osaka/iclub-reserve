@@ -19,6 +19,7 @@ import {
   ensureActorCan,
   groupNotFound,
   resolveGroupActorWithMembership,
+  toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import { validateMembershipRole } from "./_shared/member-role";
 
@@ -47,6 +48,31 @@ export interface InviteMemberArgs {
 export interface InviteMemberResult {
   readonly invitationId: string;
 }
+
+/**
+ * 宛先がすでにこの団体のメンバーなら止める（COND-022）。
+ *
+ * 承諾しても所属は増えず、届いたメールが紛らわしいだけになるため、送る時点で断る。
+ */
+const ensureInviteeNotMember = (
+  deps: Pick<InviteMemberDeps, "membershipRepository">,
+  groupId: string,
+  email: string,
+): ResultAsync<null, GroupError> =>
+  deps.membershipRepository
+    .findByGroupAndEmail(groupId, email)
+    .mapErr(toGroupDatabaseError)
+    .andThen((existing) =>
+      existing === null
+        ? okAsync(null)
+        : errAsync<null, GroupError>({
+            code: GroupErrorCode.InvalidInput,
+            field: GroupField.InviteeEmail,
+            // 宛先のアドレスは埋め込まない（ADR-004 決定 9）
+            message: `宛先ユーザー ${existing.userId} はすでに団体 ${groupId} のメンバーである。`,
+            userMessage: "このメールアドレスの方は、すでにこの団体のメンバーです。",
+          }),
+    );
 
 /**
  * 団体へメンバーを招待するユースケース（REQ-017 / UC-011 / EVT-014）。
@@ -87,6 +113,8 @@ export const inviteMemberUseCase = (
 
     // 団体名はメールの本文に載せるために引く
     const group = yield* deps.groupRepository.findById(groupId);
+
+    yield* ensureInviteeNotMember(deps, groupId, email);
 
     const pending = yield* deps.invitationRepository.findPendingByGroupAndEmail(groupId, email);
     if (pending !== null && pending.expiresAt.getTime() > args.now.getTime()) {

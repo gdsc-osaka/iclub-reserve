@@ -148,6 +148,7 @@ const createDeps = (
   );
   const membershipRepository: MembershipRepository = {
     findByGroupAndUser,
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: () =>
       errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     updateRole: () =>

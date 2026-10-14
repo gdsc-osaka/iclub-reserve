@@ -60,6 +60,7 @@ const createFakeMembershipRepository = (
       const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
       return okAsync(found ?? null);
     },
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: (_groupId) => {
       countAdminsCallCount += 1;
       if (options.countAdminsResult) {

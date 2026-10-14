@@ -109,6 +109,7 @@ const createDeps = (
     findByGroupAndUser: () =>
       okAsync(overrides.membership === undefined ? membership : overrides.membership),
     // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: () =>
       errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     updateRole: () =>

@@ -1,4 +1,5 @@
 /**
+ * メールアドレスによる所属の取得（COND-022）と、
  * 所属の書き込み（役割の変更・削除）と操作履歴（COND-013）を、ローカルの本物の D1 に対して実行して確かめるテスト。
  *
  * 【なぜ実際に流すのか】
@@ -25,10 +26,13 @@ beforeEach(async () => {
   await testDb.seed(
     [insertUserSql, "usr_taro", "太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
     [insertUserSql, "usr_hanako", "花子", "hanako@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
+    // 大文字まじりで保存されたアドレスも、小文字にそろえて突き合わせられることを確かめる
+    [insertUserSql, "usr_jiro", "次郎", "Jiro.Handai@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
     [insertGroupSql, "grp_robotics", "ロボティクス", "enabled", 0, 0],
     [insertGroupSql, "grp_ai", "AI 班", "enabled", 0, 0],
     [insertMemberSql, "mem_taro", "grp_robotics", "usr_taro", "admin", 0, 0],
     [insertMemberSql, "mem_hanako", "grp_robotics", "usr_hanako", "member", 0, 0],
+    [insertMemberSql, "mem_jiro", "grp_ai", "usr_jiro", "member", 0, 0],
   );
 });
 
@@ -52,6 +56,49 @@ const roleOf = async (memberId: string) =>
       .bind(memberId)
       .first<{ role: string }>()
   )?.role;
+
+describe("メールアドレスによる所属の取得（MembershipRepository.findByGroupAndEmail）", () => {
+  it("その団体に所属していれば、その所属を返す", async () => {
+    const result = await createMembershipRepository(testDb.db).findByGroupAndEmail(
+      "grp_robotics",
+      "hanako@ecs.osaka-u.ac.jp",
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({
+      id: "mem_hanako",
+      groupId: "grp_robotics",
+      userId: "usr_hanako",
+      role: MembershipRole.Member,
+    });
+  });
+
+  it("保存されたアドレスが大文字まじりでも、小文字のアドレスで見つかる", async () => {
+    const result = await createMembershipRepository(testDb.db).findByGroupAndEmail(
+      "grp_ai",
+      "jiro.handai@ecs.osaka-u.ac.jp",
+    );
+
+    expect(result._unsafeUnwrap()?.id).toBe("mem_jiro");
+  });
+
+  it("別の団体にだけ所属している人は null になる", async () => {
+    const result = await createMembershipRepository(testDb.db).findByGroupAndEmail(
+      "grp_ai",
+      "hanako@ecs.osaka-u.ac.jp",
+    );
+
+    expect(result._unsafeUnwrap()).toBeNull();
+  });
+
+  it("アカウントの無いアドレスは null になる", async () => {
+    const result = await createMembershipRepository(testDb.db).findByGroupAndEmail(
+      "grp_robotics",
+      "nobody@ecs.osaka-u.ac.jp",
+    );
+
+    expect(result._unsafeUnwrap()).toBeNull();
+  });
+});
 
 describe("役割の変更（MembershipRepository.updateRole）", () => {
   const changeRoleAuditLog: AuditLogDraft = {

@@ -95,6 +95,7 @@ const createDeps = (
   const membershipRepository: MembershipRepository = {
     findByGroupAndUser: () =>
       okAsync(overrides.membership === undefined ? membership : overrides.membership),
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: () =>
       errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     updateRole: () =>
