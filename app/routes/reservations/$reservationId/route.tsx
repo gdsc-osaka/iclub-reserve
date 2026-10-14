@@ -1,4 +1,4 @@
-import { env, waitUntil } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import {
   CalendarPlus,
   ChevronLeft,
@@ -108,31 +108,30 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
    * そのかわり、予約詳細へのリンクに先読み（`<Link prefetch>`）を付けてはいけない。
    * 先読みでもこの loader が走るので、開いていない予約まで既読になってしまう。
    *
-   * 書き込みは waitUntil で応答の後に回し、画面の表示を待たせない。
+   * 書き込みは、応答を返す前に終える。応答の後に回す（waitUntil）と、
+   * すぐにダッシュボードへ戻ったときに書き込みが間に合わず、確認した予約が残って見えることがある。
    * 失敗しても画面は開き、ログにだけ残す（既読にならなくても、ダッシュボードに残るだけで済む）。
    */
   if (result.value.view.canViewDetail) {
-    waitUntil(
-      markReservationReadUseCase(
-        {
-          reservationReadRepository: createReservationReadRepository(db),
-          reservationRepository: createReservationRepository(db),
-          membershipRepository: createMembershipRepository(db),
-        },
-        {
-          reservationId: params.reservationId,
-          actorUserId: user.id,
-          isStaff: user.is_staff,
-          now,
-        },
-      ).match(
-        () => undefined,
-        (error) =>
-          logReservationError(
-            { where: "reservations.detail.loader.mark-read", userId: user.id },
-            error,
-          ),
-      ),
+    await markReservationReadUseCase(
+      {
+        reservationReadRepository: createReservationReadRepository(db),
+        reservationRepository: createReservationRepository(db),
+        membershipRepository: createMembershipRepository(db),
+      },
+      {
+        reservationId: params.reservationId,
+        actorUserId: user.id,
+        isStaff: user.is_staff,
+        now,
+      },
+    ).match(
+      () => undefined,
+      (error) =>
+        logReservationError(
+          { where: "reservations.detail.loader.mark-read", userId: user.id },
+          error,
+        ),
     );
   }
 
