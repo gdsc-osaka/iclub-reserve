@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, ne, or } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import {
@@ -11,7 +11,7 @@ import {
   reservationTable,
 } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import { UNREAD_TRACKING_STARTS_AT } from "~/domain/reservation";
+import { UNREAD_ITEMS_LIMIT, unreadEventsSince } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import {
   GroupUnreadEventType,
@@ -55,26 +55,51 @@ interface RawEvent {
 
 export const createGroupUnreadUpdatesQuery = (db: Database): GroupUnreadUpdatesQuery => ({
   findUnreadForUser: (userId: string, now: Date) => {
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const minThreshold = new Date(
-      Math.max(thirtyDaysAgo.getTime(), UNREAD_TRACKING_STARTS_AT.getTime()),
+    const since = unreadEventsSince(now);
+
+    /** 行に出す予約の情報。メッセージと操作のどちらの問い合わせでも同じ列を取る */
+    const reservationColumns = {
+      reservationId: reservationTable.id,
+      groupId: reservationTable.groupId,
+      groupName: groupTable.name,
+      facilityId: reservationTable.facilityId,
+      facilityName: facilityTable.name,
+      startAt: reservationTable.startAt,
+      endAt: reservationTable.endAt,
+      statusReason: reservationTable.statusReason,
+    };
+
+    /** 本人が予約の団体の今のメンバーであること（COND-008 の (1)）。外れた人は内部結合で落ちる */
+    const isCurrentMember = and(
+      eq(groupMemberTable.groupId, reservationTable.groupId),
+      eq(groupMemberTable.userId, userId),
     );
 
-    /*
-     * D1 の db.batch() は各行を「列名 → 値」の辞書として受け取るため、
-     * 同じ名前の列（name や id）が 2 つあると値が衝突して上書きされる。
-     * そのため、reservationTable.id のみを id として残し、name には別名を付ける。
+    /** 本人のその予約の既読の記録（無ければ列は NULL になる） */
+    const isOwnRead = and(
+      eq(reservationReadTable.reservationId, reservationTable.id),
+      eq(reservationReadTable.userId, userId),
+    );
+
+    /**
+     * 本人にとって未読の出来事であること（COND-026 (2)・(4)・(6)）。
+     *
+     * 直近 30 日より後で、既読の日時より後（既読の記録が無ければ 30 日の起点だけで決める）、
+     * かつ本人が申請者・管理者・団体側として送ったことのある人のいずれかであること。
      */
+    const isUnreadEvent = (
+      eventAt: typeof reservationMessageTable.sentAt | typeof auditLogTable.occurredAt,
+    ) =>
+      and(
+        gt(eventAt, since),
+        or(isNull(reservationReadTable.lastReadAt), gt(eventAt, reservationReadTable.lastReadAt)),
+        userQualifiesForReservationGroupAudience(db, userId),
+      );
+
+    // 事務局としてのメッセージ（本人が送ったものは除く）
     const messageQuery = db
       .select({
-        reservationId: reservationTable.id,
-        groupId: reservationTable.groupId,
-        groupName: sql<string>`${groupTable.name}`.as("group_name"),
-        facilityId: reservationTable.facilityId,
-        facilityName: sql<string>`${facilityTable.name}`.as("facility_name"),
-        startAt: reservationTable.startAt,
-        endAt: reservationTable.endAt,
-        statusReason: reservationTable.statusReason,
+        ...reservationColumns,
         messageBody: reservationMessageTable.body,
         eventAt: reservationMessageTable.sentAt,
       })
@@ -82,43 +107,20 @@ export const createGroupUnreadUpdatesQuery = (db: Database): GroupUnreadUpdatesQ
       .innerJoin(reservationTable, eq(reservationTable.id, reservationMessageTable.reservationId))
       .innerJoin(groupTable, eq(groupTable.id, reservationTable.groupId))
       .innerJoin(facilityTable, eq(facilityTable.id, reservationTable.facilityId))
-      .innerJoin(
-        groupMemberTable,
-        and(
-          eq(groupMemberTable.groupId, reservationTable.groupId),
-          eq(groupMemberTable.userId, userId),
-        ),
-      )
-      .leftJoin(
-        reservationReadTable,
-        and(
-          eq(reservationReadTable.reservationId, reservationTable.id),
-          eq(reservationReadTable.userId, userId),
-        ),
-      )
+      .innerJoin(groupMemberTable, isCurrentMember)
+      .leftJoin(reservationReadTable, isOwnRead)
       .where(
         and(
           eq(reservationMessageTable.sentAsStaff, true),
           ne(reservationMessageTable.senderId, userId),
-          gt(reservationMessageTable.sentAt, minThreshold),
-          or(
-            isNull(reservationReadTable.lastReadAt),
-            gt(reservationMessageTable.sentAt, reservationReadTable.lastReadAt),
-          ),
-          userQualifiesForReservationGroupAudience(userId),
+          isUnreadEvent(reservationMessageTable.sentAt),
         ),
       );
 
+    // 事務局権限による予約の操作（本人がしたものは除く）
     const auditLogQuery = db
       .select({
-        reservationId: reservationTable.id,
-        groupId: reservationTable.groupId,
-        groupName: sql<string>`${groupTable.name}`.as("audit_group_name"),
-        facilityId: reservationTable.facilityId,
-        facilityName: sql<string>`${facilityTable.name}`.as("audit_facility_name"),
-        startAt: reservationTable.startAt,
-        endAt: reservationTable.endAt,
-        statusReason: reservationTable.statusReason,
+        ...reservationColumns,
         action: auditLogTable.action,
         eventAt: auditLogTable.occurredAt,
       })
@@ -126,20 +128,8 @@ export const createGroupUnreadUpdatesQuery = (db: Database): GroupUnreadUpdatesQ
       .innerJoin(reservationTable, eq(reservationTable.id, auditLogTable.targetId))
       .innerJoin(groupTable, eq(groupTable.id, reservationTable.groupId))
       .innerJoin(facilityTable, eq(facilityTable.id, reservationTable.facilityId))
-      .innerJoin(
-        groupMemberTable,
-        and(
-          eq(groupMemberTable.groupId, reservationTable.groupId),
-          eq(groupMemberTable.userId, userId),
-        ),
-      )
-      .leftJoin(
-        reservationReadTable,
-        and(
-          eq(reservationReadTable.reservationId, reservationTable.id),
-          eq(reservationReadTable.userId, userId),
-        ),
-      )
+      .innerJoin(groupMemberTable, isCurrentMember)
+      .leftJoin(reservationReadTable, isOwnRead)
       .where(
         and(
           eq(auditLogTable.targetType, AuditLogTargetType.Reservation),
@@ -152,17 +142,17 @@ export const createGroupUnreadUpdatesQuery = (db: Database): GroupUnreadUpdatesQ
             AuditLogAction.ReservationDirectCreate,
             AuditLogAction.ReservationDirectChange,
           ]),
-          gt(auditLogTable.occurredAt, minThreshold),
-          or(
-            isNull(reservationReadTable.lastReadAt),
-            gt(auditLogTable.occurredAt, reservationReadTable.lastReadAt),
-          ),
-          userQualifiesForReservationGroupAudience(userId),
+          isUnreadEvent(auditLogTable.occurredAt),
         ),
       );
 
+    /*
+     * db.batch() ではなく、2 つを並べて投げる。
+     * D1 の db.batch() は 1 行を「列名 → 値」で受け取るので、同じ名前の列（団体と施設の name）が潰れてしまい、
+     * 列に別名を付ける SQL を書かなければならなくなるため。
+     */
     return ResultAsync.fromPromise(
-      db.batch([messageQuery, auditLogQuery]),
+      Promise.all([messageQuery, auditLogQuery]),
       (error): QueryError => ({
         code: QueryErrorCode.DatabaseError,
         message: "団体側の未読情報の取得に失敗しました。",
@@ -237,8 +227,8 @@ export const createGroupUnreadUpdatesQuery = (db: Database): GroupUnreadUpdatesQ
       );
 
       const allUnreadReservationIds = reservationItems.map((item) => item.reservationId);
-      const items = reservationItems.slice(0, 10);
-      const overflowCount = Math.max(0, reservationItems.length - 10);
+      const items = reservationItems.slice(0, UNREAD_ITEMS_LIMIT);
+      const overflowCount = Math.max(0, reservationItems.length - UNREAD_ITEMS_LIMIT);
 
       return {
         items,

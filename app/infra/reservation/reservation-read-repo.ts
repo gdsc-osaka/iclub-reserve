@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { ok, okAsync, ResultAsync } from "neverthrow";
 
 import { reservationReadTable } from "~/db/schema";
@@ -9,22 +9,26 @@ import {
 } from "~/domain/reservation";
 import type { Database } from "../db";
 
+/**
+ * 既読の日時を upsert する文を組み立てる。
+ *
+ * 既に記録があるときは、渡された時刻のほうが後のときだけ書き換える（setWhere）。
+ * 先に開いた画面の書き込みが後から届いても、last_read_at を後ろへは戻さない（INFO-012）。
+ */
+const upsertReadStatement = (db: Database, userId: string, reservationId: string, readAt: Date) =>
+  db
+    .insert(reservationReadTable)
+    .values({ userId, reservationId, lastReadAt: readAt })
+    .onConflictDoUpdate({
+      target: [reservationReadTable.userId, reservationReadTable.reservationId],
+      set: { lastReadAt: readAt },
+      setWhere: lt(reservationReadTable.lastReadAt, readAt),
+    });
+
 export const createReservationReadRepository = (db: Database): ReservationReadRepository => ({
   upsert: (userId, reservationId, readAt) =>
     ResultAsync.fromPromise(
-      db
-        .insert(reservationReadTable)
-        .values({
-          userId,
-          reservationId,
-          lastReadAt: readAt,
-        })
-        .onConflictDoUpdate({
-          target: [reservationReadTable.userId, reservationReadTable.reservationId],
-          set: {
-            lastReadAt: sql`MAX(${reservationReadTable.lastReadAt}, excluded.last_read_at)`,
-          },
-        }),
+      upsertReadStatement(db, userId, reservationId, readAt),
       (error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
         message: "既読日時の更新に失敗しました。",
@@ -33,27 +37,9 @@ export const createReservationReadRepository = (db: Database): ReservationReadRe
     ).map(() => undefined),
 
   upsertMany: (userId, reservationIds, readAt) => {
-    if (reservationIds.length === 0) {
-      return okAsync(undefined);
-    }
-
-    const statements = reservationIds.map((reservationId) =>
-      db
-        .insert(reservationReadTable)
-        .values({
-          userId,
-          reservationId,
-          lastReadAt: readAt,
-        })
-        .onConflictDoUpdate({
-          target: [reservationReadTable.userId, reservationReadTable.reservationId],
-          set: {
-            lastReadAt: sql`MAX(${reservationReadTable.lastReadAt}, excluded.last_read_at)`,
-          },
-        }),
+    const [first, ...rest] = reservationIds.map((reservationId) =>
+      upsertReadStatement(db, userId, reservationId, readAt),
     );
-
-    const [first, ...rest] = statements;
     if (first === undefined) {
       return okAsync(undefined);
     }

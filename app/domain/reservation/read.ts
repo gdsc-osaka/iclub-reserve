@@ -1,15 +1,26 @@
 import type { ResultAsync } from "neverthrow";
+import { addDays } from "~/lib/date";
 import type { ReservationError } from "./index";
 
 /**
- * 既読の記録を使い始めた日時（COND-026 (4) / INFO-012）。
+ * 未読として出す出来事の期間（日数）（COND-026 (6)）。
  *
- * この日時より前の出来事は、既読の記録（INFO-012）が無くても既読として扱う。
- * 使い始めた時点で、過去の出来事が一斉に未読としてダッシュボードに出るのを防ぐため。
- *
- * TODO: 今の値は作業をした日の 0 時（仮）。リリースする日に合わせて直す。
+ * これより前の出来事は、既読の記録（INFO-012）が無くても未読として出さない。
+ * 予約を開かないままでも、古い出来事がダッシュボードに残り続けないようにするため。
  */
-export const UNREAD_TRACKING_STARTS_AT = new Date("2026-10-14T00:00:00+09:00");
+export const UNREAD_LOOKBACK_DAYS = 30;
+
+/**
+ * 「確認が必要なこと」に出す行（予約）の上限（COND-026 (6)）。超えた分は件数だけを示す。
+ */
+export const UNREAD_ITEMS_LIMIT = 10;
+
+/**
+ * 未読として出す出来事の起点を返す純粋関数（COND-026 (6)）。
+ *
+ * この日時より後に起きた出来事だけを未読として扱う。
+ */
+export const unreadEventsSince = (now: Date): Date => addDays(now, -UNREAD_LOOKBACK_DAYS);
 
 /**
  * 既読の記録エンティティ（INFO-012）。
@@ -27,14 +38,14 @@ export interface ReservationReadRepository {
   /**
    * 予約 1 件の既読日時を upsert する。
    *
-   * 既存の last_read_at より前の時刻が渡されても、後ろへは戻さない（MAX を取る）。
+   * 既存の last_read_at より前の時刻が渡されたときは書き換えない（後ろへは戻さない）。
    */
   upsert(userId: string, reservationId: string, readAt: Date): ResultAsync<void, ReservationError>;
 
   /**
    * 複数の予約の既読日時を 1 回の db.batch でまとめて upsert する。
    *
-   * 既存の last_read_at より前の時刻が渡されても、後ろへは戻さない（MAX を取る）。
+   * 既存の last_read_at より前の時刻が渡されたときは書き換えない（後ろへは戻さない）。
    */
   upsertMany(
     userId: string,

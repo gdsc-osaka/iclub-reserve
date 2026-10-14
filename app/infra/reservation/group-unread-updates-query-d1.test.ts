@@ -8,7 +8,7 @@ import { useD1TestDb } from "../d1-test-db";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";
-import { ReservationStatus, UNREAD_TRACKING_STARTS_AT } from "~/domain/reservation";
+import { ReservationStatus, unreadEventsSince } from "~/domain/reservation";
 import { GroupUnreadEventType } from "~/query/reservation/group-unread-updates";
 import { createGroupUnreadUpdatesQuery } from "./group-unread-updates-query";
 
@@ -198,6 +198,9 @@ describe("findUnreadForUser (D1)", () => {
     expect(resApplicant.isOk()).toBe(true);
     if (!resApplicant.isOk()) return;
     expect(resApplicant.value.items).toHaveLength(1);
+    // 団体名と施設名は、どちらも name という列から取る。取り違えずに入っていること
+    expect(resApplicant.value.items[0]?.groupName).toBe("テスト団体");
+    expect(resApplicant.value.items[0]?.facilityName).toBe("会議室 1");
     expect(resApplicant.value.items[0]?.reservationId).toBe("res_1");
     expect(resApplicant.value.items[0]?.latestEvent.type).toBe(GroupUnreadEventType.Message);
     expect(resApplicant.value.items[0]?.latestEvent.messageBody).toBe(
@@ -265,29 +268,30 @@ describe("findUnreadForUser (D1)", () => {
     expect(res.value.items).toHaveLength(0);
   });
 
-  it("last_read_at より前、UNREAD_TRACKING_STARTS_AT より前、30 日より前の出来事は出ない", async () => {
+  it("last_read_at より前と、30 日より前の出来事は出ない", async () => {
     const query = createGroupUnreadUpdatesQuery(testDb.db);
+    const since = unreadEventsSince(NOW);
 
-    // 1. UNREAD_TRACKING_STARTS_AT より前のメッセージ
-    await insertReservation("res_old_1", USER_APPLICANT.id);
-    await insertMessage(
-      "msg_old_starts",
-      "res_old_1",
-      USER_STAFF.id,
-      true,
-      "開始日時より前",
-      new Date(UNREAD_TRACKING_STARTS_AT.getTime() - 60000),
-    );
-
-    // 2. 30日より前のメッセージ
-    await insertReservation("res_old_2", USER_APPLICANT.id);
+    // 1. 30 日の起点のすぐ前のメッセージ（出ない）
+    await insertReservation("res_old", USER_APPLICANT.id);
     await insertMessage(
       "msg_old_30d",
-      "res_old_2",
+      "res_old",
       USER_STAFF.id,
       true,
       "30日より前",
-      new Date(NOW.getTime() - 31 * 24 * 60 * 60 * 1000),
+      new Date(since.getTime() - 60000),
+    );
+
+    // 2. 30 日の起点のすぐ後のメッセージ（出る）
+    await insertReservation("res_edge", USER_APPLICANT.id);
+    await insertMessage(
+      "msg_edge_30d",
+      "res_edge",
+      USER_STAFF.id,
+      true,
+      "30日以内",
+      new Date(since.getTime() + 60000),
     );
 
     // 3. last_read_at より前のメッセージ
@@ -326,11 +330,10 @@ describe("findUnreadForUser (D1)", () => {
     expect(res.isOk()).toBe(true);
     if (!res.isOk()) return;
 
-    // res_new だけが出るはず
-    expect(res.value.items).toHaveLength(1);
-    expect(res.value.items[0]?.reservationId).toBe("res_new");
+    // res_new と res_edge だけが出る（新しい順）
+    expect(res.value.items.map((item) => item.reservationId)).toEqual(["res_new", "res_edge"]);
     expect(res.value.items[0]?.latestEvent.messageBody).toBe("新しいメッセージ");
-    // res_new_old は last_read_at より前なので otherCount にも入らない
+    // res_new の古いメッセージは last_read_at より前なので otherCount にも入らない
     expect(res.value.items[0]?.otherCount).toBe(0);
   });
 
