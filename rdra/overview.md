@@ -55,7 +55,7 @@ contexts:
   - id: "BIZ-002"
     name: "reservation-approval"
     display_name: "予約承認"
-    description: "事務局による全団体の予約の一覧確認、仮予約の承認・却下、直接予約の作成・変更、メッセージ送受信。"
+    description: "事務局による全団体の予約の一覧確認、仮予約の承認・却下、直接予約の作成・変更、メッセージ送受信、施設の解錠の手配。"
     primary_actors: ["ACTOR-001"]
     goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005", "GOAL-007"]
   - id: "BIZ-003"
