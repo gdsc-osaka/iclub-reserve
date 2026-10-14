@@ -8,7 +8,11 @@ import { openPage } from "../support/page.js";
  * UC-035 所属団体を確認する（`rdra/contexts/group-management.md`）
  */
 test.describe("UC-035 所属団体を確認する", { tag: "@UC-035" }, () => {
-  test("ダッシュボードと団体一覧に、所属団体が状態つきで出る", async ({ page, db, signInAs }) => {
+  test("団体一覧に所属団体が状態つきで出て、ダッシュボードには承認待ちの案内が出る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
     const user = await createUser(db);
     const enabledGroup = await createGroup(db, {
       members: [{ userId: user.id, role: MembershipRole.Member }],
@@ -19,15 +23,20 @@ test.describe("UC-035 所属団体を確認する", { tag: "@UC-035" }, () => {
     });
     await signInAs(user.id);
 
-    for (const path of ["/", "/groups"]) {
-      await openPage(page, path);
-      const enabledCard = page.getByRole("link", { name: new RegExp(enabledGroup.name) });
-      const pendingCard = page.getByRole("link", { name: new RegExp(pendingGroup.name) });
-      await expect(enabledCard.getByText("活動中", { exact: true })).toBeVisible();
-      await expect(pendingCard.getByText("承認待ち", { exact: true })).toBeVisible();
-      // 管理者を務めている団体には、そのことが出る
-      await expect(pendingCard.getByText("管理者", { exact: true })).toBeVisible();
-    }
+    // 団体一覧画面（/groups）では所属団体が状態つきで出る
+    await openPage(page, "/groups");
+    const enabledCard = page.getByRole("link", { name: new RegExp(enabledGroup.name) });
+    const pendingCard = page.getByRole("link", { name: new RegExp(pendingGroup.name) });
+    await expect(enabledCard.getByText("活動中", { exact: true })).toBeVisible();
+    await expect(pendingCard.getByText("承認待ち", { exact: true })).toBeVisible();
+    // 管理者を務めている団体には、そのことが出る
+    await expect(pendingCard.getByText("管理者", { exact: true })).toBeVisible();
+
+    // ダッシュボード（/）では所属団体のカード一覧は出ず、承認待ちの案内が出る
+    await openPage(page, "/");
+    const pendingNotice = page.getByRole("alert").filter({ hasText: "承認待ちの団体があります" });
+    await expect(pendingNotice).toBeVisible();
+    await expect(pendingNotice).toContainText(pendingGroup.name);
   });
 
   test("一般メンバーは団体の画面を読み取り専用で開け、メールアドレスと招待は見えない", async ({

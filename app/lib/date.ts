@@ -384,3 +384,31 @@ export const formatRelativeTime = (targetDate: Date, now: Date = new Date()): st
   const day = tokyoDate.getUTCDate();
   return `${month}/${day}`;
 };
+
+/**
+ * 予約の利用日までの日数を、現在日付に対する相対的な表示形式に変換する。
+ *
+ * ダッシュボードの「今後の予約」などで使用する。
+ * 判定は日本時間（Asia/Tokyo）の各日の 0 時を基準に行う。
+ *
+ * - 当日（または過去）: 「今日」
+ * - 翌日: 「明日」
+ * - 2 日以上先: 「あと n 日」
+ *
+ * @example formatDaysUntil(new Date("2026-10-15T10:00:00+09:00"), new Date("2026-10-15T08:00:00+09:00")) // → "今日"
+ * @example formatDaysUntil(new Date("2026-10-16T10:00:00+09:00"), new Date("2026-10-15T08:00:00+09:00")) // → "明日"
+ * @example formatDaysUntil(new Date("2026-10-18T10:00:00+09:00"), new Date("2026-10-15T08:00:00+09:00")) // → "あと 3 日"
+ */
+export const formatDaysUntil = (targetDate: Date, now: Date = new Date()): string => {
+  const targetDay = startOfTokyoDay(targetDate);
+  const currentDay = startOfTokyoDay(now);
+  const diffDays = Math.round((targetDay.getTime() - currentDay.getTime()) / DAY_MS);
+
+  if (diffDays <= 0) {
+    return "今日";
+  }
+  if (diffDays === 1) {
+    return "明日";
+  }
+  return `あと ${diffDays} 日`;
+};

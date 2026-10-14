@@ -4,8 +4,9 @@
  * 予約・団体・メンバーシップ・招待・施設・事務局権限に対して人が行った操作を追記する（COND-013）。
  * 記録は無期限に保持され、編集・削除する操作は用意しない（REQ-038）。
  */
+import { addDays } from "~/lib/date";
 import type { PermissionTable } from "../authz";
-import { canAct, type Actor, type ActorRole } from "../membership";
+import { canAct, MembershipRole, type Actor, type ActorRole } from "../membership";
 
 /**
  * 記録対象の種類（VAR-003）。
@@ -396,3 +397,39 @@ export const toAuditLogEntryView = (
   targetId: record.targetId,
   changes: record.changes,
 });
+
+/**
+ * ダッシュボード「団体の最近の動き」に表示する期間（日数）（SCR-022）。
+ */
+export const RECENT_ACTIVITIES_LOOKBACK_DAYS = 7;
+
+/**
+ * ダッシュボード「団体の最近の動き」に表示する件数の上限（SCR-022）。
+ */
+export const RECENT_ACTIVITIES_LIMIT = 5;
+
+/**
+ * 最近の動きとして出す記録の起点を返す純粋関数。
+ */
+export const recentActivitiesSince = (now: Date): Date =>
+  addDays(now, -RECENT_ACTIVITIES_LOOKBACK_DAYS);
+
+/**
+ * 団体のロールに応じて閲覧可能な操作履歴の対象種別を返す（COND-012 (2)・(3)）。
+ *
+ * - 管理者: 予約・団体・メンバーシップ・招待
+ * - 一般メンバー: 予約のみ
+ */
+export const visibleAuditLogTargetTypesForRole = (
+  role: MembershipRole,
+): readonly AuditLogTargetType[] => {
+  if (role === MembershipRole.Admin) {
+    return [
+      AuditLogTargetType.Reservation,
+      AuditLogTargetType.Group,
+      AuditLogTargetType.Membership,
+      AuditLogTargetType.Invitation,
+    ];
+  }
+  return [AuditLogTargetType.Reservation];
+};

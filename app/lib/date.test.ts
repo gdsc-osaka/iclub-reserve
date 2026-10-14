@@ -4,6 +4,7 @@ import {
   addDays,
   atTokyoTime,
   formatDateInput,
+  formatDaysUntil,
   formatMonthDayParts,
   formatRelativeTime,
   formatTime,
@@ -303,5 +304,44 @@ describe("formatRelativeTime", () => {
 
     const targetOtherMonth = new Date("2026-04-01T12:00:00+09:00");
     expect(formatRelativeTime(targetOtherMonth, baseNow)).toBe("4/1");
+  });
+});
+
+describe("formatDaysUntil", () => {
+  const baseNow = new Date("2026-10-15T14:30:00+09:00");
+
+  it("当日（日本時間で同じ日）の予約は「今日」を返す", () => {
+    // 同じ日の過去時刻・未来時刻
+    expect(formatDaysUntil(new Date("2026-10-15T10:00:00+09:00"), baseNow)).toBe("今日");
+    expect(formatDaysUntil(new Date("2026-10-15T18:00:00+09:00"), baseNow)).toBe("今日");
+    // 23:59 でも「今日」
+    expect(formatDaysUntil(new Date("2026-10-15T23:59:59+09:00"), baseNow)).toBe("今日");
+  });
+
+  it("翌日（日本時間で +1 日）の予約は「明日」を返す", () => {
+    expect(formatDaysUntil(new Date("2026-10-16T00:00:00+09:00"), baseNow)).toBe("明日");
+    expect(formatDaysUntil(new Date("2026-10-16T15:00:00+09:00"), baseNow)).toBe("明日");
+    expect(formatDaysUntil(new Date("2026-10-16T23:59:00+09:00"), baseNow)).toBe("明日");
+  });
+
+  it("2日以上先の予約は「あと n 日」を返す", () => {
+    expect(formatDaysUntil(new Date("2026-10-17T10:00:00+09:00"), baseNow)).toBe("あと 2 日");
+    expect(formatDaysUntil(new Date("2026-10-18T10:00:00+09:00"), baseNow)).toBe("あと 3 日");
+    expect(formatDaysUntil(new Date("2026-10-25T10:00:00+09:00"), baseNow)).toBe("あと 10 日");
+  });
+
+  it("月をまたぐ場合でも日本時間の日数差で正確に計算する", () => {
+    // 10/31 から 11/1 は「明日」
+    const endOfMonth = new Date("2026-10-31T23:30:00+09:00");
+    expect(formatDaysUntil(new Date("2026-11-01T09:00:00+09:00"), endOfMonth)).toBe("明日");
+    // 10/31 から 11/2 は「あと 2 日」
+    expect(formatDaysUntil(new Date("2026-11-02T09:00:00+09:00"), endOfMonth)).toBe("あと 2 日");
+  });
+
+  it("UTC では前日または翌日になる時刻でも日本時間の日付で判定する", () => {
+    // baseNow (10/15 14:30 JST = 10/15 05:30 UTC)
+    // 10/16 02:00 JST (= 10/15 17:00 UTC) -> 日本時間では翌日なので「明日」
+    const targetTomorrowEarly = new Date("2026-10-16T02:00:00+09:00");
+    expect(formatDaysUntil(targetTomorrowEarly, baseNow)).toBe("明日");
   });
 });

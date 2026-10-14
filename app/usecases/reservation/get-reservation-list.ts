@@ -7,10 +7,10 @@ import type {
   ReservationListFacility,
   ReservationListItem,
   ReservationListQuery,
-  ReservationListRow,
   ReservationListSort,
   ReservationStatusCounts,
 } from "~/query/reservation/reservation-list";
+import { toReservationListItem } from "./_shared/to-reservation-list-item";
 import type {
   UserGroupList,
   UserGroupListItem,
@@ -112,29 +112,6 @@ const toDomainStatuses = (filter: ReservationListStatusFilter): readonly Reserva
       return allStatuses;
   }
 };
-
-/**
- * 予約一覧の行から団体の ID を落とし、画面へ渡してよい形に変換する（COND-008）。
- *
- * 団体の ID は「自団体の予約かどうか」の絞り込み判定にのみ使い、
- * 画面へは団体名までしか渡さない。
- */
-const toReservationListItem = (row: ReservationListRow): ReservationListItem => ({
-  id: row.id,
-  groupName: row.groupName,
-  facilityId: row.facilityId,
-  facilityName: row.facilityName,
-  startAt: row.startAt,
-  endAt: row.endAt,
-  status: row.status,
-  statusReason: row.statusReason,
-  headCount: row.headCount,
-  note: row.note,
-  createdByName: row.createdByName,
-  createdAt: row.createdAt,
-  hasApprovedOverlap: row.hasApprovedOverlap ?? false,
-  hasProvisionalOverlap: row.hasProvisionalOverlap ?? false,
-});
 
 /**
  * 条件に応じた並び順を決定する。
