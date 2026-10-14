@@ -193,6 +193,11 @@ const createAuth = () => {
          * ただし制限したいのは「誰が登録できるか」であって、
          * 既に登録済みの人を締め出すことではない。
          * そのため、アカウントが既にある場合はドメインを問わず通す（checkSendVerificationOtpRule）。
+         *
+         * この 403 から、阪大以外のアドレスにアカウントがあるかどうかが分かる。
+         * また Better Auth の不備で、`type: "email-verification"` で送った後の `/email-otp/verify-email` の
+         * エラーからも、阪大のアドレスにアカウントがあるかどうかが分かる。
+         * どちらも致命的ではないので受け入れている（ADR-009）。
          */
         if (ctx.path === "/email-otp/send-verification-otp") {
           const email = (ctx.body as { email?: unknown } | undefined)?.email;
@@ -211,6 +216,9 @@ const createAuth = () => {
         /*
          * メールアドレス変更用のコード送信（COND-004 / COND-018）。
          * 大阪大学のドメイン以外は拒否し、アカウントの有無による例外は適用しない。
+         *
+         * 新しいアドレスが使用済みかどうかは、Better Auth の不備で `/email-otp/change-email` のエラーの種類から分かってしまう。
+         * 回避策は入れず、上流の修正を待つ（ADR-009）。
          */
         if (ctx.path === "/email-otp/request-email-change") {
           const newEmail = (ctx.body as { newEmail?: unknown } | undefined)?.newEmail;
