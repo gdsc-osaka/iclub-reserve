@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createId } from "@paralleldrive/cuid2";
 import { user } from "./auth";
 import { groupTable } from "./group";
@@ -98,5 +98,28 @@ export const reservationMessageTable = sqliteTable(
   },
   (table) => [
     index("reservation_message_reservation_sent_at_idx").on(table.reservationId, table.sentAt),
+  ],
+);
+
+/**
+ * 既読の記録テーブル（INFO-012）。
+ *
+ * 利用者がある予約の動きをどこまで確認したかを表す。
+ * 利用者と予約の組ごとに、最後に確認した日時（last_read_at）を 1 つだけ持つ。
+ */
+export const reservationReadTable = sqliteTable(
+  "reservation_read",
+  {
+    userId: text("user_id")
+      .references(() => user.id, { onDelete: "cascade" })
+      .notNull(),
+    reservationId: text("reservation_id")
+      .references(() => reservationTable.id, { onDelete: "cascade" })
+      .notNull(),
+    lastReadAt: integer("last_read_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.reservationId] }),
+    index("reservation_read_reservation_id_idx").on(table.reservationId),
   ],
 );
