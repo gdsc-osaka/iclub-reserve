@@ -5,6 +5,7 @@ import { canAct, type Actor, type MembershipRole } from "~/domain/membership";
 import { ReservationAction, reservationPermissions } from "~/domain/reservation";
 import { allowedTransitions, isStaffTransition } from "~/domain/reservation/transition";
 import { canViewReservationDetail } from "~/domain/reservation/visibility";
+import { addDays, toTokyoDateKey } from "~/lib/date";
 import type { QueryError } from "~/query/error";
 import type {
   AvailabilityCalendar,
@@ -12,6 +13,7 @@ import type {
   AvailabilityReservationRow,
   FacilityAvailabilityCalendarQuery,
 } from "~/query/facility/facility-availability-calendar";
+import type { HolidayQuery } from "~/query/holiday";
 import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
 
 /** このユースケースが必要とする依存 */
@@ -19,6 +21,8 @@ export interface GetAvailabilityCalendarDeps {
   readonly facilityAvailabilityCalendarQuery: FacilityAvailabilityCalendarQuery;
   /** 「どの予約が自団体のものか」を判定するために、見ている人の所属を引く */
   readonly userGroupListQuery: UserGroupListQuery;
+  /** 表示期間内の祝日を取得するクエリ */
+  readonly holidayQuery: HolidayQuery;
 }
 
 /** このユースケースへの入力 */
@@ -112,15 +116,20 @@ const canApplyReservation = (groups: UserGroupList, isStaff: boolean): boolean =
 export const getAvailabilityCalendarUseCase = (
   deps: GetAvailabilityCalendarDeps,
   args: GetAvailabilityCalendarArgs,
-): ResultAsync<AvailabilityCalendar, QueryError> =>
-  ResultAsync.combine([
+): ResultAsync<AvailabilityCalendar, QueryError> => {
+  const fromDateKey = toTokyoDateKey(args.from);
+  // args.to は終了時刻（排他、翌週日曜 0 時など）のため、期間内の末日（直前の日）を終端とする
+  const toDateKey = toTokyoDateKey(addDays(args.to, -1));
+
+  return ResultAsync.combine([
     deps.userGroupListQuery.findByUserId(args.actorUserId),
     deps.facilityAvailabilityCalendarQuery.findByFacilityAndPeriod({
       facilityId: args.facilityId,
       from: args.from,
       to: args.to,
     }),
-  ]).map(([groups, calendar]): AvailabilityCalendar => {
+    deps.holidayQuery.findHolidaysBetween(fromDateKey, toDateKey),
+  ]).map(([groups, calendar, holidayDateKeys]): AvailabilityCalendar => {
     const viewer: CalendarViewer = {
       userId: args.actorUserId,
       isStaff: args.isStaff,
@@ -137,5 +146,7 @@ export const getAvailabilityCalendarUseCase = (
         { isStaff: args.isStaff, membership: null },
         ReservationAction.CreateDirect,
       ),
+      holidayDateKeys,
     };
   });
+};

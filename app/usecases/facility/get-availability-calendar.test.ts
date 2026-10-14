@@ -9,6 +9,7 @@ import type {
   AvailabilityReservationRow,
   FacilityAvailabilityCalendarQuery,
 } from "~/query/facility/facility-availability-calendar";
+import type { HolidayQuery } from "~/query/holiday";
 import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
 import { getAvailabilityCalendarUseCase } from "./get-availability-calendar";
 
@@ -62,7 +63,12 @@ const pendingMembership: UserGroupList = [
   },
 ];
 
-const createDeps = (groups: UserGroupList) => {
+const createDeps = (
+  groups: UserGroupList,
+  overrides?: {
+    readonly holidayQuery?: HolidayQuery;
+  },
+) => {
   const userGroupListQuery: UserGroupListQuery = { findByUserId: () => okAsync(groups) };
 
   const facilityAvailabilityCalendarQuery: FacilityAvailabilityCalendarQuery = {
@@ -74,7 +80,11 @@ const createDeps = (groups: UserGroupList) => {
       }),
   };
 
-  return { userGroupListQuery, facilityAvailabilityCalendarQuery };
+  const holidayQuery: HolidayQuery = overrides?.holidayQuery ?? {
+    findHolidaysBetween: () => okAsync([]),
+  };
+
+  return { userGroupListQuery, facilityAvailabilityCalendarQuery, holidayQuery };
 };
 
 const args = {
@@ -198,6 +208,7 @@ describe("getAvailabilityCalendarUseCase", () => {
             message: "施設・設備 fac_unknown が有効な施設の中に見つからない。",
           }),
       } as FacilityAvailabilityCalendarQuery,
+      holidayQuery: { findHolidaysBetween: () => okAsync([]) } as HolidayQuery,
     };
 
     const result = await getAvailabilityCalendarUseCase(deps, {
@@ -207,5 +218,41 @@ describe("getAvailabilityCalendarUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.NotFound);
+  });
+
+  it("期間内の祝日の日付一覧が holidayDateKeys に入る", async () => {
+    const holidayQuery: HolidayQuery = {
+      findHolidaysBetween: (from, to) => {
+        expect(from).toBe("2026-09-07");
+        expect(to).toBe("2026-09-13"); // to は 2026-09-14 0:00 の前日
+        return okAsync(["2026-09-15"]);
+      },
+    };
+
+    const result = await getAvailabilityCalendarUseCase(
+      createDeps(enabledMembership, { holidayQuery }),
+      args,
+    );
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap().holidayDateKeys).toEqual(["2026-09-15"]);
+  });
+
+  it("祝日取得がエラーの場合はそのエラーを返す", async () => {
+    const holidayQuery: HolidayQuery = {
+      findHolidaysBetween: () =>
+        errAsync({
+          code: QueryErrorCode.DatabaseError,
+          message: "祝日取得失敗",
+        }),
+    };
+
+    const result = await getAvailabilityCalendarUseCase(
+      createDeps(enabledMembership, { holidayQuery }),
+      args,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.DatabaseError);
   });
 });

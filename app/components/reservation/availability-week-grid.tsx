@@ -18,6 +18,7 @@ import {
   toAxisPercent,
   toDayBlocks,
   toOccupiedHours,
+  weekdayLabel,
   weekdayStyle,
   type AvailabilityBlock,
   type AvailabilityDay,
@@ -25,12 +26,6 @@ import {
 import { reservationStatusLabel } from "./reservation-status-badge";
 import { layoutTimelineItems } from "./timeline-layout";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-
-/** 曜日だけを取り出すための形式。日付の見出しの 1 行目に使う */
-const weekdayFormatter = new Intl.DateTimeFormat("ja-JP", {
-  weekday: "short",
-  timeZone: "Asia/Tokyo",
-});
 
 /** 「9/12」の形式。日付の見出しの 2 行目に使う */
 const shortDateFormatter = new Intl.DateTimeFormat("ja-JP", {
@@ -146,7 +141,7 @@ export function AvailabilityWeekGrid({
  * 見出しと列で塗り方が違うと、同じ日の上下が別のものに見えてしまう。
  */
 function DayHeading({ day }: Readonly<{ day: AvailabilityDay }>) {
-  const weekday = weekdayStyle(day.weekday);
+  const weekday = weekdayStyle(day);
 
   return (
     <div className="sticky top-0 z-20 border-b border-l bg-card">
@@ -161,10 +156,15 @@ function DayHeading({ day }: Readonly<{ day: AvailabilityDay }>) {
          * その日付が誤っているように見えてしまう。
          * 今日は見出しごと白抜きなので、ここでは色を足さず受け継ぐ。
          */}
-        <p className={cn("text-xs", !day.isToday && (weekday.label ?? "text-muted-foreground"))}>
-          {weekdayFormatter.format(day.date)}
+        <p
+          className={cn(
+            "text-xs whitespace-nowrap",
+            !day.isToday && (weekday.label ?? "text-muted-foreground"),
+          )}
+        >
+          {weekdayLabel(day)}
         </p>
-        <p className="text-sm">{shortDateFormatter.format(day.date)}</p>
+        <p className="text-sm whitespace-nowrap">{shortDateFormatter.format(day.date)}</p>
       </div>
     </div>
   );
@@ -226,7 +226,7 @@ function DayColumn({
   const occupiedHours = toOccupiedHours(blocks);
   const nowMinutes = tokyoMinutesOfDay(now);
   const showNowLine = day.isToday && nowMinutes >= OPEN_MINUTES && nowMinutes <= CLOSE_MINUTES;
-  const weekday = weekdayStyle(day.weekday);
+  const weekday = weekdayStyle(day);
 
   return (
     /*

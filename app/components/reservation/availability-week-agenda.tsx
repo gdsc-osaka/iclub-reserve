@@ -12,6 +12,7 @@ import {
   blockStyle,
   isPastDay,
   toDayBlocks,
+  weekdayLabel,
   weekdayStyle,
   type AvailabilityDay,
 } from "./availability-week";
@@ -53,8 +54,9 @@ export function AvailabilityWeekAgenda({
   return (
     <ul className="divide-y">
       {days.map((day) => {
-        const weekday = weekdayStyle(day.weekday);
-        const { monthDay, weekday: weekdayLabel } = formatMonthDayParts(day.date);
+        const weekday = weekdayStyle(day);
+        const { monthDay } = formatMonthDayParts(day.date);
+        const label = weekdayLabel(day);
 
         return (
           <li key={day.dateKey} className="py-3">
@@ -66,7 +68,7 @@ export function AvailabilityWeekAgenda({
                  * その日付が誤っているように見えてしまう。
                  * 今日は見出しごと色を変えているので、ここでは足さない。
                  */}
-                <span className={cn(!day.isToday && weekday.label)}>({weekdayLabel})</span>
+                <span className={cn(!day.isToday && weekday.label)}>({label})</span>
                 {day.isToday && <span className="ml-2 text-xs">今日</span>}
               </h3>
 

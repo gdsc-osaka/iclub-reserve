@@ -110,6 +110,12 @@ export interface AvailabilityCalendar {
    * 権限表の CreateDirect から導く。事務局スタッフのときだけ true になる。
    */
   readonly canCreateDirectly: boolean;
+  /**
+   * 表示期間内の日本の祝日の日付キー（"YYYY-MM-DD"）一覧。
+   *
+   * カレンダーの日付見出しや列の色（日曜と同じ赤系）の判定に使用する。
+   */
+  readonly holidayDateKeys: readonly string[];
 }
 
 /** {@link FacilityAvailabilityCalendarQuery.findByFacilityAndPeriod} への入力。 */
