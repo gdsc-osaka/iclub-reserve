@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { env, waitUntil } from "cloudflare:workers";
 import {
   CalendarPlus,
   ChevronLeft,
@@ -36,6 +36,7 @@ import { createReservationDetailQuery } from "~/infra/reservation/reservation-de
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationMessageListQuery } from "~/infra/reservation/reservation-message-list-query";
 import { createReservationMessageRepository } from "~/infra/reservation/reservation-message-repo";
+import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
@@ -43,11 +44,13 @@ import { formatDateTime, formatFullDate, formatTimeRange } from "~/lib/date";
 import { parseHistoryPage } from "~/lib/history-page";
 import { toReservationEditPath } from "~/lib/reservation-paths";
 import {
+  logReservationError,
   reservationActionErrors,
   reservationErrorResponse,
 } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationUseCase } from "~/usecases/reservation/get-reservation";
+import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
 import { sendReservationMessageUseCase } from "~/usecases/reservation/send-reservation-message";
 import type { Route } from "./+types/route";
 import { ReservationAuditLogCard } from "./reservation-audit-log-card";
@@ -94,6 +97,42 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     throw reservationErrorResponse(
       { where: "reservations.detail.loader", userId: user.id },
       result.error,
+    );
+  }
+
+  /*
+   * 予約を開いたら、その予約を既読にする（UC-034 / COND-026 (5)）。
+   *
+   * GET で書き込むのは、「詳細を開いた」こと自体が「確認した」ことだからである。
+   * 開いた後に別の POST を送らせると、送る前に閉じられたときに既読にならない。
+   * そのかわり、予約詳細へのリンクに先読み（`<Link prefetch>`）を付けてはいけない。
+   * 先読みでもこの loader が走るので、開いていない予約まで既読になってしまう。
+   *
+   * 書き込みは waitUntil で応答の後に回し、画面の表示を待たせない。
+   * 失敗しても画面は開き、ログにだけ残す（既読にならなくても、ダッシュボードに残るだけで済む）。
+   */
+  if (result.value.view.canViewDetail) {
+    waitUntil(
+      markReservationReadUseCase(
+        {
+          reservationReadRepository: createReservationReadRepository(db),
+          reservationRepository: createReservationRepository(db),
+          membershipRepository: createMembershipRepository(db),
+        },
+        {
+          reservationId: params.reservationId,
+          actorUserId: user.id,
+          isStaff: user.is_staff,
+          now,
+        },
+      ).match(
+        () => undefined,
+        (error) =>
+          logReservationError(
+            { where: "reservations.detail.loader.mark-read", userId: user.id },
+            error,
+          ),
+      ),
     );
   }
 
@@ -152,6 +191,31 @@ async function handleSendMessageAction(
         { [ReservationField.MessageBody]: "body" },
       ),
     };
+  }
+
+  /*
+   * 送った人のその予約を既読にする（UC-009 / COND-026 (5)）。
+   * 送る前に届いていた相手のメッセージは、送った時点で読んだものとみなす。
+   * 失敗してもメッセージは送れているので、ログにだけ残して成功を返す。
+   */
+  const markReadResult = await markReservationReadUseCase(
+    {
+      reservationReadRepository: createReservationReadRepository(db),
+      reservationRepository: createReservationRepository(db),
+      membershipRepository: createMembershipRepository(db),
+    },
+    {
+      reservationId,
+      actorUserId: user.id,
+      isStaff: user.is_staff,
+      now: new Date(),
+    },
+  );
+  if (markReadResult.isErr()) {
+    logReservationError(
+      { where: "reservations.detail.send-message.mark-read", userId: user.id },
+      markReadResult.error,
+    );
   }
 
   return {

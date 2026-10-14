@@ -6,6 +6,7 @@ import {
 } from "~/domain/reservation";
 
 import {
+  logDomainError,
   toActionErrors,
   toErrorResponse,
   type ActionErrors,
@@ -124,3 +125,9 @@ export const reservationActionErrors = <K extends string = never>(
   fieldOf?: Partial<Record<ReservationField, K>>,
 ): ActionErrors<NoInfer<K>> =>
   toActionErrors(reservationActionErrorTables, context, error, fieldOf);
+
+/**
+ * 予約のユースケースの失敗をログにだけ残す。
+ */
+export const logReservationError = (context: ErrorContext, error: ReservationError): void =>
+  logDomainError(reservationErrorTables, context, error);
