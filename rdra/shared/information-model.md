@@ -66,6 +66,9 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "作成者"
+      - target: "INFO-012"
+        type: "1:N"
+        label: "既読の記録"
     traces_to:
       [
         "UC-001",
@@ -79,11 +82,13 @@ entities:
         "UC-032",
         "UC-033",
         "UC-034",
+        "UC-037",
         "SCR-001",
         "SCR-002",
         "SCR-003",
         "SCR-005",
         "SCR-018",
+        "SCR-022",
       ]
 
   - id: "INFO-002"
@@ -142,6 +147,7 @@ entities:
         "SCR-009",
         "SCR-010",
         "SCR-018",
+        "SCR-022",
       ]
 
   - id: "INFO-003"
@@ -234,7 +240,7 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "送信者"
-    traces_to: ["UC-009", "SCR-005"]
+    traces_to: ["UC-009", "UC-037", "SCR-005", "SCR-022"]
 
   - id: "INFO-005"
     name: "メンバーシップ"
@@ -339,6 +345,9 @@ entities:
       - target: "INFO-011"
         type: "1:N"
         label: "ログイン中の端末"
+      - target: "INFO-012"
+        type: "1:N"
+        label: "既読の記録"
     traces_to:
       [
         "UC-010",
@@ -352,6 +361,7 @@ entities:
         "UC-028",
         "UC-029",
         "UC-035",
+        "UC-037",
         "SCR-005",
         "SCR-007",
         "SCR-012",
@@ -361,6 +371,7 @@ entities:
         "SCR-018",
         "SCR-019",
         "SCR-021",
+        "SCR-022",
       ]
 
   - id: "INFO-007"
@@ -406,7 +417,7 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "招待者"
-    traces_to: ["UC-011", "UC-022", "SCR-007", "SCR-016", "SCR-018"]
+    traces_to: ["UC-011", "UC-022", "SCR-007", "SCR-016", "SCR-018", "SCR-022"]
 
   - id: "INFO-008"
     name: "操作履歴"
@@ -478,9 +489,11 @@ entities:
         "UC-026",
         "UC-027",
         "UC-028",
+        "UC-037",
         "SCR-005",
         "SCR-007",
         "SCR-018",
+        "SCR-022",
       ]
 
   - id: "INFO-009"
@@ -592,6 +605,30 @@ entities:
         type: "N:1"
         label: "ログインしているユーザー"
     traces_to: ["UC-019", "UC-020", "UC-023", "UC-031", "UC-036", "SCR-021"]
+  - id: "INFO-012"
+    name: "既読の記録"
+    description: "利用者がある予約の動きをどこまで確認したかを表す。利用者と予約の組ごとに、最後に確認した日時を1つだけ持つ。ダッシュボード（SCR-022）に出す未読の判定に使う（COND-026）。予約詳細（SCR-005）を開いたとき（UC-034）、その予約にメッセージを送ったとき（UC-009）、ダッシュボードで確認済みにしたとき（UC-037）に今の時刻へ進め、後ろへは戻さない。既読の記録を使い始める前の出来事は、記録が無くても既読として扱う（使い始めた時点で、過去の出来事が一斉に未読として出ないようにするため）。既読にする操作は、予約にもメッセージにも変更を加えず本人の表示だけに関わるため、操作履歴（INFO-008）には記録しない。"
+    attributes:
+      - name: "user_id"
+        type: "string"
+        required: true
+        description: "確認した利用者のID（外部キー）。reservation_id と組で主キーになる。"
+      - name: "reservation_id"
+        type: "string"
+        required: true
+        description: "確認した予約のID（外部キー）"
+      - name: "last_read_at"
+        type: "datetime"
+        required: true
+        description: "最後に確認した日時。この日時より後の相手方の出来事を未読とする（COND-026）。"
+    relations:
+      - target: "INFO-006"
+        type: "N:1"
+        label: "確認した利用者"
+      - target: "INFO-001"
+        type: "N:1"
+        label: "確認した予約"
+    traces_to: ["UC-009", "UC-034", "UC-037", "SCR-022"]
 ---
 
 # 情報モデル（横断）
@@ -618,6 +655,8 @@ erDiagram
     INFO_006 ||--o{ INFO_009 : "事務局に招待する"
     INFO_006 ||--o{ INFO_010 : "登録する"
     INFO_006 ||--o{ INFO_011 : "ログインする"
+    INFO_006 ||--o{ INFO_012 : "確認する"
+    INFO_001 ||--o{ INFO_012 : "確認される"
 
     INFO_006["INFO-006: ユーザー"] {
         string id PK
@@ -726,9 +765,16 @@ erDiagram
         datetime updated_at
         datetime expires_at
     }
+    INFO_012["INFO-012: 既読の記録"] {
+        string user_id PK, FK
+        string reservation_id PK, FK
+        datetime last_read_at
+    }
 ```
 
 INFO-008 の actor_id・group_id・target_id は論理的な参照であり、外部キー制約を張らない。記録の対象や操作者が後から消えても、記録は残す必要があるためである。
+
+INFO-012 は、出来事（メッセージ・操作履歴）ごとに既読・未読を持たず、予約ごとに「どこまで確認したか」の日時を1つだけ持つ。出来事ごとに持つと、出来事が増えるたびに利用者の人数分の行が増えるうえ、ダッシュボードでは予約1件を1行にまとめて確認済みにするため（COND-026 の (1)）、細かく持っても使い道が無い。
 
 INFO-001 には Google Calendar の予定の ID を持たない。予定の ID は予約の ID から毎回同じ値を導いて使う。同期は予約の今の状態に合わせるため（COND-024）、どの予定が予約に当たるかを予約の ID だけで決められれば足りる。
 
