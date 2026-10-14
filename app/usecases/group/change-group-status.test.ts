@@ -67,6 +67,7 @@ const createDeps = (overrides?: {
     findByGroupAndUser: vi.fn((_groupId: string, _userId: string) =>
       okAsync(overrides?.membership ?? null),
     ),
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: vi.fn(),
     updateRole: vi.fn(),
     remove: vi.fn(),

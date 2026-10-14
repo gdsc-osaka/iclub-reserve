@@ -133,6 +133,7 @@ const createMockDeps = (options?: {
   const membershipRepository: MembershipRepository = {
     findByGroupAndUser,
     // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: () =>
       errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     updateRole: () =>

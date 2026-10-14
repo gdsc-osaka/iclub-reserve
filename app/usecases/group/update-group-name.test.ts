@@ -100,6 +100,7 @@ const createFakeMembershipRepository = (memberships: readonly StoredMembership[]
       return okAsync(found ?? null);
     },
     // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: () =>
       errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
     updateRole: () =>
@@ -352,6 +353,7 @@ describe("updateGroupNameUseCase", () => {
           cause: new Error("DB error"),
         }),
       // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
+      findByGroupAndEmail: () => okAsync(null),
       countAdmins: () =>
         errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
       updateRole: () =>

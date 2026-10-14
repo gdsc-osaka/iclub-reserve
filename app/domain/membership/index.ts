@@ -172,6 +172,22 @@ export interface MembershipRepository {
   ): ResultAsync<StoredMembership | null, MembershipError>;
 
   /**
+   * そのメールアドレスを持つユーザーが、その団体に所属しているかを調べる（COND-022）。
+   *
+   * 招待の宛先がすでにメンバーかどうかを確かめるために使う。
+   * 招待の時点では宛先をメールアドレスでしか知らないので、ユーザー ID ではなくアドレスで引く。
+   *
+   * `normalizedEmail` は小文字にそろえ済みであること。
+   * 保存されているアドレスの大文字・小文字に左右されないよう、DB 側でも小文字にして突き合わせる。
+   *
+   * 戻り値の考え方は `findByGroupAndUser` と同じで、所属していなければ ok(null)。
+   */
+  findByGroupAndEmail(
+    groupId: string,
+    normalizedEmail: string,
+  ): ResultAsync<StoredMembership | null, MembershipError>;
+
+  /**
    * その団体の管理者の人数を数える（最後の管理者の保護に使う）。
    *
    * group_member テーブルには (group_id, user_id) の一意制約があるので、

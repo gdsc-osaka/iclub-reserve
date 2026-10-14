@@ -67,6 +67,7 @@ const createFakeMembershipRepository = (
       const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
       return okAsync(found ?? null);
     },
+    findByGroupAndEmail: () => okAsync(null),
     countAdmins: () =>
       errAsync({
         code: MembershipErrorCode.DatabaseError,
