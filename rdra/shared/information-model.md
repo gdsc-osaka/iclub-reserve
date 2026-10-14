@@ -41,6 +41,10 @@ entities:
         type: "string"
         required: false
         description: "却下・キャンセル理由。status が rejected（事務局却下）または cancelled_by_staff（事務局キャンセル）の場合は必須（COND-002）。withdrawn（団体取り消し）・cancelled（団体キャンセル）の場合は任意。開示範囲: 自団体のメンバーと事務局のみ（COND-008）。"
+      - name: "unlock_arrangement"
+        type: "enum"
+        required: false
+        description: "施設の解錠の手配: required（要手配）/ arranged（手配済み）/ not_required（不要）。値なしは未定を表す。仮予約の間は未定で、事務局が承認（UC-006）・直接作成（UC-008）するときに必ず選ぶ。団体が施設・日時を変えて仮予約に戻ると未定に戻る。承認後は事務局が変えられる（UC-038）。状態は STATE-004、決め方と表示は COND-027。解錠の方法は持たず、メッセージで伝える。開示範囲: 自団体のメンバーと事務局のみ（COND-008）。"
       - name: "created_by"
         type: "string"
         required: true
@@ -83,6 +87,7 @@ entities:
         "UC-033",
         "UC-034",
         "UC-037",
+        "UC-038",
         "SCR-001",
         "SCR-002",
         "SCR-003",
@@ -240,7 +245,7 @@ entities:
       - target: "INFO-006"
         type: "N:1"
         label: "送信者"
-    traces_to: ["UC-009", "UC-037", "SCR-005", "SCR-022"]
+    traces_to: ["UC-006", "UC-009", "UC-037", "UC-038", "SCR-005", "SCR-022"]
 
   - id: "INFO-005"
     name: "メンバーシップ"
@@ -490,6 +495,7 @@ entities:
         "UC-027",
         "UC-028",
         "UC-037",
+        "UC-038",
         "SCR-005",
         "SCR-007",
         "SCR-018",
@@ -628,7 +634,7 @@ entities:
       - target: "INFO-001"
         type: "N:1"
         label: "確認した予約"
-    traces_to: ["UC-009", "UC-034", "UC-037", "SCR-022"]
+    traces_to: ["UC-006", "UC-009", "UC-034", "UC-037", "UC-038", "SCR-022"]
 ---
 
 # 情報モデル（横断）
@@ -716,6 +722,7 @@ erDiagram
         string note
         enum status "provisional/approved/withdrawn/rejected/cancelled/cancelled_by_staff"
         string status_reason
+        enum unlock_arrangement "required/arranged/not_required"
         string created_by FK
         datetime created_at
         datetime updated_at
@@ -778,6 +785,8 @@ INFO-012 は、出来事（メッセージ・操作履歴）ごとに既読・�
 
 INFO-001 には Google Calendar の予定の ID を持たない。予定の ID は予約の ID から毎回同じ値を導いて使う。同期は予約の今の状態に合わせるため（COND-024）、どの予定が予約に当たるかを予約の ID だけで決められれば足りる。
 
+INFO-001.unlock_arrangement は、建物が施錠される日時かどうかではなく、事務局が判断した結果を持つ（COND-027）。施錠の規則（土日・祝日・夜間など）を表す情報は持たない。解錠の方法（カードキーの貸し出し・時間帯を指定した解錠の設定など）とカードキーの貸し出しの記録も持たず、方法はメッセージ（INFO-004）で伝える。未定を値なしで表すのは、仮予約の間は事務局がまだ判断していないことを、判断した結果（不要など）と区別するためである。
+
 ## 予約の開示範囲（COND-008）
 
 INFO-001 の属性は、見る人によって次の3段階で開示する。
@@ -791,6 +800,7 @@ INFO-001 の属性は、見る人によって次の3段階で開示する。
 | headcount             |       ○        |           ×            |            ×            |
 | note                  |       ○        |           ×            |            ×            |
 | status_reason         |       ○        |           ×            |            ×            |
+| unlock_arrangement    |       ○        |           ×            |            ×            |
 | created_by            |       ○        |           ×            |            ×            |
 | INFO-004 メッセージ   |       ○        |           ×            |            ×            |
 
