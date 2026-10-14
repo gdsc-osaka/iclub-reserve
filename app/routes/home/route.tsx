@@ -3,14 +3,17 @@ import { Calendar, CircleAlert, Plus } from "lucide-react";
 import { Link } from "react-router";
 
 import { toMyGroup, type MyGroup } from "~/components/group/my-group";
+import { NoGroupsCard } from "~/components/group/my-group-card";
 import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { createGroupRecentActivitiesQuery } from "~/infra/audit-log/group-recent-activities-query";
 import { createDb } from "~/infra/db";
 import { createUserInvitationsQuery } from "~/infra/group/user-invitations-query";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createGroupUnreadUpdatesQuery } from "~/infra/reservation/group-unread-updates-query";
+import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
@@ -19,10 +22,12 @@ import { formatMonthDay } from "~/lib/date";
 import { invitationActionErrors } from "~/routes/_shared/group-error.server";
 import { logQueryError } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
+import { getGroupRecentActivitiesUseCase } from "~/usecases/audit-log/get-group-recent-activities";
 import { acceptInvitationUseCase } from "~/usecases/group/accept-invitation";
 import { listMyInvitationsUseCase } from "~/usecases/group/list-my-invitations";
 import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
 import { getGroupUnreadUpdatesUseCase } from "~/usecases/reservation/get-group-unread-updates";
+import { listUpcomingReservationsUseCase } from "~/usecases/reservation/list-upcoming-reservations";
 import { markAllReservationsReadUseCase } from "~/usecases/reservation/mark-all-reservations-read";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
 import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
@@ -30,7 +35,8 @@ import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
 import type { Route } from "./+types/route";
 import { HomeIntent } from "./home-intent";
 import { InboxSection } from "./inbox-section";
-import { MyGroupsSection } from "./my-groups-section";
+import { RecentActivitySection } from "./recent-activity-section";
+import { UpcomingSection } from "./upcoming-section";
 
 export function meta() {
   return [{ title: "ダッシュボード | iclub-reserve" }];
@@ -50,24 +56,42 @@ export async function loader({ context }: Route.LoaderArgs) {
   const db = createDb(env.DB);
   const now = new Date();
 
-  // 区画どうしは互いの結果を使わないので、D1 への問い合わせを並べて待つ
-  const [groupsResult, unreadResult, invitationsResult] = await Promise.all([
-    // 所属団体（承認待ちの団体の案内と、所属が無いときの案内に使う）
-    listMyGroupsUseCase(
-      { userGroupListQuery: createUserGroupListQuery(db) },
-      { actorUserId: user.id },
-    ),
-    // 団体側の未読（UC-037 / COND-026）
-    getGroupUnreadUpdatesUseCase(
-      { groupUnreadUpdatesQuery: createGroupUnreadUpdatesQuery(db) },
-      { actorUserId: user.id, now },
-    ),
-    // 自分宛ての招待（UC-022）
-    listMyInvitationsUseCase(
-      { userInvitationsQuery: createUserInvitationsQuery(db) },
-      { actorEmail: user.email, now },
-    ),
-  ]);
+  // 区画どうしは互いの結果を使わないので、D1 への問い合わせを並べて待つ。
+  // 所属団体はいくつかの区画がそれぞれ引き直すが、軽い問い合わせなので、区画どうしを待たせない方をとる
+  const [groupsResult, unreadResult, invitationsResult, upcomingResult, recentActivitiesResult] =
+    await Promise.all([
+      // 所属団体（承認待ちの団体の案内と、所属が無いときの案内に使う）
+      listMyGroupsUseCase(
+        { userGroupListQuery: createUserGroupListQuery(db) },
+        { actorUserId: user.id },
+      ),
+      // 団体側の未読（UC-037 / COND-026）
+      getGroupUnreadUpdatesUseCase(
+        { groupUnreadUpdatesQuery: createGroupUnreadUpdatesQuery(db) },
+        { actorUserId: user.id, now },
+      ),
+      // 自分宛ての招待（UC-022）
+      listMyInvitationsUseCase(
+        { userInvitationsQuery: createUserInvitationsQuery(db) },
+        { actorEmail: user.email, now },
+      ),
+      // 今後の予約（UC-032 / SCR-022）
+      listUpcomingReservationsUseCase(
+        {
+          userGroupListQuery: createUserGroupListQuery(db),
+          reservationListQuery: createReservationListQuery(db),
+        },
+        { actorUserId: user.id, now },
+      ),
+      // 団体の最近の動き（UC-025 / SCR-022）
+      getGroupRecentActivitiesUseCase(
+        {
+          userGroupListQuery: createUserGroupListQuery(db),
+          groupRecentActivitiesQuery: createGroupRecentActivitiesQuery(db),
+        },
+        { actorUserId: user.id, isStaff: user.is_staff, now },
+      ),
+    ]);
 
   if (groupsResult.isErr()) {
     logQueryError({ where: "home.loader.groups", userId: user.id }, groupsResult.error);
@@ -78,6 +102,15 @@ export async function loader({ context }: Route.LoaderArgs) {
   if (invitationsResult.isErr()) {
     logQueryError({ where: "home.loader.invitations", userId: user.id }, invitationsResult.error);
   }
+  if (upcomingResult.isErr()) {
+    logQueryError({ where: "home.loader.upcoming", userId: user.id }, upcomingResult.error);
+  }
+  if (recentActivitiesResult.isErr()) {
+    logQueryError(
+      { where: "home.loader.recentActivities", userId: user.id },
+      recentActivitiesResult.error,
+    );
+  }
 
   return {
     isStaff: user.is_staff,
@@ -85,8 +118,14 @@ export async function loader({ context }: Route.LoaderArgs) {
     isGroupsUnavailable: groupsResult.isErr(),
     unreadReservations: unreadResult.isOk() ? unreadResult.value.items : [],
     overflowCount: unreadResult.isOk() ? unreadResult.value.overflowCount : 0,
+    // 「今後の予約」で未読のある予約に印を付けるのに使う（一覧の 10 件を超えた分も含む）
+    allUnreadReservationIds: unreadResult.isOk() ? unreadResult.value.allUnreadReservationIds : [],
     invitations: invitationsResult.isOk() ? invitationsResult.value : [],
     isInboxUnavailable: unreadResult.isErr() || invitationsResult.isErr(),
+    upcomingReservations: upcomingResult.isOk() ? upcomingResult.value : [],
+    isUpcomingUnavailable: upcomingResult.isErr(),
+    recentActivities: recentActivitiesResult.isOk() ? recentActivitiesResult.value : [],
+    isRecentActivitiesUnavailable: recentActivitiesResult.isErr(),
     // 相対時刻（「25 分前」など）をサーバーとブラウザで食い違わせないよう、今の時刻をここで決めて渡す
     now: now.toISOString(),
   };
@@ -207,8 +246,7 @@ export async function action({ request, context }: Route.ActionArgs) {
  * 団体を切り替えて見る形にしていないのは、複数の団体を掛け持ちしている人が多く、
  * 切り替えを忘れたまま「予約が無い」と勘違いするのを避けたいため。
  *
- * NOTE: SCR-022 のうち「今後の予約」「団体の最近の動き」と事務局向けの区画は、まだ作っていない（#176）。
- * 所属団体の区画は SCR-022 から外したので、それらを足すときに消す。
+ * NOTE: SCR-022 のうち事務局向けの区画は、まだ作っていない（#176）。
  */
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
@@ -217,8 +255,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     isGroupsUnavailable,
     unreadReservations,
     overflowCount,
+    allUnreadReservationIds,
     invitations,
     isInboxUnavailable,
+    upcomingReservations,
+    isUpcomingUnavailable,
+    recentActivities,
+    isRecentActivitiesUnavailable,
     now,
   } = loaderData;
 
@@ -230,9 +273,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {isGroupsUnavailable && <GroupsUnavailableAlert />}
 
-      {/* 承認待ちの団体がカードに出ていない 5 件目以降でも、ここには必ず名前が出る */}
+      {/* 承認待ちの団体の案内 */}
       <PendingGroupsNotice groups={groups} />
 
+      {/* どの団体にも所属していない人への案内（事務局でない人のみ） */}
+      {!isStaff && !isGroupsUnavailable && groups.length === 0 && <NoGroupsCard />}
+
+      {/* 確認が必要なこと（団体側の未読・招待） */}
       <InboxSection
         unreadReservations={unreadReservations}
         overflowCount={overflowCount}
@@ -241,7 +288,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         now={nowDate}
       />
 
-      <MyGroupsSection groups={groups} isUnavailable={isGroupsUnavailable} />
+      {/* 今後の予約と団体の最近の動き（PC では横並び 3:2、スマホでは縦積み） */}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <UpcomingSection
+            reservations={upcomingReservations}
+            unreadReservationIds={new Set(allUnreadReservationIds)}
+            isUnavailable={isUpcomingUnavailable}
+            now={nowDate}
+          />
+        </div>
+        <div className="lg:col-span-2">
+          <RecentActivitySection
+            activities={recentActivities}
+            isUnavailable={isRecentActivitiesUnavailable}
+            now={nowDate}
+          />
+        </div>
+      </div>
     </main>
   );
 }

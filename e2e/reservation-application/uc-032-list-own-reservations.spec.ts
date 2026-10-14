@@ -120,4 +120,27 @@ test.describe("UC-032 自団体の予約一覧を確認する", { tag: "@UC-032"
     await expect(rowOf(page, provisionalFacility.name)).toBeVisible();
     await expect(rowOf(page, approvedFacility.name)).toBeHidden();
   });
+
+  test("申請した予約がダッシュボードの『今後の予約』に出る", async ({ page, db, signInAs }) => {
+    const member = await createUser(db);
+    const group = await createGroup(db, {
+      members: [{ userId: member.id, role: MembershipRole.Member }],
+    });
+    const facility = await createFacility(db);
+    await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: member.id,
+      startAt: nextWeekAt(Weekday.Monday, 10),
+      endAt: nextWeekAt(Weekday.Monday, 12),
+      status: ReservationStatus.Provisional,
+    });
+    await signInAs(member.id);
+
+    await openPage(page, "/");
+    await expect(page.getByRole("heading", { level: 2, name: "今後の予約" })).toBeVisible();
+    await expect(page.getByText(facility.name)).toBeVisible();
+    await expect(page.getByText(group.name)).toBeVisible();
+    await expect(page.getByText("仮予約", { exact: true })).toBeVisible();
+  });
 });

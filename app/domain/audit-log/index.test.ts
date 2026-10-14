@@ -9,12 +9,14 @@ import {
   isActedAsStaff,
   parseAuditLogChanges,
   parseAuditLogTargetType,
+  recentActivitiesSince,
   toAuditLogActorView,
   toAuditLogEntryView,
   toAuditLogValue,
   toCreatedChanges,
   toIdentityChanges,
   toUpdatedChanges,
+  visibleAuditLogTargetTypesForRole,
 } from "./index";
 import { GroupAction, groupPermissions } from "../group";
 import { MembershipRole } from "../membership";
@@ -378,6 +380,31 @@ describe("操作履歴のドメイン定義", () => {
       };
       // 団体情報の編集は管理者ロールでも許可されているため actedAsStaff は false
       expect(isActedAsStaff(groupPermissions, actor, GroupAction.Update)).toBe(false);
+    });
+  });
+
+  describe("visibleAuditLogTargetTypesForRole", () => {
+    it("管理者は予約・団体・メンバーシップ・招待の記録を閲覧できる（COND-012 (3)）", () => {
+      const types = visibleAuditLogTargetTypesForRole(MembershipRole.Admin);
+      expect(types).toEqual([
+        AuditLogTargetType.Reservation,
+        AuditLogTargetType.Group,
+        AuditLogTargetType.Membership,
+        AuditLogTargetType.Invitation,
+      ]);
+    });
+
+    it("一般メンバーは予約の記録のみ閲覧できる（COND-012 (2)）", () => {
+      const types = visibleAuditLogTargetTypesForRole(MembershipRole.Member);
+      expect(types).toEqual([AuditLogTargetType.Reservation]);
+    });
+  });
+
+  describe("recentActivitiesSince", () => {
+    it("7日前の日時を返す", () => {
+      const now = new Date("2026-10-15T12:00:00.000Z");
+      const since = recentActivitiesSince(now);
+      expect(since.toISOString()).toBe("2026-10-08T12:00:00.000Z");
     });
   });
 });

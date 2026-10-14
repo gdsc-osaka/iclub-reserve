@@ -240,4 +240,44 @@ test.describe("UC-025 自団体の操作履歴を閲覧する", { tag: "@UC-025"
     await expect(approveRecord).toContainText("状態: 仮予約 → 承認済み");
     await expect(page.getByRole("list", { name: "操作履歴" })).not.toContainText(staff.name);
   });
+
+  test("同じ団体のほかのメンバーの申請がダッシュボードの『団体の最近の動き』に出る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const member = await createUser(db);
+    const otherMember = await createUser(db);
+    const group = await createGroup(db, {
+      members: [
+        { userId: member.id, role: MembershipRole.Member },
+        { userId: otherMember.id, role: MembershipRole.Member },
+      ],
+    });
+    const facility = await createFacility(db);
+    const reservation = await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: otherMember.id,
+    });
+
+    await createAuditLog(db, {
+      actorId: otherMember.id,
+      actedAsStaff: false,
+      action: AuditLogAction.ReservationApply,
+      targetType: AuditLogTargetType.Reservation,
+      targetId: reservation.id,
+      groupId: group.id,
+      changes: {},
+    });
+
+    await signInAs(member.id);
+    await openPage(page, "/");
+
+    const recentActivitySection = page.getByRole("region", { name: "団体の最近の動き" });
+    await expect(recentActivitySection).toBeVisible();
+    await expect(recentActivitySection).toContainText(otherMember.name);
+    await expect(recentActivitySection).toContainText("申請");
+    await expect(recentActivitySection).toContainText(group.name);
+  });
 });
