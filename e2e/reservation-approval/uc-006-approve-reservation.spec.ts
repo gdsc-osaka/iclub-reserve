@@ -178,4 +178,47 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
       .where(eq(reservationTable.id, reservation.id));
     expect(saved?.status).toBe(ReservationStatus.Provisional);
   });
+
+  test("ダッシュボード（SCR-022）の承認待ちから、その場で仮予約を承認できる", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    /*
+     * ダッシュボードには開始の近い 5 件しか出ないので、ほかのテストが残した仮予約より
+     * 先に始まるよう、1 時間後に始まる予約にする
+     */
+    const applicant = await createUser(db);
+    const group = await createGroup(db, {
+      members: [{ userId: applicant.id, role: MembershipRole.Member }],
+    });
+    const facility = await createFacility(db);
+    const startAt = new Date(Date.now() + 60 * 60 * 1000);
+    const reservation = await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: applicant.id,
+      startAt,
+      endAt: new Date(startAt.getTime() + 60 * 60 * 1000),
+    });
+
+    await signInAs(personas.staff.id);
+    await openPage(page, "/");
+
+    const section = page.getByRole("region", { name: "承認待ちの予約" });
+    const row = section.getByRole("listitem").filter({ hasText: facility.name });
+    await row.getByRole("button", { name: "承認" }).click();
+
+    // 確認のダイアログを挟まずに承認され、行が一覧から消える
+    await expect(row).toBeHidden();
+    await expect
+      .poll(async () => {
+        const [saved] = await db
+          .select()
+          .from(reservationTable)
+          .where(eq(reservationTable.id, reservation.id));
+        return saved?.status;
+      })
+      .toBe(ReservationStatus.Approved);
+  });
 });

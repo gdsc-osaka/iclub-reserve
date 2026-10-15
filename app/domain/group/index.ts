@@ -11,6 +11,12 @@ export const GroupStatus = {
 } as const;
 export type GroupStatus = (typeof GroupStatus)[keyof typeof GroupStatus];
 
+/**
+ * 事務局のダッシュボード「有効化を待っている団体」に表示する団体の最大件数（SCR-022 / UC-014）。
+ * 超えた分は団体一覧（SCR-008）で見る。
+ */
+export const STAFF_PENDING_GROUPS_LIMIT = 5;
+
 export interface Group {
   id: string;
   name: string;

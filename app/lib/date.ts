@@ -386,6 +386,16 @@ export const formatRelativeTime = (targetDate: Date, now: Date = new Date()): st
 };
 
 /**
+ * 今日から対象の日まで、日本時間（Asia/Tokyo）の日付で何日あるかを返す。
+ *
+ * 時刻は見ず、各日の 0 時どうしで比べる。今日なら 0、明日なら 1、過去の日なら負の数。
+ *
+ * @example tokyoDaysUntil(new Date("2026-10-18T01:00:00+09:00"), new Date("2026-10-15T23:00:00+09:00")) // → 3
+ */
+export const tokyoDaysUntil = (targetDate: Date, now: Date): number =>
+  Math.round((startOfTokyoDay(targetDate).getTime() - startOfTokyoDay(now).getTime()) / DAY_MS);
+
+/**
  * 予約の利用日までの日数を、現在日付に対する相対的な表示形式に変換する。
  *
  * ダッシュボードの「今後の予約」などで使用する。
@@ -400,9 +410,7 @@ export const formatRelativeTime = (targetDate: Date, now: Date = new Date()): st
  * @example formatDaysUntil(new Date("2026-10-18T10:00:00+09:00"), new Date("2026-10-15T08:00:00+09:00")) // → "あと 3 日"
  */
 export const formatDaysUntil = (targetDate: Date, now: Date = new Date()): string => {
-  const targetDay = startOfTokyoDay(targetDate);
-  const currentDay = startOfTokyoDay(now);
-  const diffDays = Math.round((targetDay.getTime() - currentDay.getTime()) / DAY_MS);
+  const diffDays = tokyoDaysUntil(targetDate, now);
 
   if (diffDays <= 0) {
     return "今日";

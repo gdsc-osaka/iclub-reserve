@@ -67,4 +67,29 @@ test.describe("UC-014 団体を有効化・無効化する", { tag: "@UC-014" },
     await statusFilter.getByRole("link", { name: /停止中/ }).click();
     await expect(row.getByText("停止中", { exact: true })).toBeVisible();
   });
+
+  test("事務局のダッシュボード（SCR-022）に有効化を待っている団体が出て、団体の画面を開ける", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const admin = await createUser(db);
+    const group = await createGroup(db, {
+      status: GroupStatus.Pending,
+      members: [{ userId: admin.id, role: MembershipRole.Admin }],
+      /*
+       * ダッシュボードには登録の古い 5 件しか出ないので、ほかのテストが残した承認待ちの団体より
+       * 先に並ぶよう、遅く作るほど古い登録日にする（同じ回に 5 種類のブラウザで流しても押し出されない）
+       */
+      createdAt: new Date(-Date.now()),
+    });
+    await signInAs(personas.staff.id);
+
+    await openPage(page, "/");
+    const section = page.getByRole("region", { name: "有効化を待っている団体" });
+    await section.getByRole("link", { name: new RegExp(group.name) }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/groups/${group.id}$`));
+    await expect(page.getByRole("heading", { level: 1, name: group.name })).toBeVisible();
+  });
 });

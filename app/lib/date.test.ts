@@ -17,6 +17,7 @@ import {
   startOfTokyoWeek,
   toCalendarDate,
   toTokyoDateKey,
+  tokyoDaysUntil,
   tokyoMinutesOfDay,
 } from "./date";
 
@@ -343,5 +344,19 @@ describe("formatDaysUntil", () => {
     // 10/16 02:00 JST (= 10/15 17:00 UTC) -> 日本時間では翌日なので「明日」
     const targetTomorrowEarly = new Date("2026-10-16T02:00:00+09:00");
     expect(formatDaysUntil(targetTomorrowEarly, baseNow)).toBe("明日");
+  });
+});
+
+describe("tokyoDaysUntil", () => {
+  it("時刻を見ず、日本時間の日付の差を返す", () => {
+    const now = new Date("2026-10-15T23:00:00+09:00");
+    expect(tokyoDaysUntil(new Date("2026-10-15T01:00:00+09:00"), now)).toBe(0);
+    expect(tokyoDaysUntil(new Date("2026-10-16T00:00:00+09:00"), now)).toBe(1);
+    expect(tokyoDaysUntil(new Date("2026-10-23T08:00:00+09:00"), now)).toBe(8);
+  });
+
+  it("過去の日は負の数を返す", () => {
+    const now = new Date("2026-10-15T00:30:00+09:00");
+    expect(tokyoDaysUntil(new Date("2026-10-14T23:59:00+09:00"), now)).toBe(-1);
   });
 });
