@@ -12,7 +12,7 @@ test.describe("PWA ホーム画面への追加", { tag: "@PWA" }, () => {
     page,
     request,
   }) => {
-    // ブラウザは manifest を Cookie なしで取りに来る。ログイン必須にすると取れなくなる
+    // ログインする前（ログイン画面）でもホーム画面に追加できるよう、ログイン必須にしない
     const manifestResponse = await request.get("/manifest.webmanifest");
     expect(manifestResponse.status()).toBe(200);
 
@@ -22,7 +22,11 @@ test.describe("PWA ホーム画面への追加", { tag: "@PWA" }, () => {
       short_name: "i-Club 予約",
       start_url: "/",
       display: "standalone",
+      // 起動時の画面（スプラッシュ）の背景。ダークモードで白く光らないよう黒にしている
+      background_color: "#0a0a0a",
     });
+    // theme_color を書くと、Android のアプリのステータスバーがダークモードでもその色に固定される
+    expect(manifest).not.toHaveProperty("theme_color");
 
     for (const { src } of manifest.icons as { src: string }[]) {
       const iconResponse = await request.get(src);

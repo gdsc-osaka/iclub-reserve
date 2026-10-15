@@ -96,6 +96,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/*
           ホーム画面から開いたときの、上の帯（ステータスバー・タイトルバー）の色。
           画面の上端の帯と同じ背景色（app.css の --background）にそろえる。
+
+          manifest にはライト・ダーク別の色を書けないので、ここでだけ指定する。
+          manifest に theme_color を書くと、Android でインストールしたアプリの
+          ステータスバーがダークモードでもその色に固定される（ADR-011）。
         */}
         <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
