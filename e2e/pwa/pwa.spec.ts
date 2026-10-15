@@ -30,12 +30,12 @@ test.describe("PWA ホーム画面への追加", { tag: "@PWA" }, () => {
       expect(iconResponse.headers()["content-type"], src).toBe("image/png");
     }
 
-    // ログイン画面からも manifest を参照している
+    // ログイン画面からも manifest を参照している。Cloudflare Access の内側にある
+    // ブランチのプレビューでも読めるよう、Cookie 付きで取りに行かせる（ADR-011）
     await openPage(page, "/login");
-    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
-      "href",
-      "/manifest.webmanifest",
-    );
+    const manifestLink = page.locator('link[rel="manifest"]');
+    await expect(manifestLink).toHaveAttribute("href", "/manifest.webmanifest");
+    await expect(manifestLink).toHaveAttribute("crossorigin", "use-credentials");
   });
 
   test("電波が無いときは、前に開いた画面ではなく、つながっていない旨の画面を出す", async ({

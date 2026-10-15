@@ -40,8 +40,12 @@ export const links: Route.LinksFunction = () => [
    * ホーム画面に追加したときの名前・アイコン・開き方（ADR-011）。
    * どちらも public/ の静的なファイルなので、ログインしていなくても取れる。
    * アイコンは `pnpm run icons:generate` で作り直す。
+   *
+   * ブラウザは manifest を、ふつうは Cookie なしで取りに行く。ブランチのプレビューは
+   * Cloudflare Access の内側にあり、Cookie が無いとログインへ転送されて manifest を読めず、
+   * インストールできなくなる。`use-credentials` で Cookie 付きにしておく（本番でも害はない）。
    */
-  { rel: "manifest", href: "/manifest.webmanifest" },
+  { rel: "manifest", href: "/manifest.webmanifest", crossOrigin: "use-credentials" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
