@@ -36,6 +36,17 @@ export function loader({ context }: Route.LoaderArgs) {
 }
 
 export const links: Route.LinksFunction = () => [
+  /*
+   * ホーム画面に追加したときの名前・アイコン・開き方（ADR-011）。
+   * どちらも public/ の静的なファイルなので、ログインしていなくても取れる。
+   * アイコンは `pnpm run icons:generate` で作り直す。
+   *
+   * ブラウザは manifest を、ふつうは Cookie なしで取りに行く。ブランチのプレビューは
+   * Cloudflare Access の内側にあり、Cookie が無いとログインへ転送されて manifest を読めず、
+   * インストールできなくなる。`use-credentials` で Cookie 付きにしておく（本番でも害はない）。
+   */
+  { rel: "manifest", href: "/manifest.webmanifest", crossOrigin: "use-credentials" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
@@ -59,11 +70,39 @@ export function Layout({ children }: { children: React.ReactNode }) {
     document.documentElement.dataset.hydrated = "true";
   }, []);
 
+  /*
+   * Service Worker（public/sw.js）を登録する。
+   * 電波が無くて画面を開けないときに「つながっていません」の画面を出すだけで、
+   * 画面やデータはキャッシュしない（ADR-011）。
+   *
+   * 開発サーバー（`pnpm run dev`）では登録しない。localhost のポートは他のプロジェクトとも
+   * 共有されるので、登録すると別のプロジェクトの画面まで、この Service Worker を通ってしまう。
+   * 試すときは `pnpm run preview` でビルドしたものを開く。
+   */
+  useEffect(() => {
+    if (!import.meta.env.PROD || !("serviceWorker" in navigator)) {
+      return;
+    }
+    navigator.serviceWorker.register("/sw.js").catch((error: unknown) => {
+      console.error("Service Worker の登録に失敗しました:", error);
+    });
+  }, []);
+
   return (
     <html lang="ja">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/*
+          ホーム画面から開いたときの、上の帯（ステータスバー・タイトルバー）の色。
+          画面の上端の帯と同じ背景色（app.css の --background）にそろえる。
+
+          manifest にはライト・ダーク別の色を書けないので、ここでだけ指定する。
+          manifest に theme_color を書くと、Android でインストールしたアプリの
+          ステータスバーがダークモードでもその色に固定される（ADR-011）。
+        */}
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
         <Meta />
         <Links />
       </head>

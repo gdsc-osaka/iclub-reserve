@@ -1,0 +1,89 @@
+<!doctype html>
+<!--
+  電波が無くて画面を開けないときに、Service Worker（public/sw.js）が代わりに出す画面。
+
+  Service Worker が最初に一度だけ取り込んでおき、通信できないときは手元の写しを出す。
+  そのため、ほかのファイル（CSS・フォント・画像）には頼らず、この 1 枚だけで表示できるようにしてある。
+  文言や見た目を変えたら、sw.js の CACHE_NAME の版も上げること（上げないと古い写しが出続ける）。
+-->
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>オフライン - i-Club 予約システム</title>
+    <style>
+      /* 色は app/app.css と同じ値（この画面は app.css を読み込めないため写している） */
+      :root {
+        --background: oklch(1 0 0);
+        --foreground: oklch(0.145 0 0);
+        --muted: oklch(0.556 0 0);
+        --primary: oklch(0.511 0.096 186.391);
+        --primary-foreground: oklch(0.984 0.014 180.72);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: oklch(0.145 0 0);
+          --foreground: oklch(0.985 0 0);
+          --muted: oklch(0.708 0 0);
+          --primary: oklch(0.437 0.078 188.216);
+          --primary-foreground: oklch(0.984 0.014 180.72);
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100svh;
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+        box-sizing: border-box;
+        background: var(--background);
+        color: var(--foreground);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Hiragino Sans",
+          "Yu Gothic UI",
+          sans-serif;
+        line-height: 1.7;
+      }
+      main {
+        max-width: 24rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.125rem;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        color: var(--muted);
+        font-size: 0.875rem;
+        margin: 0 0 1.5rem;
+      }
+      button {
+        font: inherit;
+        font-size: 0.875rem;
+        padding: 0.5rem 1.25rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>インターネットにつながっていません</h1>
+      <p>通信できる状態になってから、もう一度お試しください。</p>
+      <button type="button" id="reload">再読み込み</button>
+    </main>
+    <script>
+      // 開こうとしていた画面を、もう一度サーバーへ取りに行く（URL はそのまま残っている）。
+      // 通信が戻ったとブラウザが知らせてきたときも読み込み直す（知らせない環境もあるので、ボタンも置く）
+      const reload = () => location.reload();
+      document.getElementById("reload").addEventListener("click", reload);
+      window.addEventListener("online", reload);
+    </script>
+  </body>
+</html>

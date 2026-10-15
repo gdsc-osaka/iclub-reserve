@@ -1,11 +1,8 @@
 import type { CSSProperties } from "react";
 import { Link } from "react-router";
 
-import {
-  ICLUB_BOLT_BOX,
-  ICLUB_WORDMARK_VIEW_BOX,
-  IclubWordmark,
-} from "~/components/brand/iclub-logo";
+import { ICLUB_BOLT_BOX } from "~/components/brand/iclub-bolt";
+import { ICLUB_WORDMARK_VIEW_BOX, IclubWordmark } from "~/components/brand/iclub-logo";
 
 /** 開いているときのワードマークの幅（rem）。 */
 const WORDMARK_WIDTH = 9;

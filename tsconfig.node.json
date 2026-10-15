@@ -8,6 +8,7 @@
     "e2e/**/*.ts",
     "app/db/schema/**/*",
     "app/domain/**/*",
+    "app/components/brand/iclub-bolt.ts",
     "app/lib/date.ts"
   ],
   "compilerOptions": {
