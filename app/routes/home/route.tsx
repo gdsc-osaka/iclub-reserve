@@ -7,7 +7,7 @@ import { NoGroupsCard } from "~/components/group/my-group-card";
 import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
-import { GroupStatus } from "~/domain/group";
+import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createGroupRecentActivitiesQuery } from "~/infra/audit-log/group-recent-activities-query";
 import { createDb, type Database } from "~/infra/db";
@@ -50,6 +50,7 @@ import type { Route } from "./+types/route";
 import { HomeIntent } from "./home-intent";
 import { InboxSection } from "./inbox-section";
 import { RecentActivitySection } from "./recent-activity-section";
+import { StaffPendingGroupsSection } from "./staff-pending-groups-section";
 import { StaffPendingSection } from "./staff-pending-section";
 import { StaffTilesSection } from "./staff-tiles-section";
 import { StaffTodayScheduleSection } from "./staff-today-schedule-section";
@@ -234,9 +235,10 @@ const loadStaffUnreadMessages = async (db: Database, user: SessionUser, now: Dat
 };
 
 /**
- * 有効化を待っている団体の数と、いちばん古い団体（UC-014）。null は読めなかったことを表す。
+ * 有効化を待っている団体と、その数（UC-014）。null は読めなかったことを表す。
  *
- * 承認待ちで絞ると、団体の一覧は登録が古い順に並ぶ（`group-search-query.ts`）ので、先頭がいちばん古い。
+ * 承認待ちで絞ると、団体の一覧は登録が古い順に並ぶ（`group-search-query.ts`）。
+ * 待たせている団体から片付けられるよう、その並びのまま先頭の数件を出す。
  */
 const loadPendingGroups = async (db: Database, user: SessionUser) => {
   const result = await searchGroupsUseCase(
@@ -247,10 +249,9 @@ const loadPendingGroups = async (db: Database, user: SessionUser) => {
     logQueryError({ where: "home.loader.pendingGroups", userId: user.id }, result.error);
     return null;
   }
-  const [oldest] = result.value.items;
   return {
-    total: result.value.items.length,
-    oldest: oldest === undefined ? null : { name: oldest.name, createdAt: oldest.createdAt },
+    items: result.value.items.slice(0, STAFF_PENDING_GROUPS_LIMIT),
+    totalCount: result.value.items.length,
   };
 };
 
@@ -423,7 +424,8 @@ type MemberLoaderData = Extract<HomeLoaderData, { isStaff: false }>;
  * 団体を切り替えて見る形にしていないのは、複数の団体を掛け持ちしている人が多く、
  * 切り替えを忘れたまま「予約が無い」と勘違いするのを避けたいため。
  *
- * 事務局には、団体の区画の代わりに事務局の仕事（承認待ち・団体からのメッセージ・今日の予約）を出す。
+ * 事務局には、団体の区画の代わりに事務局の仕事（承認待ち・団体からのメッセージ・有効化を待っている団体・
+ * 今日の予約）を出す。
  */
 export default function Home({ loaderData }: Route.ComponentProps) {
   const now = new Date(loaderData.now);
@@ -516,7 +518,10 @@ function StaffDashboard({ data, now }: Readonly<{ data: StaffLoaderData; now: Da
               : { total: pending.totalCount, shortNotice: pending.shortNoticeCount },
           // 行と同じく、未読のある予約の数を数える（COND-026 (1)）
           unreadMessages: unreadMessages?.allUnreadReservationIds.length ?? null,
-          pendingGroups,
+          pendingGroups:
+            pendingGroups === null
+              ? null
+              : { total: pendingGroups.totalCount, oldest: pendingGroups.items[0] ?? null },
         }}
       />
 
@@ -532,6 +537,12 @@ function StaffDashboard({ data, now }: Readonly<{ data: StaffLoaderData; now: Da
         overflowCount={unreadMessages?.overflowCount ?? 0}
         isUnavailable={unreadMessages === null}
         now={now}
+      />
+
+      <StaffPendingGroupsSection
+        groups={pendingGroups?.items ?? []}
+        totalCount={pendingGroups?.totalCount ?? 0}
+        isUnavailable={pendingGroups === null}
       />
 
       <StaffTodayScheduleSection

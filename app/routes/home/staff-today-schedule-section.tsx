@@ -113,6 +113,12 @@ function LegendSwatch({ status }: Readonly<{ status: ReservationStatus }>) {
 const hourColumns = { gridTemplateColumns: `repeat(${slotHours.length}, minmax(0, 1fr))` };
 
 /**
+ * 施設名の列。横に動かしても左端に残し、どの行がどの施設かを見失わないようにする。
+ * 下を帯が通り抜けるので、背景は透けない色にし、帯（重ね順を指定していない）より手前に置く。
+ */
+const facilityColumn = "sticky left-0 z-10 w-36 shrink-0 border-r bg-card";
+
+/**
  * PC 向けの 1 日分のタイムライン（施設が縦、時間が横）。
  *
  * 横幅が足りないときは、この中だけを横に動かせるようにする（画面全体は動かさない）。
@@ -136,8 +142,11 @@ function TodayTimeline({
       <div className="min-w-[48rem]">
         {/* 時刻の目盛り */}
         <div className="flex border-b bg-muted/30">
-          <div className="w-36 shrink-0 border-r px-3 py-2 text-xs font-medium text-muted-foreground">
-            施設・設備
+          {/* 目盛りの行の薄い色は透けるので、列の中に重ねて塗る */}
+          <div className={facilityColumn}>
+            <div className="h-full bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
+              施設・設備
+            </div>
           </div>
           <div className="grid flex-1 text-xs text-muted-foreground" style={hourColumns}>
             {slotHours.map((hour) => (
@@ -162,8 +171,12 @@ function TodayTimeline({
 
             return (
               <div key={facility.id} className="flex min-h-16">
-                <div className="flex w-36 shrink-0 items-center border-r px-3 py-2 text-xs font-semibold">
-                  <span className="truncate" title={facility.name}>
+                <div className={cn(facilityColumn, "flex items-center px-3 py-2")}>
+                  {/* 長い名前は 2 行まで折り返し、それを超える分は省いて title で全体を見せる */}
+                  <span
+                    className="line-clamp-2 text-xs font-semibold wrap-anywhere"
+                    title={facility.name}
+                  >
                     {facility.name}
                   </span>
                 </div>
