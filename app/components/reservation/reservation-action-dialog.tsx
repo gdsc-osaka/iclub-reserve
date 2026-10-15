@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Form, useNavigation } from "react-router";
+import { Form, useNavigation, type FetcherWithComponents } from "react-router";
 
 import {
   AlertDialog,
@@ -35,6 +35,11 @@ interface ReservationActionDialogProps {
   readonly showGroupName: boolean;
   readonly trigger: ReactNode;
   readonly disabled?: boolean;
+  /**
+   * 渡すと、画面全体の遷移ではなくこの fetcher で送る。
+   * ダッシュボード（SCR-022）のように、行だけをその場で消したい画面で使う。
+   */
+  readonly fetcher?: FetcherWithComponents<unknown>;
 }
 
 interface DialogConfig {
@@ -116,6 +121,7 @@ export function ReservationActionDialog({
   showGroupName,
   trigger,
   disabled = false,
+  fetcher,
 }: Readonly<ReservationActionDialogProps>) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -126,10 +132,11 @@ export function ReservationActionDialog({
 
   // この予約のこの操作が送信中か。同じ画面に他の予約のボタンが並ぶので、
   // intent（操作）だけでなく reservationId まで見て、押したボタンだけを見分ける
+  const submission = fetcher ?? navigation;
   const isSubmitting =
-    navigation.state === "submitting" &&
-    navigation.formData?.get("intent") === transition &&
-    navigation.formData?.get("reservationId") === item.id;
+    submission.state === "submitting" &&
+    submission.formData?.get("intent") === transition &&
+    submission.formData?.get("reservationId") === item.id;
 
   /*
    * 送信が終わったら、このダイアログを自分で閉じる。
@@ -161,6 +168,8 @@ export function ReservationActionDialog({
   const { weekday } = formatMonthDayParts(item.startAt);
   const timeStr = `${formatTime(item.startAt)} – ${formatTime(item.endAt)}`;
 
+  const FormComponent = fetcher ? fetcher.Form : Form;
+
   return (
     <>
       <AlertDialog open={open} onOpenChange={setOpen}>
@@ -168,7 +177,7 @@ export function ReservationActionDialog({
           {trigger}
         </AlertDialogTrigger>
         <AlertDialogContent className="max-w-md">
-          <Form method="post" className="flex flex-col gap-4">
+          <FormComponent method="post" className="flex flex-col gap-4">
             <input type="hidden" name="intent" value={transition} />
             <input type="hidden" name="reservationId" value={item.id} />
 
@@ -216,7 +225,7 @@ export function ReservationActionDialog({
                 {config.actionLabel}
               </Button>
             </AlertDialogFooter>
-          </Form>
+          </FormComponent>
         </AlertDialogContent>
       </AlertDialog>
 

@@ -487,6 +487,14 @@ export const reservationDetailPath = (reservationId: string): string =>
  */
 export const UPCOMING_RESERVATIONS_LIMIT = 5;
 
+/**
+ * 事務局のダッシュボード「承認待ちの予約」に表示する仮予約の最大件数（SCR-022 / UC-006）。
+ * 超えた分は事務局の予約一覧（SCR-003）で見る。
+ */
+export const STAFF_PENDING_RESERVATIONS_LIMIT = 5;
+
+export { APPLICATION_LEAD_DAYS, isShortNotice } from "./lead-time";
+
 export {
   UNREAD_ITEMS_LIMIT,
   UNREAD_LOOKBACK_DAYS,
