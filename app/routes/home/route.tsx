@@ -496,9 +496,13 @@ function StaffDashboard({ data, now }: Readonly<{ data: StaffLoaderData; now: Da
     today,
   } = data;
 
-  // 団体に所属しているか、団体への招待が届いているときだけ「自分の団体」を出す
+  /*
+   * 団体に所属しているか、団体への招待が届いているときだけ「自分の団体」を出す。
+   * 招待を読めなかったときも出す。届いているかどうか分からないまま隠すと、
+   * 読めなかったことに気づけない（「確認が必要なこと」が読めなかった案内を出す）
+   */
   const hasOwnGroup = groups.groups.length > 0;
-  const showOwnGroup = hasOwnGroup || (invitations?.length ?? 0) > 0;
+  const showOwnGroup = hasOwnGroup || invitations === null || invitations.length > 0;
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6">

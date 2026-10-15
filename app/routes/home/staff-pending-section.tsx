@@ -48,7 +48,8 @@ export function StaffPendingSection({
         </div>
         <Button asChild variant="ghost" size="sm" className="h-9 text-xs">
           <Link to="/staff/reservations">
-            すべて見る（{totalCount} 件）
+            {/* 読めなかったときに「0 件」と出すと、承認待ちが無いと読み違えるので件数を付けない */}
+            {isUnavailable ? "すべて見る" : `すべて見る（${totalCount} 件）`}
             <ChevronRight aria-hidden />
           </Link>
         </Button>
