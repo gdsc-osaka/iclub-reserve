@@ -121,4 +121,40 @@ test.describe("UC-037 確認が必要なことを確認する", { tag: "@UC-037"
     await expect(page.getByText(messageBody)).toBeHidden();
     await expect(page.getByText("確認が必要なことはありません")).toBeVisible();
   });
+
+  test("団体がメッセージを送ると事務局のダッシュボードに出て、別の事務局が返信すると消える", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const { applicant, reservation } = await setupReservationWithMembers(db);
+    const otherStaff = await createUser(db, { is_staff: true });
+
+    const messageBody = `団体からの問い合わせ ${uniqueSuffix()}`;
+    await createReservationMessage(db, {
+      reservationId: reservation.id,
+      senderId: applicant.id,
+      sentAsStaff: false,
+      body: messageBody,
+    });
+
+    await signInAs(personas.staff.id);
+    await openPage(page, "/");
+
+    const section = page.getByRole("region", { name: "団体からの未読メッセージ" });
+    await expect(section.getByText(messageBody)).toBeVisible();
+
+    // 別の事務局が事務局として返信する
+    const replyBody = `事務局からの返信です ${uniqueSuffix()}`;
+    await createReservationMessage(db, {
+      reservationId: reservation.id,
+      senderId: otherStaff.id,
+      sentAsStaff: true,
+      body: replyBody,
+    });
+
+    // 事務局の誰かが返信すると、返信していない事務局の一覧からも消える（COND-026 (3)）
+    await openPage(page, "/");
+    await expect(section.getByText(messageBody)).toBeHidden();
+  });
 });

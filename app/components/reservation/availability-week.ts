@@ -163,9 +163,20 @@ export const weekdayStyle = (
   return { label: null, surface: null };
 };
 
-/** タイムラインに描く帯 1 本。位置はその日の 0 時からの分で表す。 */
-export interface AvailabilityBlock {
-  readonly reservation: AvailabilityReservation;
+/** 帯にできる予約。開始と終了の日時さえあればよい */
+interface TimedReservation {
+  readonly startAt: Date;
+  readonly endAt: Date;
+}
+
+/**
+ * タイムラインに描く帯 1 本。位置はその日の 0 時からの分で表す。
+ *
+ * 予約の型を受け取れるようにしているのは、事務局のダッシュボード（SCR-022）の
+ * 「今日の予約状況」でも、同じ切り詰め方で帯を描くため。
+ */
+export interface AvailabilityBlock<R extends TimedReservation = AvailabilityReservation> {
+  readonly reservation: R;
   /** 表示範囲に収めた開始位置（分）。9:00 より前から続く予約は 9:00 に切り詰める */
   readonly startMinutes: number;
   /** 表示範囲に収めた終了位置（分） */
@@ -184,10 +195,10 @@ const minutesFromDayStart = (date: Date, dayStart: Date): number =>
  * 吹き出しに出す時刻は予約そのものの値を使うこと。
  * 切り詰めた時刻を出すと、9 時前から続いている予約が 9 時開始に見えてしまう。
  */
-export const toDayBlocks = (
-  day: AvailabilityDay,
-  reservations: readonly AvailabilityReservation[],
-): readonly AvailabilityBlock[] => {
+export const toDayBlocks = <R extends TimedReservation>(
+  day: Pick<AvailabilityDay, "date">,
+  reservations: readonly R[],
+): readonly AvailabilityBlock<R>[] => {
   const dayOpen = atTokyoTime(day.date, FACILITY_OPEN_HOUR);
   const dayClose = atTokyoTime(day.date, FACILITY_CLOSE_HOUR);
 

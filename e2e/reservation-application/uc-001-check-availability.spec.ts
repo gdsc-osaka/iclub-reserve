@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { formatFullDate, formatMonthDay } from "~/lib/date";
+import { atTokyoTime, formatFullDate, formatMonthDay } from "~/lib/date";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
@@ -10,7 +10,7 @@ import {
   createReservation,
   createUser,
 } from "../support/factories.js";
-import { expect, test } from "../support/fixtures.js";
+import { expect, personas, test } from "../support/fixtures.js";
 import { openPage } from "../support/page.js";
 
 /**
@@ -219,5 +219,34 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
       // パソコンでは、週の表の枠が押せない
       await expect(page.getByRole("button", { name: /から仮予約を申請$/ }).first()).toBeDisabled();
     }
+  });
+
+  test("事務局のダッシュボードの「今日の予約状況」に今日の予約が出る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const user = await createUser(db);
+    const group = await createGroup(db, {
+      members: [{ userId: user.id, role: MembershipRole.Admin }],
+    });
+    const facility = await createFacility(db);
+
+    await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: user.id,
+      status: ReservationStatus.Approved,
+      // スマホ幅の一覧は終わった予約を省くので、今日のうちに終わらない予約にする
+      startAt: atTokyoTime(new Date(), 12, 0),
+      endAt: atTokyoTime(new Date(), 23, 59),
+    });
+
+    await signInAs(personas.staff.id);
+    await openPage(page, "/");
+
+    // PC 幅ではタイムラインの帯に、スマホ幅では一覧の行に団体名が出る（もう片方は隠れている）
+    const section = page.getByRole("region", { name: "今日の予約状況" });
+    await expect(section.getByText(group.name).filter({ visible: true })).toBeVisible();
   });
 });

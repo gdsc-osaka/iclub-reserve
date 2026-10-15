@@ -15,7 +15,7 @@ interface ReservationMessageSectionProps {
  */
 export function ReservationMessageSection({ messages }: ReservationMessageSectionProps) {
   return (
-    <Card>
+    <Card id="messages">
       <CardHeader>
         <CardTitle className="text-base font-semibold">メッセージ</CardTitle>
       </CardHeader>

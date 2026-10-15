@@ -11,7 +11,7 @@ import {
   reservationTable,
 } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import { UNREAD_ITEMS_LIMIT, unreadEventsSince } from "~/domain/reservation";
+import { unreadEventsSince } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import {
   GroupUnreadEventType,
@@ -21,6 +21,7 @@ import {
 } from "~/query/reservation/group-unread-updates";
 import type { Database } from "../db";
 import { userQualifiesForReservationGroupAudience } from "./reservation-audience-condition";
+import { toUnreadRows } from "./unread-rows";
 
 const auditActionToUnreadEventType = (action: AuditLogAction): GroupUnreadEventType => {
   switch (action) {
@@ -188,53 +189,22 @@ export const createGroupUnreadUpdatesQuery = (db: Database): GroupUnreadUpdatesQ
         })),
       ];
 
-      // 予約ごとにイベントをグループ化
-      const eventsByReservation = new Map<string, RawEvent[]>();
-      for (const event of allEvents) {
-        const list = eventsByReservation.get(event.reservationId) ?? [];
-        list.push(event);
-        eventsByReservation.set(event.reservationId, list);
-      }
-
-      // 各予約のイベントを新しい順にソートし、最新のものを代表として 1 行にまとめる
-      const reservationItems: GroupUnreadUpdateItem[] = [];
-      for (const [reservationId, events] of eventsByReservation) {
-        events.sort((a, b) => b.eventAt.getTime() - a.eventAt.getTime());
-        const latest = events[0];
-        if (!latest) continue;
-
-        reservationItems.push({
-          reservationId,
-          groupId: latest.groupId,
-          groupName: latest.groupName,
-          facilityId: latest.facilityId,
-          facilityName: latest.facilityName,
-          startAt: latest.startAt,
-          endAt: latest.endAt,
-          latestEvent: {
-            type: latest.type,
-            eventAt: latest.eventAt,
-            messageBody: latest.messageBody,
-            statusReason: latest.statusReason,
-          },
-          otherCount: events.length - 1,
-        });
-      }
-
-      // 最新イベントの日時が新しい順にソート
-      reservationItems.sort(
-        (a, b) => b.latestEvent.eventAt.getTime() - a.latestEvent.eventAt.getTime(),
-      );
-
-      const allUnreadReservationIds = reservationItems.map((item) => item.reservationId);
-      const items = reservationItems.slice(0, UNREAD_ITEMS_LIMIT);
-      const overflowCount = Math.max(0, reservationItems.length - UNREAD_ITEMS_LIMIT);
-
-      return {
-        items,
-        overflowCount,
-        allUnreadReservationIds,
-      };
+      return toUnreadRows(allEvents, (latest, otherCount): GroupUnreadUpdateItem => ({
+        reservationId: latest.reservationId,
+        groupId: latest.groupId,
+        groupName: latest.groupName,
+        facilityId: latest.facilityId,
+        facilityName: latest.facilityName,
+        startAt: latest.startAt,
+        endAt: latest.endAt,
+        latestEvent: {
+          type: latest.type,
+          eventAt: latest.eventAt,
+          messageBody: latest.messageBody,
+          statusReason: latest.statusReason,
+        },
+        otherCount,
+      }));
     });
   },
 });
