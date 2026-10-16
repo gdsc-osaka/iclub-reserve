@@ -8,6 +8,7 @@ import {
   ScrollRestoration,
 } from "react-router";
 
+import { NavigationProgress } from "~/components/navigation-progress";
 import { Toaster } from "~/components/ui/sonner";
 import { getRequestUser, requireAuthentication } from "~/lib/auth/auth-session.server";
 
@@ -121,7 +122,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  return (
+    <>
+      {/*
+        画面を移るあいだ、上端に出すローディングのバー。
+        App はふつうの画面すべての親なので、ここに 1 つ置けば全画面で出る。
+        `Layout` はエラー画面（下の ErrorBoundary）も包む外枠だが、エラー画面からは
+        ふつうのリンク（<a href>）でページごと開き直すので、バーは要らない。
+      */}
+      <NavigationProgress />
+      <Outlet />
+    </>
+  );
 }
 
 /**
