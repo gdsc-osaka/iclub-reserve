@@ -68,7 +68,7 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 
   同じ判定を 2 つのユースケースに書き写さないこと。文言だけが違うなら、`ensureNotLastAdmin` や `ensureNoApprovedOverlap` のようにメッセージを引数で受け取る。
 
-- **画面のための読み取り**（`docs/adr/001-read-model-separation.md`・`docs/adr/012-query-functions.md`）: 更新に使わず、集約をまたいで表示するだけの読み取りは `app/query/<入口>/<出口>.ts` に置く。次の 3 つをすべて満たすもの（素通しの読み取り）は、型・門番・SQL を同じファイルに書いた関数 `find*(db, args)` 1 本にし、ポートの interface・`app/infra/` の実装・ユースケースは作らない。手本は `app/query/reservation/staff-today-schedule.ts`。
+- **画面のための読み取り**（`docs/adr/001-read-model-separation.md`・`docs/adr/012-query-functions.md`）: 更新に使わず、集約をまたいで表示するだけの読み取りは `app/query/<入口>/<出口>.ts` に置く。次の 3 つをすべて満たすもの（素通しの読み取り）は、型・門番・SQL を同じファイルに書いた関数 `find*(db, args)` 1 本にし、ポートの interface・`app/infra/` の実装・ユースケースは作らない。手本は `app/query/reservation/staff-today-schedule.ts`。判断を持つユースケースが同じ読み取りをポートで使っているとき（所属団体の一覧・団体側の未読）は、ポートの interface を残し、関数を呼ぶだけの `create<出口>Query(db)` を同じファイルに置く（ADR-012 決定 8）。
 
   1. 見る人の判定が、Repository を読まない門番 1 つで済む（事務局かどうかは `app/query/_shared/staff.ts` の `ensureStaff`）
   2. 見る人によって、返す形が変わらない
