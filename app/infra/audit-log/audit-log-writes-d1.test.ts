@@ -4,19 +4,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { auditLogTable, groupTable } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";
 import { useD1TestDb } from "../d1-test-db";
+import { seedGroup } from "../d1-test-seeds";
 import { allOf, auditLogInsert, guardedAuditLogInsert } from "./audit-log-writes";
 
 const testDb = useD1TestDb();
 
 beforeEach(async () => {
-  await testDb.seed([
-    `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-    "grp_alpha",
-    "アルファ部",
-    "enabled",
-    0,
-    0,
-  ]);
+  await testDb.seed(seedGroup({ id: "grp_alpha", name: "アルファ部" }));
 });
 
 describe("audit-log-writes", () => {

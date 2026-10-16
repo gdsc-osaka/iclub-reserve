@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";
 import { useD1TestDb } from "../d1-test-db";
+import { seedGroup, seedMember, seedUser } from "../d1-test-seeds";
 import { createMembershipRepository } from "./membership-repo";
 
 const testDb = useD1TestDb();
@@ -19,20 +20,31 @@ const testDb = useD1TestDb();
 const NOW = new Date("2026-04-01T10:00:00.000Z");
 
 beforeEach(async () => {
-  const insertUserSql = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
-  const insertGroupSql = `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`;
-  const insertMemberSql = `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`;
-
   await testDb.seed(
-    [insertUserSql, "usr_taro", "太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertUserSql, "usr_hanako", "花子", "hanako@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
+    seedUser({ id: "usr_taro", name: "太郎", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedUser({ id: "usr_hanako", name: "花子", email: "hanako@ecs.osaka-u.ac.jp" }),
     // 大文字まじりで保存されたアドレスも、小文字にそろえて突き合わせられることを確かめる
-    [insertUserSql, "usr_jiro", "次郎", "Jiro.Handai@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertGroupSql, "grp_robotics", "ロボティクス", "enabled", 0, 0],
-    [insertGroupSql, "grp_ai", "AI 班", "enabled", 0, 0],
-    [insertMemberSql, "mem_taro", "grp_robotics", "usr_taro", "admin", 0, 0],
-    [insertMemberSql, "mem_hanako", "grp_robotics", "usr_hanako", "member", 0, 0],
-    [insertMemberSql, "mem_jiro", "grp_ai", "usr_jiro", "member", 0, 0],
+    seedUser({ id: "usr_jiro", name: "次郎", email: "Jiro.Handai@ecs.osaka-u.ac.jp" }),
+    seedGroup({ id: "grp_robotics", name: "ロボティクス" }),
+    seedGroup({ id: "grp_ai", name: "AI 班" }),
+    seedMember({
+      id: "mem_taro",
+      groupId: "grp_robotics",
+      userId: "usr_taro",
+      role: MembershipRole.Admin,
+    }),
+    seedMember({
+      id: "mem_hanako",
+      groupId: "grp_robotics",
+      userId: "usr_hanako",
+      role: MembershipRole.Member,
+    }),
+    seedMember({
+      id: "mem_jiro",
+      groupId: "grp_ai",
+      userId: "usr_jiro",
+      role: MembershipRole.Member,
+    }),
   );
 });
 

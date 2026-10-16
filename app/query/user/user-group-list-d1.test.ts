@@ -10,30 +10,72 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { useD1TestDb } from "~/infra/d1-test-db";
+import { seedGroup, seedMember, seedUser } from "~/infra/d1-test-seeds";
 import { findUserGroupList } from "./user-group-list";
 
 const testDb = useD1TestDb();
 
 beforeEach(async () => {
-  const insertUserSql = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
-  const insertGroupSql = `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`;
-  const insertMemberSql = `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`;
-
   await testDb.seed(
-    [insertUserSql, "usr_taro", "太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertUserSql, "usr_hanako", "花子", "hanako@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertUserSql, "usr_jiro", "次郎", "jiro@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertGroupSql, "grp_robotics", "ロボティクス", "enabled", 1000, 1000],
-    [insertGroupSql, "grp_ai", "AI 班", "pending", 3000, 3000],
-    [insertGroupSql, "grp_band", "軽音", "pending", 2000, 2000],
-    [insertGroupSql, "grp_empty", "休止中のグループ", "disabled", 4000, 4000],
-    [insertMemberSql, "mem_1", "grp_robotics", "usr_taro", "admin", 0, 0],
-    [insertMemberSql, "mem_2", "grp_robotics", "usr_hanako", "member", 0, 0],
-    [insertMemberSql, "mem_3", "grp_robotics", "usr_jiro", "member", 0, 0],
-    [insertMemberSql, "mem_4", "grp_ai", "usr_taro", "member", 0, 0],
-    [insertMemberSql, "mem_5", "grp_band", "usr_hanako", "admin", 0, 0],
+    seedUser({ id: "usr_taro", name: "太郎", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedUser({ id: "usr_hanako", name: "花子", email: "hanako@ecs.osaka-u.ac.jp" }),
+    seedUser({ id: "usr_jiro", name: "次郎", email: "jiro@ecs.osaka-u.ac.jp" }),
+    seedGroup({
+      id: "grp_robotics",
+      name: "ロボティクス",
+      status: GroupStatus.Enabled,
+      createdAt: new Date(1000),
+      updatedAt: new Date(1000),
+    }),
+    seedGroup({
+      id: "grp_ai",
+      name: "AI 班",
+      status: GroupStatus.Pending,
+      createdAt: new Date(3000),
+      updatedAt: new Date(3000),
+    }),
+    seedGroup({
+      id: "grp_band",
+      name: "軽音",
+      status: GroupStatus.Pending,
+      createdAt: new Date(2000),
+      updatedAt: new Date(2000),
+    }),
+    seedGroup({
+      id: "grp_empty",
+      name: "休止中のグループ",
+      status: GroupStatus.Disabled,
+      createdAt: new Date(4000),
+      updatedAt: new Date(4000),
+    }),
+    seedMember({
+      id: "mem_1",
+      groupId: "grp_robotics",
+      userId: "usr_taro",
+      role: MembershipRole.Admin,
+    }),
+    seedMember({
+      id: "mem_2",
+      groupId: "grp_robotics",
+      userId: "usr_hanako",
+      role: MembershipRole.Member,
+    }),
+    seedMember({
+      id: "mem_3",
+      groupId: "grp_robotics",
+      userId: "usr_jiro",
+      role: MembershipRole.Member,
+    }),
+    seedMember({ id: "mem_4", groupId: "grp_ai", userId: "usr_taro", role: MembershipRole.Member }),
+    seedMember({
+      id: "mem_5",
+      groupId: "grp_band",
+      userId: "usr_hanako",
+      role: MembershipRole.Admin,
+    }),
   );
 });
 

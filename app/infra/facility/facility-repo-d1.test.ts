@@ -9,50 +9,24 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AuditLogAction, AuditLogChanges, AuditLogDraft } from "~/domain/audit-log";
 import { FacilityErrorCode, type UpdateFacilityInput } from "~/domain/facility";
+import type { ReservationStatus } from "~/domain/reservation";
 import { createFacilityRepository } from "./facility-repo";
 import { useD1TestDb } from "../d1-test-db";
+import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import type { Database } from "../db";
 
 const testDb = useD1TestDb();
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_taro",
-      "太郎",
-      "taro@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_robotics",
-      "ロボット部",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, photo_url, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_with_photo",
-      "写真のある施設",
-      "/facility-photos/p0.jpg",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, photo_url, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_no_photo",
-      "写真の無い施設",
-      null,
-      1,
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_taro", name: "太郎", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedGroup({ id: "grp_robotics", name: "ロボット部" }),
+    seedFacility({
+      id: "fac_with_photo",
+      name: "写真のある施設",
+      photoUrl: "/facility-photos/p0.jpg",
+    }),
+    seedFacility({ id: "fac_no_photo", name: "写真の無い施設", photoUrl: null }),
   );
 });
 
@@ -63,19 +37,18 @@ const insertReservation = async (
   endHoursFromNow: number,
   facilityId = "fac_no_photo",
 ) => {
-  await testDb.seed([
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    id,
-    "grp_robotics",
-    facilityId,
-    NOW.getTime() + startHoursFromNow * HOUR,
-    NOW.getTime() + endHoursFromNow * HOUR,
-    1,
-    status,
-    "usr_taro",
-    0,
-    0,
-  ]);
+  await testDb.seed(
+    seedReservation({
+      id,
+      groupId: "grp_robotics",
+      facilityId,
+      startAt: new Date(NOW.getTime() + startHoursFromNow * HOUR),
+      endAt: new Date(NOW.getTime() + endHoursFromNow * HOUR),
+      headCount: 1,
+      status: status as ReservationStatus,
+      createdBy: "usr_taro",
+    }),
+  );
 };
 
 /** 基準の現在時刻（2026-10-01 12:00 UTC） */

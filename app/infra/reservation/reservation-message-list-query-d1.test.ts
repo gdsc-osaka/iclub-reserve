@@ -7,8 +7,16 @@ import { ReservationStatus } from "~/domain/reservation";
 
 import { useD1TestDb } from "../d1-test-db";
 
-const testDb = useD1TestDb();
+import {
+  seedFacility,
+  seedGroup,
+  seedReservation,
+  seedReservationMessage,
+  seedUser,
+} from "../d1-test-seeds";
 import { createReservationMessageListQuery } from "./reservation-message-list-query";
+
+const testDb = useD1TestDb();
 
 const USER_MEMBER = {
   userId: "usr_member",
@@ -17,60 +25,28 @@ const USER_MEMBER = {
 };
 const USER_STAFF = { userId: "usr_staff", address: "staff@osaka-u.ac.jp", name: "スタッフ太郎" };
 
-beforeEach(async () => {
-  await testDb.seed(
-    insertUser(USER_MEMBER, { isStaff: false }),
-    insertUser(USER_STAFF, { isStaff: true }),
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_robotics",
-      "ロボティクス",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_a",
-      "施設 A",
-      1,
-      0,
-      0,
-    ],
-    insertReservation("res_target"),
-    insertReservation("res_other"),
-  );
-});
 const insertUser = (
   person: { userId: string; address: string; name: string },
   options: { isStaff: boolean },
 ) =>
-  [
-    `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-    person.userId,
-    person.name,
-    person.address,
-    1,
-    0,
-    0,
-    options.isStaff ? 1 : 0,
-  ] as const;
+  seedUser({
+    id: person.userId,
+    name: person.name,
+    email: person.address,
+    is_staff: options.isStaff,
+  });
 
 const insertReservation = (reservationId: string) =>
-  [
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-
-    reservationId,
-    "grp_robotics",
-    "fac_a",
-    new Date("2026-10-10T10:00:00+09:00").getTime(),
-    new Date("2026-10-10T12:00:00+09:00").getTime(),
-    4,
-    ReservationStatus.Provisional,
-    USER_MEMBER.userId,
-    0,
-    0,
-  ] as const;
+  seedReservation({
+    id: reservationId,
+    groupId: "grp_robotics",
+    facilityId: "fac_a",
+    startAt: new Date("2026-10-10T10:00:00+09:00"),
+    endAt: new Date("2026-10-10T12:00:00+09:00"),
+    headCount: 4,
+    status: ReservationStatus.Provisional,
+    createdBy: USER_MEMBER.userId,
+  });
 
 const insertMessage = (message: {
   id: string;
@@ -80,16 +56,25 @@ const insertMessage = (message: {
   body: string;
   sentAt: Date;
 }) =>
-  [
-    `INSERT INTO "reservation_message" (id, reservation_id, sender_id, sent_as_staff, body, sent_at) VALUES (?,?,?,?,?,?)`,
+  seedReservationMessage({
+    id: message.id,
+    reservationId: message.reservationId,
+    senderId: message.senderId,
+    sentAsStaff: message.sentAsStaff,
+    body: message.body,
+    sentAt: message.sentAt,
+  });
 
-    message.id,
-    message.reservationId,
-    message.senderId,
-    message.sentAsStaff ? 1 : 0,
-    message.body,
-    message.sentAt.getTime(),
-  ] as const;
+beforeEach(async () => {
+  await testDb.seed(
+    insertUser(USER_MEMBER, { isStaff: false }),
+    insertUser(USER_STAFF, { isStaff: true }),
+    seedGroup({ id: "grp_robotics", name: "ロボティクス" }),
+    seedFacility({ id: "fac_a", name: "施設 A" }),
+    insertReservation("res_target"),
+    insertReservation("res_other"),
+  );
+});
 
 describe("createReservationMessageListQuery (D1)", () => {
   it("送った順に返り、同じ sent_at なら ID の昇順", async () => {

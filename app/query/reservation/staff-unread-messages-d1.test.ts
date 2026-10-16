@@ -18,6 +18,16 @@ import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "~/infra/d1-test-db";
+import {
+  seedAuditLog,
+  seedFacility,
+  seedGroup,
+  seedMember,
+  seedReservation,
+  seedReservationMessage,
+  seedReservationRead,
+  seedUser,
+} from "~/infra/d1-test-seeds";
 import { QueryErrorCode } from "../error";
 import { findStaffUnreadMessages } from "./staff-unread-messages";
 
@@ -30,48 +40,19 @@ const USER_STAFF_2 = { id: "usr_staff_2", name: "事務局 2", email: "staff2@ex
 const NOW = new Date("2026-10-20T12:00:00+09:00");
 
 beforeEach(async () => {
-  for (const u of [USER_MEMBER, USER_STAFF_1, USER_STAFF_2]) {
-    await testDb.seed([
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      u.id,
-      u.name,
-      u.email,
-      1,
-      0,
-      0,
-      u.id.includes("staff") ? 1 : 0,
-    ]);
-  }
-
   await testDb.seed(
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_test",
-      "テスト団体",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_1",
-      "会議室 1",
-      1,
-      0,
-      0,
-    ],
+    ...[USER_MEMBER, USER_STAFF_1, USER_STAFF_2].map((u) =>
+      seedUser({ id: u.id, name: u.name, email: u.email, is_staff: u.id.includes("staff") }),
+    ),
+    seedGroup({ id: "grp_test", name: "テスト団体" }),
+    seedFacility({ id: "fac_1", name: "会議室 1" }),
+    seedMember({
+      id: "mem_1",
+      groupId: "grp_test",
+      userId: USER_MEMBER.id,
+      role: MembershipRole.Member,
+    }),
   );
-
-  // メンバーシップ
-  await testDb.seed([
-    `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-    "mem_1",
-    "grp_test",
-    USER_MEMBER.id,
-    MembershipRole.Member,
-    0,
-    0,
-  ]);
 });
 
 async function insertReservation(
@@ -79,19 +60,18 @@ async function insertReservation(
   createdBy: string = USER_MEMBER.id,
   status: ReservationStatus = ReservationStatus.Provisional,
 ) {
-  await testDb.seed([
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    id,
-    "grp_test",
-    "fac_1",
-    new Date("2026-10-25T10:00:00+09:00").getTime(),
-    new Date("2026-10-25T12:00:00+09:00").getTime(),
-    2,
-    status,
-    createdBy,
-    0,
-    0,
-  ]);
+  await testDb.seed(
+    seedReservation({
+      id,
+      groupId: "grp_test",
+      facilityId: "fac_1",
+      startAt: new Date("2026-10-25T10:00:00+09:00"),
+      endAt: new Date("2026-10-25T12:00:00+09:00"),
+      headCount: 2,
+      status,
+      createdBy,
+    }),
+  );
 }
 
 async function insertMessage(
@@ -102,15 +82,9 @@ async function insertMessage(
   body: string,
   sentAt: Date,
 ) {
-  await testDb.seed([
-    `INSERT INTO "reservation_message" (id, reservation_id, sender_id, sent_as_staff, body, sent_at) VALUES (?,?,?,?,?,?)`,
-    id,
-    reservationId,
-    senderId,
-    sentAsStaff ? 1 : 0,
-    body,
-    sentAt.getTime(),
-  ]);
+  await testDb.seed(
+    seedReservationMessage({ id, reservationId, senderId, sentAsStaff, body, sentAt }),
+  );
 }
 
 async function insertAuditLog(
@@ -121,27 +95,23 @@ async function insertAuditLog(
   action: AuditLogAction,
   occurredAt: Date,
 ) {
-  await testDb.seed([
-    `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    id,
-    occurredAt.getTime(),
-    actorId,
-    actedAsStaff ? 1 : 0,
-    action,
-    AuditLogTargetType.Reservation,
-    targetId,
-    "grp_test",
-    "{}",
-  ]);
+  await testDb.seed(
+    seedAuditLog({
+      id,
+      occurredAt,
+      actorId,
+      actedAsStaff,
+      action,
+      targetType: AuditLogTargetType.Reservation,
+      targetId,
+      groupId: "grp_test",
+      changes: {},
+    }),
+  );
 }
 
 async function insertRead(userId: string, reservationId: string, lastReadAt: Date) {
-  await testDb.seed([
-    `INSERT INTO "reservation_read" (user_id, reservation_id, last_read_at) VALUES (?,?,?)`,
-    userId,
-    reservationId,
-    lastReadAt.getTime(),
-  ]);
+  await testDb.seed(seedReservationRead({ userId, reservationId, lastReadAt }));
 }
 
 /** 事務局 `staffUserId` から見た、今の未読 */

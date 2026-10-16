@@ -16,6 +16,7 @@ import { InvitationStatus, type AcceptInvitationInput } from "~/domain/invitatio
 import { MembershipRole } from "~/domain/membership";
 import { invitationAcceptStatements } from "./invitation-repo";
 import { useD1TestDb } from "../d1-test-db";
+import { seedGroup, seedGroupInvitation, seedMember, seedUser } from "../d1-test-seeds";
 
 const testDb = useD1TestDb();
 
@@ -38,44 +39,10 @@ const dummyAuditLog: AuditLogDraft = {
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_inviter",
-      "招待した管理者",
-      "taro@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_invitee",
-      "招待された人",
-      INVITEE_EMAIL,
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_other",
-      "招待されていない人",
-      OTHER_EMAIL,
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_1",
-      "テスト団体",
-      "enabled",
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_inviter", name: "招待した管理者", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedUser({ id: "usr_invitee", name: "招待された人", email: INVITEE_EMAIL }),
+    seedUser({ id: "usr_other", name: "招待されていない人", email: OTHER_EMAIL }),
+    seedGroup({ id: "grp_1", name: "テスト団体" }),
   );
 });
 
@@ -84,17 +51,17 @@ const insertInvitation = async (options: {
   readonly email: string;
   readonly expiresAt: Date;
 }) => {
-  await testDb.seed([
-    `INSERT INTO "group_invitation" (id, group_id, email, role, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?,?,?)`,
-    "inv_1",
-    "grp_1",
-    options.email,
-    MembershipRole.Admin,
-    options.status,
-    options.expiresAt.getTime(),
-    0,
-    "usr_inviter",
-  ]);
+  await testDb.seed(
+    seedGroupInvitation({
+      id: "inv_1",
+      groupId: "grp_1",
+      email: options.email,
+      role: MembershipRole.Admin,
+      status: options.status,
+      expiresAt: options.expiresAt,
+      inviterId: "usr_inviter",
+    }),
+  );
 };
 
 const runAccept = async (input: AcceptInvitationInput): Promise<string | null> => {
@@ -247,15 +214,14 @@ describe("承諾の 3 文を D1 で実行する", () => {
       email: INVITEE_EMAIL,
       expiresAt: NOT_EXPIRED,
     });
-    await testDb.seed([
-      `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "mem_old",
-      "grp_1",
-      "usr_invitee",
-      MembershipRole.Member,
-      0,
-      0,
-    ]);
+    await testDb.seed(
+      seedMember({
+        id: "mem_old",
+        groupId: "grp_1",
+        userId: "usr_invitee",
+        role: MembershipRole.Member,
+      }),
+    );
 
     expect(await runAccept(acceptAsInvitee)).toBe("grp_1");
     // 招待の役割は admin だが、既存の member のまま残る

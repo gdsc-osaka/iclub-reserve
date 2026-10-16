@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "../d1-test-db";
+import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createReservationReadRepository } from "./reservation-read-repo";
 
 const USER_ID = "usr_reader";
@@ -13,58 +15,29 @@ const testDb = useD1TestDb();
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      USER_ID,
-      "テスト読者",
-      "reader@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      GROUP_ID,
-      "テスト団体",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      FACILITY_ID,
-      "テスト施設",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      RESERVATION_1,
-      GROUP_ID,
-      FACILITY_ID,
-      1000,
-      2000,
-      5,
-      "approved",
-      USER_ID,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      RESERVATION_2,
-      GROUP_ID,
-      FACILITY_ID,
-      3000,
-      4000,
-      5,
-      "approved",
-      USER_ID,
-      0,
-      0,
-    ],
+    seedUser({ id: USER_ID, name: "テスト読者", email: "reader@ecs.osaka-u.ac.jp" }),
+    seedGroup({ id: GROUP_ID, name: "テスト団体" }),
+    seedFacility({ id: FACILITY_ID, name: "テスト施設" }),
+    seedReservation({
+      id: RESERVATION_1,
+      groupId: GROUP_ID,
+      facilityId: FACILITY_ID,
+      startAt: new Date(1000),
+      endAt: new Date(2000),
+      headCount: 5,
+      status: ReservationStatus.Approved,
+      createdBy: USER_ID,
+    }),
+    seedReservation({
+      id: RESERVATION_2,
+      groupId: GROUP_ID,
+      facilityId: FACILITY_ID,
+      startAt: new Date(3000),
+      endAt: new Date(4000),
+      headCount: 5,
+      status: ReservationStatus.Approved,
+      createdBy: USER_ID,
+    }),
   );
 });
 

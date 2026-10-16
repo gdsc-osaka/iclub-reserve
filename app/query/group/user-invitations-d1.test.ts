@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { InvitationStatus } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
 import { useD1TestDb } from "~/infra/d1-test-db";
+import { seedGroup, seedGroupInvitation, seedUser } from "~/infra/d1-test-seeds";
 import { findUserInvitations } from "./user-invitations";
 
 const testDb = useD1TestDb();
@@ -14,32 +15,9 @@ const NOW = new Date("2026-10-20T12:00:00+09:00");
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      INVITER.id,
-      INVITER.name,
-      INVITER.email,
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_1",
-      "ロボット研究会",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_2",
-      "プログラミング同好会",
-      "enabled",
-      0,
-      0,
-    ],
+    seedUser({ id: INVITER.id, name: INVITER.name, email: INVITER.email }),
+    seedGroup({ id: "grp_1", name: "ロボット研究会" }),
+    seedGroup({ id: "grp_2", name: "プログラミング同好会" }),
   );
 });
 
@@ -51,17 +29,9 @@ async function insertInvitation(
   status: InvitationStatus,
   expiresAt: Date,
 ) {
-  await testDb.seed([
-    `INSERT INTO "group_invitation" (id, group_id, email, role, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?,?,?)`,
-    id,
-    groupId,
-    email,
-    role,
-    status,
-    expiresAt.getTime(),
-    0,
-    INVITER.id,
-  ]);
+  await testDb.seed(
+    seedGroupInvitation({ id, groupId, email, role, status, expiresAt, inviterId: INVITER.id }),
+  );
 }
 
 describe("findUserInvitations", () => {

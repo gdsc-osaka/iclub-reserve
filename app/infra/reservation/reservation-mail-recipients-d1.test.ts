@@ -16,6 +16,14 @@ import { useD1TestDb } from "../d1-test-db";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
+import {
+  seedFacility,
+  seedGroup,
+  seedMember,
+  seedReservation,
+  seedReservationMessage,
+  seedUser,
+} from "../d1-test-seeds";
 import { createReservationMailRecipientsQuery } from "./reservation-mail-recipients-query";
 
 /** 宛先として返ってくる形。期待値を書きやすくするためにまとめておく */
@@ -40,51 +48,16 @@ const testDb = useD1TestDb();
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      ADMIN.userId,
-      ADMIN.name,
-      ADMIN.address,
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      STAFF.userId,
-      STAFF.name,
-      STAFF.address,
-      1,
-      0,
-      0,
-      1,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_robotics",
-      "ロボット部",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_a",
-      "会議室 A",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      `mem_${ADMIN.userId}`,
-      "grp_robotics",
-      ADMIN.userId,
-      "admin",
-      0,
-      0,
-    ],
+    seedUser({ id: ADMIN.userId, name: ADMIN.name, email: ADMIN.address, is_staff: false }),
+    seedUser({ id: STAFF.userId, name: STAFF.name, email: STAFF.address, is_staff: true }),
+    seedGroup({ id: "grp_robotics", name: "ロボット部" }),
+    seedFacility({ id: "fac_a", name: "会議室 A" }),
+    seedMember({
+      id: `mem_${ADMIN.userId}`,
+      groupId: "grp_robotics",
+      userId: ADMIN.userId,
+      role: MembershipRole.Admin,
+    }),
   );
 });
 
@@ -92,45 +65,41 @@ async function insertUser(
   person: { userId: string; address: string; name: string },
   options: { isStaff: boolean },
 ) {
-  await testDb.seed([
-    `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-    person.userId,
-    person.name,
-    person.address,
-    1,
-    0,
-    0,
-    options.isStaff ? 1 : 0,
-  ]);
+  await testDb.seed(
+    seedUser({
+      id: person.userId,
+      name: person.name,
+      email: person.address,
+      is_staff: options.isStaff,
+    }),
+  );
 }
 
 async function insertMember(userId: string, role: MembershipRole) {
-  await testDb.seed([
-    `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-    `mem_${userId}`,
-    "grp_robotics",
-    userId,
-    role,
-    0,
-    0,
-  ]);
+  await testDb.seed(
+    seedMember({
+      id: `mem_${userId}`,
+      groupId: "grp_robotics",
+      userId,
+      role,
+    }),
+  );
 }
 
 /** ロボット部の予約を、申請者が申請したものとして入れる */
 const insertReservation = async () =>
-  await testDb.seed([
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    "res_target",
-    "grp_robotics",
-    "fac_a",
-    new Date("2026-10-10T10:00:00+09:00").getTime(),
-    new Date("2026-10-10T12:00:00+09:00").getTime(),
-    4,
-    ReservationStatus.Provisional,
-    APPLICANT.userId,
-    0,
-    0,
-  ]);
+  await testDb.seed(
+    seedReservation({
+      id: "res_target",
+      groupId: "grp_robotics",
+      facilityId: "fac_a",
+      startAt: new Date("2026-10-10T10:00:00+09:00"),
+      endAt: new Date("2026-10-10T12:00:00+09:00"),
+      headCount: 4,
+      status: ReservationStatus.Provisional,
+      createdBy: APPLICANT.userId,
+    }),
+  );
 
 describe("findByReservationId を D1 で実行する（申請者を宛先に入れる条件。COND-008 の (1)）", () => {
   it("自団体のメンバーである申請者は、団体側の宛先に入る", async () => {
@@ -191,15 +160,16 @@ async function insertMessage(message: {
   body: string;
   sentAt: number;
 }) {
-  await testDb.seed([
-    `INSERT INTO "reservation_message" (id, reservation_id, sender_id, sent_as_staff, body, sent_at) VALUES (?,?,?,?,?,?)`,
-    message.id,
-    message.reservationId,
-    message.senderId,
-    message.sentAsStaff ? 1 : 0,
-    message.body,
-    message.sentAt,
-  ]);
+  await testDb.seed(
+    seedReservationMessage({
+      id: message.id,
+      reservationId: message.reservationId,
+      senderId: message.senderId,
+      sentAsStaff: message.sentAsStaff,
+      body: message.body,
+      sentAt: new Date(message.sentAt),
+    }),
+  );
 }
 
 describe("findForMessage を D1 で実行する（メッセージ通知先の取得条件。EVT-008）", () => {
@@ -240,19 +210,18 @@ describe("findForMessage を D1 で実行する（メッセージ通知先の取
     await insertReservation();
 
     // 別の予約を作成
-    await testDb.seed([
-      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      "res_other",
-      "grp_robotics",
-      "fac_a",
-      new Date("2026-10-11T10:00:00+09:00").getTime(),
-      new Date("2026-10-11T12:00:00+09:00").getTime(),
-      2,
-      ReservationStatus.Approved,
-      ADMIN.userId,
-      0,
-      0,
-    ]);
+    await testDb.seed(
+      seedReservation({
+        id: "res_other",
+        groupId: "grp_robotics",
+        facilityId: "fac_a",
+        startAt: new Date("2026-10-11T10:00:00+09:00"),
+        endAt: new Date("2026-10-11T12:00:00+09:00"),
+        headCount: 2,
+        status: ReservationStatus.Approved,
+        createdBy: ADMIN.userId,
+      }),
+    );
 
     const SENDER_VALID = {
       userId: "usr_sender_valid",

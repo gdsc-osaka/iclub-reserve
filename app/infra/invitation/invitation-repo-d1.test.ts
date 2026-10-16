@@ -12,6 +12,7 @@ import { InvitationStatus } from "~/domain/invitation";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { MembershipRole } from "~/domain/membership";
 import { useD1TestDb } from "../d1-test-db";
+import { seedGroup, seedGroupInvitation, seedUser } from "../d1-test-seeds";
 import { createInvitationRepository } from "./invitation-repo";
 
 const testDb = useD1TestDb();
@@ -22,47 +23,24 @@ const INVITEE_EMAIL = "hanako@ecs.osaka-u.ac.jp";
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_admin",
-      "団体の管理者",
-      "taro@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_1",
-      "テスト団体",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_other",
-      "ほかの団体",
-      "enabled",
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_admin", name: "団体の管理者", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedGroup({ id: "grp_1", name: "テスト団体" }),
+    seedGroup({ id: "grp_other", name: "ほかの団体" }),
   );
 });
 
 const insertPendingInvitation = async () => {
-  await testDb.seed([
-    `INSERT INTO "group_invitation" (id, group_id, email, role, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?,?,?)`,
-    "inv_1",
-    "grp_1",
-    INVITEE_EMAIL,
-    MembershipRole.Member,
-    InvitationStatus.Pending,
-    NOT_EXPIRED.getTime(),
-    0,
-    "usr_admin",
-  ]);
+  await testDb.seed(
+    seedGroupInvitation({
+      id: "inv_1",
+      groupId: "grp_1",
+      email: INVITEE_EMAIL,
+      role: MembershipRole.Member,
+      status: InvitationStatus.Pending,
+      expiresAt: NOT_EXPIRED,
+      inviterId: "usr_admin",
+    }),
+  );
 };
 
 const auditLogRows = async () =>

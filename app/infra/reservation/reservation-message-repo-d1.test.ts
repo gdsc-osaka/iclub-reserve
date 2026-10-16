@@ -17,51 +17,28 @@ import { useD1TestDb } from "../d1-test-db";
  * どちらかが失敗すれば両方とも巻き戻る、という本番と同じ振る舞いの上で確かめている。
  */
 const testDb = useD1TestDb();
+import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createReservationMessageRepository } from "./reservation-message-repo";
 
 const initialUpdatedAt = 100000;
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_sender",
-      "送信者",
-      "sender@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_test",
-      "テストグループ",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_test",
-      "施設",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      "res_target",
-      "grp_test",
-      "fac_test",
-      200000,
-      300000,
-      4,
-      ReservationStatus.Approved,
-      "usr_sender",
-      initialUpdatedAt,
-      initialUpdatedAt,
-    ],
+    seedUser({ id: "usr_sender", name: "送信者", email: "sender@ecs.osaka-u.ac.jp" }),
+    seedGroup({ id: "grp_test", name: "テストグループ" }),
+    seedFacility({ id: "fac_test", name: "施設" }),
+    seedReservation({
+      id: "res_target",
+      groupId: "grp_test",
+      facilityId: "fac_test",
+      startAt: new Date(200000),
+      endAt: new Date(300000),
+      headCount: 4,
+      status: ReservationStatus.Approved,
+      createdBy: "usr_sender",
+      createdAt: new Date(initialUpdatedAt),
+      updatedAt: new Date(initialUpdatedAt),
+    }),
   );
 });
 describe("createReservationMessageRepository を D1 で実行する", () => {
