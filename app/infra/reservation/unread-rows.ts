@@ -21,7 +21,7 @@ export interface UnreadRows<Row> {
  *
  * 行には、その予約の未読のうち最新の出来事を代表として渡し、ほかの未読の数を添える。
  * 行は代表の出来事が新しい順に並べ、最大 10 件まで出す。
- * 団体側（`group-unread-updates-query.ts`）と事務局側（`staff-unread-messages-query.ts`）で、
+ * 団体側（`group-unread-updates-query.ts`）と事務局側（`app/query/reservation/staff-unread-messages.ts`）で、
  * 何を出来事とみなすかは違うが、まとめ方は同じなのでここに置く。
  */
 export const toUnreadRows = <Event extends UnreadEvent, Row>(

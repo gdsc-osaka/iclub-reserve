@@ -1,16 +1,18 @@
 /**
- * 承認待ち予約問い合わせ（StaffPendingReservationsQuery）をローカル D1 に対して検証するテスト。
+ * 承認待ちの予約（findStaffPendingReservations）をローカル D1 に対して検証するテスト。
  *
+ * - 事務局でない人には Forbidden を返す
  * - 開始日時が今より後の仮予約だけを、開始が近い順に返す
  * - 承認済みの予約・ほかの仮予約との重なりを返す
  *
- * 件数の上限と、利用日まで 7 日を切っている数の数え方はユースケースのテストで確かめる。
+ * 利用日まで 7 日を切っている数の境目は、DB の要らない `toStaffPendingReservations` のテストで確かめる。
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { useD1TestDb } from "../d1-test-db";
 
 import { ReservationStatus } from "~/domain/reservation";
-import { createStaffPendingReservationsQuery } from "./staff-pending-reservations-query";
+import { useD1TestDb } from "~/infra/d1-test-db";
+import { QueryErrorCode } from "../error";
+import { findStaffPendingReservations } from "./staff-pending-reservations";
 
 const testDb = useD1TestDb();
 
@@ -70,8 +72,14 @@ async function insertReservation(
   ]);
 }
 
-describe("createStaffPendingReservationsQuery", () => {
-  it("開始日時が今より後の仮予約を、開始が近い順にすべて返す", async () => {
+describe("findStaffPendingReservations", () => {
+  it("事務局でない人には Forbidden を返す（COND-009）", async () => {
+    const result = await findStaffPendingReservations(testDb.db, { isStaff: false, now: NOW });
+
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.Forbidden);
+  });
+
+  it("開始日時が今より後の仮予約を開始が近い順に 5 件返し、総数は 5 件を超えた分も数える", async () => {
     // 入れる順番と開始日時の順番をわざとずらす
     for (const [id, day] of [
       ["res_3", "17"],
@@ -88,17 +96,17 @@ describe("createStaffPendingReservationsQuery", () => {
       );
     }
 
-    const query = createStaffPendingReservationsQuery(testDb.db);
-    const result = await query.findUpcomingProvisional(NOW);
+    const result = await findStaffPendingReservations(testDb.db, { isStaff: true, now: NOW });
 
-    expect(result._unsafeUnwrap().map((item) => item.id)).toEqual([
+    const value = result._unsafeUnwrap();
+    expect(value.items.map((item) => item.id)).toEqual([
       "res_1",
       "res_2",
       "res_3",
       "res_4",
       "res_5",
-      "res_6",
     ]);
+    expect(value.totalCount).toBe(6);
   });
 
   it("開始日時が今以前の仮予約と、仮予約でない予約は含めない", async () => {
@@ -122,10 +130,9 @@ describe("createStaffPendingReservationsQuery", () => {
       new Date("2026-10-15T16:00:00+09:00"),
     );
 
-    const query = createStaffPendingReservationsQuery(testDb.db);
-    const result = await query.findUpcomingProvisional(NOW);
+    const result = await findStaffPendingReservations(testDb.db, { isStaff: true, now: NOW });
 
-    expect(result._unsafeUnwrap().map((item) => item.id)).toEqual(["res_future"]);
+    expect(result._unsafeUnwrap().items.map((item) => item.id)).toEqual(["res_future"]);
   });
 
   it("同じ施設・時間帯の承認済みの予約と、ほかの仮予約との重なりを返す", async () => {
@@ -159,13 +166,12 @@ describe("createStaffPendingReservationsQuery", () => {
       new Date("2026-10-18T12:00:00+09:00"),
     );
 
-    const query = createStaffPendingReservationsQuery(testDb.db);
-    const result = await query.findUpcomingProvisional(NOW);
+    const result = await findStaffPendingReservations(testDb.db, { isStaff: true, now: NOW });
 
     const flags = Object.fromEntries(
       result
         ._unsafeUnwrap()
-        .map((item) => [item.id, [item.hasApprovedOverlap, item.hasProvisionalOverlap]]),
+        .items.map((item) => [item.id, [item.hasApprovedOverlap, item.hasProvisionalOverlap]]),
     );
     expect(flags).toEqual({
       // res_over_approved は res_approved と重なり、仮予約どうしの重なりは無い

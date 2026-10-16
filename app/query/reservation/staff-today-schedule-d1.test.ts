@@ -1,15 +1,17 @@
 /**
- * 今日の予約状況問い合わせ（StaffTodayScheduleQuery）をローカル D1 に対して検証するテスト。
+ * 今日の予約状況（findStaffTodaySchedule）をローカル D1 に対して検証するテスト。
  *
+ * - 事務局でない人には Forbidden を返す
  * - 今日の予約状況で、日付の境目（0 時）をまたぐ予約の扱い
  * - 有効な施設・設備のみが取得される
  * - 承認済み・仮予約のみが取得され、終了した予約は除外される
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { useD1TestDb } from "../d1-test-db";
 
 import { ReservationStatus } from "~/domain/reservation";
-import { createStaffTodayScheduleQuery } from "./staff-today-schedule-query";
+import { useD1TestDb } from "~/infra/d1-test-db";
+import { QueryErrorCode } from "../error";
+import { findStaffTodaySchedule } from "./staff-today-schedule";
 
 const testDb = useD1TestDb();
 
@@ -79,10 +81,15 @@ async function insertReservation(
   ]);
 }
 
-describe("createStaffTodayScheduleQuery", () => {
+describe("findStaffTodaySchedule", () => {
+  it("事務局でない人には Forbidden を返す（COND-009）", async () => {
+    const result = await findStaffTodaySchedule(testDb.db, { isStaff: false, now: NOW });
+
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.Forbidden);
+  });
+
   it("有効な施設のみを取得する", async () => {
-    const query = createStaffTodayScheduleQuery(testDb.db);
-    const result = await query.findTodaySchedule(NOW);
+    const result = await findStaffTodaySchedule(testDb.db, { isStaff: true, now: NOW });
 
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
@@ -132,8 +139,7 @@ describe("createStaffTodayScheduleQuery", () => {
       new Date("2026-10-16T02:00:00+09:00"),
     );
 
-    const query = createStaffTodayScheduleQuery(testDb.db);
-    const result = await query.findTodaySchedule(NOW);
+    const result = await findStaffTodaySchedule(testDb.db, { isStaff: true, now: NOW });
 
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
@@ -180,8 +186,7 @@ describe("createStaffTodayScheduleQuery", () => {
       ReservationStatus.Rejected,
     );
 
-    const query = createStaffTodayScheduleQuery(testDb.db);
-    const result = await query.findTodaySchedule(NOW);
+    const result = await findStaffTodaySchedule(testDb.db, { isStaff: true, now: NOW });
 
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;

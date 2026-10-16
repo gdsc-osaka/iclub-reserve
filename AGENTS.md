@@ -68,6 +68,14 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 
   同じ判定を 2 つのユースケースに書き写さないこと。文言だけが違うなら、`ensureNotLastAdmin` や `ensureNoApprovedOverlap` のようにメッセージを引数で受け取る。
 
+- **画面のための読み取り**（`docs/adr/001-read-model-separation.md`・`docs/adr/012-query-functions.md`）: 更新に使わず、集約をまたいで表示するだけの読み取りは `app/query/<入口>/<出口>.ts` に置く。次の 3 つをすべて満たすもの（素通しの読み取り）は、型・門番・SQL を同じファイルに書いた関数 `find*(db, args)` 1 本にし、ポートの interface・`app/infra/` の実装・ユースケースは作らない。手本は `app/query/reservation/staff-today-schedule.ts`。
+
+  1. 見る人の判定が、Repository を読まない門番 1 つで済む（事務局かどうかは `app/query/_shared/staff.ts` の `ensureStaff`）
+  2. 見る人によって、返す形が変わらない
+  3. 読むのと同時に書き込まない
+
+  どれかを満たさない読み取り（所属で判定する・見る人によって項目を落とす など）は、今までどおりユースケースから Query ポートを通して読む。素通しの読み取りのテストは、本物の D1 を使う `<出口>-d1.test.ts`（門番が止めることも含める）と、画面に合わせて数える `to*` 関数の単体テストだけにし、偽物の Query を渡すテストは書かない。画面の部品は `app/query/` から `import type` で型だけを読み込む（値を読み込むと、DB のコードがブラウザ向けのバンドルに入る）。
+
 - **エラーの扱い**（`docs/adr/004-error-handling-unification.md`）: ユースケースは起きたことを正直なコードで返し、利用者に何を見せるか（status・文言・存在の秘匿）は `app/routes/_shared/` のドメインごとの表が決める。見せない相手にも、ユースケースは `NotFound` に潰さず `NotVisible` を返す。
 
   | 書くもの                 | 置き場所                                        | 決まり                                                                   |

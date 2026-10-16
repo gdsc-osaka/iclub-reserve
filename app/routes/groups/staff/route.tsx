@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { CheckCircle2, CircleAlert, Users } from "lucide-react";
+import { ResultAsync } from "neverthrow";
 import { useEffect } from "react";
 import { isRouteErrorResponse, Link } from "react-router";
 import { toast } from "sonner";
@@ -10,17 +11,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { GroupStatus } from "~/domain/group";
 import { allowedGroupStatusTransitions } from "~/domain/group/status-transition";
 import { createDb } from "~/infra/db";
-import { createGroupSearchQuery } from "~/infra/group/group-search-query";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { formatFullDate } from "~/lib/date";
 import { cn } from "~/lib/utils";
-import type { GroupSearchItem } from "~/query/group/group-search";
+import {
+  countGroupsByStatus,
+  findGroupSearchList,
+  type GroupSearchItem,
+} from "~/query/group/group-search";
 import { groupActionErrors } from "~/routes/_shared/group-error.server";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { changeGroupStatusUseCase } from "~/usecases/group/change-group-status";
-import { searchGroupsUseCase } from "~/usecases/group/search-groups";
 
 import type { Route } from "./+types/route";
 import { GroupStatusDialog } from "./group-status-dialog";
@@ -38,7 +41,7 @@ export function meta() {
 /**
  * 事務局向け全団体管理画面（SCR-008）のローダー。
  *
- * 事務局スタッフのみ閲覧可能（COND-009）。非スタッフはユースケースで Forbidden が返り、
+ * 事務局スタッフのみ閲覧可能（COND-009）。非スタッフは読み取りの関数が Forbidden を返し、
  * 403 エラーレスポンスとしてログに残る。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -48,24 +51,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const params = parseStaffGroupParams(url.searchParams);
 
   const db = createDb(env.DB);
-  const result = await searchGroupsUseCase(
-    { groupSearchQuery: createGroupSearchQuery(db) },
-    {
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-      status: toDomainGroupStatus(params.status),
-    },
-  );
+  const result = await ResultAsync.combine([
+    findGroupSearchList(db, { isStaff: user.is_staff, status: toDomainGroupStatus(params.status) }),
+    countGroupsByStatus(db, { isStaff: user.is_staff }),
+  ]);
 
   if (result.isErr()) {
     throw queryErrorResponse({ where: "staff.groups.loader", userId: user.id }, result.error);
   }
 
-  return {
-    items: result.value.items,
-    counts: result.value.counts,
-    params,
-  };
+  const [items, counts] = result.value;
+  return { items, counts, params };
 }
 
 /**

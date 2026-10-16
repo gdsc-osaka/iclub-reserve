@@ -11,7 +11,6 @@ import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createGroupRecentActivitiesQuery } from "~/infra/audit-log/group-recent-activities-query";
 import { createDb, type Database } from "~/infra/db";
-import { createGroupSearchQuery } from "~/infra/group/group-search-query";
 import { createUserInvitationsQuery } from "~/infra/group/user-invitations-query";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
@@ -21,13 +20,14 @@ import { createReservationListQuery } from "~/infra/reservation/reservation-list
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { createStaffPendingReservationsQuery } from "~/infra/reservation/staff-pending-reservations-query";
-import { createStaffTodayScheduleQuery } from "~/infra/reservation/staff-today-schedule-query";
-import { createStaffUnreadMessagesQuery } from "~/infra/reservation/staff-unread-messages-query";
 import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
 import { formatMonthDay } from "~/lib/date";
+import { findGroupSearchList } from "~/query/group/group-search";
+import { findStaffPendingReservations } from "~/query/reservation/staff-pending-reservations";
+import { findStaffTodaySchedule } from "~/query/reservation/staff-today-schedule";
+import { findStaffUnreadMessages } from "~/query/reservation/staff-unread-messages";
 import { invitationActionErrors } from "~/routes/_shared/group-error.server";
 import { logQueryError } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
@@ -35,12 +35,8 @@ import { getGroupRecentActivitiesUseCase } from "~/usecases/audit-log/get-group-
 import { acceptInvitationUseCase } from "~/usecases/group/accept-invitation";
 import { listMyInvitationsUseCase } from "~/usecases/group/list-my-invitations";
 import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
-import { searchGroupsUseCase } from "~/usecases/group/search-groups";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getGroupUnreadUpdatesUseCase } from "~/usecases/reservation/get-group-unread-updates";
-import { getStaffPendingReservationsUseCase } from "~/usecases/reservation/get-staff-pending-reservations";
-import { getStaffTodayScheduleUseCase } from "~/usecases/reservation/get-staff-today-schedule";
-import { getStaffUnreadMessagesUseCase } from "~/usecases/reservation/get-staff-unread-messages";
 import { listUpcomingReservationsUseCase } from "~/usecases/reservation/list-upcoming-reservations";
 import { markAllReservationsReadUseCase } from "~/usecases/reservation/mark-all-reservations-read";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
@@ -210,10 +206,7 @@ const loadRecentActivities = async (db: Database, user: SessionUser, now: Date) 
 
 /** 承認待ちの予約と、その件数（UC-006）。null は読めなかったことを表す */
 const loadStaffPending = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await getStaffPendingReservationsUseCase(
-    { staffPendingReservationsQuery: createStaffPendingReservationsQuery(db) },
-    { isStaff: user.is_staff, now },
-  );
+  const result = await findStaffPendingReservations(db, { isStaff: user.is_staff, now });
   if (result.isErr()) {
     logQueryError({ where: "home.loader.staffPending", userId: user.id }, result.error);
     return null;
@@ -223,10 +216,11 @@ const loadStaffPending = async (db: Database, user: SessionUser, now: Date) => {
 
 /** 団体からの未読メッセージ（UC-037 / COND-026 (3)）。null は読めなかったことを表す */
 const loadStaffUnreadMessages = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await getStaffUnreadMessagesUseCase(
-    { staffUnreadMessagesQuery: createStaffUnreadMessagesQuery(db) },
-    { actorUserId: user.id, isStaff: user.is_staff, now },
-  );
+  const result = await findStaffUnreadMessages(db, {
+    actorUserId: user.id,
+    isStaff: user.is_staff,
+    now,
+  });
   if (result.isErr()) {
     logQueryError({ where: "home.loader.staffUnread", userId: user.id }, result.error);
     return null;
@@ -237,30 +231,27 @@ const loadStaffUnreadMessages = async (db: Database, user: SessionUser, now: Dat
 /**
  * 有効化を待っている団体と、その数（UC-014）。null は読めなかったことを表す。
  *
- * 承認待ちで絞ると、団体の一覧は登録が古い順に並ぶ（`group-search-query.ts`）。
+ * 承認待ちで絞ると、団体の一覧は登録が古い順に並ぶ（`app/query/group/group-search.ts`）。
  * 待たせている団体から片付けられるよう、その並びのまま先頭の数件を出す。
  */
 const loadPendingGroups = async (db: Database, user: SessionUser) => {
-  const result = await searchGroupsUseCase(
-    { groupSearchQuery: createGroupSearchQuery(db) },
-    { actorUserId: user.id, isStaff: user.is_staff, status: GroupStatus.Pending },
-  );
+  const result = await findGroupSearchList(db, {
+    isStaff: user.is_staff,
+    status: GroupStatus.Pending,
+  });
   if (result.isErr()) {
     logQueryError({ where: "home.loader.pendingGroups", userId: user.id }, result.error);
     return null;
   }
   return {
-    items: result.value.items.slice(0, STAFF_PENDING_GROUPS_LIMIT),
-    totalCount: result.value.items.length,
+    items: result.value.slice(0, STAFF_PENDING_GROUPS_LIMIT),
+    totalCount: result.value.length,
   };
 };
 
 /** 今日の予約状況（UC-001）。null は読めなかったことを表す */
 const loadStaffToday = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await getStaffTodayScheduleUseCase(
-    { staffTodayScheduleQuery: createStaffTodayScheduleQuery(db) },
-    { isStaff: user.is_staff, now },
-  );
+  const result = await findStaffTodaySchedule(db, { isStaff: user.is_staff, now });
   if (result.isErr()) {
     logQueryError({ where: "home.loader.staffToday", userId: user.id }, result.error);
     return null;
