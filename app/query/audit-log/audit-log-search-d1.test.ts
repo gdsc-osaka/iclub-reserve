@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import { createAuditLogSearchQuery } from "./audit-log-search-query";
-import { useD1TestDb } from "../d1-test-db";
+import { useD1TestDb } from "~/infra/d1-test-db";
+import { QueryErrorCode } from "../error";
+import { findAuditLogSearchResult } from "./audit-log-search";
 
 /*
- * Query は内部で `db.batch()` を使う。D1 の batch は 1 行を「列名 → 値」のオブジェクトで受け取るので、
+ * 内部で `db.batch()` を使う。D1 の batch は 1 行を「列名 → 値」のオブジェクトで受け取るので、
  * 同じ名前の列が 2 つあると 1 つに潰れて後ろの列がずれる。ここでは本物の D1 で流しているので、
  * 列名が重なる問い合わせを書けば、下の値の比較がそのまま落ちる。
  */
@@ -101,7 +102,23 @@ beforeEach(async () => {
   );
 });
 
-describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
+describe("findAuditLogSearchResult", () => {
+  it("事務局でない人には Forbidden を返す（COND-009・COND-012(1)）", async () => {
+    const result = await findAuditLogSearchResult(testDb.db, {
+      isStaff: false,
+      filter: {
+        targetType: null,
+        groupId: null,
+        actorId: null,
+        occurredFrom: null,
+        occurredBefore: null,
+      },
+      page: 1,
+    });
+
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.Forbidden);
+  });
+
   it("予約・施設・団体の情報が LEFT JOIN され、参照先が消えた記録も落ちずに取得できる", async () => {
     const db = testDb.db;
     const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
@@ -137,18 +154,18 @@ describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
       JSON.stringify({}),
     ]);
 
-    const query = createAuditLogSearchQuery(db);
     const result = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
 
     expect(result.items.length).toBe(2);
@@ -191,18 +208,18 @@ describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
       }),
     ]);
 
-    const query = createAuditLogSearchQuery(db);
     const result = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
 
     expect(result.userNames).toEqual({
@@ -248,18 +265,18 @@ describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
       "{}",
     ]);
 
-    const query = createAuditLogSearchQuery(db);
     const result = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
 
     expect(result.actors).toEqual([
@@ -309,65 +326,67 @@ describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
       "{}",
     ]);
 
-    const query = createAuditLogSearchQuery(db);
-
     // 1. 種類で絞り込み
     const resByType = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: AuditLogTargetType.Facility,
           groupId: null,
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
     expect(resByType.items.map((i) => i.id)).toEqual(["log_2"]);
 
     // 2. 団体で絞り込み
     const resByGroup = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: "grp_beta",
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
     expect(resByGroup.items.map((i) => i.id)).toEqual(["log_3"]);
 
     // 3. 操作者で絞り込み
     const resByActor = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: "usr_student_1",
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
     expect(resByActor.items.map((i) => i.id)).toEqual(["log_1"]);
 
     // 4. 期間の境界値テスト（occurredFrom は含む、occurredBefore は含まない）
     const resByTime = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: null,
           occurredFrom: new Date(2000), // 2000 を含む
           occurredBefore: new Date(3000), // 3000 は含まない
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
     expect(resByTime.items.map((i) => i.id)).toEqual(["log_2"]);
   });
@@ -415,18 +434,18 @@ describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
       "{}",
     ]);
 
-    const query = createAuditLogSearchQuery(db);
     const result = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
 
     // 2000 の log_c が先頭。時刻 1000 同士は id 降順で log_b -> log_a
@@ -454,20 +473,19 @@ describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
       ]);
     }
 
-    const query = createAuditLogSearchQuery(db);
-
     // 1 ページ目
     const page1 = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        1,
-      )
+        page: 1,
+      })
     )._unsafeUnwrap();
 
     expect(page1.items.length).toBe(50);
@@ -477,16 +495,17 @@ describe("AuditLogSearchQuery (本物の D1 を使用したテスト)", () => {
 
     // 2 ページ目
     const page2 = (
-      await query.search(
-        {
+      await findAuditLogSearchResult(db, {
+        isStaff: true,
+        filter: {
           targetType: null,
           groupId: null,
           actorId: null,
           occurredFrom: null,
           occurredBefore: null,
         },
-        2,
-      )
+        page: 2,
+      })
     )._unsafeUnwrap();
 
     expect(page2.items.length).toBe(2);

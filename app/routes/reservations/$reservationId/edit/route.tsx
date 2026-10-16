@@ -24,12 +24,12 @@ import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationFormQuery } from "~/infra/reservation/reservation-form-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { toTokyoDateKey, tokyoMinutesOfDay } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
+import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import {
   reservationActionErrors,
   reservationErrorResponse,

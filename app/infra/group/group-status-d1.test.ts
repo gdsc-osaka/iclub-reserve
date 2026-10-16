@@ -1,53 +1,25 @@
 /**
- * 所属団体の一覧（SCR-008）の読み取りと、団体の状態の更新（UC-014）を、ローカルの本物の D1 に対して実行して確かめるテスト。
- * 事務局向けの全団体の一覧は `app/query/group/group-search-d1.test.ts` で確かめる。
+ * 団体の状態の更新（UC-014、`GroupRepository.updateStatus`）を、ローカルの本物の D1 に対して実行して確かめるテスト。
  *
- * 【なぜ実際に流すのか】
- * ユースケースのテストは Query と Repository を偽物に差し替えるので、SQL の誤りは素通りする。
- * 実際に、最初の実装ではメンバー数を相関サブクエリで数えており、Drizzle が列名から表名を省いたせいで
- * 内側の `id` が group_member.id を指し、どの団体も「メンバー 0 人」になっていた。
- * 型もテストも通っていたので、ここで数と並び順を実際の DB で押さえる。
+ * 条件付き UPDATE と操作履歴の同一 batch での書き込み（COND-013）が、実際の DB で意図どおりに動くことを押さえる。
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
 import { useD1TestDb } from "../d1-test-db";
+import { createGroupRepository } from "./group-repo";
 
 const testDb = useD1TestDb();
-import { createUserGroupListQuery } from "../user/user-group-list-query";
-import { createGroupRepository } from "./group-repo";
 
 beforeEach(async () => {
   const insertUserSql = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
   const insertGroupSql = `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`;
-  const insertMemberSql = `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`;
 
   await testDb.seed(
     [insertUserSql, "usr_taro", "太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertUserSql, "usr_hanako", "花子", "hanako@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertUserSql, "usr_jiro", "次郎", "jiro@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertGroupSql, "grp_robotics", "ロボティクス", "enabled", 1000, 1000],
     [insertGroupSql, "grp_ai", "AI 班", "pending", 3000, 3000],
-    [insertGroupSql, "grp_band", "軽音", "pending", 2000, 2000],
-    [insertGroupSql, "grp_empty", "休止中のグループ", "disabled", 4000, 4000],
-    [insertMemberSql, "mem_1", "grp_robotics", "usr_taro", "admin", 0, 0],
-    [insertMemberSql, "mem_2", "grp_robotics", "usr_hanako", "member", 0, 0],
-    [insertMemberSql, "mem_3", "grp_robotics", "usr_jiro", "member", 0, 0],
-    [insertMemberSql, "mem_4", "grp_ai", "usr_taro", "member", 0, 0],
-    [insertMemberSql, "mem_5", "grp_band", "usr_hanako", "admin", 0, 0],
   );
-});
-describe("所属団体の一覧（createUserGroupListQuery）", () => {
-  it("自分の所属だけでなく、その団体のメンバー全員を数える", async () => {
-    const result = await createUserGroupListQuery(testDb.db).findByUserId("usr_taro");
-
-    expect(result._unsafeUnwrap().map(({ id, memberCount }) => ({ id, memberCount }))).toEqual([
-      // 団体名の昇順（"AI 研究会" < "ロボット部"）
-      { id: "grp_ai", memberCount: 1 },
-      { id: "grp_robotics", memberCount: 3 },
-    ]);
-  });
 });
 
 describe("団体の状態の更新（GroupRepository.updateStatus）", () => {

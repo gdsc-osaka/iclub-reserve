@@ -11,36 +11,36 @@ import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createGroupRecentActivitiesQuery } from "~/infra/audit-log/group-recent-activities-query";
 import { createDb, type Database } from "~/infra/db";
-import { createUserInvitationsQuery } from "~/infra/group/user-invitations-query";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
-import { createGroupUnreadUpdatesQuery } from "~/infra/reservation/group-unread-updates-query";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
 import { formatMonthDay } from "~/lib/date";
 import { findGroupSearchList } from "~/query/group/group-search";
+import { findUserInvitations } from "~/query/group/user-invitations";
+import {
+  createGroupUnreadUpdatesQuery,
+  findGroupUnreadUpdates,
+} from "~/query/reservation/group-unread-updates";
 import { findStaffPendingReservations } from "~/query/reservation/staff-pending-reservations";
 import { findStaffTodaySchedule } from "~/query/reservation/staff-today-schedule";
 import { findStaffUnreadMessages } from "~/query/reservation/staff-unread-messages";
+import { createUserGroupListQuery, findUserGroupList } from "~/query/user/user-group-list";
 import { invitationActionErrors } from "~/routes/_shared/group-error.server";
 import { logQueryError } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { getGroupRecentActivitiesUseCase } from "~/usecases/audit-log/get-group-recent-activities";
 import { acceptInvitationUseCase } from "~/usecases/group/accept-invitation";
-import { listMyInvitationsUseCase } from "~/usecases/group/list-my-invitations";
 import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
-import { getGroupUnreadUpdatesUseCase } from "~/usecases/reservation/get-group-unread-updates";
 import { listUpcomingReservationsUseCase } from "~/usecases/reservation/list-upcoming-reservations";
 import { markAllReservationsReadUseCase } from "~/usecases/reservation/mark-all-reservations-read";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
-import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
 
 import type { Route } from "./+types/route";
 import { HomeIntent } from "./home-intent";
@@ -133,10 +133,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 
 /** 所属団体（承認待ちの団体の案内と、所属が無いときの案内、事務局の「自分の団体」に使う） */
 const loadMyGroups = async (db: Database, user: SessionUser) => {
-  const result = await listMyGroupsUseCase(
-    { userGroupListQuery: createUserGroupListQuery(db) },
-    { actorUserId: user.id },
-  );
+  const result = await findUserGroupList(db, { actorUserId: user.id });
   if (result.isErr()) {
     logQueryError({ where: "home.loader.groups", userId: user.id }, result.error);
   }
@@ -148,10 +145,7 @@ const loadMyGroups = async (db: Database, user: SessionUser) => {
 
 /** 自分宛ての招待（UC-022）。null は読めなかったことを表す */
 const loadInvitations = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await listMyInvitationsUseCase(
-    { userInvitationsQuery: createUserInvitationsQuery(db) },
-    { actorEmail: user.email, now },
-  );
+  const result = await findUserInvitations(db, { actorEmail: user.email, now });
   if (result.isErr()) {
     logQueryError({ where: "home.loader.invitations", userId: user.id }, result.error);
     return null;
@@ -161,10 +155,7 @@ const loadInvitations = async (db: Database, user: SessionUser, now: Date) => {
 
 /** 団体側の未読（UC-037 / COND-026 (2)）。null は読めなかったことを表す */
 const loadGroupUnread = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await getGroupUnreadUpdatesUseCase(
-    { groupUnreadUpdatesQuery: createGroupUnreadUpdatesQuery(db) },
-    { actorUserId: user.id, now },
-  );
+  const result = await findGroupUnreadUpdates(db, { actorUserId: user.id, now });
   if (result.isErr()) {
     logQueryError({ where: "home.loader.unread", userId: user.id }, result.error);
     return null;

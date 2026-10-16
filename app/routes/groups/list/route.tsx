@@ -8,10 +8,9 @@ import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { createDb } from "~/infra/db";
-import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { findUserGroupList } from "~/query/user/user-group-list";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
-import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
 
 import type { Route } from "./+types/route";
 
@@ -28,10 +27,7 @@ export async function loader({ context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
 
   const db = createDb(env.DB);
-  const groupsResult = await listMyGroupsUseCase(
-    { userGroupListQuery: createUserGroupListQuery(db) },
-    { actorUserId: user.id },
-  );
+  const groupsResult = await findUserGroupList(db, { actorUserId: user.id });
 
   if (groupsResult.isErr()) {
     throw queryErrorResponse({ where: "groups.list.loader", userId: user.id }, groupsResult.error);

@@ -21,18 +21,20 @@ import {
   auditLogActionLabel,
   auditLogTargetTypeLabel,
 } from "~/domain/audit-log";
-import { createAuditLogSearchQuery } from "~/infra/audit-log/audit-log-search-query";
 import { createDb } from "~/infra/db";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { formatDateTime } from "~/lib/date";
+import {
+  findAuditLogSearchResult,
+  type AuditLogSearchItem,
+  type AuditLogSearchResult,
+} from "~/query/audit-log/audit-log-search";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
-import { searchAuditLogsUseCase } from "~/usecases/audit-log/search-audit-logs";
 import {
   parseAuditLogSearchParams,
   toAuditLogSearchPath,
   type ParsedAuditLogSearchParams,
 } from "./query-params";
-import type { AuditLogSearchItem, AuditLogSearchResult } from "~/query/audit-log/audit-log-search";
 import type { Route } from "./+types/route";
 
 export function meta() {
@@ -43,7 +45,7 @@ export function meta() {
  * 事務局向け操作履歴一覧画面（SCR-018）のローダー。
  *
  * 事務局スタッフのみがアクセス可能。非スタッフには 403 を返す（COND-009・COND-012(1)）。
- * 事務局判定はルートで先に行わず、ユースケースに任せる（ADR-004 決定 9）。
+ * 事務局判定はルートで先に行わず、読み取りの関数に任せる（ADR-004 決定 9）。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
@@ -51,17 +53,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const params = parseAuditLogSearchParams(url.searchParams);
 
   const db = createDb(env.DB);
-  const result = await searchAuditLogsUseCase(
-    {
-      auditLogSearchQuery: createAuditLogSearchQuery(db),
-    },
-    {
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-      filter: params.filter,
-      page: params.page,
-    },
-  );
+  const result = await findAuditLogSearchResult(db, {
+    isStaff: user.is_staff,
+    filter: params.filter,
+    page: params.page,
+  });
 
   if (result.isErr()) {
     // 事務局でなければ 403、DB の失敗は 500 になる。どちらもログに残る
