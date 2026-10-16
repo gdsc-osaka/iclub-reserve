@@ -25,14 +25,11 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { membershipRoleLabel } from "~/domain/membership";
-import { reservationDetailPath } from "~/domain/reservation";
+import { GroupUnreadEventType, reservationDetailPath } from "~/domain/reservation";
 import { formatMonthDay, formatRelativeTime, formatTimeRange } from "~/lib/date";
 import { cn } from "~/lib/utils";
 import type { UserInvitationItem } from "~/query/group/user-invitations";
-import {
-  GroupUnreadEventType,
-  type GroupUnreadUpdateItem,
-} from "~/query/reservation/group-unread-updates";
+import type { GroupUnreadUpdateItem } from "~/query/reservation/group-unread-updates";
 import { toFormPathForFacility } from "~/routes/reservations/new/paths";
 import { HomeIntent, type HomeActionData } from "./home-intent";
 

@@ -23,6 +23,20 @@ export const UNREAD_ITEMS_LIMIT = 10;
 export const unreadEventsSince = (now: Date): Date => addDays(now, -UNREAD_LOOKBACK_DAYS);
 
 /**
+ * 団体側で未読として表示する出来事の種類（COND-026 (2)）。
+ */
+export const GroupUnreadEventType = {
+  Message: "message",
+  Approve: "approve",
+  Reject: "reject",
+  StaffCancel: "staff_cancel",
+  DirectCreate: "direct_create",
+  DirectChange: "direct_change",
+} as const;
+
+export type GroupUnreadEventType = (typeof GroupUnreadEventType)[keyof typeof GroupUnreadEventType];
+
+/**
  * 既読の記録エンティティ（INFO-012）。
  */
 export interface ReservationRead {

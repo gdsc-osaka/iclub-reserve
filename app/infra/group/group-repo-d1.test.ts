@@ -2,7 +2,7 @@
  * 団体の作成（UC-010）と団体名の変更（UC-013）で、操作履歴（COND-013）が業務データと同じ batch で
  * 書かれることを、ローカルの本物の D1 に対して実行して確かめるテスト。
  *
- * 団体の状態の更新（updateStatus）は `group-list-d1.test.ts` で確かめている。
+ * 団体の状態の更新（updateStatus）は `group-status-d1.test.ts` で確かめている。
  */
 import { beforeEach, describe, expect, it } from "vitest";
 

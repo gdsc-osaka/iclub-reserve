@@ -5,7 +5,6 @@ import type { AuditLogAction, AuditLogChanges, AuditLogDraft } from "~/domain/au
 import { InvitationStatus } from "~/domain/invitation";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { createStaffInvitationRepository } from "./staff-invitation-repo";
-import { createStaffManagementQuery } from "./staff-management-query";
 import { createStaffMemberRepository } from "./staff-member-repo";
 
 /*
@@ -36,7 +35,7 @@ const countAuditLogs = async (targetId: string): Promise<number> => {
   return row?.count ?? 0;
 };
 
-describe("Staff Repositories & Query (D1)", () => {
+describe("Staff Repositories (D1)", () => {
   it("招待の行と outbox のメールが入り、enqueuedMailIds が返る", async () => {
     // 招待者を登録
     await testDb.seed([
@@ -325,51 +324,6 @@ describe("Staff Repositories & Query (D1)", () => {
     expect(found?.expiresAt.getTime()).toBe(2000);
 
     expect((await repo.findPendingByEmail("gone@osaka-u.ac.jp"))._unsafeUnwrap()).toBeNull();
-  });
-
-  it("読み取りモデルの並び順と pending の絞り込み", async () => {
-    const insertUser = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
-    // 氏名の昇順、同名は id の昇順
-    await testDb.seed([insertUser, "usr_b", "B 事務局", "b@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_a2", "A 事務局", "a2@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_a1", "A 事務局", "a1@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_normal", "一般 太郎", "normal@osaka-u.ac.jp", 1, 0, 0, 0]); // 事務局でない
-
-    const insertInv = `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`;
-    // expires_at の昇順、同期限は id の昇順
-    await testDb.seed([insertInv, "inv_2", "two@osaka-u.ac.jp", "pending", 2000, 0, "usr_a1"]);
-    await testDb.seed([insertInv, "inv_1b", "one_b@osaka-u.ac.jp", "pending", 1000, 0, "usr_a1"]);
-    await testDb.seed([insertInv, "inv_1a", "one_a@osaka-u.ac.jp", "pending", 1000, 0, "usr_a1"]);
-    await testDb.seed([
-      insertInv,
-      "inv_canceled",
-      "canceled@osaka-u.ac.jp",
-      "canceled",
-      500,
-      0,
-      "usr_a1",
-    ]); // pending でない
-
-    const query = createStaffManagementQuery(testDb.db);
-    const result = await query.get();
-
-    expect(result.isOk()).toBe(true);
-    if (result.isOk()) {
-      const { members, pendingInvitations } = result.value;
-
-      // 事務局のみ、A 事務局(usr_a1) → A 事務局(usr_a2) → B 事務局(usr_b)
-      expect(members).toHaveLength(3);
-      expect(members[0].userId).toBe("usr_a1");
-      expect(members[0].name).toBe("A 事務局");
-      expect(members[1].userId).toBe("usr_a2");
-      expect(members[2].userId).toBe("usr_b");
-
-      // pending のみ、期限 1000(inv_1a) → 期限 1000(inv_1b) → 期限 2000(inv_2)
-      expect(pendingInvitations).toHaveLength(3);
-      expect(pendingInvitations[0].id).toBe("inv_1a");
-      expect(pendingInvitations[1].id).toBe("inv_1b");
-      expect(pendingInvitations[2].id).toBe("inv_2");
-    }
   });
 
   it("findById は招待が存在すれば返し、存在しなければ null を返す", async () => {

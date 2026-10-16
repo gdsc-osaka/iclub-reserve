@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useD1TestDb } from "../d1-test-db";
+
 import { InvitationStatus } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
-import { createUserInvitationsQuery } from "./user-invitations-query";
+import { useD1TestDb } from "~/infra/d1-test-db";
+import { findUserInvitations } from "./user-invitations";
 
 const testDb = useD1TestDb();
 
@@ -63,10 +64,8 @@ async function insertInvitation(
   ]);
 }
 
-describe("createUserInvitationsQuery (D1)", () => {
+describe("findUserInvitations", () => {
   it("指定メールアドレス宛ての、承諾待ちかつ期限内の招待のみを返す", async () => {
-    const query = createUserInvitationsQuery(testDb.db);
-
     // 1. 有効な招待（対象）
     await insertInvitation(
       "inv_valid_1",
@@ -127,7 +126,10 @@ describe("createUserInvitationsQuery (D1)", () => {
       new Date(NOW.getTime() + 86400000),
     );
 
-    const result = await query.findPendingInvitationsForEmail(TARGET_EMAIL, NOW);
+    const result = await findUserInvitations(testDb.db, {
+      actorEmail: TARGET_EMAIL,
+      now: NOW,
+    });
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
 
@@ -139,5 +141,23 @@ describe("createUserInvitationsQuery (D1)", () => {
     expect(result.value[1]?.id).toBe("inv_valid_2");
     expect(result.value[1]?.groupName).toBe("プログラミング同好会");
     expect(result.value[1]?.role).toBe(MembershipRole.Admin);
+  });
+
+  it("大文字と前後の空白を含むメールアドレスで呼んでも正規化されて見つかる", async () => {
+    await insertInvitation(
+      "inv_valid_1",
+      "grp_1",
+      TARGET_EMAIL,
+      MembershipRole.Member,
+      InvitationStatus.Pending,
+      new Date(NOW.getTime() + 86400000),
+    );
+
+    const result = await findUserInvitations(testDb.db, {
+      actorEmail: "  Target@EXAMPLE.com  ",
+      now: NOW,
+    });
+
+    expect(result._unsafeUnwrap().map((item) => item.id)).toEqual(["inv_valid_1"]);
   });
 });
