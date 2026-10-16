@@ -1,7 +1,8 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { HolidayErrorCode, type HolidayError, type HolidayRepository } from "~/domain/holiday";
+import { HolidayErrorCode, type HolidayError } from "~/domain/holiday";
+import { fakeHolidayRepository } from "~/testing/fakes/holiday";
 import { refreshHolidaysUseCase } from "./refresh-holidays";
 
 const sampleIcal = `BEGIN:VCALENDAR
@@ -22,7 +23,7 @@ describe("refreshHolidaysUseCase", () => {
   it("正常系: iCal を取得して読み解き、保存して件数を返す", async () => {
     const fetchHolidayIcal = vi.fn().mockReturnValue(okAsync(sampleIcal));
     const replaceAll = vi.fn().mockReturnValue(okAsync(undefined));
-    const holidayRepository: HolidayRepository = { replaceAll };
+    const holidayRepository = fakeHolidayRepository({ replaceAll });
 
     const result = await refreshHolidaysUseCase({
       fetchHolidayIcal,
@@ -45,7 +46,7 @@ describe("refreshHolidaysUseCase", () => {
     };
     const fetchHolidayIcal = vi.fn().mockReturnValue(errAsync(fetchError));
     const replaceAll = vi.fn();
-    const holidayRepository: HolidayRepository = { replaceAll };
+    const holidayRepository = fakeHolidayRepository({ replaceAll });
 
     const result = await refreshHolidaysUseCase({
       fetchHolidayIcal,
@@ -70,7 +71,7 @@ END:VCALENDAR`;
 
     const fetchHolidayIcal = vi.fn().mockReturnValue(okAsync(emptyIcal));
     const replaceAll = vi.fn();
-    const holidayRepository: HolidayRepository = { replaceAll };
+    const holidayRepository = fakeHolidayRepository({ replaceAll });
 
     const result = await refreshHolidaysUseCase({
       fetchHolidayIcal,
@@ -90,7 +91,7 @@ END:VCALENDAR`;
     };
     const fetchHolidayIcal = vi.fn().mockReturnValue(okAsync(sampleIcal));
     const replaceAll = vi.fn().mockReturnValue(errAsync(dbError));
-    const holidayRepository: HolidayRepository = { replaceAll };
+    const holidayRepository = fakeHolidayRepository({ replaceAll });
 
     const result = await refreshHolidaysUseCase({
       fetchHolidayIcal,

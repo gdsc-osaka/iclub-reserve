@@ -7,14 +7,13 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { InvitationStatus } from "~/domain/invitation";
 import { useD1TestDb } from "~/infra/d1-test-db";
+import { seedStaffInvitation, seedUser } from "~/infra/d1-test-seeds";
 import { QueryErrorCode } from "../error";
 import { findStaffManagement } from "./staff-management";
 
 const testDb = useD1TestDb();
-
-const insertUser = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
-const insertInv = `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`;
 
 describe("findStaffManagement", () => {
   it("事務局でない人には Forbidden を返す（COND-009）", async () => {
@@ -28,24 +27,43 @@ describe("findStaffManagement", () => {
 
   it("読み取りモデルの並び順と pending の絞り込み", async () => {
     // 氏名の昇順、同名は id の昇順
-    await testDb.seed([insertUser, "usr_b", "B 事務局", "b@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_a2", "A 事務局", "a2@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_a1", "A 事務局", "a1@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_normal", "一般 太郎", "normal@osaka-u.ac.jp", 1, 0, 0, 0]); // 事務局でない
-
     // expires_at の昇順、同期限は id の昇順
-    await testDb.seed([insertInv, "inv_2", "two@osaka-u.ac.jp", "pending", 2000, 0, "usr_a1"]);
-    await testDb.seed([insertInv, "inv_1b", "one_b@osaka-u.ac.jp", "pending", 1000, 0, "usr_a1"]);
-    await testDb.seed([insertInv, "inv_1a", "one_a@osaka-u.ac.jp", "pending", 1000, 0, "usr_a1"]);
-    await testDb.seed([
-      insertInv,
-      "inv_canceled",
-      "canceled@osaka-u.ac.jp",
-      "canceled",
-      3000,
-      0,
-      "usr_a1",
-    ]); // pending でない
+    await testDb.seed(
+      seedUser({ id: "usr_b", name: "B 事務局", email: "b@osaka-u.ac.jp", is_staff: true }),
+      seedUser({ id: "usr_a2", name: "A 事務局", email: "a2@osaka-u.ac.jp", is_staff: true }),
+      seedUser({ id: "usr_a1", name: "A 事務局", email: "a1@osaka-u.ac.jp", is_staff: true }),
+      seedUser({
+        id: "usr_normal",
+        name: "一般 太郎",
+        email: "normal@osaka-u.ac.jp",
+        is_staff: false,
+      }), // 事務局でない
+      seedStaffInvitation({
+        id: "inv_2",
+        email: "two@osaka-u.ac.jp",
+        expiresAt: new Date(2000),
+        inviterId: "usr_a1",
+      }),
+      seedStaffInvitation({
+        id: "inv_1b",
+        email: "one_b@osaka-u.ac.jp",
+        expiresAt: new Date(1000),
+        inviterId: "usr_a1",
+      }),
+      seedStaffInvitation({
+        id: "inv_1a",
+        email: "one_a@osaka-u.ac.jp",
+        expiresAt: new Date(1000),
+        inviterId: "usr_a1",
+      }),
+      seedStaffInvitation({
+        id: "inv_canceled",
+        email: "canceled@osaka-u.ac.jp",
+        status: InvitationStatus.Canceled,
+        expiresAt: new Date(3000),
+        inviterId: "usr_a1",
+      }), // pending でない
+    );
 
     const result = await findStaffManagement(testDb.db, {
       isStaff: true,
@@ -73,36 +91,28 @@ describe("findStaffManagement", () => {
 
   it("期限を過ぎた招待は承諾待ちの一覧に出さない（STATE-003・SCR-007 と同じ扱い）", async () => {
     const now = new Date("2026-10-09T12:00:00+09:00");
-    await testDb.seed([insertUser, "usr_staff", "スタッフ", "staff@osaka-u.ac.jp", 1, 0, 0, 1]);
-
-    // 期限ちょうどは、もう承諾できないので出さない
-    await testDb.seed([
-      insertInv,
-      "sinv_expired_now",
-      "a@osaka-u.ac.jp",
-      "pending",
-      now.getTime(),
-      0,
-      "usr_staff",
-    ]);
-    await testDb.seed([
-      insertInv,
-      "sinv_expired",
-      "b@osaka-u.ac.jp",
-      "pending",
-      new Date("2026-10-09T11:59:59+09:00").getTime(),
-      0,
-      "usr_staff",
-    ]);
-    await testDb.seed([
-      insertInv,
-      "sinv_valid",
-      "c@osaka-u.ac.jp",
-      "pending",
-      new Date("2026-10-09T12:00:01+09:00").getTime(),
-      0,
-      "usr_staff",
-    ]);
+    await testDb.seed(
+      seedUser({ id: "usr_staff", name: "スタッフ", email: "staff@osaka-u.ac.jp", is_staff: true }),
+      // 期限ちょうどは、もう承諾できないので出さない
+      seedStaffInvitation({
+        id: "sinv_expired_now",
+        email: "a@osaka-u.ac.jp",
+        expiresAt: now,
+        inviterId: "usr_staff",
+      }),
+      seedStaffInvitation({
+        id: "sinv_expired",
+        email: "b@osaka-u.ac.jp",
+        expiresAt: new Date("2026-10-09T11:59:59+09:00"),
+        inviterId: "usr_staff",
+      }),
+      seedStaffInvitation({
+        id: "sinv_valid",
+        email: "c@osaka-u.ac.jp",
+        expiresAt: new Date("2026-10-09T12:00:01+09:00"),
+        inviterId: "usr_staff",
+      }),
+    );
 
     const result = await findStaffManagement(testDb.db, {
       isStaff: true,

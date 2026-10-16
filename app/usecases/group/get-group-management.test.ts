@@ -1,22 +1,22 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import type { Group, GroupRepository } from "~/domain/group";
+import type { Group } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
-import type { StoredMembership, MembershipRepository } from "~/domain/membership";
+import type { StoredMembership } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
-import type {
-  GroupAuditLogItem,
-  GroupAuditLogList,
-  GroupAuditLogListQuery,
-} from "~/query/audit-log/group-audit-log-list";
+import type { GroupAuditLogItem, GroupAuditLogList } from "~/query/audit-log/group-audit-log-list";
 import { QueryErrorCode } from "~/query/error";
-import type {
-  GroupInvitationList,
-  GroupInvitationListQuery,
-} from "~/query/group/group-invitation-list";
-import type { GroupMemberList, GroupMemberListQuery } from "~/query/group/group-member-list";
+import type { GroupInvitationList } from "~/query/group/group-invitation-list";
+import type { GroupMemberList } from "~/query/group/group-member-list";
+import { fakeGroupAuditLogListQuery } from "~/testing/fakes/audit-log";
+import {
+  fakeGroupInvitationListQuery,
+  fakeGroupMemberListQuery,
+  fakeGroupRepository,
+} from "~/testing/fakes/group";
+import { fakeMembershipRepository } from "~/testing/fakes/membership";
 import { getGroupManagementUseCase } from "./get-group-management";
 
 const testGroup: Group = {
@@ -69,108 +69,66 @@ const testInvitations: GroupInvitationList = [
 
 /** D1 を使わないダミーのグループリポジトリ */
 const createFakeGroupRepository = (groups: readonly Group[]) => {
-  let findByIdCallCount = 0;
+  const findById = vi.fn((id: string) => {
+    const found = groups.find((group) => group.id === id);
 
-  const repository: GroupRepository = {
-    findById: (id) => {
-      findByIdCallCount += 1;
-      const found = groups.find((group) => group.id === id);
+    if (found === undefined) {
+      return errAsync({
+        code: GroupErrorCode.NotFound,
+        message: "Group not found",
+      });
+    }
 
-      if (found === undefined) {
-        return errAsync({
-          code: GroupErrorCode.NotFound,
-          message: "Group not found",
-        });
-      }
+    return okAsync(found);
+  });
 
-      return okAsync(found);
-    },
-    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-    updateName: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateStatus: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    create: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは create は使わない" }),
-  };
+  const repository = fakeGroupRepository({ findById });
 
-  return { repository, findByIdCallCount: () => findByIdCallCount };
+  return { repository, findById };
 };
 
 /** D1 を使わないダミーのメンバーシップリポジトリ */
 const createFakeMembershipRepository = (memberships: readonly StoredMembership[]) => {
-  let callCount = 0;
+  const findByGroupAndUser = vi.fn((groupId: string, userId: string) => {
+    const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
 
-  const repository: MembershipRepository = {
-    findByGroupAndUser: (groupId, userId) => {
-      callCount += 1;
-      const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
+    return okAsync(found ?? null);
+  });
 
-      return okAsync(found ?? null);
-    },
-    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateRole: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    remove: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  const repository = fakeMembershipRepository({ findByGroupAndUser });
 
-  return { repository, callCount: () => callCount };
+  return { repository, findByGroupAndUser };
 };
 
 /** D1 を使わないダミーのメンバー一覧 Query */
 const createFakeGroupMemberListQuery = (members: GroupMemberList) => {
-  let callCount = 0;
+  const findByGroupId = vi.fn(() => okAsync(members));
 
-  const query: GroupMemberListQuery = {
-    findByGroupId: () => {
-      callCount += 1;
-      return okAsync(members);
-    },
-  };
+  const query = fakeGroupMemberListQuery({ findByGroupId });
 
-  return { query, callCount: () => callCount };
+  return { query, findByGroupId };
 };
 
 /** D1 を使わないダミーの招待一覧 Query */
 const createFakeGroupInvitationListQuery = (invitations: GroupInvitationList) => {
-  let callCount = 0;
+  const findByGroupId = vi.fn(() => okAsync(invitations));
 
-  const query: GroupInvitationListQuery = {
-    findByGroupId: () => {
-      callCount += 1;
-      return okAsync(invitations);
-    },
-  };
+  const query = fakeGroupInvitationListQuery({ findByGroupId });
 
-  return { query, callCount: () => callCount };
+  return { query, findByGroupId };
 };
 
 /** D1 を使わないダミーの操作履歴一覧 Query */
 const createFakeGroupAuditLogListQuery = (
   auditLogs: GroupAuditLogList = { items: [], hasNextPage: false, userNames: {} },
 ) => {
-  let callCount = 0;
-  let lastGroupId: string | null = null;
-  let lastPage: number | null = null;
+  const findByGroupId = vi.fn((_groupId: string, _page: number) => okAsync(auditLogs));
 
-  const query: GroupAuditLogListQuery = {
-    findByGroupId: (groupId, page) => {
-      callCount += 1;
-      lastGroupId = groupId;
-      lastPage = page;
-      return okAsync(auditLogs);
-    },
-  };
+  const query = fakeGroupAuditLogListQuery({ findByGroupId });
 
   return {
     query,
-    callCount: () => callCount,
-    lastGroupId: () => lastGroupId,
-    lastPage: () => lastPage,
+    findByGroupId,
   };
 };
 
@@ -210,7 +168,7 @@ describe("getGroupManagementUseCase", () => {
       expect(view.members[0].email).toBe("admin@example.com");
       expect(view.invitations).toEqual(testInvitations);
       expect(view.auditLogs.items).toEqual([]);
-      expect(auditLogListQuery.callCount()).toBe(1);
+      expect(auditLogListQuery.findByGroupId).toHaveBeenCalledTimes(1);
     }
   });
 
@@ -284,8 +242,8 @@ describe("getGroupManagementUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(invitationListQuery.callCount()).toBe(0);
-    expect(auditLogListQuery.callCount()).toBe(0);
+    expect(invitationListQuery.findByGroupId).not.toHaveBeenCalled();
+    expect(auditLogListQuery.findByGroupId).not.toHaveBeenCalled();
   });
 
   it("事務局（isStaff: true）は所属していなくても canManage: true で取得でき、所属を一度も問い合わせない（偽 Repository の呼び出し回数が 0）", async () => {
@@ -316,9 +274,9 @@ describe("getGroupManagementUseCase", () => {
     const view = result._unsafeUnwrap();
     expect(view.canManage).toBe(true);
     // 事務局は所属を持たないので membershipRepository を問い合わせてはならない
-    expect(memberships.callCount()).toBe(0);
-    expect(groups.findByIdCallCount()).toBe(1);
-    expect(auditLogListQuery.callCount()).toBe(1);
+    expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
+    expect(groups.findById).toHaveBeenCalledTimes(1);
+    expect(auditLogListQuery.findByGroupId).toHaveBeenCalledTimes(1);
   });
 
   it("所属していない人は NotVisible になり、団体を取りに行かない（呼び出し回数が 0）", async () => {
@@ -348,10 +306,10 @@ describe("getGroupManagementUseCase", () => {
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotVisible);
     // 存在の有無が問い合わせ回数に現れないよう、団体リポジトリは呼ばれない
-    expect(groups.findByIdCallCount()).toBe(0);
-    expect(memberListQuery.callCount()).toBe(0);
-    expect(invitationListQuery.callCount()).toBe(0);
-    expect(auditLogListQuery.callCount()).toBe(0);
+    expect(groups.findById).not.toHaveBeenCalled();
+    expect(memberListQuery.findByGroupId).not.toHaveBeenCalled();
+    expect(invitationListQuery.findByGroupId).not.toHaveBeenCalled();
+    expect(auditLogListQuery.findByGroupId).not.toHaveBeenCalled();
   });
 
   it("所属していない団体と存在しない団体で、返るエラーがメッセージまで含めて完全に一致する", async () => {
@@ -388,28 +346,20 @@ describe("getGroupManagementUseCase", () => {
     });
 
     expect(notMember._unsafeUnwrapErr()).toEqual(notExists._unsafeUnwrapErr());
-    expect(groups.findByIdCallCount()).toBe(0);
-    expect(auditLogListQuery.callCount()).toBe(0);
+    expect(groups.findById).not.toHaveBeenCalled();
+    expect(auditLogListQuery.findByGroupId).not.toHaveBeenCalled();
   });
 
   it("所属の取得に失敗したら DATABASE_ERROR（GROUP_NOT_FOUND に潰れないこと）", async () => {
     const groups = createFakeGroupRepository([testGroup]);
-    const failingMembershipRepo: MembershipRepository = {
+    const failingMembershipRepo = fakeMembershipRepository({
       findByGroupAndUser: () =>
         errAsync({
           code: MembershipErrorCode.DatabaseError,
           message: "メンバーシップの取得に失敗しました。",
           cause: new Error("DB error"),
         }),
-      // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-      findByGroupAndEmail: () => okAsync(null),
-      countAdmins: () =>
-        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-      updateRole: () =>
-        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-      remove: () =>
-        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    };
+    });
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
     const auditLogListQuery = createFakeGroupAuditLogListQuery();
@@ -433,19 +383,19 @@ describe("getGroupManagementUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.DatabaseError);
-    expect(groups.findByIdCallCount()).toBe(0);
+    expect(groups.findById).not.toHaveBeenCalled();
   });
 
   it("メンバー一覧の取得に失敗したら DATABASE_ERROR", async () => {
     const groups = createFakeGroupRepository([testGroup]);
     const memberships = createFakeMembershipRepository([adminMembership]);
-    const failingMemberListQuery: GroupMemberListQuery = {
+    const failingMemberListQuery = fakeGroupMemberListQuery({
       findByGroupId: () =>
         errAsync({
           code: QueryErrorCode.DatabaseError,
           message: "メンバー一覧の取得に失敗しました。",
         }),
-    };
+    });
     const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
     const auditLogListQuery = createFakeGroupAuditLogListQuery();
 
@@ -556,11 +506,11 @@ describe("getGroupManagementUseCase", () => {
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotFound);
-      expect(memberships.callCount()).toBe(0);
-      expect(groups.findByIdCallCount()).toBe(0);
-      expect(memberListQuery.callCount()).toBe(0);
-      expect(invitationListQuery.callCount()).toBe(0);
-      expect(auditLogListQuery.callCount()).toBe(0);
+      expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(groups.findById).not.toHaveBeenCalled();
+      expect(memberListQuery.findByGroupId).not.toHaveBeenCalled();
+      expect(invitationListQuery.findByGroupId).not.toHaveBeenCalled();
+      expect(auditLogListQuery.findByGroupId).not.toHaveBeenCalled();
     },
   );
 
@@ -682,13 +632,13 @@ describe("getGroupManagementUseCase", () => {
       const memberships = createFakeMembershipRepository([adminMembership]);
       const memberListQuery = createFakeGroupMemberListQuery(testMembers);
       const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
-      const failingAuditLogQuery: GroupAuditLogListQuery = {
+      const failingAuditLogQuery = fakeGroupAuditLogListQuery({
         findByGroupId: () =>
           errAsync({
             code: QueryErrorCode.DatabaseError,
             message: "操作履歴の取得に失敗しました。",
           }),
-      };
+      });
 
       const result = await getGroupManagementUseCase(
         {
@@ -736,8 +686,8 @@ describe("getGroupManagementUseCase", () => {
       );
 
       expect(result.isOk()).toBe(true);
-      expect(auditLogListQuery.lastPage()).toBe(3);
-      expect(auditLogListQuery.lastGroupId()).toBe(testGroup.id);
+      expect(auditLogListQuery.findByGroupId.mock.calls[0]?.[1]).toBe(3);
+      expect(auditLogListQuery.findByGroupId.mock.calls[0]?.[0]).toBe(testGroup.id);
       const view = result._unsafeUnwrap();
       if (view.canManage) {
         expect(view.auditLogs.page).toBe(3);

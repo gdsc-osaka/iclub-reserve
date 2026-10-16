@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "~/infra/d1-test-db";
+import { seedFacility, seedGroup, seedReservation, seedUser } from "~/infra/d1-test-seeds";
 import { QueryErrorCode } from "../error";
 import { findStaffTodaySchedule } from "./staff-today-schedule";
 
@@ -20,42 +21,11 @@ const USER_APPLICANT = { id: "usr_applicant", name: "申請者", email: "applica
 const NOW = new Date("2026-10-15T12:00:00+09:00");
 
 beforeEach(async () => {
-  await testDb.seed([
-    `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-    USER_APPLICANT.id,
-    USER_APPLICANT.name,
-    USER_APPLICANT.email,
-    1,
-    0,
-    0,
-    0,
-  ]);
-
   await testDb.seed(
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_test",
-      "テスト団体",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_active_1",
-      "アクティブ施設 1",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_inactive",
-      "無効な施設",
-      0,
-      0,
-      0,
-    ],
+    seedUser({ id: USER_APPLICANT.id, name: USER_APPLICANT.name, email: USER_APPLICANT.email }),
+    seedGroup({ id: "grp_test", name: "テスト団体" }),
+    seedFacility({ id: "fac_active_1", name: "アクティブ施設 1", isActive: true }),
+    seedFacility({ id: "fac_inactive", name: "無効な施設", isActive: false }),
   );
 });
 
@@ -66,19 +36,18 @@ async function insertReservation(
   endAt: Date,
   status: ReservationStatus = ReservationStatus.Approved,
 ) {
-  await testDb.seed([
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    id,
-    "grp_test",
-    facilityId,
-    startAt.getTime(),
-    endAt.getTime(),
-    2,
-    status,
-    USER_APPLICANT.id,
-    0,
-    0,
-  ]);
+  await testDb.seed(
+    seedReservation({
+      id,
+      groupId: "grp_test",
+      facilityId,
+      startAt,
+      endAt,
+      headCount: 2,
+      status,
+      createdBy: USER_APPLICANT.id,
+    }),
+  );
 }
 
 describe("findStaffTodaySchedule", () => {

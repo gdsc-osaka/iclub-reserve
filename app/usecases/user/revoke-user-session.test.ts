@@ -7,6 +7,7 @@ import {
   type UserError,
   type UserSessionRepository,
 } from "~/domain/user";
+import { fakeSessionRevoker, fakeUserSessionRepository } from "~/testing/fakes/user";
 import { revokeOtherSessionsUseCase, revokeSessionUseCase } from "./revoke-user-session";
 
 const userId = "usr_user_1";
@@ -20,14 +21,17 @@ const dbError: UserError = {
 /** 引いたときに返すトークンを決めた偽物の Repository を作る */
 const repositoryReturning = (
   result: ReturnType<UserSessionRepository["findOwnSessionToken"]>,
-): UserSessionRepository => ({
-  findOwnSessionToken: vi.fn(() => result),
-});
+): UserSessionRepository =>
+  fakeUserSessionRepository({
+    findOwnSessionToken: vi.fn(() => result),
+  });
 
-const createRevoker = (): SessionRevoker => ({
-  revoke: vi.fn(() => okAsync(undefined)),
-  revokeOthers: vi.fn(() => okAsync(undefined)),
-});
+const createRevoker = (overrides: Partial<SessionRevoker> = {}): SessionRevoker =>
+  fakeSessionRevoker({
+    revoke: vi.fn(() => okAsync(undefined)),
+    revokeOthers: vi.fn(() => okAsync(undefined)),
+    ...overrides,
+  });
 
 describe("revokeSessionUseCase", () => {
   it("ほかの端末なら、そのセッションのトークンで終わらせる", async () => {

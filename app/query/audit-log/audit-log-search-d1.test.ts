@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
+import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "~/infra/d1-test-db";
+import {
+  seedAuditLog,
+  seedFacility,
+  seedGroup,
+  seedReservation,
+  seedUser,
+} from "~/infra/d1-test-seeds";
 import { QueryErrorCode } from "../error";
 import { findAuditLogSearchResult } from "./audit-log-search";
 
@@ -14,91 +22,44 @@ const testDb = useD1TestDb();
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_staff",
-      "事務局スタッフ",
-      "staff@osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      1,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_student_1",
-      "阪大太郎",
-      "taro@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_student_2",
-      "阪大花子",
-      "hanako@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_never_acted",
-      "未操作ユーザー",
-      "no-action@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_room_a",
-      "ミーティングルームA",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_room_b",
-      "3Dプリンター室",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_alpha",
-      "アルファ部",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_beta",
-      "ベータ研究会",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      "res_1",
-      "grp_alpha",
-      "fac_room_a",
-      1700000000000,
-      1700003600000,
-      4,
-      "approved",
-      "usr_student_1",
-      0,
-      0,
-    ],
+    seedUser({
+      id: "usr_staff",
+      name: "事務局スタッフ",
+      email: "staff@osaka-u.ac.jp",
+      is_staff: true,
+    }),
+    seedUser({
+      id: "usr_student_1",
+      name: "阪大太郎",
+      email: "taro@ecs.osaka-u.ac.jp",
+      is_staff: false,
+    }),
+    seedUser({
+      id: "usr_student_2",
+      name: "阪大花子",
+      email: "hanako@ecs.osaka-u.ac.jp",
+      is_staff: false,
+    }),
+    seedUser({
+      id: "usr_never_acted",
+      name: "未操作ユーザー",
+      email: "no-action@ecs.osaka-u.ac.jp",
+      is_staff: false,
+    }),
+    seedFacility({ id: "fac_room_a", name: "ミーティングルームA" }),
+    seedFacility({ id: "fac_room_b", name: "3Dプリンター室" }),
+    seedGroup({ id: "grp_alpha", name: "アルファ部" }),
+    seedGroup({ id: "grp_beta", name: "ベータ研究会" }),
+    seedReservation({
+      id: "res_1",
+      groupId: "grp_alpha",
+      facilityId: "fac_room_a",
+      startAt: new Date(1700000000000),
+      endAt: new Date(1700003600000),
+      headCount: 4,
+      status: ReservationStatus.Approved,
+      createdBy: "usr_student_1",
+    }),
   );
 });
 
@@ -121,38 +82,35 @@ describe("findAuditLogSearchResult", () => {
 
   it("予約・施設・団体の情報が LEFT JOIN され、参照先が消えた記録も落ちずに取得できる", async () => {
     const db = testDb.db;
-    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 予約の記録（正常に施設・団体が結合される）
-    await testDb.seed([
-      insertLogSql,
-      "log_res",
-      10_000,
-      "usr_student_1",
-      0,
-      AuditLogAction.ReservationApply,
-      AuditLogTargetType.Reservation,
-      "res_1",
-      "grp_alpha",
-      JSON.stringify({
-        head_count: { before: null, after: 4 },
-        user_id: { before: null, after: "usr_student_1" },
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_res",
+        occurredAt: new Date(10_000),
+        actorId: "usr_student_1",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_alpha",
+        changes: {
+          head_count: { before: null, after: 4 },
+          user_id: { before: null, after: "usr_student_1" },
+        },
       }),
-    ]);
-
-    // 参照先（予約や団体やユーザー）が存在しない記録（消えたレコード）
-    await testDb.seed([
-      insertLogSql,
-      "log_ghost",
-      20_000,
-      "usr_ghost_id", // user テーブルに存在しない
-      0,
-      AuditLogAction.ReservationCancel,
-      AuditLogTargetType.Reservation,
-      "res_deleted_id",
-      "grp_deleted_id",
-      JSON.stringify({}),
-    ]);
+      // 参照先（予約や団体やユーザー）が存在しない記録（消えたレコード）
+      seedAuditLog({
+        id: "log_ghost",
+        occurredAt: new Date(20_000),
+        actorId: "usr_ghost_id", // user テーブルに存在しない
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationCancel,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_deleted_id",
+        groupId: "grp_deleted_id",
+      }),
+    );
 
     const result = (
       await findAuditLogSearchResult(db, {
@@ -190,23 +148,23 @@ describe("findAuditLogSearchResult", () => {
 
   it("changes に現れる user_id と facility_id の名称が解決される", async () => {
     const db = testDb.db;
-    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    await testDb.seed([
-      insertLogSql,
-      "log_changes",
-      10_000,
-      "usr_staff",
-      1,
-      AuditLogAction.FacilityUpdate,
-      AuditLogTargetType.Facility,
-      "fac_room_b",
-      null,
-      JSON.stringify({
-        user_id: { before: "usr_student_1", after: "usr_student_2" },
-        facility_id: { before: "fac_room_a", after: "fac_room_b" },
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_changes",
+        occurredAt: new Date(10_000),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.FacilityUpdate,
+        targetType: AuditLogTargetType.Facility,
+        targetId: "fac_room_b",
+        groupId: null,
+        changes: {
+          user_id: { before: "usr_student_1", after: "usr_student_2" },
+          facility_id: { before: "fac_room_a", after: "fac_room_b" },
+        },
       }),
-    ]);
+    );
 
     const result = (
       await findAuditLogSearchResult(db, {
@@ -237,33 +195,29 @@ describe("findAuditLogSearchResult", () => {
 
   it("操作者の選択肢（actors）には記録に一度でも現れた人だけが名前昇順で含まれる", async () => {
     const db = testDb.db;
-    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
-
     // usr_student_2 と usr_staff だけが記録に現れる（usr_never_acted は現れない）
-    await testDb.seed([
-      insertLogSql,
-      "log_1",
-      10_000,
-      "usr_student_2",
-      0,
-      AuditLogAction.GroupUpdate,
-      AuditLogTargetType.Group,
-      "grp_alpha",
-      "grp_alpha",
-      "{}",
-    ]);
-    await testDb.seed([
-      insertLogSql,
-      "log_2",
-      20_000,
-      "usr_staff",
-      1,
-      AuditLogAction.GroupEnable,
-      AuditLogTargetType.Group,
-      "grp_alpha",
-      "grp_alpha",
-      "{}",
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_1",
+        occurredAt: new Date(10_000),
+        actorId: "usr_student_2",
+        actedAsStaff: false,
+        action: AuditLogAction.GroupUpdate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_alpha",
+        groupId: "grp_alpha",
+      }),
+      seedAuditLog({
+        id: "log_2",
+        occurredAt: new Date(20_000),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.GroupEnable,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_alpha",
+        groupId: "grp_alpha",
+      }),
+    );
 
     const result = (
       await findAuditLogSearchResult(db, {
@@ -287,44 +241,39 @@ describe("findAuditLogSearchResult", () => {
 
   it("各絞り込み（種類・団体・操作者・期間の境界）が正しく機能する", async () => {
     const db = testDb.db;
-    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    await testDb.seed([
-      insertLogSql,
-      "log_1",
-      1000,
-      "usr_student_1",
-      0,
-      AuditLogAction.ReservationApply,
-      AuditLogTargetType.Reservation,
-      "res_1",
-      "grp_alpha",
-      "{}",
-    ]);
-    await testDb.seed([
-      insertLogSql,
-      "log_2",
-      2000,
-      "usr_staff",
-      1,
-      AuditLogAction.FacilityUpdate,
-      AuditLogTargetType.Facility,
-      "fac_room_a",
-      null,
-      "{}",
-    ]);
-    await testDb.seed([
-      insertLogSql,
-      "log_3",
-      3000,
-      "usr_student_2",
-      0,
-      AuditLogAction.GroupUpdate,
-      AuditLogTargetType.Group,
-      "grp_beta",
-      "grp_beta",
-      "{}",
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_1",
+        occurredAt: new Date(1000),
+        actorId: "usr_student_1",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_alpha",
+      }),
+      seedAuditLog({
+        id: "log_2",
+        occurredAt: new Date(2000),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.FacilityUpdate,
+        targetType: AuditLogTargetType.Facility,
+        targetId: "fac_room_a",
+        groupId: null,
+      }),
+      seedAuditLog({
+        id: "log_3",
+        occurredAt: new Date(3000),
+        actorId: "usr_student_2",
+        actedAsStaff: false,
+        action: AuditLogAction.GroupUpdate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_beta",
+        groupId: "grp_beta",
+      }),
+    );
 
     // 1. 種類で絞り込み
     const resByType = (
@@ -393,46 +342,40 @@ describe("findAuditLogSearchResult", () => {
 
   it("並び順は occurred_at の降順、同時刻は id の降順になる", async () => {
     const db = testDb.db;
-    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
-    // 同時刻 1000 に 2 件投入
-    await testDb.seed([
-      insertLogSql,
-      "log_a",
-      1000,
-      "usr_staff",
-      1,
-      AuditLogAction.GroupCreate,
-      AuditLogTargetType.Group,
-      "grp_alpha",
-      "grp_alpha",
-      "{}",
-    ]);
-    await testDb.seed([
-      insertLogSql,
-      "log_b",
-      1000,
-      "usr_staff",
-      1,
-      AuditLogAction.GroupCreate,
-      AuditLogTargetType.Group,
-      "grp_alpha",
-      "grp_alpha",
-      "{}",
-    ]);
-    // 時刻 2000 に 1 件投入
-    await testDb.seed([
-      insertLogSql,
-      "log_c",
-      2000,
-      "usr_staff",
-      1,
-      AuditLogAction.GroupCreate,
-      AuditLogTargetType.Group,
-      "grp_alpha",
-      "grp_alpha",
-      "{}",
-    ]);
+    // 同時刻 1000 に 2 件投入、時刻 2000 に 1 件投入
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_a",
+        occurredAt: new Date(1000),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.GroupCreate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_alpha",
+        groupId: "grp_alpha",
+      }),
+      seedAuditLog({
+        id: "log_b",
+        occurredAt: new Date(1000),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.GroupCreate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_alpha",
+        groupId: "grp_alpha",
+      }),
+      seedAuditLog({
+        id: "log_c",
+        occurredAt: new Date(2000),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.GroupCreate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_alpha",
+        groupId: "grp_alpha",
+      }),
+    );
 
     const result = (
       await findAuditLogSearchResult(db, {
@@ -454,23 +397,22 @@ describe("findAuditLogSearchResult", () => {
 
   it("51 件目で hasNextPage が true になり、2 ページ目が正しく取得できる", async () => {
     const db = testDb.db;
-    const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
 
     // 52 件のレコードを投入（1 ページあたり 50 件）
     for (let i = 1; i <= 52; i++) {
       const padded = String(i).padStart(3, "0");
-      await testDb.seed([
-        insertLogSql,
-        `log_${padded}`,
-        i * 100,
-        "usr_staff",
-        1,
-        AuditLogAction.GroupCreate,
-        AuditLogTargetType.Group,
-        "grp_alpha",
-        "grp_alpha",
-        "{}",
-      ]);
+      await testDb.seed(
+        seedAuditLog({
+          id: `log_${padded}`,
+          occurredAt: new Date(i * 100),
+          actorId: "usr_staff",
+          actedAsStaff: true,
+          action: AuditLogAction.GroupCreate,
+          targetType: AuditLogTargetType.Group,
+          targetId: "grp_alpha",
+          groupId: "grp_alpha",
+        }),
+      );
     }
 
     // 1 ページ目

@@ -2,27 +2,19 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
-import {
-  MembershipErrorCode,
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
+import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
 import { ReservationErrorCode, ReservationStatus } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
-import type {
-  ReservationAuditLogList,
-  ReservationAuditLogListQuery,
-} from "~/query/audit-log/reservation-audit-log-list";
+import type { ReservationAuditLogList } from "~/query/audit-log/reservation-audit-log-list";
 import { QueryErrorCode } from "~/query/error";
-import type {
-  ReservationDetailQuery,
-  ReservationDetailRow,
-} from "~/query/reservation/reservation-detail";
-import type {
-  ReservationMessageListQuery,
-  ReservationMessageRow,
-} from "~/query/reservation/reservation-message-list";
+import type { ReservationDetailRow } from "~/query/reservation/reservation-detail";
+import type { ReservationMessageRow } from "~/query/reservation/reservation-message-list";
+import {
+  fakeMembershipRepository,
+  fakeReservationAuditLogListQuery,
+  fakeReservationDetailQuery,
+  fakeReservationMessageListQuery,
+} from "~/testing/fakes";
 import { getReservationUseCase } from "./get-reservation";
 
 const defaultRow: ReservationDetailRow = {
@@ -109,28 +101,21 @@ const createDeps = (
     );
   });
 
-  const reservationDetailQuery: ReservationDetailQuery = {
+  const reservationDetailQuery = fakeReservationDetailQuery({
     findByReservationId,
-  };
+  });
 
-  const reservationMessageListQuery: ReservationMessageListQuery = {
+  const reservationMessageListQuery = fakeReservationMessageListQuery({
     listByReservationId,
-  };
+  });
 
-  const reservationAuditLogListQuery: ReservationAuditLogListQuery = {
+  const reservationAuditLogListQuery = fakeReservationAuditLogListQuery({
     findByReservationId: findAuditLogsByReservationId,
-  };
+  });
 
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser,
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateRole: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    remove: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
   return {
     deps: {

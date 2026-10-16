@@ -24,6 +24,7 @@ import {
   type Reservation,
 } from "~/domain/reservation";
 import { useD1TestDb } from "../d1-test-db";
+import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createReservationRepository } from "./reservation-repo";
 
 const testDb = useD1TestDb();
@@ -49,31 +50,13 @@ const dummyAuditLog = (overrides?: Partial<AuditLogDraft>): AuditLogDraft => ({
 /** 2026-09-25（日本時間）の指定した時刻 */
 const at = (time: string) => new Date(`2026-09-25T${time}:00+09:00`);
 
-const insertFacilitySql = `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`;
-
 /** どのテストでも使う、予約者・団体・施設を入れる */
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_taro",
-      "太郎",
-      "taro@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_robotics",
-      "ロボット部",
-      "enabled",
-      0,
-      0,
-    ],
-    [insertFacilitySql, "fac_a", "会議室 A", 1, 0, 0],
-    [insertFacilitySql, "fac_b", "会議室 B", 1, 0, 0],
+    seedUser({ id: "usr_taro", name: "太郎", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedGroup({ id: "grp_robotics", name: "ロボット部" }),
+    seedFacility({ id: "fac_a", name: "会議室 A" }),
+    seedFacility({ id: "fac_b", name: "会議室 B" }),
   );
 });
 
@@ -88,19 +71,19 @@ interface ReservationRow {
 }
 
 const insertReservation = (row: ReservationRow) =>
-  testDb.seed([
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    row.id,
-    "grp_robotics",
-    row.facilityId ?? "fac_a",
-    row.startAt.getTime(),
-    row.endAt.getTime(),
-    row.headCount ?? 4,
-    row.status,
-    "usr_taro",
-    0,
-    (row.updatedAt ?? READ_AT).getTime(),
-  ]);
+  testDb.seed(
+    seedReservation({
+      id: row.id,
+      groupId: "grp_robotics",
+      facilityId: row.facilityId ?? "fac_a",
+      startAt: row.startAt,
+      endAt: row.endAt,
+      headCount: row.headCount ?? 4,
+      status: row.status,
+      createdBy: "usr_taro",
+      updatedAt: row.updatedAt ?? READ_AT,
+    }),
+  );
 
 /** 書かれた行を、列の生の値のまま読み戻す。無ければ null */
 const rowOf = (id: string) =>

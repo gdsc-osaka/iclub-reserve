@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { useD1TestDb } from "../d1-test-db";
+import { seedStaffInvitation, seedUser } from "../d1-test-seeds";
 
 import type { AuditLogAction, AuditLogChanges, AuditLogDraft } from "~/domain/audit-log";
 import { InvitationStatus } from "~/domain/invitation";
@@ -38,16 +39,14 @@ const countAuditLogs = async (targetId: string): Promise<number> => {
 describe("Staff Repositories (D1)", () => {
   it("招待の行と outbox のメールが入り、enqueuedMailIds が返る", async () => {
     // 招待者を登録
-    await testDb.seed([
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_staff_01",
-      "スタッフ1",
-      "staff1@osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      1,
-    ]);
+    await testDb.seed(
+      seedUser({
+        id: "usr_staff_01",
+        name: "スタッフ1",
+        email: "staff1@osaka-u.ac.jp",
+        is_staff: true,
+      }),
+    );
 
     const repo = createStaffInvitationRepository(testDb.db);
 
@@ -97,36 +96,28 @@ describe("Staff Repositories (D1)", () => {
   });
 
   it("cancel は pending にしか効かない", async () => {
-    await testDb.seed([
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_staff_01",
-      "スタッフ1",
-      "staff1@osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      1,
-    ]);
-
-    await testDb.seed([
-      `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-      "inv_pending",
-      "p@osaka-u.ac.jp",
-      "pending",
-      999999999,
-      0,
-      "usr_staff_01",
-    ]);
-
-    await testDb.seed([
-      `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-      "inv_canceled",
-      "c@osaka-u.ac.jp",
-      "canceled",
-      999999999,
-      0,
-      "usr_staff_01",
-    ]);
+    await testDb.seed(
+      seedUser({
+        id: "usr_staff_01",
+        name: "スタッフ1",
+        email: "staff1@osaka-u.ac.jp",
+        is_staff: true,
+      }),
+      seedStaffInvitation({
+        id: "inv_pending",
+        email: "p@osaka-u.ac.jp",
+        status: InvitationStatus.Pending,
+        expiresAt: new Date(999999999),
+        inviterId: "usr_staff_01",
+      }),
+      seedStaffInvitation({
+        id: "inv_canceled",
+        email: "c@osaka-u.ac.jp",
+        status: InvitationStatus.Canceled,
+        expiresAt: new Date(999999999),
+        inviterId: "usr_staff_01",
+      }),
+    );
 
     const repo = createStaffInvitationRepository(testDb.db);
 
@@ -168,10 +159,21 @@ describe("Staff Repositories (D1)", () => {
   });
 
   it("revoke の条件: 事務局が 2 人のとき片方を剥奪すると 1 件、続けてもう片方を剥奪すると 0 件で is_staff が true のまま残る、事務局でない人は 0 件", async () => {
-    const insertUser = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
-    await testDb.seed([insertUser, "usr_staff_1", "スタッフ1", "staff1@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_staff_2", "スタッフ2", "staff2@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_normal", "一般", "normal@osaka-u.ac.jp", 1, 0, 0, 0]);
+    await testDb.seed(
+      seedUser({
+        id: "usr_staff_1",
+        name: "スタッフ1",
+        email: "staff1@osaka-u.ac.jp",
+        is_staff: true,
+      }),
+      seedUser({
+        id: "usr_staff_2",
+        name: "スタッフ2",
+        email: "staff2@osaka-u.ac.jp",
+        is_staff: true,
+      }),
+      seedUser({ id: "usr_normal", name: "一般", email: "normal@osaka-u.ac.jp", is_staff: false }),
+    );
 
     const repo = createStaffMemberRepository(testDb.db);
 
@@ -234,19 +236,21 @@ describe("Staff Repositories (D1)", () => {
   });
 
   it("事務局の検索: メールアドレスは大文字混じりで登録されていても一致し、事務局でない人は返さない", async () => {
-    const insertUser = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
-    await testDb.seed([
-      insertUser,
-      "usr_staff_1",
-      "スタッフ1",
-      "Staff.One@Osaka-U.ac.jp",
-      1,
-      0,
-      0,
-      1,
-    ]);
-    await testDb.seed([insertUser, "usr_staff_2", "スタッフ2", "staff2@osaka-u.ac.jp", 1, 0, 0, 1]);
-    await testDb.seed([insertUser, "usr_normal", "一般", "normal@osaka-u.ac.jp", 1, 0, 0, 0]);
+    await testDb.seed(
+      seedUser({
+        id: "usr_staff_1",
+        name: "スタッフ1",
+        email: "Staff.One@Osaka-U.ac.jp",
+        is_staff: true,
+      }),
+      seedUser({
+        id: "usr_staff_2",
+        name: "スタッフ2",
+        email: "staff2@osaka-u.ac.jp",
+        is_staff: true,
+      }),
+      seedUser({ id: "usr_normal", name: "一般", email: "normal@osaka-u.ac.jp", is_staff: false }),
+    );
 
     const repo = createStaffMemberRepository(testDb.db);
 
@@ -266,55 +270,43 @@ describe("Staff Repositories (D1)", () => {
   });
 
   it("findPendingByEmail は承諾待ちのうち期限が最も遅いものを返し、期限切れも返す", async () => {
-    await testDb.seed([
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_staff_01",
-      "スタッフ1",
-      "staff1@osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      1,
-    ]);
-
-    const insertInv = `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`;
-    await testDb.seed([
-      insertInv,
-      "inv_old",
-      "target@osaka-u.ac.jp",
-      "pending",
-      1000,
-      0,
-      "usr_staff_01",
-    ]);
-    await testDb.seed([
-      insertInv,
-      "inv_new",
-      "target@osaka-u.ac.jp",
-      "pending",
-      2000,
-      0,
-      "usr_staff_01",
-    ]);
-    // 取り消し済みは期限が遅くても対象外
-    await testDb.seed([
-      insertInv,
-      "inv_canceled",
-      "target@osaka-u.ac.jp",
-      "canceled",
-      3000,
-      0,
-      "usr_staff_01",
-    ]);
-    await testDb.seed([
-      insertInv,
-      "inv_only_canceled",
-      "gone@osaka-u.ac.jp",
-      "canceled",
-      3000,
-      0,
-      "usr_staff_01",
-    ]);
+    await testDb.seed(
+      seedUser({
+        id: "usr_staff_01",
+        name: "スタッフ1",
+        email: "staff1@osaka-u.ac.jp",
+        is_staff: true,
+      }),
+      seedStaffInvitation({
+        id: "inv_old",
+        email: "target@osaka-u.ac.jp",
+        status: InvitationStatus.Pending,
+        expiresAt: new Date(1000),
+        inviterId: "usr_staff_01",
+      }),
+      seedStaffInvitation({
+        id: "inv_new",
+        email: "target@osaka-u.ac.jp",
+        status: InvitationStatus.Pending,
+        expiresAt: new Date(2000),
+        inviterId: "usr_staff_01",
+      }),
+      // 取り消し済みは期限が遅くても対象外
+      seedStaffInvitation({
+        id: "inv_canceled",
+        email: "target@osaka-u.ac.jp",
+        status: InvitationStatus.Canceled,
+        expiresAt: new Date(3000),
+        inviterId: "usr_staff_01",
+      }),
+      seedStaffInvitation({
+        id: "inv_only_canceled",
+        email: "gone@osaka-u.ac.jp",
+        status: InvitationStatus.Canceled,
+        expiresAt: new Date(3000),
+        inviterId: "usr_staff_01",
+      }),
+    );
 
     const repo = createStaffInvitationRepository(testDb.db);
 
@@ -327,26 +319,22 @@ describe("Staff Repositories (D1)", () => {
   });
 
   it("findById は招待が存在すれば返し、存在しなければ null を返す", async () => {
-    await testDb.seed([
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_staff_01",
-      "スタッフ1",
-      "staff1@osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      1,
-    ]);
-
-    await testDb.seed([
-      `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-      "inv_exists",
-      "target@osaka-u.ac.jp",
-      "pending",
-      5000,
-      1000,
-      "usr_staff_01",
-    ]);
+    await testDb.seed(
+      seedUser({
+        id: "usr_staff_01",
+        name: "スタッフ1",
+        email: "staff1@osaka-u.ac.jp",
+        is_staff: true,
+      }),
+      seedStaffInvitation({
+        id: "inv_exists",
+        email: "target@osaka-u.ac.jp",
+        status: InvitationStatus.Pending,
+        expiresAt: new Date(5000),
+        createdAt: new Date(1000),
+        inviterId: "usr_staff_01",
+      }),
+    );
 
     const repo = createStaffInvitationRepository(testDb.db);
 
@@ -367,36 +355,23 @@ describe("Staff Repositories (D1)", () => {
     const targetEmail = "invitee@osaka-u.ac.jp";
 
     it("承諾で is_staff が true になり、招待が accepted になる", async () => {
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_staff_01",
-        "スタッフ1",
-        "staff1@osaka-u.ac.jp",
-        1,
-        0,
-        0,
-        1,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_invitee",
-        "招待された人",
-        targetEmail,
-        1,
-        0,
-        0,
-        0,
-      ]);
-
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_valid",
-        targetEmail,
-        "pending",
-        validExpiresAt.getTime(),
-        now.getTime() - 1000,
-        "usr_staff_01",
-      ]);
+      await testDb.seed(
+        seedUser({
+          id: "usr_staff_01",
+          name: "スタッフ1",
+          email: "staff1@osaka-u.ac.jp",
+          is_staff: true,
+        }),
+        seedUser({ id: "usr_invitee", name: "招待された人", email: targetEmail, is_staff: false }),
+        seedStaffInvitation({
+          id: "inv_valid",
+          email: targetEmail,
+          status: InvitationStatus.Pending,
+          expiresAt: validExpiresAt,
+          createdAt: new Date(now.getTime() - 1000),
+          inviterId: "usr_staff_01",
+        }),
+      );
 
       const repo = createStaffInvitationRepository(testDb.db);
       const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee", {
@@ -433,35 +408,22 @@ describe("Staff Repositories (D1)", () => {
     });
 
     it("期限切れの招待は false を返し、is_staff は変わらず履歴も書かない", async () => {
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_staff_01",
-        "スタッフ1",
-        "staff1@osaka-u.ac.jp",
-        1,
-        0,
-        0,
-        1,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_invitee",
-        "招待された人",
-        targetEmail,
-        1,
-        0,
-        0,
-        0,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_expired",
-        targetEmail,
-        "pending",
-        expiredAt.getTime(),
-        0,
-        "usr_staff_01",
-      ]);
+      await testDb.seed(
+        seedUser({
+          id: "usr_staff_01",
+          name: "スタッフ1",
+          email: "staff1@osaka-u.ac.jp",
+          is_staff: true,
+        }),
+        seedUser({ id: "usr_invitee", name: "招待された人", email: targetEmail, is_staff: false }),
+        seedStaffInvitation({
+          id: "inv_expired",
+          email: targetEmail,
+          status: InvitationStatus.Pending,
+          expiresAt: expiredAt,
+          inviterId: "usr_staff_01",
+        }),
+      );
 
       const repo = createStaffInvitationRepository(testDb.db);
       const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee");
@@ -493,44 +455,29 @@ describe("Staff Repositories (D1)", () => {
     });
 
     it("取り消し済み・承諾済みの招待は false を返し、is_staff は変わらず履歴も書かない", async () => {
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_staff_01",
-        "スタッフ1",
-        "staff1@osaka-u.ac.jp",
-        1,
-        0,
-        0,
-        1,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_invitee",
-        "招待された人",
-        targetEmail,
-        1,
-        0,
-        0,
-        0,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_canceled",
-        targetEmail,
-        "canceled",
-        validExpiresAt.getTime(),
-        0,
-        "usr_staff_01",
-      ]);
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_accepted",
-        targetEmail,
-        "accepted",
-        validExpiresAt.getTime(),
-        0,
-        "usr_staff_01",
-      ]);
+      await testDb.seed(
+        seedUser({
+          id: "usr_staff_01",
+          name: "スタッフ1",
+          email: "staff1@osaka-u.ac.jp",
+          is_staff: true,
+        }),
+        seedUser({ id: "usr_invitee", name: "招待された人", email: targetEmail, is_staff: false }),
+        seedStaffInvitation({
+          id: "inv_canceled",
+          email: targetEmail,
+          status: InvitationStatus.Canceled,
+          expiresAt: validExpiresAt,
+          inviterId: "usr_staff_01",
+        }),
+        seedStaffInvitation({
+          id: "inv_accepted",
+          email: targetEmail,
+          status: InvitationStatus.Accepted,
+          expiresAt: validExpiresAt,
+          inviterId: "usr_staff_01",
+        }),
+      );
 
       const repo = createStaffInvitationRepository(testDb.db);
       const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee");
@@ -566,35 +513,27 @@ describe("Staff Repositories (D1)", () => {
     });
 
     it("宛先違いの招待は false を返し、is_staff は変わらず履歴も書かない", async () => {
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_staff_01",
-        "スタッフ1",
-        "staff1@osaka-u.ac.jp",
-        1,
-        0,
-        0,
-        1,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_invitee",
-        "招待された人",
-        "other@osaka-u.ac.jp",
-        1,
-        0,
-        0,
-        0,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_valid",
-        targetEmail,
-        "pending",
-        validExpiresAt.getTime(),
-        0,
-        "usr_staff_01",
-      ]);
+      await testDb.seed(
+        seedUser({
+          id: "usr_staff_01",
+          name: "スタッフ1",
+          email: "staff1@osaka-u.ac.jp",
+          is_staff: true,
+        }),
+        seedUser({
+          id: "usr_invitee",
+          name: "招待された人",
+          email: "other@osaka-u.ac.jp",
+          is_staff: false,
+        }),
+        seedStaffInvitation({
+          id: "inv_valid",
+          email: targetEmail,
+          status: InvitationStatus.Pending,
+          expiresAt: validExpiresAt,
+          inviterId: "usr_staff_01",
+        }),
+      );
 
       const repo = createStaffInvitationRepository(testDb.db);
       const auditLog = dummyAuditLog("staff_role.accept", "usr_invitee");
@@ -618,25 +557,21 @@ describe("Staff Repositories (D1)", () => {
     });
 
     it("すでに事務局の人が承諾しても true になり、招待は accepted になり履歴も 1 行書く", async () => {
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_already_staff",
-        "すでにスタッフ",
-        targetEmail,
-        1,
-        0,
-        0,
-        1,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_valid",
-        targetEmail,
-        "pending",
-        validExpiresAt.getTime(),
-        0,
-        "usr_already_staff",
-      ]);
+      await testDb.seed(
+        seedUser({
+          id: "usr_already_staff",
+          name: "すでにスタッフ",
+          email: targetEmail,
+          is_staff: true,
+        }),
+        seedStaffInvitation({
+          id: "inv_valid",
+          email: targetEmail,
+          status: InvitationStatus.Pending,
+          expiresAt: validExpiresAt,
+          inviterId: "usr_already_staff",
+        }),
+      );
 
       const repo = createStaffInvitationRepository(testDb.db);
       const auditLog = dummyAuditLog("staff_role.accept", "usr_already_staff", {
@@ -675,25 +610,21 @@ describe("Staff Repositories (D1)", () => {
     const targetEmail = "invitee@osaka-u.ac.jp";
 
     it("辞退で status が rejected になり、件数 1 が返り履歴も書く", async () => {
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_staff_01",
-        "スタッフ1",
-        "staff1@osaka-u.ac.jp",
-        1,
-        0,
-        0,
-        1,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_reject",
-        targetEmail,
-        "pending",
-        validExpiresAt.getTime(),
-        0,
-        "usr_staff_01",
-      ]);
+      await testDb.seed(
+        seedUser({
+          id: "usr_staff_01",
+          name: "スタッフ1",
+          email: "staff1@osaka-u.ac.jp",
+          is_staff: true,
+        }),
+        seedStaffInvitation({
+          id: "inv_reject",
+          email: targetEmail,
+          status: InvitationStatus.Pending,
+          expiresAt: validExpiresAt,
+          inviterId: "usr_staff_01",
+        }),
+      );
 
       const repo = createStaffInvitationRepository(testDb.db);
       const auditLog = dummyAuditLog("staff_role.decline", "inv_reject", {
@@ -721,35 +652,29 @@ describe("Staff Repositories (D1)", () => {
     });
 
     it("宛先違い・期限切れ・存在しない招待の辞退は件数 0 が返り履歴も書かない", async () => {
-      await testDb.seed([
-        `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-        "usr_staff_01",
-        "スタッフ1",
-        "staff1@osaka-u.ac.jp",
-        1,
-        0,
-        0,
-        1,
-      ]);
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_other",
-        targetEmail,
-        "pending",
-        validExpiresAt.getTime(),
-        0,
-        "usr_staff_01",
-      ]);
-      // 期限ちょうどは切れている扱い
-      await testDb.seed([
-        `INSERT INTO "staff_invitation" (id, email, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?)`,
-        "inv_expired",
-        targetEmail,
-        "pending",
-        now.getTime(),
-        0,
-        "usr_staff_01",
-      ]);
+      await testDb.seed(
+        seedUser({
+          id: "usr_staff_01",
+          name: "スタッフ1",
+          email: "staff1@osaka-u.ac.jp",
+          is_staff: true,
+        }),
+        seedStaffInvitation({
+          id: "inv_other",
+          email: targetEmail,
+          status: InvitationStatus.Pending,
+          expiresAt: validExpiresAt,
+          inviterId: "usr_staff_01",
+        }),
+        // 期限ちょうどは切れている扱い
+        seedStaffInvitation({
+          id: "inv_expired",
+          email: targetEmail,
+          status: InvitationStatus.Pending,
+          expiresAt: now,
+          inviterId: "usr_staff_01",
+        }),
+      );
 
       const repo = createStaffInvitationRepository(testDb.db);
       const auditLog = dummyAuditLog("staff_role.decline", "inv_other");

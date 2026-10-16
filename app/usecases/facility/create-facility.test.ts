@@ -12,9 +12,9 @@ import {
   FacilityField,
   type CreateFacilityInput,
   type Facility,
-  type FacilityRepository,
 } from "~/domain/facility";
-import type { FacilityPhotoStorage } from "~/domain/facility/facility-photo";
+import { fakeCalendarClient } from "~/testing/fakes/calendar";
+import { fakeFacilityPhotoStorage, fakeFacilityRepository } from "~/testing/fakes/facility";
 import { createFacilityUseCase, type CreateFacilityDeps } from "./create-facility";
 
 /** 先頭のバイトが本物の PNG・JPEG になっている写真（形式は先頭のバイトで判定される） */
@@ -26,18 +26,16 @@ const JPEG_BYTES = new Uint8Array([
 const createMockCalendarClient = (
   access: CalendarWriteAccess | "error" = "writable",
   error?: CalendarError,
-): CalendarClient => ({
-  checkWriteAccess: vi
-    .fn()
-    .mockImplementation(() =>
-      access === "error"
-        ? errAsync(error ?? { code: CalendarErrorCode.Unavailable, message: "Unavailable" })
-        : okAsync(access),
-    ),
-  upsertEvent: vi.fn().mockReturnValue(okAsync(null)),
-  deleteEvent: vi.fn().mockReturnValue(okAsync(null)),
-  listManagedEvents: vi.fn().mockReturnValue(okAsync([])),
-});
+): CalendarClient =>
+  fakeCalendarClient({
+    checkWriteAccess: vi
+      .fn()
+      .mockImplementation(() =>
+        access === "error"
+          ? errAsync(error ?? { code: CalendarErrorCode.Unavailable, message: "Unavailable" })
+          : okAsync(access),
+      ),
+  });
 
 const mockCreatedFacility = (input: CreateFacilityInput): Facility => ({
   id: input.id ?? "fac_new_01",
@@ -52,12 +50,12 @@ const mockCreatedFacility = (input: CreateFacilityInput): Facility => ({
 });
 
 const defaultDeps = (overrides: Partial<CreateFacilityDeps> = {}): CreateFacilityDeps => ({
-  facilityRepository: {
+  facilityRepository: fakeFacilityRepository({
     create: vi
       .fn()
       .mockImplementation((input: CreateFacilityInput) => okAsync(mockCreatedFacility(input))),
-  } as unknown as FacilityRepository,
-  facilityPhotoStorage: { put: vi.fn(), delete: vi.fn() } as unknown as FacilityPhotoStorage,
+  }),
+  facilityPhotoStorage: fakeFacilityPhotoStorage({ put: vi.fn(), delete: vi.fn() }),
   calendarClient: createMockCalendarClient("writable"),
   calendarWriterEmail: "service-account@example.iam.gserviceaccount.com",
   ...overrides,
@@ -70,8 +68,8 @@ describe("createFacilityUseCase", () => {
     const putMock = vi.fn();
     const createMock = vi.fn();
     const deps = defaultDeps({
-      facilityPhotoStorage: { put: putMock, delete: vi.fn() } as unknown as FacilityPhotoStorage,
-      facilityRepository: { create: createMock } as unknown as FacilityRepository,
+      facilityPhotoStorage: fakeFacilityPhotoStorage({ put: putMock, delete: vi.fn() }),
+      facilityRepository: fakeFacilityRepository({ create: createMock }),
     });
 
     const result = await createFacilityUseCase(deps, {
@@ -147,8 +145,8 @@ describe("createFacilityUseCase", () => {
     const putMock = vi.fn();
     const createMock = vi.fn();
     const deps = defaultDeps({
-      facilityPhotoStorage: { put: putMock, delete: vi.fn() } as unknown as FacilityPhotoStorage,
-      facilityRepository: { create: createMock } as unknown as FacilityRepository,
+      facilityPhotoStorage: fakeFacilityPhotoStorage({ put: putMock, delete: vi.fn() }),
+      facilityRepository: fakeFacilityRepository({ create: createMock }),
     });
 
     const result = await createFacilityUseCase(deps, {
@@ -175,8 +173,8 @@ describe("createFacilityUseCase", () => {
       .fn()
       .mockImplementation((input: CreateFacilityInput) => okAsync(mockCreatedFacility(input)));
     const deps = defaultDeps({
-      facilityPhotoStorage: { put: putMock, delete: vi.fn() } as unknown as FacilityPhotoStorage,
-      facilityRepository: { create: createMock } as unknown as FacilityRepository,
+      facilityPhotoStorage: fakeFacilityPhotoStorage({ put: putMock, delete: vi.fn() }),
+      facilityRepository: fakeFacilityRepository({ create: createMock }),
     });
 
     const result = await createFacilityUseCase(deps, {
@@ -211,13 +209,13 @@ describe("createFacilityUseCase", () => {
     );
 
     const deps = defaultDeps({
-      facilityPhotoStorage: {
+      facilityPhotoStorage: fakeFacilityPhotoStorage({
         put: putMock,
         delete: deleteMock,
-      } as unknown as FacilityPhotoStorage,
-      facilityRepository: {
+      }),
+      facilityRepository: fakeFacilityRepository({
         create: createMock,
-      } as unknown as FacilityRepository,
+      }),
     });
 
     const file = new File([PNG_BYTES], "photo.png", { type: "image/png" });
@@ -248,13 +246,13 @@ describe("createFacilityUseCase", () => {
       .mockImplementation((input: CreateFacilityInput) => okAsync(mockCreatedFacility(input)));
 
     const deps = defaultDeps({
-      facilityPhotoStorage: {
+      facilityPhotoStorage: fakeFacilityPhotoStorage({
         put: putMock,
         delete: vi.fn(),
-      } as unknown as FacilityPhotoStorage,
-      facilityRepository: {
+      }),
+      facilityRepository: fakeFacilityRepository({
         create: createMock,
-      } as unknown as FacilityRepository,
+      }),
     });
 
     const file = new File([JPEG_BYTES], "camera.jpg", { type: "image/jpeg" });
@@ -329,8 +327,8 @@ describe("createFacilityUseCase", () => {
       const calendarClient = createMockCalendarClient("writable");
 
       const deps = defaultDeps({
-        facilityPhotoStorage: { put: putMock, delete: vi.fn() } as unknown as FacilityPhotoStorage,
-        facilityRepository: { create: createMock } as unknown as FacilityRepository,
+        facilityPhotoStorage: fakeFacilityPhotoStorage({ put: putMock, delete: vi.fn() }),
+        facilityRepository: fakeFacilityRepository({ create: createMock }),
         calendarClient,
       });
 
@@ -359,8 +357,8 @@ describe("createFacilityUseCase", () => {
       const calendarClient = createMockCalendarClient("not_writable");
 
       const deps = defaultDeps({
-        facilityPhotoStorage: { put: putMock, delete: vi.fn() } as unknown as FacilityPhotoStorage,
-        facilityRepository: { create: createMock } as unknown as FacilityRepository,
+        facilityPhotoStorage: fakeFacilityPhotoStorage({ put: putMock, delete: vi.fn() }),
+        facilityRepository: fakeFacilityRepository({ create: createMock }),
         calendarClient,
       });
 
@@ -389,8 +387,8 @@ describe("createFacilityUseCase", () => {
       const calendarClient = createMockCalendarClient("not_found");
 
       const deps = defaultDeps({
-        facilityPhotoStorage: { put: putMock, delete: vi.fn() } as unknown as FacilityPhotoStorage,
-        facilityRepository: { create: createMock } as unknown as FacilityRepository,
+        facilityPhotoStorage: fakeFacilityPhotoStorage({ put: putMock, delete: vi.fn() }),
+        facilityRepository: fakeFacilityRepository({ create: createMock }),
         calendarClient,
       });
 
@@ -420,8 +418,8 @@ describe("createFacilityUseCase", () => {
       });
 
       const deps = defaultDeps({
-        facilityPhotoStorage: { put: putMock, delete: vi.fn() } as unknown as FacilityPhotoStorage,
-        facilityRepository: { create: createMock } as unknown as FacilityRepository,
+        facilityPhotoStorage: fakeFacilityPhotoStorage({ put: putMock, delete: vi.fn() }),
+        facilityRepository: fakeFacilityRepository({ create: createMock }),
         calendarClient,
       });
 

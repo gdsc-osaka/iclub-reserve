@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
 import { useD1TestDb } from "../d1-test-db";
+import { seedGroup, seedUser } from "../d1-test-seeds";
 import { createGroupRepository } from "./group-repo";
 
 const testDb = useD1TestDb();
@@ -17,24 +18,8 @@ const NOW = new Date("2026-04-01T10:00:00.000Z");
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_taro",
-      "太郎",
-      "taro@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_robotics",
-      "ロボティクス",
-      "enabled",
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_taro", name: "太郎", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedGroup({ id: "grp_robotics", name: "ロボティクス", status: GroupStatus.Enabled }),
   );
 });
 

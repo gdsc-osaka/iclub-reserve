@@ -1,27 +1,25 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { ReservationErrorCode, type ReservationReadRepository } from "~/domain/reservation";
+import { ReservationErrorCode } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
-import type { GroupUnreadUpdatesQuery } from "~/query/reservation/group-unread-updates";
+import { fakeGroupUnreadUpdatesQuery, fakeReservationReadRepository } from "~/testing/fakes";
 import { markAllReservationsReadUseCase } from "./mark-all-reservations-read";
 
 const now = new Date("2026-10-14T15:00:00+09:00");
 
 const buildDeps = (unreadIds: readonly string[]) => {
   const upsertMany = vi.fn().mockReturnValue(okAsync(undefined));
-  const reservationReadRepository: ReservationReadRepository = {
-    upsert: vi.fn(),
+  const reservationReadRepository = fakeReservationReadRepository({
     upsertMany,
-    findByUserAndReservation: vi.fn(),
-  };
-  const groupUnreadUpdatesQuery: GroupUnreadUpdatesQuery = {
+  });
+  const groupUnreadUpdatesQuery = fakeGroupUnreadUpdatesQuery({
     findUnreadForUser: vi
       .fn()
       .mockReturnValue(
         okAsync({ items: [], overflowCount: 0, allUnreadReservationIds: unreadIds }),
       ),
-  };
+  });
   return { deps: { reservationReadRepository, groupUnreadUpdatesQuery }, upsertMany };
 };
 

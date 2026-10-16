@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { reservationTable } from "~/db/schema";
 import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "../d1-test-db";
+import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createD1CalendarSyncQuery } from "./d1-calendar-sync-query";
 
 const testDb = useD1TestDb();
@@ -12,42 +12,10 @@ const endAt = new Date("2026-10-10T12:00:00.000Z");
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_test",
-      "テストユーザー",
-      "test@example.com",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_test",
-      "テストグループ",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_1",
-      "施設1",
-      "cal_1@example.com",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_2",
-      "施設2",
-      null,
-      1,
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_test", name: "テストユーザー", email: "test@example.com" }),
+    seedGroup({ id: "grp_test", name: "テストグループ" }),
+    seedFacility({ id: "fac_1", name: "施設1", googleCalendarId: "cal_1@example.com" }),
+    seedFacility({ id: "fac_2", name: "施設2", googleCalendarId: null }),
   );
 });
 
@@ -63,8 +31,8 @@ describe("createD1CalendarSyncQuery", () => {
     it("予約と施設の情報を結合して最新状態を取得する", async () => {
       const query = createD1CalendarSyncQuery(testDb.db);
 
-      await testDb.db.insert(reservationTable).values([
-        {
+      await testDb.seed(
+        seedReservation({
           id: "res_1",
           groupId: "grp_test",
           facilityId: "fac_1",
@@ -73,8 +41,8 @@ describe("createD1CalendarSyncQuery", () => {
           endAt,
           headCount: 5,
           createdBy: "usr_test",
-        },
-        {
+        }),
+        seedReservation({
           id: "res_2",
           groupId: "grp_test",
           facilityId: "fac_2",
@@ -83,8 +51,8 @@ describe("createD1CalendarSyncQuery", () => {
           endAt,
           headCount: 2,
           createdBy: "usr_test",
-        },
-      ]);
+        }),
+      );
 
       const result = await query.fetchReservationStates(["res_1", "res_2", "res_nonexistent"]);
       expect(result.isOk()).toBe(true);

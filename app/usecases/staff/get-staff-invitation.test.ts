@@ -1,13 +1,9 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { InvitationStatus } from "~/domain/invitation";
-import {
-  StaffErrorCode,
-  type StaffError,
-  type StaffInvitation,
-  type StaffInvitationRepository,
-} from "~/domain/staff";
+import { StaffErrorCode, type StaffError, type StaffInvitation } from "~/domain/staff";
+import { fakeStaffInvitationRepository } from "~/testing/fakes/staff";
 import { getStaffInvitationUseCase, type GetStaffInvitationArgs } from "./get-staff-invitation";
 
 const testInvitationId = "sinv_123456";
@@ -33,49 +29,18 @@ const createFakeStaffInvitationRepository = (
   initialInvitation: StaffInvitation | null = validInvitation,
   options: FakeStaffInvitationRepoOptions = {},
 ) => {
-  let findByIdCallCount = 0;
-  let lastFindByIdId: string | null = null;
+  const findById = vi.fn((invitationId: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(invitationId);
+    }
+    return okAsync(initialInvitation);
+  });
 
-  const repository: StaffInvitationRepository = {
-    findPendingByEmail: () =>
-      errAsync({
-        code: StaffErrorCode.DatabaseError,
-        message: "findPendingByEmail is not used in this test",
-      }),
-    create: () =>
-      errAsync({
-        code: StaffErrorCode.DatabaseError,
-        message: "create is not used in this test",
-      }),
-    cancel: () =>
-      errAsync({
-        code: StaffErrorCode.DatabaseError,
-        message: "cancel is not used in this test",
-      }),
-    findById: (invitationId) => {
-      findByIdCallCount += 1;
-      lastFindByIdId = invitationId;
-      if (options.findByIdResult) {
-        return options.findByIdResult(invitationId);
-      }
-      return okAsync(initialInvitation);
-    },
-    accept: () =>
-      errAsync({
-        code: StaffErrorCode.DatabaseError,
-        message: "accept is not used in this test",
-      }),
-    reject: () =>
-      errAsync({
-        code: StaffErrorCode.DatabaseError,
-        message: "reject is not used in this test",
-      }),
-  };
+  const repository = fakeStaffInvitationRepository({ findById });
 
   return {
     repository,
-    findByIdCallCount: () => findByIdCallCount,
-    lastFindByIdId: () => lastFindByIdId,
+    findById,
   };
 };
 
@@ -101,8 +66,8 @@ describe("getStaffInvitationUseCase", () => {
         expiresAt: validInvitation.expiresAt,
       });
     }
-    expect(fakeRepo.findByIdCallCount()).toBe(1);
-    expect(fakeRepo.lastFindByIdId()).toBe(testInvitationId);
+    expect(fakeRepo.findById).toHaveBeenCalledTimes(1);
+    expect(fakeRepo.findById).toHaveBeenCalledWith(testInvitationId);
   });
 
   it("前後に空白がある招待 ID は trim して検索される", async () => {
@@ -114,7 +79,7 @@ describe("getStaffInvitationUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeRepo.lastFindByIdId()).toBe(testInvitationId);
+    expect(fakeRepo.findById).toHaveBeenCalledWith(testInvitationId);
   });
 
   it("空文字の招待 ID では DB を引かずに NotFound を返す（存在秘匿）", async () => {
@@ -129,7 +94,7 @@ describe("getStaffInvitationUseCase", () => {
     if (result.isErr()) {
       expect(result.error.code).toBe(StaffErrorCode.InvitationNotFound);
     }
-    expect(fakeRepo.findByIdCallCount()).toBe(0);
+    expect(fakeRepo.findById).not.toHaveBeenCalled();
   });
 
   it("招待が存在しない場合は NotFound を返す", async () => {

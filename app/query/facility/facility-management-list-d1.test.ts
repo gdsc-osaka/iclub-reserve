@@ -8,12 +8,11 @@
 import { describe, expect, it } from "vitest";
 
 import { useD1TestDb } from "~/infra/d1-test-db";
+import { seedFacility } from "~/infra/d1-test-seeds";
 import { QueryErrorCode } from "../error";
 import { findFacilityManagementList } from "./facility-management-list";
 
 const testDb = useD1TestDb();
-
-const insertFacilitySql = `INSERT INTO "facility" (id, name, description, photo_url, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`;
 
 describe("findFacilityManagementList", () => {
   it("事務局でない人には Forbidden を返す（COND-009）", async () => {
@@ -24,11 +23,36 @@ describe("findFacilityManagementList", () => {
 
   it("有効な施設を先に、施設名の昇順、同名は ID の昇順で並べる", async () => {
     await testDb.seed(
-      [insertFacilitySql, "fac_inactive_a", "A 施設", null, null, null, 0, 0, 1000],
-      [insertFacilitySql, "fac_active_b", "B 施設", null, null, null, 1, 0, 1000],
-      [insertFacilitySql, "fac_active_a2", "A 施設", null, null, null, 1, 0, 1000],
-      [insertFacilitySql, "fac_active_a1", "A 施設", null, null, null, 1, 0, 1000],
-      [insertFacilitySql, "fac_inactive_b", "B 施設", null, null, null, 0, 0, 1000],
+      seedFacility({
+        id: "fac_inactive_a",
+        name: "A 施設",
+        isActive: false,
+        updatedAt: new Date(1000),
+      }),
+      seedFacility({
+        id: "fac_active_b",
+        name: "B 施設",
+        isActive: true,
+        updatedAt: new Date(1000),
+      }),
+      seedFacility({
+        id: "fac_active_a2",
+        name: "A 施設",
+        isActive: true,
+        updatedAt: new Date(1000),
+      }),
+      seedFacility({
+        id: "fac_active_a1",
+        name: "A 施設",
+        isActive: true,
+        updatedAt: new Date(1000),
+      }),
+      seedFacility({
+        id: "fac_inactive_b",
+        name: "B 施設",
+        isActive: false,
+        updatedAt: new Date(1000),
+      }),
     );
 
     const result = await findFacilityManagementList(testDb.db, { isStaff: true });
@@ -44,29 +68,29 @@ describe("findFacilityManagementList", () => {
 
   it("hasGoogleCalendar は google_calendar_id が null・空白だけのときは false、値があるときは true になる", async () => {
     await testDb.seed(
-      [
-        insertFacilitySql,
-        "fac_1_null",
-        "施設1",
-        "説明1",
-        "https://example.com/1.jpg",
-        null,
-        1,
-        0,
-        1000,
-      ],
-      [insertFacilitySql, "fac_2_blank", "施設2", null, null, "   ", 1, 0, 2000],
-      [
-        insertFacilitySql,
-        "fac_3_set",
-        "施設3",
-        null,
-        null,
-        "cal_123@group.calendar.google.com",
-        1,
-        0,
-        3000,
-      ],
+      seedFacility({
+        id: "fac_1_null",
+        name: "施設1",
+        description: "説明1",
+        photoUrl: "https://example.com/1.jpg",
+        googleCalendarId: null,
+        isActive: true,
+        updatedAt: new Date(1000),
+      }),
+      seedFacility({
+        id: "fac_2_blank",
+        name: "施設2",
+        googleCalendarId: "   ",
+        isActive: true,
+        updatedAt: new Date(2000),
+      }),
+      seedFacility({
+        id: "fac_3_set",
+        name: "施設3",
+        googleCalendarId: "cal_123@group.calendar.google.com",
+        isActive: true,
+        updatedAt: new Date(3000),
+      }),
     );
 
     const result = await findFacilityManagementList(testDb.db, { isStaff: true });

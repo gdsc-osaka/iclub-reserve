@@ -15,6 +15,11 @@ import type {
   CalendarReconcileQuery,
   CalendarReconcileReservation,
 } from "~/query/calendar/calendar-reconcile-query";
+import {
+  fakeCalendarClient,
+  fakeCalendarReconcileQuery,
+  fakeCalendarSyncTasks,
+} from "~/testing/fakes/calendar";
 import { reconcileCalendarsUseCase, toExpectedCalendarEvents } from "./reconcile-calendars";
 
 const now = new Date("2026-10-10T04:00:00+09:00");
@@ -24,26 +29,21 @@ const endAt = new Date("2026-10-10T12:00:00+09:00");
 const createFakeQuery = (
   facilities: readonly CalendarReconcileFacility[],
   reservations: readonly CalendarReconcileReservation[],
-): CalendarReconcileQuery => ({
-  fetchTargetFacilities: () => okAsync(facilities),
-  fetchApprovedReservations: () => okAsync(reservations),
-});
+): CalendarReconcileQuery =>
+  fakeCalendarReconcileQuery({
+    fetchTargetFacilities: () => okAsync(facilities),
+    fetchApprovedReservations: () => okAsync(reservations),
+  });
 
-const createFakeClient = (
-  listManagedEvents: CalendarClient["listManagedEvents"],
-): CalendarClient => ({
-  upsertEvent: vi.fn(),
-  deleteEvent: vi.fn(),
-  checkWriteAccess: vi.fn(),
-  listManagedEvents: vi.fn(listManagedEvents),
-});
+const createFakeClient = (listManagedEvents: CalendarClient["listManagedEvents"]): CalendarClient =>
+  fakeCalendarClient({
+    listManagedEvents: vi.fn(listManagedEvents),
+  });
 
-const createFakeCalendarSyncTasks = (): CalendarSyncTasks => ({
-  claimDue: vi.fn(),
-  complete: vi.fn(),
-  fail: vi.fn(),
-  enqueue: vi.fn().mockReturnValue(okAsync(undefined)),
-});
+const createFakeCalendarSyncTasks = (): CalendarSyncTasks =>
+  fakeCalendarSyncTasks({
+    enqueue: vi.fn().mockReturnValue(okAsync(undefined)),
+  });
 
 const toManagedEvent = (
   reservationId: string,

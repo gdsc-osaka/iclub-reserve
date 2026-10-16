@@ -8,17 +8,21 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
 import { useD1TestDb } from "../d1-test-db";
+import { seedGroup, seedUser } from "../d1-test-seeds";
 import { createGroupRepository } from "./group-repo";
 
 const testDb = useD1TestDb();
 
 beforeEach(async () => {
-  const insertUserSql = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
-  const insertGroupSql = `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`;
-
   await testDb.seed(
-    [insertUserSql, "usr_taro", "太郎", "taro@ecs.osaka-u.ac.jp", 1, 0, 0, 0],
-    [insertGroupSql, "grp_ai", "AI 班", "pending", 3000, 3000],
+    seedUser({ id: "usr_taro", name: "太郎", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedGroup({
+      id: "grp_ai",
+      name: "AI 班",
+      status: GroupStatus.Pending,
+      createdAt: new Date(3000),
+      updatedAt: new Date(3000),
+    }),
   );
 });
 

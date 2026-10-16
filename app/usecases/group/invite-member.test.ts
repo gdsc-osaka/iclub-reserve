@@ -1,25 +1,22 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
-import type { Group, GroupError, GroupRepository, UpdateGroupNameInput } from "~/domain/group";
+import type { Group, GroupError } from "~/domain/group";
 import { GroupErrorCode, GroupField, GroupStatus } from "~/domain/group";
 import {
   INVITATION_EXPIRES_IN_HOURS,
   type CreateInvitationInput,
   type CreateInvitationOutcome,
   type Invitation,
-  type InvitationRepository,
 } from "~/domain/invitation";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
-import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
-import type {
-  StoredMembership,
-  MembershipError,
-  MembershipRepository,
-  UpdateMembershipRoleInput,
-} from "~/domain/membership";
+import type { StoredMembership, MembershipError } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
+import { fakeGroupRepository } from "~/testing/fakes/group";
+import { fakeInvitationRepository } from "~/testing/fakes/invitation";
+import { fakeMailOutboxNotifier } from "~/testing/fakes/mail";
+import { fakeMembershipRepository } from "~/testing/fakes/membership";
 import { inviteMemberUseCase, type InviteMemberArgs } from "./invite-member";
 
 const testGroupId = "grp_robotics";
@@ -51,41 +48,26 @@ interface FakeGroupRepoOptions {
 }
 
 const createFakeGroupRepository = (options: FakeGroupRepoOptions = {}) => {
-  let findByIdCallCount = 0;
-  const repository: GroupRepository = {
-    findById: (id: string) => {
-      findByIdCallCount += 1;
-      if (options.findByIdResult) {
-        return options.findByIdResult(id);
-      }
-      if (id === testGroupId) {
-        return okAsync(testGroup);
-      }
-      return errAsync({
-        code: GroupErrorCode.NotFound,
-        message: "Group not found",
-      });
-    },
-    updateName: (_input: UpdateGroupNameInput) =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "updateName is not used in this test",
-      }),
-    updateStatus: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "updateStatus is not used in this test",
-      }),
-    create: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは create は使わない",
-      }),
-  };
+  const findById = vi.fn((id: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(id);
+    }
+    if (id === testGroupId) {
+      return okAsync(testGroup);
+    }
+    return errAsync({
+      code: GroupErrorCode.NotFound,
+      message: "Group not found",
+    });
+  });
+
+  const repository = fakeGroupRepository({
+    findById,
+  });
 
   return {
     repository,
-    findByIdCallCount: () => findByIdCallCount,
+    findById,
   };
 };
 
@@ -106,48 +88,33 @@ const createFakeMembershipRepository = (
   initialMemberships: readonly StoredMembership[],
   options: FakeMembershipRepoOptions = {},
 ) => {
-  let findByGroupAndUserCallCount = 0;
-  const findByGroupAndEmailCalls: { groupId: string; normalizedEmail: string }[] = [];
   const memberships = [...initialMemberships];
 
-  const repository: MembershipRepository = {
-    findByGroupAndUser: (groupId, userId) => {
-      findByGroupAndUserCallCount += 1;
-      if (options.findByGroupAndUserResult) {
-        return options.findByGroupAndUserResult(groupId, userId);
-      }
-      const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
-      return okAsync(found ?? null);
-    },
-    findByGroupAndEmail: (groupId, normalizedEmail) => {
-      findByGroupAndEmailCalls.push({ groupId, normalizedEmail });
-      if (options.findByGroupAndEmailResult) {
-        return options.findByGroupAndEmailResult(groupId, normalizedEmail);
-      }
-      const found = options.membershipsByEmail?.[normalizedEmail];
-      return okAsync(found !== undefined && found.groupId === groupId ? found : null);
-    },
-    countAdmins: () =>
-      errAsync({
-        code: MembershipErrorCode.DatabaseError,
-        message: "countAdmins is not used in this test",
-      }),
-    updateRole: (_input: UpdateMembershipRoleInput) =>
-      errAsync({
-        code: MembershipErrorCode.DatabaseError,
-        message: "updateRole is not used in this test",
-      }),
-    remove: () =>
-      errAsync({
-        code: MembershipErrorCode.DatabaseError,
-        message: "remove is not used in this test",
-      }),
-  };
+  const findByGroupAndUser = vi.fn((groupId: string, userId: string) => {
+    if (options.findByGroupAndUserResult) {
+      return options.findByGroupAndUserResult(groupId, userId);
+    }
+    const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
+    return okAsync(found ?? null);
+  });
+
+  const findByGroupAndEmail = vi.fn((groupId: string, normalizedEmail: string) => {
+    if (options.findByGroupAndEmailResult) {
+      return options.findByGroupAndEmailResult(groupId, normalizedEmail);
+    }
+    const found = options.membershipsByEmail?.[normalizedEmail];
+    return okAsync(found !== undefined && found.groupId === groupId ? found : null);
+  });
+
+  const repository = fakeMembershipRepository({
+    findByGroupAndUser,
+    findByGroupAndEmail,
+  });
 
   return {
     repository,
-    findByGroupAndUserCallCount: () => findByGroupAndUserCallCount,
-    findByGroupAndEmailCalls: () => findByGroupAndEmailCalls,
+    findByGroupAndUser,
+    findByGroupAndEmail,
   };
 };
 
@@ -161,77 +128,45 @@ interface FakeInvitationRepoOptions {
 }
 
 const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {}) => {
-  let findPendingCallCount = 0;
-  let createCallCount = 0;
-  let lastCreateInput: CreateInvitationInput | null = null;
-  let lastCreateMails: readonly MailDraft[] | null = null;
-  let lastAuditLog: AuditLogDraft | null = null;
+  const findPendingByGroupAndEmail = vi.fn((_groupId: string, _email: string) => {
+    return okAsync(options.pendingInvitation ?? null);
+  });
 
-  const repository: InvitationRepository = {
-    findPendingByGroupAndEmail: (_groupId, _email) => {
-      findPendingCallCount += 1;
-      return okAsync(options.pendingInvitation ?? null);
-    },
-    create: (input, mails, auditLog) => {
-      createCallCount += 1;
-      lastCreateInput = input;
-      lastCreateMails = mails;
-      lastAuditLog = auditLog;
+  const create = vi.fn(
+    (input: CreateInvitationInput, mails: readonly MailDraft[], auditLog: AuditLogDraft) => {
       if (options.createResult) {
         return options.createResult(input, mails, auditLog);
       }
       return okAsync({ enqueuedMailIds: ["mail_1"] });
     },
-    cancel: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "cancel is not used in this test",
-      }),
-    findById: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "findById is not used in this test",
-      }),
-    accept: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "accept is not used in this test",
-      }),
-    reject: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "reject is not used in this test",
-      }),
-  };
+  );
+
+  const repository = fakeInvitationRepository({
+    findPendingByGroupAndEmail,
+    create,
+  });
 
   return {
     repository,
-    findPendingCallCount: () => findPendingCallCount,
-    createCallCount: () => createCallCount,
-    lastCreateInput: () => lastCreateInput,
-    lastCreateMails: () => lastCreateMails,
-    lastAuditLog: () => lastAuditLog,
+    findPendingByGroupAndEmail,
+    create,
   };
 };
 
 const createFakeMailOutboxNotifier = (shouldThrow = false) => {
-  let notifyEnqueuedCallCount = 0;
-  let lastEnqueuedIds: readonly string[] | null = null;
+  const notifyEnqueued = vi.fn((_mailIds: readonly string[]) => {
+    if (shouldThrow) {
+      throw new Error("Simulated notifier error");
+    }
+  });
 
-  const notifier: MailOutboxNotifier = {
-    notifyEnqueued: (mailIds: readonly string[]) => {
-      notifyEnqueuedCallCount += 1;
-      lastEnqueuedIds = mailIds;
-      if (shouldThrow) {
-        throw new Error("Simulated notifier error");
-      }
-    },
-  };
+  const notifier = fakeMailOutboxNotifier({
+    notifyEnqueued,
+  });
 
   return {
     notifier,
-    notifyEnqueuedCallCount: () => notifyEnqueuedCallCount,
-    lastEnqueuedIds: () => lastEnqueuedIds,
+    notifyEnqueued,
   };
 };
 
@@ -265,13 +200,14 @@ describe("inviteMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeInvitation.createCallCount()).toBe(1);
+    expect(fakeInvitation.create).toHaveBeenCalledTimes(1);
 
-    const input = fakeInvitation.lastCreateInput()!;
-    expect(input.email).toBe("taro.handai@osaka-u.ac.jp");
-    expect(input.role).toBe(MembershipRole.Member);
-    expect(input.inviterUserId).toBe("usr_admin");
-    expect(input.expiresAt.getTime()).toBe(
+    const [input] = fakeInvitation.create.mock.calls[0] ?? [];
+    expect(input).toBeDefined();
+    expect(input!.email).toBe("taro.handai@osaka-u.ac.jp");
+    expect(input!.role).toBe(MembershipRole.Member);
+    expect(input!.inviterUserId).toBe("usr_admin");
+    expect(input!.expiresAt.getTime()).toBe(
       baseNow.getTime() + INVITATION_EXPIRES_IN_HOURS * 60 * 60 * 1000,
     );
   });
@@ -294,10 +230,11 @@ describe("inviteMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    const mails = fakeInvitation.lastCreateMails()!;
-    expect(mails.length).toBe(1);
+    const [, mails] = fakeInvitation.create.mock.calls[0] ?? [];
+    expect(mails).toBeDefined();
+    expect(mails!.length).toBe(1);
     const createdInvitationId = result._unsafeUnwrap().invitationId;
-    expect(mails[0].idempotencyKey).toBe(
+    expect(mails![0].idempotencyKey).toBe(
       `invitation:created:${createdInvitationId}:taro.handai@osaka-u.ac.jp`,
     );
   });
@@ -322,8 +259,8 @@ describe("inviteMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeNotifier.notifyEnqueuedCallCount()).toBe(1);
-    expect(fakeNotifier.lastEnqueuedIds()).toEqual(["mail_abc_123"]);
+    expect(fakeNotifier.notifyEnqueued).toHaveBeenCalledTimes(1);
+    expect(fakeNotifier.notifyEnqueued.mock.calls[0]?.[0]).toEqual(["mail_abc_123"]);
   });
 
   // 4. notifyEnqueued が例外を投げても、ユースケースは成功のまま返る
@@ -344,7 +281,7 @@ describe("inviteMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeNotifier.notifyEnqueuedCallCount()).toBe(1);
+    expect(fakeNotifier.notifyEnqueued).toHaveBeenCalledTimes(1);
   });
 
   // 5. 事務局スタッフは所属していなくても成功し、actedAsStaff が true になる（COND-012）
@@ -370,9 +307,9 @@ describe("inviteMemberUseCase", () => {
 
     expect(result.isOk()).toBe(true);
     // COND-012: acted_as_staff 判定のため、事務局であっても操作者の所属を 1 回引く
-    expect(fakeMembership.findByGroupAndUserCallCount()).toBe(1);
-    expect(fakeInvitation.createCallCount()).toBe(1);
-    const auditLog = fakeInvitation.lastAuditLog();
+    expect(fakeMembership.findByGroupAndUser).toHaveBeenCalledTimes(1);
+    expect(fakeInvitation.create).toHaveBeenCalledTimes(1);
+    const auditLog = fakeInvitation.create.mock.calls[0]?.[2];
     expect(auditLog?.actedAsStaff).toBe(true);
   });
 
@@ -401,7 +338,7 @@ describe("inviteMemberUseCase", () => {
       expect(result.error.code).toBe(GroupErrorCode.Forbidden);
       expect(result.error.userMessage).toBe("メンバーを招待できるのは管理者と事務局だけです。");
     }
-    expect(fakeInvitation.createCallCount()).toBe(0);
+    expect(fakeInvitation.create).not.toHaveBeenCalled();
   });
 
   // 7. 所属していない人が呼ぶと NotVisible（利用者への応答を 404 に揃えるのは画面の側。COND-011）
@@ -429,7 +366,7 @@ describe("inviteMemberUseCase", () => {
       expect(result.error.code).toBe(GroupErrorCode.NotVisible);
       expect(result.error.userMessage).toBeUndefined();
     }
-    expect(fakeInvitation.createCallCount()).toBe(0);
+    expect(fakeInvitation.create).not.toHaveBeenCalled();
   });
 
   // 8. groupId が空文字・空白のみのときは NotFound で、リポジトリが 1 つも呼ばれない
@@ -458,10 +395,10 @@ describe("inviteMemberUseCase", () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(GroupErrorCode.NotFound);
       }
-      expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
-      expect(fakeGroup.findByIdCallCount()).toBe(0);
-      expect(fakeInvitation.findPendingCallCount()).toBe(0);
-      expect(fakeInvitation.createCallCount()).toBe(0);
+      expect(fakeMembership.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(fakeGroup.findById).not.toHaveBeenCalled();
+      expect(fakeInvitation.findPendingByGroupAndEmail).not.toHaveBeenCalled();
+      expect(fakeInvitation.create).not.toHaveBeenCalled();
     },
   );
 
@@ -490,7 +427,7 @@ describe("inviteMemberUseCase", () => {
       expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
     }
     // 認可より前に入力を弾くため、所属確認は呼ばれない
-    expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
+    expect(fakeMembership.findByGroupAndUser).not.toHaveBeenCalled();
   });
 
   // 10. 役割が不正なら InvalidInput
@@ -520,7 +457,7 @@ describe("inviteMemberUseCase", () => {
         expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
         expect(result.error.userMessage).toBe("指定できない役割です。");
       }
-      expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
+      expect(fakeMembership.findByGroupAndUser).not.toHaveBeenCalled();
     },
   );
 
@@ -559,7 +496,7 @@ describe("inviteMemberUseCase", () => {
         "このメールアドレスには、すでに招待を送っています。取り消してから送り直してください。",
       );
     }
-    expect(fakeInvitation.createCallCount()).toBe(0);
+    expect(fakeInvitation.create).not.toHaveBeenCalled();
   });
 
   // 12. 同じ宛先の招待があっても期限切れなら成功し、create が呼ばれる
@@ -593,7 +530,7 @@ describe("inviteMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeInvitation.createCallCount()).toBe(1);
+    expect(fakeInvitation.create).toHaveBeenCalledTimes(1);
   });
 
   // 13. 団体が見つからないときは NotFound（findById が失敗を返すケース）
@@ -623,7 +560,7 @@ describe("inviteMemberUseCase", () => {
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.NotFound);
     }
-    expect(fakeInvitation.createCallCount()).toBe(0);
+    expect(fakeInvitation.create).not.toHaveBeenCalled();
   });
 
   // 14. invitationRepository.create が DB エラーを返したら DatabaseError になり、notifyEnqueued が呼ばれない
@@ -653,7 +590,7 @@ describe("inviteMemberUseCase", () => {
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.DatabaseError);
     }
-    expect(fakeNotifier.notifyEnqueuedCallCount()).toBe(0);
+    expect(fakeNotifier.notifyEnqueued).not.toHaveBeenCalled();
   });
 
   // 15. membershipRepository.findByGroupAndUser が DB エラーを返したら、NotFound に潰れず DatabaseError になる
@@ -692,8 +629,8 @@ describe("inviteMemberUseCase", () => {
         message: "D1 connection failed",
       });
     }
-    expect(fakeGroup.findByIdCallCount()).toBe(0);
-    expect(fakeInvitation.createCallCount()).toBe(0);
+    expect(fakeGroup.findById).not.toHaveBeenCalled();
+    expect(fakeInvitation.create).not.toHaveBeenCalled();
   });
 
   // 16. 宛先がすでにこの団体のメンバーなら InvalidInput で、招待を作らない（COND-022）
@@ -732,11 +669,14 @@ describe("inviteMemberUseCase", () => {
       expect(result.error.message).not.toContain("taro.handai");
     }
     // 小文字にそろえたアドレスで、この団体に限って引く
-    expect(fakeMembership.findByGroupAndEmailCalls()).toEqual([
-      { groupId: testGroupId, normalizedEmail: "taro.handai@osaka-u.ac.jp" },
-    ]);
-    expect(fakeInvitation.createCallCount()).toBe(0);
-    expect(fakeNotifier.notifyEnqueuedCallCount()).toBe(0);
+    expect(
+      fakeMembership.findByGroupAndEmail.mock.calls.map(([groupId, normalizedEmail]) => ({
+        groupId,
+        normalizedEmail,
+      })),
+    ).toEqual([{ groupId: testGroupId, normalizedEmail: "taro.handai@osaka-u.ac.jp" }]);
+    expect(fakeInvitation.create).not.toHaveBeenCalled();
+    expect(fakeNotifier.notifyEnqueued).not.toHaveBeenCalled();
   });
 
   // 17. 宛先が別の団体のメンバーであっても、この団体には招待できる
@@ -765,7 +705,7 @@ describe("inviteMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeInvitation.createCallCount()).toBe(1);
+    expect(fakeInvitation.create).toHaveBeenCalledTimes(1);
   });
 
   // 18. findByGroupAndEmail が DB エラーを返したら DatabaseError になり、招待を作らない
@@ -799,6 +739,6 @@ describe("inviteMemberUseCase", () => {
         message: "D1 connection failed",
       });
     }
-    expect(fakeInvitation.createCallCount()).toBe(0);
+    expect(fakeInvitation.create).not.toHaveBeenCalled();
   });
 });

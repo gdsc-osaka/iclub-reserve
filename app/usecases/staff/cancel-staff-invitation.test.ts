@@ -1,11 +1,8 @@
 import { okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { InvitationStatus } from "~/domain/invitation";
-import {
-  StaffErrorCode,
-  type StaffInvitation,
-  type StaffInvitationRepository,
-} from "~/domain/staff";
+import { StaffErrorCode, type StaffInvitation } from "~/domain/staff";
+import { fakeStaffInvitationRepository } from "~/testing/fakes/staff";
 import {
   cancelStaffInvitationUseCase,
   type CancelStaffInvitationArgs,
@@ -35,28 +32,19 @@ describe("cancelStaffInvitationUseCase", () => {
       canceledCount?: number;
     } = {},
   ) => {
-    let passedId = "";
-    let passedAuditLog: unknown = null;
-    const staffInvitationRepository: StaffInvitationRepository = {
-      findPendingByEmail: () => okAsync(null),
-      create: () => okAsync({ enqueuedMailIds: [] }),
-      cancel: (id, auditLog) => {
-        passedId = id;
-        passedAuditLog = auditLog;
-        return okAsync(options.canceledCount ?? 1);
-      },
-      findById: (id) =>
-        okAsync(
-          options.invitation !== undefined ? options.invitation : { ...defaultInvitation, id },
-        ),
-      accept: () => okAsync(false),
-      reject: () => okAsync(0),
-    };
+    const cancel = vi.fn((_id: string, _auditLog: unknown) => okAsync(options.canceledCount ?? 1));
+    const findById = vi.fn((id: string) =>
+      okAsync(options.invitation !== undefined ? options.invitation : { ...defaultInvitation, id }),
+    );
+
+    const staffInvitationRepository = fakeStaffInvitationRepository({
+      cancel,
+      findById,
+    });
 
     return {
       deps: { staffInvitationRepository },
-      getPassedId: () => passedId,
-      getPassedAuditLog: () => passedAuditLog,
+      cancel,
     };
   };
 
@@ -101,12 +89,11 @@ describe("cancelStaffInvitationUseCase", () => {
   });
 
   it("正常に取り消しが行われ、操作履歴が渡される", async () => {
-    const { deps, getPassedId, getPassedAuditLog } = setupDeps({ canceledCount: 1 });
+    const { deps, cancel } = setupDeps({ canceledCount: 1 });
     const result = await cancelStaffInvitationUseCase(deps, baseArgs);
 
     expect(result.isOk()).toBe(true);
-    expect(getPassedId()).toBe("inv_to_cancel");
-    expect(getPassedAuditLog()).toEqual({
+    expect(cancel).toHaveBeenCalledWith("inv_to_cancel", {
       occurredAt: now,
       actorId: baseArgs.actorUserId,
       actedAsStaff: true,

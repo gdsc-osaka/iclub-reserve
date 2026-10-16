@@ -1,8 +1,9 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
-import type { User, UserRepository } from "~/domain/user";
+import type { User } from "~/domain/user";
 import { UserErrorCode } from "~/domain/user";
+import { fakeUserRepository } from "~/testing/fakes/user";
 import { getUserUseCase } from "./get-user";
 
 const dummyUser: User = {
@@ -15,30 +16,32 @@ const dummyUser: User = {
 };
 
 /** D1 を使わないダミーのリポジトリ。渡した users の中から ID で検索する */
-const createFakeUserRepository = (users: User[]): UserRepository => ({
-  findById: (id) => {
-    const found = users.find((user) => user.id === id);
+const createFakeUserRepository = (users: User[]) =>
+  fakeUserRepository({
+    findById: (id) => {
+      const found = users.find((user) => user.id === id);
 
-    if (found === undefined) {
-      return errAsync({
-        code: UserErrorCode.NotFound,
-        message: `ID が ${id} のユーザーは見つかりませんでした。`,
-      });
-    }
+      if (found === undefined) {
+        return errAsync({
+          code: UserErrorCode.NotFound,
+          message: `ID が ${id} のユーザーは見つかりませんでした。`,
+        });
+      }
 
-    return okAsync(found);
-  },
-});
+      return okAsync(found);
+    },
+  });
 
 /** 必ず DB エラーを返すダミーのリポジトリ */
-const createFailingUserRepository = (): UserRepository => ({
-  findById: () =>
-    errAsync({
-      code: UserErrorCode.DatabaseError,
-      message: "ユーザー情報の取得に失敗しました。",
-      cause: new Error("D1 との接続に失敗しました"),
-    }),
-});
+const createFailingUserRepository = () =>
+  fakeUserRepository({
+    findById: () =>
+      errAsync({
+        code: UserErrorCode.DatabaseError,
+        message: "ユーザー情報の取得に失敗しました。",
+        cause: new Error("D1 との接続に失敗しました"),
+      }),
+  });
 
 describe("getUserUseCase", () => {
   it("ID に一致するユーザーを返す", async () => {

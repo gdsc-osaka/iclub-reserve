@@ -8,6 +8,7 @@ import {
   type CalendarWriteAccess,
 } from "~/domain/calendar";
 import { FacilityErrorCode, FacilityField } from "~/domain/facility";
+import { fakeCalendarClient } from "~/testing/fakes/calendar";
 import { ensureCalendarWritable } from "./facility-calendar";
 
 describe("ensureCalendarWritable", () => {
@@ -17,15 +18,13 @@ describe("ensureCalendarWritable", () => {
   const createMockClient = (
     checkWriteAccessResult: CalendarWriteAccess | CalendarError,
     isOk = true,
-  ): CalendarClient => ({
-    checkWriteAccess: () =>
-      isOk
-        ? okAsync(checkWriteAccessResult as CalendarWriteAccess)
-        : errAsync(checkWriteAccessResult as CalendarError),
-    upsertEvent: () => okAsync(null),
-    deleteEvent: () => okAsync(null),
-    listManagedEvents: () => okAsync([]),
-  });
+  ): CalendarClient =>
+    fakeCalendarClient({
+      checkWriteAccess: () =>
+        isOk
+          ? okAsync(checkWriteAccessResult as CalendarWriteAccess)
+          : errAsync(checkWriteAccessResult as CalendarError),
+    });
 
   it("writable の場合は ok(null) を返す", async () => {
     const calendarClient = createMockClient("writable");
