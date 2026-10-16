@@ -1,5 +1,6 @@
 /**
- * 団体一覧（SCR-008）の読み取りと、団体の状態の更新（UC-014）を、ローカルの本物の D1 に対して実行して確かめるテスト。
+ * 所属団体の一覧（SCR-008）の読み取りと、団体の状態の更新（UC-014）を、ローカルの本物の D1 に対して実行して確かめるテスト。
+ * 事務局向けの全団体の一覧は `app/query/group/group-search-d1.test.ts` で確かめる。
  *
  * 【なぜ実際に流すのか】
  * ユースケースのテストは Query と Repository を偽物に差し替えるので、SQL の誤りは素通りする。
@@ -16,7 +17,6 @@ import { useD1TestDb } from "../d1-test-db";
 const testDb = useD1TestDb();
 import { createUserGroupListQuery } from "../user/user-group-list-query";
 import { createGroupRepository } from "./group-repo";
-import { createGroupSearchQuery } from "./group-search-query";
 
 beforeEach(async () => {
   const insertUserSql = `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`;
@@ -47,40 +47,6 @@ describe("所属団体の一覧（createUserGroupListQuery）", () => {
       { id: "grp_ai", memberCount: 1 },
       { id: "grp_robotics", memberCount: 3 },
     ]);
-  });
-});
-
-describe("事務局向けの団体一覧（createGroupSearchQuery）", () => {
-  it("すべての状態を出すときは団体名の順に並べ、メンバーが 0 人の団体も落とさない", async () => {
-    const result = await createGroupSearchQuery(testDb.db).findList({ status: null });
-
-    // SQLite の既定の比較は UTF-8 のバイト順なので、英字 → カタカナ → 漢字の順になる
-    expect(result._unsafeUnwrap().map(({ id, memberCount }) => ({ id, memberCount }))).toEqual([
-      { id: "grp_ai", memberCount: 1 },
-      { id: "grp_robotics", memberCount: 3 },
-      { id: "grp_empty", memberCount: 0 },
-      { id: "grp_band", memberCount: 1 },
-    ]);
-  });
-
-  it("承認待ちだけを出すときは、待たせている順（作成日時の昇順）に並べる", async () => {
-    const result = await createGroupSearchQuery(testDb.db).findList({
-      status: GroupStatus.Pending,
-    });
-
-    expect(result._unsafeUnwrap().map(({ id }) => id)).toEqual(["grp_band", "grp_ai"]);
-  });
-
-  it("状態ごとの件数を数え、1 件も無い状態は 0 にする", async () => {
-    await testDb.seed([`UPDATE "group" SET status = 'pending' WHERE id = 'grp_empty'`]);
-
-    const result = await createGroupSearchQuery(testDb.db).countByStatus();
-
-    expect(result._unsafeUnwrap()).toEqual({
-      [GroupStatus.Pending]: 3,
-      [GroupStatus.Enabled]: 1,
-      [GroupStatus.Disabled]: 0,
-    });
   });
 });
 

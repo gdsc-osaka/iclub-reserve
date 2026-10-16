@@ -1,7 +1,8 @@
 /**
- * 事務局側の未読問い合わせ（StaffUnreadMessagesQuery）をローカル D1 に対して検証するテスト。
+ * 事務局側の未読（findStaffUnreadMessages）をローカル D1 に対して検証するテスト。
  *
  * COND-026 (3) の事務局側の各判定を検証する:
+ * - 事務局でない人には Forbidden を返す
  * - 団体側のメッセージが未読になる
  * - 事務局の誰かが後から返信すると全員の未読から消える
  * - 事務局の誰かが後から承認などの操作をすると全員の未読から消える
@@ -12,12 +13,13 @@
  * - 予約 1 件につき 1 行にまとめ、最大 10 件で超えた分は件数だけ返す
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { useD1TestDb } from "../d1-test-db";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
-import { createStaffUnreadMessagesQuery } from "./staff-unread-messages-query";
+import { useD1TestDb } from "~/infra/d1-test-db";
+import { QueryErrorCode } from "../error";
+import { findStaffUnreadMessages } from "./staff-unread-messages";
 
 const testDb = useD1TestDb();
 
@@ -142,7 +144,21 @@ async function insertRead(userId: string, reservationId: string, lastReadAt: Dat
   ]);
 }
 
-describe("createStaffUnreadMessagesQuery", () => {
+/** 事務局 `staffUserId` から見た、今の未読 */
+const findUnreadFor = (staffUserId: string) =>
+  findStaffUnreadMessages(testDb.db, { actorUserId: staffUserId, isStaff: true, now: NOW });
+
+describe("findStaffUnreadMessages", () => {
+  it("事務局でない人には Forbidden を返す（COND-009）", async () => {
+    const result = await findStaffUnreadMessages(testDb.db, {
+      actorUserId: USER_MEMBER.id,
+      isStaff: false,
+      now: NOW,
+    });
+
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.Forbidden);
+  });
+
   it("団体側がメッセージを送ると事務局の未読になる", async () => {
     await insertReservation("res_1");
     await insertMessage(
@@ -154,8 +170,7 @@ describe("createStaffUnreadMessagesQuery", () => {
       new Date("2026-10-20T10:00:00+09:00"),
     );
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-    const result = await query.findUnreadForStaff(USER_STAFF_1.id, NOW);
+    const result = await findUnreadFor(USER_STAFF_1.id);
 
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
@@ -187,15 +202,14 @@ describe("createStaffUnreadMessagesQuery", () => {
       new Date("2026-10-20T11:00:00+09:00"),
     );
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
     // 事務局1 から見ても未読から消えている
-    const result1 = await query.findUnreadForStaff(USER_STAFF_1.id, NOW);
+    const result1 = await findUnreadFor(USER_STAFF_1.id);
     expect(result1.isOk()).toBe(true);
     if (!result1.isOk()) return;
     expect(result1.value.items).toHaveLength(0);
 
     // 事務局2 から見ても消えている
-    const result2 = await query.findUnreadForStaff(USER_STAFF_2.id, NOW);
+    const result2 = await findUnreadFor(USER_STAFF_2.id);
     expect(result2.isOk()).toBe(true);
     if (!result2.isOk()) return;
     expect(result2.value.items).toHaveLength(0);
@@ -222,8 +236,7 @@ describe("createStaffUnreadMessagesQuery", () => {
       new Date("2026-10-20T11:00:00+09:00"),
     );
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-    const result = await query.findUnreadForStaff(USER_STAFF_1.id, NOW);
+    const result = await findUnreadFor(USER_STAFF_1.id);
 
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
@@ -244,16 +257,14 @@ describe("createStaffUnreadMessagesQuery", () => {
     // 事務局1 だけが 10:30 に既読にした
     await insertRead(USER_STAFF_1.id, "res_1", new Date("2026-10-20T10:30:00+09:00"));
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-
     // 事務局1 からは見えない
-    const result1 = await query.findUnreadForStaff(USER_STAFF_1.id, NOW);
+    const result1 = await findUnreadFor(USER_STAFF_1.id);
     expect(result1.isOk()).toBe(true);
     if (!result1.isOk()) return;
     expect(result1.value.items).toHaveLength(0);
 
     // 事務局2 からはまだ未読として見える
-    const result2 = await query.findUnreadForStaff(USER_STAFF_2.id, NOW);
+    const result2 = await findUnreadFor(USER_STAFF_2.id);
     expect(result2.isOk()).toBe(true);
     if (!result2.isOk()) return;
     expect(result2.value.items).toHaveLength(1);
@@ -272,16 +283,14 @@ describe("createStaffUnreadMessagesQuery", () => {
       new Date("2026-10-20T10:00:00+09:00"),
     );
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-
     // 送信者本人（事務局1）には未読にならない
-    const result1 = await query.findUnreadForStaff(USER_STAFF_1.id, NOW);
+    const result1 = await findUnreadFor(USER_STAFF_1.id);
     expect(result1.isOk()).toBe(true);
     if (!result1.isOk()) return;
     expect(result1.value.items).toHaveLength(0);
 
     // 別の事務局（事務局2）には未読になる
-    const result2 = await query.findUnreadForStaff(USER_STAFF_2.id, NOW);
+    const result2 = await findUnreadFor(USER_STAFF_2.id);
     expect(result2.isOk()).toBe(true);
     if (!result2.isOk()) return;
     expect(result2.value.items).toHaveLength(1);
@@ -315,8 +324,7 @@ describe("createStaffUnreadMessagesQuery", () => {
       new Date("2026-10-20T11:00:00+09:00"),
     );
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-    const value = (await query.findUnreadForStaff(USER_STAFF_1.id, NOW))._unsafeUnwrap();
+    const value = (await findUnreadFor(USER_STAFF_1.id))._unsafeUnwrap();
 
     expect(value.items).toHaveLength(1);
     expect(value.items[0]?.latestMessage.body).toBe("2 通目");
@@ -345,8 +353,7 @@ describe("createStaffUnreadMessagesQuery", () => {
       new Date("2026-09-20T12:01:00+09:00"),
     );
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-    const value = (await query.findUnreadForStaff(USER_STAFF_1.id, NOW))._unsafeUnwrap();
+    const value = (await findUnreadFor(USER_STAFF_1.id))._unsafeUnwrap();
 
     expect(value.items.map((item) => item.reservationId)).toEqual(["res_recent"]);
   });
@@ -378,8 +385,7 @@ describe("createStaffUnreadMessagesQuery", () => {
       new Date("2026-10-20T11:00:00+09:00"),
     );
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-    const value = (await query.findUnreadForStaff(USER_STAFF_1.id, NOW))._unsafeUnwrap();
+    const value = (await findUnreadFor(USER_STAFF_1.id))._unsafeUnwrap();
 
     expect(value.items).toHaveLength(1);
     expect(value.items[0]?.latestMessage.body).toBe("3 通目");
@@ -401,8 +407,7 @@ describe("createStaffUnreadMessagesQuery", () => {
       );
     }
 
-    const query = createStaffUnreadMessagesQuery(testDb.db);
-    const value = (await query.findUnreadForStaff(USER_STAFF_1.id, NOW))._unsafeUnwrap();
+    const value = (await findUnreadFor(USER_STAFF_1.id))._unsafeUnwrap();
 
     expect(value.items.map((item) => item.reservationId)).toEqual([...ids].reverse().slice(0, 10));
     expect(value.overflowCount).toBe(2);
