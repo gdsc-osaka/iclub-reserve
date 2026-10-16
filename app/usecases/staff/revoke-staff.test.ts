@@ -1,6 +1,7 @@
 import { okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
-import { StaffErrorCode, type StaffMemberRepository } from "~/domain/staff";
+import { describe, expect, it, vi } from "vitest";
+import { StaffErrorCode } from "~/domain/staff";
+import { fakeStaffMemberRepository } from "~/testing/fakes/staff";
 import { revokeStaffUseCase, type RevokeStaffArgs } from "./revoke-staff";
 
 describe("revokeStaffUseCase", () => {
@@ -19,10 +20,11 @@ describe("revokeStaffUseCase", () => {
       revokedCount?: number;
     } = {},
   ) => {
-    let passedTargetId = "";
-    let passedAuditLog: unknown = null;
-    const staffMemberRepository: StaffMemberRepository = {
-      findStaffByEmail: () => okAsync(null),
+    const revoke = vi.fn((_id: string, _now: Date, _auditLog: unknown) =>
+      okAsync(options.revokedCount ?? 1),
+    );
+
+    const staffMemberRepository = fakeStaffMemberRepository({
       findStaffById: (id) => {
         if (options.targetStaff !== undefined) {
           return okAsync(options.targetStaff);
@@ -30,17 +32,12 @@ describe("revokeStaffUseCase", () => {
         return okAsync({ id });
       },
       countStaff: () => okAsync(options.staffCount ?? 2),
-      revoke: (id, _now, auditLog) => {
-        passedTargetId = id;
-        passedAuditLog = auditLog;
-        return okAsync(options.revokedCount ?? 1);
-      },
-    };
+      revoke,
+    });
 
     return {
       deps: { staffMemberRepository },
-      getPassedTargetId: () => passedTargetId,
-      getPassedAuditLog: () => passedAuditLog,
+      revoke,
     };
   };
 
@@ -97,7 +94,7 @@ describe("revokeStaffUseCase", () => {
   });
 
   it("自分自身の剥奪は他に事務局がいれば成功し、revokedSelf が true になる", async () => {
-    const { deps, getPassedTargetId } = setupDeps({ staffCount: 2, revokedCount: 1 });
+    const { deps, revoke } = setupDeps({ staffCount: 2, revokedCount: 1 });
     const result = await revokeStaffUseCase(deps, {
       ...baseArgs,
       targetUserId: baseArgs.actorUserId,
@@ -107,11 +104,11 @@ describe("revokeStaffUseCase", () => {
     if (result.isOk()) {
       expect(result.value.revokedSelf).toBe(true);
     }
-    expect(getPassedTargetId()).toBe(baseArgs.actorUserId);
+    expect(revoke).toHaveBeenCalledWith(baseArgs.actorUserId, now, expect.anything());
   });
 
   it("他人を剥奪した場合は revokedSelf が false になり、操作履歴が渡される", async () => {
-    const { deps, getPassedTargetId, getPassedAuditLog } = setupDeps({
+    const { deps, revoke } = setupDeps({
       staffCount: 3,
       revokedCount: 1,
     });
@@ -121,8 +118,7 @@ describe("revokeStaffUseCase", () => {
     if (result.isOk()) {
       expect(result.value.revokedSelf).toBe(false);
     }
-    expect(getPassedTargetId()).toBe("usr_target");
-    expect(getPassedAuditLog()).toEqual({
+    expect(revoke).toHaveBeenCalledWith("usr_target", now, {
       occurredAt: now,
       actorId: baseArgs.actorUserId,
       actedAsStaff: true,

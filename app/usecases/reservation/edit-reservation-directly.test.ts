@@ -2,15 +2,10 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction } from "~/domain/audit-log";
-import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
+import { FacilityErrorCode, type Facility } from "~/domain/facility";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { ReservationMailEvent, type ReservationMailAudience } from "~/domain/mail/reservation-mail";
-import {
-  MembershipErrorCode,
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
+import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationField,
@@ -18,11 +13,16 @@ import {
   type ApplyContentEditArgs,
   type Reservation,
   type ReservationOverlapArgs,
-  type ReservationRepository,
 } from "~/domain/reservation";
 import { ReservationEditOutcome, type ReservationContent } from "~/domain/reservation/edit";
 import { QueryErrorCode } from "~/query/error";
-import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
+import {
+  fakeFacilityRepository,
+  fakeMailOutboxNotifier,
+  fakeMembershipRepository,
+  fakeReservationMailRecipientsQuery,
+  fakeReservationRepository,
+} from "~/testing/fakes";
 import { APPROVED_OVERLAP_MESSAGE } from "./_shared/approved-overlap";
 import {
   editReservationDirectlyUseCase,
@@ -129,66 +129,41 @@ const createDeps = (
     ) => okAsync({ applied, enqueuedMailIds: applied ? ["outbox_01"] : [] }),
   );
 
-  const reservationRepository: ReservationRepository = {
+  const reservationRepository = fakeReservationRepository({
     findById,
     existsApprovedOverlap,
     applyContentEdit,
-    create: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    createApproved: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    applyStatusTransition: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
   const findByGroupAndUser = vi.fn((_groupId: string, _userId: string) =>
     overrides.membershipDbError === true
       ? errAsync({ code: MembershipErrorCode.DatabaseError, message: "db down" })
       : okAsync(overrides.membership === undefined ? memberMembership : overrides.membership),
   );
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser,
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateRole: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    remove: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
   const findFacility = vi.fn((_id: string) =>
     overrides.facilityNotFound === true
       ? errAsync({ code: FacilityErrorCode.NotFound, message: "not found" })
       : okAsync(overrides.facility ?? activeFacility),
   );
-  const facilityRepository: FacilityRepository = {
+  const facilityRepository = fakeFacilityRepository({
     findById: findFacility,
-    create: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    update: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    countBlockingReservations: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateActiveStatus: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
   const findByReservationId = vi.fn((_reservationId: string) =>
     overrides.recipientsDbError === true
       ? errAsync({ code: QueryErrorCode.DatabaseError, message: "query error" })
       : okAsync(defaultAudience),
   );
-  const reservationMailRecipientsQuery: ReservationMailRecipientsQuery = {
+  const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findByReservationId,
-    findForNewReservation: () =>
-      errAsync({ code: QueryErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    findForMessage: () =>
-      errAsync({ code: QueryErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
-  const mailOutboxNotifier = { notifyEnqueued };
+  const mailOutboxNotifier = fakeMailOutboxNotifier({ notifyEnqueued });
 
   return {
     deps: {

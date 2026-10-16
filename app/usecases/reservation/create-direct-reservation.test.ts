@@ -2,21 +2,21 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction } from "~/domain/audit-log";
-import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
-import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~/domain/group";
-import {
-  MembershipErrorCode,
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
+import { FacilityErrorCode, type Facility } from "~/domain/facility";
+import { GroupErrorCode, GroupStatus, type Group } from "~/domain/group";
+import { MembershipRole, type StoredMembership } from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationField,
   ReservationStatus,
   type Reservation,
-  type ReservationRepository,
 } from "~/domain/reservation";
+import {
+  fakeFacilityRepository,
+  fakeGroupRepository,
+  fakeMembershipRepository,
+  fakeReservationRepository,
+} from "~/testing/fakes";
 import { createDirectReservationUseCase } from "./create-direct-reservation";
 
 const enabledGroup: Group = {
@@ -80,57 +80,29 @@ const createDeps = (
       okAsync({ applied: overrides.blockedOnWrite !== true }),
   );
 
-  const reservationRepository: ReservationRepository = {
-    findById: () => errAsync({ code: ReservationErrorCode.NotFound, message: "not found" }),
-    create: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
+  const reservationRepository = fakeReservationRepository({
     createApproved,
     existsApprovedOverlap: () => okAsync(overrides.hasApprovedOverlap ?? false),
-    applyStatusTransition: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    applyContentEdit: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser: () =>
       okAsync(overrides.membership === undefined ? membership : overrides.membership),
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateRole: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    remove: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
-  const groupRepository: GroupRepository = {
+  const groupRepository = fakeGroupRepository({
     findById: () =>
       overrides.groupNotFound === true
         ? errAsync({ code: GroupErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.group ?? enabledGroup),
-    updateName: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateStatus: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    create: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
-  const facilityRepository: FacilityRepository = {
+  const facilityRepository = fakeFacilityRepository({
     findById: () =>
       overrides.facilityNotFound === true
         ? errAsync({ code: FacilityErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.facility ?? activeFacility),
-    create: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    update: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    countBlockingReservations: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateActiveStatus: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
   return {
     deps: {

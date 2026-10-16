@@ -2,18 +2,10 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction } from "~/domain/audit-log";
-import {
-  GroupErrorCode,
-  GroupStatus,
-  type Group,
-  type GroupError,
-  type GroupRepository,
-} from "~/domain/group";
-import {
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
+import { GroupErrorCode, GroupStatus, type Group, type GroupError } from "~/domain/group";
+import { MembershipRole, type StoredMembership } from "~/domain/membership";
+import { fakeGroupRepository } from "~/testing/fakes/group";
+import { fakeMembershipRepository } from "~/testing/fakes/membership";
 import { changeGroupStatusUseCase, type ChangeGroupStatusDeps } from "./change-group-status";
 
 const dummyNow = new Date("2026-09-23T12:00:00Z");
@@ -34,7 +26,7 @@ const createDeps = (overrides?: {
 }) => {
   const currentGroup = overrides?.group !== undefined ? overrides.group : createFakeGroup();
 
-  const groupRepository: GroupRepository = {
+  const groupRepository = fakeGroupRepository({
     findById: vi.fn((_id: string) => {
       if (overrides?.groupError) return errAsync(overrides.groupError);
       if (currentGroup === null) {
@@ -45,8 +37,6 @@ const createDeps = (overrides?: {
       }
       return okAsync(currentGroup);
     }),
-    updateName: vi.fn(),
-    create: vi.fn(),
     updateStatus: vi.fn((input) => {
       if (overrides?.groupError) return errAsync(overrides.groupError);
       if (overrides?.updateStatusResult === null) {
@@ -61,17 +51,13 @@ const createDeps = (overrides?: {
         updatedAt: input.updatedAt,
       });
     }),
-  };
+  });
 
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser: vi.fn((_groupId: string, _userId: string) =>
       okAsync(overrides?.membership ?? null),
     ),
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: vi.fn(),
-    updateRole: vi.fn(),
-    remove: vi.fn(),
-  };
+  });
 
   return {
     deps: { groupRepository, membershipRepository } satisfies ChangeGroupStatusDeps,

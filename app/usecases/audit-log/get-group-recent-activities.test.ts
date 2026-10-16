@@ -1,15 +1,14 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { RECENT_ACTIVITIES_LIMIT } from "~/domain/audit-log";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
-import { RECENT_ACTIVITIES_LIMIT } from "~/domain/audit-log";
-import type {
-  GroupRecentActivitiesQuery,
-  GroupRecentActivityItem,
-} from "~/query/audit-log/group-recent-activities";
+import type { GroupRecentActivityItem } from "~/query/audit-log/group-recent-activities";
 import { QueryErrorCode, type QueryError } from "~/query/error";
-import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
+import type { UserGroupList } from "~/query/user/user-group-list";
+import { fakeGroupRecentActivitiesQuery } from "~/testing/fakes/audit-log";
+import { fakeUserGroupListQuery } from "~/testing/fakes/user";
 import { getGroupRecentActivitiesUseCase } from "./get-group-recent-activities";
 
 describe("getGroupRecentActivitiesUseCase", () => {
@@ -64,55 +63,42 @@ describe("getGroupRecentActivitiesUseCase", () => {
     changes: {},
   };
 
-  const createMockGroupListQuery = (groups: UserGroupList): UserGroupListQuery => ({
-    findByUserId: () => okAsync(groups),
-  });
-
-  const createMockRecentActivitiesQuery = (
-    activities: readonly GroupRecentActivityItem[],
-    capturedArgs?: { current: unknown },
-  ): GroupRecentActivitiesQuery => ({
-    findRecentActivities: (args) => {
-      if (capturedArgs) {
-        capturedArgs.current = args;
-      }
-      return okAsync(activities);
-    },
-  });
-
   it("所属団体が 0 件のときはクエリを実行せずに空配列を返す", async () => {
-    let queryCalled = false;
-    const groupRecentActivitiesQuery: GroupRecentActivitiesQuery = {
-      findRecentActivities: () => {
-        queryCalled = true;
-        return okAsync([]);
-      },
-    };
+    const findRecentActivities = vi.fn(() => okAsync([]));
+    const groupRecentActivitiesQuery = fakeGroupRecentActivitiesQuery({
+      findRecentActivities,
+    });
 
     const result = await getGroupRecentActivitiesUseCase(
       {
-        userGroupListQuery: createMockGroupListQuery([]),
+        userGroupListQuery: fakeUserGroupListQuery({
+          findByUserId: vi.fn(() => okAsync([])),
+        }),
         groupRecentActivitiesQuery,
       },
       { actorUserId: "usr_1", isStaff: false, now },
     );
 
     expect(result._unsafeUnwrap()).toEqual([]);
-    expect(queryCalled).toBe(false);
+    expect(findRecentActivities).not.toHaveBeenCalled();
   });
 
   it("所属団体の ID と役割、7日前の起点、上限5件を渡してクエリを実行する", async () => {
-    const capturedArgs = { current: null as unknown };
+    const findRecentActivities = vi.fn(() => okAsync([applyActivity]));
 
     const result = await getGroupRecentActivitiesUseCase(
       {
-        userGroupListQuery: createMockGroupListQuery([adminGroup, memberGroup]),
-        groupRecentActivitiesQuery: createMockRecentActivitiesQuery([applyActivity], capturedArgs),
+        userGroupListQuery: fakeUserGroupListQuery({
+          findByUserId: vi.fn(() => okAsync([adminGroup, memberGroup])),
+        }),
+        groupRecentActivitiesQuery: fakeGroupRecentActivitiesQuery({
+          findRecentActivities,
+        }),
       },
       { actorUserId: "usr_1", isStaff: false, now },
     );
 
-    expect(capturedArgs.current).toEqual({
+    expect(findRecentActivities).toHaveBeenCalledWith({
       actorUserId: "usr_1",
       groups: [
         { id: "grp_1", role: MembershipRole.Admin },
@@ -131,8 +117,12 @@ describe("getGroupRecentActivitiesUseCase", () => {
     it("事務局の横断権限による操作は、事務局でない人には「事務局」とだけ出す", async () => {
       const result = await getGroupRecentActivitiesUseCase(
         {
-          userGroupListQuery: createMockGroupListQuery([adminGroup]),
-          groupRecentActivitiesQuery: createMockRecentActivitiesQuery([staffEnableActivity]),
+          userGroupListQuery: fakeUserGroupListQuery({
+            findByUserId: vi.fn(() => okAsync([adminGroup])),
+          }),
+          groupRecentActivitiesQuery: fakeGroupRecentActivitiesQuery({
+            findRecentActivities: vi.fn(() => okAsync([staffEnableActivity])),
+          }),
         },
         { actorUserId: "usr_1", isStaff: false, now },
       );
@@ -143,8 +133,12 @@ describe("getGroupRecentActivitiesUseCase", () => {
     it("事務局が見るときは、事務局員の名前を出す", async () => {
       const result = await getGroupRecentActivitiesUseCase(
         {
-          userGroupListQuery: createMockGroupListQuery([adminGroup]),
-          groupRecentActivitiesQuery: createMockRecentActivitiesQuery([staffEnableActivity]),
+          userGroupListQuery: fakeUserGroupListQuery({
+            findByUserId: vi.fn(() => okAsync([adminGroup])),
+          }),
+          groupRecentActivitiesQuery: fakeGroupRecentActivitiesQuery({
+            findRecentActivities: vi.fn(() => okAsync([staffEnableActivity])),
+          }),
         },
         { actorUserId: "usr_1", isStaff: true, now },
       );
@@ -162,14 +156,16 @@ describe("getGroupRecentActivitiesUseCase", () => {
       code: QueryErrorCode.DatabaseError,
       message: "DB error",
     };
-    const userGroupListQuery: UserGroupListQuery = {
-      findByUserId: () => errAsync(error),
-    };
+    const userGroupListQuery = fakeUserGroupListQuery({
+      findByUserId: vi.fn(() => errAsync(error)),
+    });
 
     const result = await getGroupRecentActivitiesUseCase(
       {
         userGroupListQuery,
-        groupRecentActivitiesQuery: createMockRecentActivitiesQuery([]),
+        groupRecentActivitiesQuery: fakeGroupRecentActivitiesQuery({
+          findRecentActivities: vi.fn(() => okAsync([])),
+        }),
       },
       { actorUserId: "usr_1", isStaff: false, now },
     );
@@ -182,13 +178,15 @@ describe("getGroupRecentActivitiesUseCase", () => {
       code: QueryErrorCode.DatabaseError,
       message: "DB error",
     };
-    const groupRecentActivitiesQuery: GroupRecentActivitiesQuery = {
-      findRecentActivities: () => errAsync(error),
-    };
+    const groupRecentActivitiesQuery = fakeGroupRecentActivitiesQuery({
+      findRecentActivities: vi.fn(() => errAsync(error)),
+    });
 
     const result = await getGroupRecentActivitiesUseCase(
       {
-        userGroupListQuery: createMockGroupListQuery([adminGroup]),
+        userGroupListQuery: fakeUserGroupListQuery({
+          findByUserId: vi.fn(() => okAsync([adminGroup])),
+        }),
         groupRecentActivitiesQuery,
       },
       { actorUserId: "usr_1", isStaff: false, now },

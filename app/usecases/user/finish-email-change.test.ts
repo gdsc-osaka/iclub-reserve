@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MailDraft } from "~/domain/mail/mail-outbox";
-import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
+import { fakeMailOutboxNotifier } from "~/testing/fakes/mail";
 import {
   createFinishEmailChangeUseCase,
   FinishEmailChangeLogCode,
@@ -33,11 +33,11 @@ const createDeps = (overrides: Partial<FinishEmailChangeDeps> = {}) => {
       enqueued.push(...mails);
       return ["outbox_1"];
     }),
-    mailOutboxNotifier: {
+    mailOutboxNotifier: fakeMailOutboxNotifier({
       notifyEnqueued: vi.fn(() => {
         calls.push("notifyEnqueued");
       }),
-    } satisfies MailOutboxNotifier,
+    }),
     sessionStore: {
       listSessions: vi.fn(async () => {
         calls.push("listSessions");

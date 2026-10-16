@@ -2,25 +2,26 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
-import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
-import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~/domain/group";
+import { FacilityErrorCode, type Facility } from "~/domain/facility";
+import { GroupErrorCode, GroupStatus, type Group } from "~/domain/group";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { ReservationMailAudience } from "~/domain/mail/reservation-mail";
-import {
-  MembershipErrorCode,
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
+import { MembershipRole, type StoredMembership } from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationField,
   ReservationStatus,
   type Reservation,
-  type ReservationRepository,
 } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
-import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
+import {
+  fakeFacilityRepository,
+  fakeGroupRepository,
+  fakeMailOutboxNotifier,
+  fakeMembershipRepository,
+  fakeReservationMailRecipientsQuery,
+  fakeReservationRepository,
+} from "~/testing/fakes";
 import { createProvisionalReservationUseCase } from "./create-reservation";
 
 const enabledGroup: Group = {
@@ -96,56 +97,32 @@ const createDeps = (
       }),
   );
 
-  const reservationRepository: ReservationRepository = {
-    findById: () => errAsync({ code: ReservationErrorCode.NotFound, message: "not found" }),
+  const reservationRepository = fakeReservationRepository({
     create,
     createApproved: () => okAsync({ applied: true }),
     existsApprovedOverlap: () => okAsync(overrides.hasApprovedOverlap ?? false),
     applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
     applyContentEdit: () => okAsync({ applied: true, enqueuedMailIds: [] }),
-  };
+  });
 
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser: () =>
       okAsync(overrides.membership === undefined ? membership : overrides.membership),
-    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateRole: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    remove: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
-  const groupRepository: GroupRepository = {
+  const groupRepository = fakeGroupRepository({
     findById: () =>
       overrides.groupNotFound === true
         ? errAsync({ code: GroupErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.group ?? enabledGroup),
-    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-    updateName: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateStatus: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    create: () =>
-      errAsync({ code: GroupErrorCode.DatabaseError, message: "このテストでは create は使わない" }),
-  };
+  });
 
-  const facilityRepository: FacilityRepository = {
+  const facilityRepository = fakeFacilityRepository({
     findById: () =>
       overrides.facilityNotFound === true
         ? errAsync({ code: FacilityErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.facility ?? activeFacility),
-    create: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    update: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    countBlockingReservations: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateActiveStatus: () =>
-      errAsync({ code: FacilityErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
   const findForNewReservation = vi.fn((_args: { groupId: string; applicantUserId: string }) =>
     overrides.recipientsQueryError
@@ -153,15 +130,12 @@ const createDeps = (
       : okAsync(overrides.audience ?? defaultAudience),
   );
 
-  const reservationMailRecipientsQuery: ReservationMailRecipientsQuery = {
-    findByReservationId: () =>
-      errAsync({ code: QueryErrorCode.NotFound, message: "not implemented in this mock" }),
+  const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findForNewReservation,
-    findForMessage: () =>
-      errAsync({ code: QueryErrorCode.NotFound, message: "not implemented in this mock" }),
-  };
+  });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
+  const mailOutboxNotifier = fakeMailOutboxNotifier({ notifyEnqueued });
 
   return {
     deps: {
@@ -170,7 +144,7 @@ const createDeps = (
       groupRepository,
       facilityRepository,
       reservationMailRecipientsQuery,
-      mailOutboxNotifier: { notifyEnqueued },
+      mailOutboxNotifier,
     },
     create,
     findForNewReservation,

@@ -1,15 +1,15 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode } from "~/domain/group";
 import type {
   StoredMembership,
   MembershipError,
-  MembershipRepository,
   UpdateMembershipRoleInput,
 } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
+import { fakeMembershipRepository } from "~/testing/fakes";
 import { updateMemberRoleUseCase } from "./update-member-role";
 
 const testGroupId = "grp_robotics";
@@ -43,61 +43,44 @@ interface FakeMembershipRepositoryOptions {
   ) => ResultAsync<number, MembershipError>;
 }
 
-/** D1 を使わないダミーのメンバーシップリポジトリ。呼び出し回数と引数を自前で記録する */
+/** D1 を使わないダミーのメンバーシップリポジトリ。呼び出しを vi.fn で記録する */
 const createFakeMembershipRepository = (
   initialMemberships: readonly StoredMembership[],
   options: FakeMembershipRepositoryOptions = {},
 ) => {
-  let findByGroupAndUserCallCount = 0;
-  let countAdminsCallCount = 0;
-  let updateRoleCallCount = 0;
-  let removeCallCount = 0;
-  let lastUpdateRoleInput: UpdateMembershipRoleInput | null = null;
-  let lastAuditLog: AuditLogDraft | null = null;
-
   const memberships = [...initialMemberships];
 
-  const repository: MembershipRepository = {
-    findByGroupAndUser: (groupId, userId) => {
-      findByGroupAndUserCallCount += 1;
-      const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
-      return okAsync(found ?? null);
-    },
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: (_groupId) => {
-      countAdminsCallCount += 1;
-      if (options.countAdminsResult) {
-        return options.countAdminsResult();
-      }
-      const count = memberships.filter((m) => m.role === MembershipRole.Admin).length;
-      return okAsync(count);
-    },
-    updateRole: (input, auditLog) => {
-      updateRoleCallCount += 1;
-      lastUpdateRoleInput = input;
-      lastAuditLog = auditLog;
-      if (options.updateRoleResult) {
-        return options.updateRoleResult(input, auditLog);
-      }
-      return okAsync(1);
-    },
-    remove: (_groupId, _userId) => {
-      removeCallCount += 1;
-      return errAsync({
-        code: MembershipErrorCode.DatabaseError,
-        message: "このテストでは remove は使わない",
-      });
-    },
-  };
+  const findByGroupAndUser = vi.fn((groupId: string, userId: string) => {
+    const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
+    return okAsync(found ?? null);
+  });
+
+  const countAdmins = vi.fn((_groupId: string) => {
+    if (options.countAdminsResult) {
+      return options.countAdminsResult();
+    }
+    const count = memberships.filter((m) => m.role === MembershipRole.Admin).length;
+    return okAsync(count);
+  });
+
+  const updateRole = vi.fn((input: UpdateMembershipRoleInput, auditLog: AuditLogDraft) => {
+    if (options.updateRoleResult) {
+      return options.updateRoleResult(input, auditLog);
+    }
+    return okAsync(1);
+  });
+
+  const repository = fakeMembershipRepository({
+    findByGroupAndUser,
+    countAdmins,
+    updateRole,
+  });
 
   return {
     repository,
-    findByGroupAndUserCallCount: () => findByGroupAndUserCallCount,
-    countAdminsCallCount: () => countAdminsCallCount,
-    updateRoleCallCount: () => updateRoleCallCount,
-    removeCallCount: () => removeCallCount,
-    lastUpdateRoleInput: () => lastUpdateRoleInput,
-    lastAuditLog: () => lastAuditLog,
+    findByGroupAndUser,
+    countAdmins,
+    updateRole,
   };
 };
 
@@ -121,8 +104,8 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fake.updateRoleCallCount()).toBe(1);
-    expect(fake.lastUpdateRoleInput()).toEqual({
+    expect(fake.updateRole).toHaveBeenCalledTimes(1);
+    expect(fake.updateRole.mock.calls[0]?.[0]).toEqual({
       groupId: testGroupId,
       userId: regularMember.userId,
       role: MembershipRole.Admin,
@@ -147,8 +130,8 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fake.countAdminsCallCount()).toBe(0);
-    expect(fake.updateRoleCallCount()).toBe(1);
+    expect(fake.countAdmins).not.toHaveBeenCalled();
+    expect(fake.updateRole).toHaveBeenCalledTimes(1);
   });
 
   // 3. 管理者が 2 人いるとき、管理者 1 人を降格できる
@@ -168,9 +151,9 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fake.countAdminsCallCount()).toBe(1);
-    expect(fake.updateRoleCallCount()).toBe(1);
-    expect(fake.lastUpdateRoleInput()).toEqual({
+    expect(fake.countAdmins).toHaveBeenCalledTimes(1);
+    expect(fake.updateRole).toHaveBeenCalledTimes(1);
+    expect(fake.updateRole.mock.calls[0]?.[0]).toEqual({
       groupId: testGroupId,
       userId: adminMembership2.userId,
       role: MembershipRole.Member,
@@ -200,8 +183,8 @@ describe("updateMemberRoleUseCase", () => {
     expect(error.userMessage).toBe(
       "管理者が 0 人になるため、最後の管理者は降格できません。先に別のメンバーを管理者にしてください。",
     );
-    expect(fake.countAdminsCallCount()).toBe(1);
-    expect(fake.updateRoleCallCount()).toBe(0);
+    expect(fake.countAdmins).toHaveBeenCalledTimes(1);
+    expect(fake.updateRole).not.toHaveBeenCalled();
   });
 
   // 5. 自分自身の降格は、他に管理者がいるなら成功する（対象 = 操作者で updateRole が呼ばれる）
@@ -221,8 +204,8 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fake.updateRoleCallCount()).toBe(1);
-    expect(fake.lastUpdateRoleInput()?.userId).toBe(adminMembership1.userId);
+    expect(fake.updateRole).toHaveBeenCalledTimes(1);
+    expect(fake.updateRole.mock.calls[0]?.[0]?.userId).toBe(adminMembership1.userId);
   });
 
   // 6. 自分自身の降格でも、自分が最後の管理者なら LastAdminRequired になる
@@ -243,7 +226,7 @@ describe("updateMemberRoleUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.LastAdminRequired);
-    expect(fake.updateRoleCallCount()).toBe(0);
+    expect(fake.updateRole).not.toHaveBeenCalled();
   });
 
   // 7. 事務局（isStaff: true）は所属していなくても操作でき、actedAsStaff が true になる（COND-012）
@@ -264,9 +247,9 @@ describe("updateMemberRoleUseCase", () => {
 
     expect(result.isOk()).toBe(true);
     // COND-012: 操作者の所属確認（1回）+ 対象メンバーの所属確認（1回）の計 2 回
-    expect(fake.findByGroupAndUserCallCount()).toBe(2);
-    expect(fake.updateRoleCallCount()).toBe(1);
-    const auditLog = fake.lastAuditLog();
+    expect(fake.findByGroupAndUser).toHaveBeenCalledTimes(2);
+    expect(fake.updateRole).toHaveBeenCalledTimes(1);
+    const auditLog = fake.updateRole.mock.calls[0]?.[1];
     expect(auditLog?.actedAsStaff).toBe(true);
   });
 
@@ -287,7 +270,7 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fake.updateRoleCallCount()).toBe(0);
+    expect(fake.updateRole).not.toHaveBeenCalled();
   });
 
   // 8. 一般メンバーが操作すると Forbidden になり、updateRole が 1 度も呼ばれない
@@ -310,7 +293,7 @@ describe("updateMemberRoleUseCase", () => {
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.Forbidden);
     expect(error.userMessage).toBe("メンバーの役割を変更できるのは管理者と事務局だけです。");
-    expect(fake.updateRoleCallCount()).toBe(0);
+    expect(fake.updateRole).not.toHaveBeenCalled();
   });
 
   // 9. 所属していない人が操作すると NotVisible になり、updateRole が 1 度も呼ばれない
@@ -331,7 +314,7 @@ describe("updateMemberRoleUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotVisible);
-    expect(fake.updateRoleCallCount()).toBe(0);
+    expect(fake.updateRole).not.toHaveBeenCalled();
   });
 
   // 10. 所属していない人には、団体が存在するかに関わらず同じエラーを返す（団体を引きに行かない。COND-011）
@@ -363,7 +346,7 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(notMemberResult._unsafeUnwrapErr()).toEqual(notExistsResult._unsafeUnwrapErr());
-    expect(fake.updateRoleCallCount()).toBe(0);
+    expect(fake.updateRole).not.toHaveBeenCalled();
   });
 
   // 11. it.each(["owner", "ADMIN", "admin,member", "", "  "]) で、不正な役割は InvalidInput になり、リポジトリが 1 つも呼ばれない（COND-007）
@@ -388,9 +371,9 @@ describe("updateMemberRoleUseCase", () => {
       const error = result._unsafeUnwrapErr();
       expect(error.code).toBe(GroupErrorCode.InvalidInput);
       expect(error.userMessage).toBe("指定できない役割です。");
-      expect(fake.findByGroupAndUserCallCount()).toBe(0);
-      expect(fake.countAdminsCallCount()).toBe(0);
-      expect(fake.updateRoleCallCount()).toBe(0);
+      expect(fake.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(fake.countAdmins).not.toHaveBeenCalled();
+      expect(fake.updateRole).not.toHaveBeenCalled();
     },
   );
 
@@ -414,7 +397,7 @@ describe("updateMemberRoleUseCase", () => {
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.MemberNotFound);
     expect(error.message).toBe("対象のメンバーはこの団体に所属していません。");
-    expect(fake.updateRoleCallCount()).toBe(0);
+    expect(fake.updateRole).not.toHaveBeenCalled();
   });
 
   // 13. updateRole が 0 件を返したときは MemberNotFound になる
@@ -439,23 +422,19 @@ describe("updateMemberRoleUseCase", () => {
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.MemberNotFound);
     expect(error.message).toBe("対象のメンバーはこの団体に所属していません。");
-    expect(fake.updateRoleCallCount()).toBe(1);
+    expect(fake.updateRole).toHaveBeenCalledTimes(1);
   });
 
   // 14. findByGroupAndUser が DB エラーを返したときは DatabaseError になる（NotFound に潰れていないこと）
   it("findByGroupAndUser が DB エラーを返したときは DatabaseError になる", async () => {
-    const failingRepo: MembershipRepository = {
+    const failingRepo = fakeMembershipRepository({
       findByGroupAndUser: () =>
         errAsync({
           code: MembershipErrorCode.DatabaseError,
           message: "DB error",
           cause: new Error("DB error"),
         }),
-      findByGroupAndEmail: () => okAsync(null),
-      countAdmins: () => errAsync({ code: MembershipErrorCode.DatabaseError, message: "使わない" }),
-      updateRole: () => errAsync({ code: MembershipErrorCode.DatabaseError, message: "使わない" }),
-      remove: () => errAsync({ code: MembershipErrorCode.DatabaseError, message: "使わない" }),
-    };
+    });
 
     const result = await updateMemberRoleUseCase(
       { membershipRepository: failingRepo },

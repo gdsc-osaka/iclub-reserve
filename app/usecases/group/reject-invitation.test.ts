@@ -1,16 +1,12 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import type { GroupError } from "~/domain/group";
 import { GroupErrorCode } from "~/domain/group";
-import {
-  InvitationStatus,
-  type Invitation,
-  type InvitationRepository,
-  type RejectInvitationInput,
-} from "~/domain/invitation";
+import { InvitationStatus, type Invitation, type RejectInvitationInput } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
+import { fakeInvitationRepository } from "~/testing/fakes/invitation";
 import { rejectInvitationUseCase, type RejectInvitationArgs } from "./reject-invitation";
 
 const testInvitationId = "inv_123456";
@@ -38,56 +34,29 @@ interface FakeInvitationRepoOptions {
 }
 
 const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {}) => {
-  let rejectCallCount = 0;
-  let lastRejectInput: RejectInvitationInput | null = null;
-  let lastAuditLog: AuditLogDraft | null = null;
-  let findByIdCallCount = 0;
+  const findById = vi.fn((invitationId: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(invitationId);
+    }
+    return okAsync(defaultInvitation);
+  });
 
-  const repository: InvitationRepository = {
-    findPendingByGroupAndEmail: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "findPendingByGroupAndEmail is not used in this test",
-      }),
-    create: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "create is not used in this test",
-      }),
-    cancel: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "cancel is not used in this test",
-      }),
-    findById: (invitationId) => {
-      findByIdCallCount += 1;
-      if (options.findByIdResult) {
-        return options.findByIdResult(invitationId);
-      }
-      return okAsync(defaultInvitation);
-    },
-    accept: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "accept is not used in this test",
-      }),
-    reject: (input, auditLog) => {
-      rejectCallCount += 1;
-      lastRejectInput = input;
-      lastAuditLog = auditLog;
-      if (options.rejectResult) {
-        return options.rejectResult(input, auditLog);
-      }
-      return okAsync(1);
-    },
-  };
+  const reject = vi.fn((input: RejectInvitationInput, auditLog: AuditLogDraft) => {
+    if (options.rejectResult) {
+      return options.rejectResult(input, auditLog);
+    }
+    return okAsync(1);
+  });
+
+  const repository = fakeInvitationRepository({
+    findById,
+    reject,
+  });
 
   return {
     repository,
-    rejectCallCount: () => rejectCallCount,
-    lastRejectInput: () => lastRejectInput,
-    lastAuditLog: () => lastAuditLog,
-    findByIdCallCount: () => findByIdCallCount,
+    findById,
+    reject,
   };
 };
 
@@ -126,8 +95,8 @@ describe("rejectInvitationUseCase", () => {
       },
     );
 
-    expect(fakeInvitation.rejectCallCount()).toBe(1);
-    const input = fakeInvitation.lastRejectInput();
+    expect(fakeInvitation.reject).toHaveBeenCalledTimes(1);
+    const input = fakeInvitation.reject.mock.calls[0]?.[0];
     expect(input).not.toBeNull();
     expect(input?.invitationId).toBe(testInvitationId);
     expect(input?.email).toBe(testEmail);
@@ -168,7 +137,7 @@ describe("rejectInvitationUseCase", () => {
         expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
         expect(result.error.userMessage).toBeUndefined();
       }
-      expect(fakeInvitation.rejectCallCount()).toBe(0);
+      expect(fakeInvitation.reject).not.toHaveBeenCalled();
     },
   );
 
@@ -200,8 +169,8 @@ describe("rejectInvitationUseCase", () => {
 
     await rejectInvitationUseCase({ invitationRepository: fakeInvitation.repository }, validArgs);
 
-    expect(fakeInvitation.findByIdCallCount()).toBe(1);
-    const auditLog = fakeInvitation.lastAuditLog();
+    expect(fakeInvitation.findById).toHaveBeenCalledTimes(1);
+    const auditLog = fakeInvitation.reject.mock.calls[0]?.[1];
     expect(auditLog).not.toBeNull();
     expect(auditLog?.action).toBe(AuditLogAction.InvitationDecline);
     expect(auditLog?.actorId).toBe(testActorUserId);

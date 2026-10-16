@@ -1,48 +1,26 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus, UPCOMING_RESERVATIONS_LIMIT } from "~/domain/reservation";
 import { QueryErrorCode, type QueryError } from "~/query/error";
-import type {
-  ReservationListQuery,
-  ReservationListRow,
-} from "~/query/reservation/reservation-list";
-import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
+import type { ReservationListRow } from "~/query/reservation/reservation-list";
+import type { UserGroupList } from "~/query/user/user-group-list";
+import { fakeReservationListQuery, fakeUserGroupListQuery } from "~/testing/fakes";
 import { listUpcomingReservationsUseCase } from "./list-upcoming-reservations";
 
 describe("listUpcomingReservationsUseCase", () => {
   const now = new Date("2026-10-15T10:00:00.000Z");
 
-  const createMockGroupListQuery = (groups: UserGroupList): UserGroupListQuery => ({
-    findByUserId: () => okAsync(groups),
-  });
-
-  const createMockReservationListQuery = (
-    rows: readonly ReservationListRow[],
-    capturedArgs?: { current: unknown },
-  ): ReservationListQuery => ({
-    findList: (args) => {
-      if (capturedArgs) {
-        capturedArgs.current = args;
-      }
-      return okAsync(rows);
-    },
-    countByStatus: () => okAsync({ all: 0, provisional: 0, approved: 0, ended: 0 }),
-    findFacilities: () => okAsync([]),
-  });
+  const createMockGroupListQuery = (groups: UserGroupList) =>
+    fakeUserGroupListQuery({
+      findByUserId: () => okAsync(groups),
+    });
 
   it("所属団体が 0 件のときは予約を検索せずに空配列を返す", async () => {
-    let reservationQueryCalled = false;
-    const reservationListQuery: ReservationListQuery = {
-      findList: () => {
-        reservationQueryCalled = true;
-        return okAsync([]);
-      },
-      countByStatus: () => okAsync({ all: 0, provisional: 0, approved: 0, ended: 0 }),
-      findFacilities: () => okAsync([]),
-    };
+    const findList = vi.fn(() => okAsync([]));
+    const reservationListQuery = fakeReservationListQuery({ findList });
 
     const result = await listUpcomingReservationsUseCase(
       {
@@ -55,7 +33,7 @@ describe("listUpcomingReservationsUseCase", () => {
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
     expect(result.value).toEqual([]);
-    expect(reservationQueryCalled).toBe(false);
+    expect(findList).not.toHaveBeenCalled();
   });
 
   it("所属する全団体の ID と条件（仮予約・承認済み、現在以降、開始昇順、上限5件）を渡して予約を取得する", async () => {
@@ -76,7 +54,6 @@ describe("listUpcomingReservationsUseCase", () => {
       },
     ];
 
-    const capturedArgs = { current: null as unknown };
     const mockRow: ReservationListRow = {
       id: "res_1",
       groupId: "grp_1",
@@ -95,10 +72,13 @@ describe("listUpcomingReservationsUseCase", () => {
       hasProvisionalOverlap: false,
     };
 
+    const findList = vi.fn((_args: unknown) => okAsync([mockRow]));
+    const reservationListQuery = fakeReservationListQuery({ findList });
+
     const result = await listUpcomingReservationsUseCase(
       {
         userGroupListQuery: createMockGroupListQuery(groups),
-        reservationListQuery: createMockReservationListQuery([mockRow], capturedArgs),
+        reservationListQuery,
       },
       { actorUserId: "usr_1", now },
     );
@@ -106,7 +86,7 @@ describe("listUpcomingReservationsUseCase", () => {
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
 
-    expect(capturedArgs.current).toEqual({
+    expect(findList).toHaveBeenCalledWith({
       groupIds: ["grp_1", "grp_2"],
       statuses: [ReservationStatus.Provisional, ReservationStatus.Approved],
       facilityId: null,
@@ -140,14 +120,14 @@ describe("listUpcomingReservationsUseCase", () => {
       code: QueryErrorCode.DatabaseError,
       message: "DB error",
     };
-    const userGroupListQuery: UserGroupListQuery = {
+    const userGroupListQuery = fakeUserGroupListQuery({
       findByUserId: () => errAsync(error),
-    };
+    });
 
     const result = await listUpcomingReservationsUseCase(
       {
         userGroupListQuery,
-        reservationListQuery: createMockReservationListQuery([]),
+        reservationListQuery: fakeReservationListQuery(),
       },
       { actorUserId: "usr_1", now },
     );
@@ -162,11 +142,9 @@ describe("listUpcomingReservationsUseCase", () => {
       code: QueryErrorCode.DatabaseError,
       message: "DB error",
     };
-    const reservationListQuery: ReservationListQuery = {
+    const reservationListQuery = fakeReservationListQuery({
       findList: () => errAsync(error),
-      countByStatus: () => okAsync({ all: 0, provisional: 0, approved: 0, ended: 0 }),
-      findFacilities: () => okAsync([]),
-    };
+    });
 
     const result = await listUpcomingReservationsUseCase(
       {

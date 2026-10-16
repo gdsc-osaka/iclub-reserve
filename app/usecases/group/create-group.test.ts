@@ -1,55 +1,36 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import type { CreateGroupInput, Group, GroupError, GroupRepository } from "~/domain/group";
+import type { CreateGroupInput, Group, GroupError } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
+import { fakeGroupRepository } from "~/testing/fakes/group";
 import { createGroupUseCase } from "./create-group";
 
 interface FakeGroupRepositoryOptions {
   readonly createResult?: (input: CreateGroupInput) => ResultAsync<Group, GroupError>;
 }
 
-/** D1 を使わないダミーのグループリポジトリ。呼び出し回数と引数を自前で記録する */
 const createFakeGroupRepository = (options: FakeGroupRepositoryOptions = {}) => {
-  let createCallCount = 0;
-  let lastCreateInput: CreateGroupInput | null = null;
+  const create = vi.fn((input: CreateGroupInput) => {
+    if (options.createResult) {
+      return options.createResult(input);
+    }
+    return okAsync({
+      id: input.id,
+      name: input.name,
+      status: GroupStatus.Pending,
+      createdAt: input.now,
+      updatedAt: input.now,
+    });
+  });
 
-  const repository: GroupRepository = {
-    findById: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは findById は使わない",
-      }),
-    updateName: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは updateName は使わない",
-      }),
-    updateStatus: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは updateStatus は使わない",
-      }),
-    create: (input) => {
-      createCallCount += 1;
-      lastCreateInput = input;
-      if (options.createResult) {
-        return options.createResult(input);
-      }
-      return okAsync({
-        id: input.id,
-        name: input.name,
-        status: GroupStatus.Pending,
-        createdAt: input.now,
-        updatedAt: input.now,
-      });
-    },
-  };
+  const repository = fakeGroupRepository({
+    create,
+  });
 
   return {
     repository,
-    createCallCount: () => createCallCount,
-    lastCreateInput: () => lastCreateInput,
+    create,
   };
 };
 
@@ -70,7 +51,7 @@ describe("createGroupUseCase", () => {
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
-      expect(groups.createCallCount()).toBe(0);
+      expect(groups.create).not.toHaveBeenCalled();
     },
   );
 
@@ -85,7 +66,7 @@ describe("createGroupUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
-    expect(groups.createCallCount()).toBe(0);
+    expect(groups.create).not.toHaveBeenCalled();
   });
 
   // 3. 団体名に改行を含むときは InvalidInput になり、create は呼ばれない
@@ -101,7 +82,7 @@ describe("createGroupUseCase", () => {
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
-      expect(groups.createCallCount()).toBe(0);
+      expect(groups.create).not.toHaveBeenCalled();
     },
   );
 
@@ -115,9 +96,9 @@ describe("createGroupUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(groups.createCallCount()).toBe(1);
+    expect(groups.create).toHaveBeenCalledTimes(1);
 
-    const input = groups.lastCreateInput();
+    const input = groups.create.mock.calls[0]?.[0];
     expect(input).not.toBeNull();
     expect(input?.name).toBe("ロボティクス部");
     expect(input?.ownerUserId).toBe(actorUserId);
@@ -160,6 +141,6 @@ describe("createGroupUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr()).toEqual(dbError);
-    expect(groups.createCallCount()).toBe(1);
+    expect(groups.create).toHaveBeenCalledTimes(1);
   });
 });

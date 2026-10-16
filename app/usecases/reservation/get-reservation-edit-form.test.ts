@@ -1,26 +1,22 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it } from "vitest";
 
-import { GroupErrorCode, GroupStatus, type Group, type GroupRepository } from "~/domain/group";
-import {
-  MembershipErrorCode,
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
-import {
-  ReservationErrorCode,
-  ReservationStatus,
-  type Reservation,
-  type ReservationRepository,
-} from "~/domain/reservation";
+import { GroupErrorCode, GroupStatus, type Group } from "~/domain/group";
+import { MembershipRole, type StoredMembership } from "~/domain/membership";
+import { ReservationErrorCode, ReservationStatus, type Reservation } from "~/domain/reservation";
 import type {
   ReservationFormArgs,
   ReservationFormFacility,
-  ReservationFormQuery,
   ReservationFormReservationRow,
 } from "~/query/reservation/reservation-form";
-import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
+import type { UserGroupList } from "~/query/user/user-group-list";
+import {
+  fakeGroupRepository,
+  fakeMembershipRepository,
+  fakeReservationFormQuery,
+  fakeReservationRepository,
+  fakeUserGroupListQuery,
+} from "~/testing/fakes";
 import { getReservationEditFormUseCase } from "./get-reservation-edit-form";
 
 const meetingRoomA: ReservationFormFacility = {
@@ -111,51 +107,37 @@ const createDeps = (
     groups?: UserGroupList;
   } = {},
 ) => {
-  const reservationRepository: ReservationRepository = {
+  const reservationRepository = fakeReservationRepository({
     findById: () =>
       overrides.reservation === null
         ? errAsync({ code: ReservationErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.reservation ?? defaultReservation),
-    create: () => errAsync({ code: ReservationErrorCode.DatabaseError, message: "unused" }),
-    createApproved: () => errAsync({ code: ReservationErrorCode.DatabaseError, message: "unused" }),
-    existsApprovedOverlap: () => okAsync(false),
-    applyStatusTransition: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "unused" }),
-    applyContentEdit: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "unused" }),
-  };
+  });
 
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser: () =>
       okAsync(overrides.membership === undefined ? memberMembership : overrides.membership),
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () => errAsync({ code: MembershipErrorCode.DatabaseError, message: "unused" }),
-    updateRole: () => errAsync({ code: MembershipErrorCode.DatabaseError, message: "unused" }),
-    remove: () => errAsync({ code: MembershipErrorCode.DatabaseError, message: "unused" }),
-  };
+  });
 
-  const groupRepository: GroupRepository = {
+  const groupRepository = fakeGroupRepository({
     findById: () =>
       overrides.group === null
         ? errAsync({ code: GroupErrorCode.NotFound, message: "not found" })
         : okAsync(overrides.group ?? groupInfo),
-    updateName: () => errAsync({ code: GroupErrorCode.DatabaseError, message: "unused" }),
-    updateStatus: () => errAsync({ code: GroupErrorCode.DatabaseError, message: "unused" }),
-    create: () => errAsync({ code: GroupErrorCode.DatabaseError, message: "unused" }),
-  };
+  });
 
-  const reservationFormQuery: ReservationFormQuery = {
+  const reservationFormQuery = fakeReservationFormQuery({
     find: (_args: ReservationFormArgs) =>
       okAsync({
         groups: [{ id: "grp_robotics", name: "ロボティクス開発プロジェクト" }],
         facilities: [meetingRoomA, meetingRoomB],
         reservations: overrides.reservations ?? [targetRow, otherRow],
       }),
-  };
+  });
 
-  const userGroupListQuery: UserGroupListQuery = {
+  const userGroupListQuery = fakeUserGroupListQuery({
     findByUserId: () => okAsync(overrides.groups ?? myGroups),
-  };
+  });
 
   return {
     reservationRepository,

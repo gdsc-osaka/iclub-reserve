@@ -1,21 +1,20 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
-import {
-  ReservationErrorCode,
-  ReservationStatus,
-  type Reservation,
-  type ReservationRepository,
-} from "~/domain/reservation";
+import { ReservationErrorCode, ReservationStatus, type Reservation } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationFormArgs,
-  ReservationFormQuery,
   ReservationFormReservationRow,
 } from "~/query/reservation/reservation-form";
-import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
+import type { UserGroupList } from "~/query/user/user-group-list";
+import {
+  fakeReservationFormQuery,
+  fakeReservationRepository,
+  fakeUserGroupListQuery,
+} from "~/testing/fakes";
 import { getReservationFormUseCase } from "./get-reservation-form";
 
 const meetingRoomA = {
@@ -80,25 +79,21 @@ const createDeps = (
     createdError?: ReservationErrorCode;
   } = {},
 ) => {
-  const calls: ReservationFormArgs[] = [];
+  const find = vi.fn((_args: ReservationFormArgs) =>
+    okAsync({
+      groups: [{ id: "grp_robotics", name: "ロボティクス開発プロジェクト" }],
+      facilities: [meetingRoomA],
+      reservations: [ownRow, otherRow],
+    }),
+  );
 
-  const reservationFormQuery: ReservationFormQuery = {
-    find: (args) => {
-      calls.push(args);
+  const reservationFormQuery = fakeReservationFormQuery({ find });
 
-      return okAsync({
-        groups: [{ id: "grp_robotics", name: "ロボティクス開発プロジェクト" }],
-        facilities: [meetingRoomA],
-        reservations: [ownRow, otherRow],
-      });
-    },
-  };
-
-  const userGroupListQuery: UserGroupListQuery = {
+  const userGroupListQuery = fakeUserGroupListQuery({
     findByUserId: () => okAsync(overrides.groups ?? myGroups),
-  };
+  });
 
-  const reservationRepository: ReservationRepository = {
+  const reservationRepository = fakeReservationRepository({
     findById: () =>
       overrides.created == null
         ? errAsync({
@@ -106,14 +101,9 @@ const createDeps = (
             message: "予約を読めませんでした",
           })
         : okAsync(overrides.created),
-    create: () => okAsync({ enqueuedMailIds: [] }),
-    createApproved: () => okAsync({ applied: true }),
-    existsApprovedOverlap: () => okAsync(false),
-    applyStatusTransition: () => okAsync({ applied: true, enqueuedMailIds: [] }),
-    applyContentEdit: () => okAsync({ applied: true, enqueuedMailIds: [] }),
-  };
+  });
 
-  return { deps: { reservationFormQuery, userGroupListQuery, reservationRepository }, calls };
+  return { deps: { reservationFormQuery, userGroupListQuery, reservationRepository }, find };
 };
 
 const args = {
@@ -145,21 +135,21 @@ describe("getReservationFormUseCase", () => {
   });
 
   it("一般のユーザーは、自分が所属している団体だけを申請元にできる", async () => {
-    const { deps, calls } = createDeps();
+    const { deps, find } = createDeps();
 
     await getReservationFormUseCase(deps, args);
 
     // COND-006: 所属で絞り込む
-    expect(calls[0]?.memberUserId).toBe("usr_student_01");
+    expect(find.mock.calls[0]?.[0]?.memberUserId).toBe("usr_student_01");
   });
 
   it("事務局は所属で絞り込まない", async () => {
-    const { deps, calls } = createDeps({ groups: [] });
+    const { deps, find } = createDeps({ groups: [] });
 
     await getReservationFormUseCase(deps, { ...args, isStaff: true });
 
     // COND-009: 所属に関わらず任意の団体として申請できる
-    expect(calls[0]?.memberUserId).toBeNull();
+    expect(find.mock.calls[0]?.[0]?.memberUserId).toBeNull();
   });
 
   it("所属していない事務局から見れば、どの予約も自団体ではない", async () => {
