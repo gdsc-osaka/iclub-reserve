@@ -12,13 +12,10 @@ import { isStaffTransition, parseReservationTransition } from "~/domain/reservat
 import { createGroupRecentActivitiesQuery } from "~/infra/audit-log/group-recent-activities-query";
 import { createDb, type Database } from "~/infra/db";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
-import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
-import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
 import { formatMonthDay } from "~/lib/date";
 import { findGroupSearchList } from "~/query/group/group-search";
@@ -34,10 +31,10 @@ import { createUserGroupListQuery, findUserGroupList } from "~/query/user/user-g
 import { invitationActionErrors } from "~/routes/_shared/group-error.server";
 import { logQueryError } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
+import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 import { getGroupRecentActivitiesUseCase } from "~/usecases/audit-log/get-group-recent-activities";
 import { acceptInvitationUseCase } from "~/usecases/group/accept-invitation";
 import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
-import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { listUpcomingReservationsUseCase } from "~/usecases/reservation/list-upcoming-reservations";
 import { markAllReservationsReadUseCase } from "~/usecases/reservation/mark-all-reservations-read";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
@@ -273,23 +270,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     const reservationId = String(formData.get("reservationId") ?? "");
     const reason = formData.get("reason");
 
-    const result = await changeReservationStatusUseCase(
-      {
-        reservationRepository: createReservationRepository(db),
-        membershipRepository: createMembershipRepository(db),
-        reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-        mailOutboxNotifier: createQueueMailOutboxNotifier(),
-      },
-      {
-        reservationId,
-        actorUserId: user.id,
-        isStaff: user.is_staff,
-        transition,
-        reason: typeof reason === "string" ? reason : null,
-        now,
-        appBaseUrl: resolveAppBaseUrl(request),
-      },
-    );
+    const result = await changeReservationStatus(db, request, user, {
+      reservationId,
+      transition,
+      reason,
+      now,
+    });
 
     if (result.isErr()) {
       return reservationActionErrors(
