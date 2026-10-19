@@ -1,13 +1,13 @@
 import { Check, CornerDownLeft, MessageSquareText } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { reservationDetailPath } from "~/domain/reservation";
 import { formatMonthDay, formatRelativeTime, formatTimeRange } from "~/lib/date";
 import type { StaffUnreadMessageItem } from "~/query/reservation/staff-unread-messages";
 import { HomeIntent, type HomeActionData } from "./home-intent";
 import { STAFF_UNREAD_SECTION_ID } from "./staff-tiles-section";
+import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
 /** 予約詳細のメッセージ欄へ移るパス。欄の id は `reservation-message-section.tsx` に置いている */
 const toMessagesPath = (reservationId: string) =>
@@ -48,15 +48,7 @@ export function StaffUnreadMessagesSection({
         </p>
       </div>
 
-      {isUnavailable && (
-        <Alert variant="destructive">
-          <AlertTitle>未読メッセージを読み込めませんでした</AlertTitle>
-          <AlertDescription>
-            時間をおいて、画面を再読み込みしてください。
-            繰り返し表示される場合はシステム管理者にご連絡ください。
-          </AlertDescription>
-        </Alert>
-      )}
+      {isUnavailable && <SectionUnavailableAlert what="未読メッセージ" forStaff />}
 
       {items.length === 0 && !isUnavailable && (
         <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">

@@ -2,12 +2,12 @@ import { Calendar, ChevronRight, MessageSquare } from "lucide-react";
 import { Link } from "react-router";
 
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import { formatDaysUntil, formatMonthDay, formatMonthDayParts, formatTime } from "~/lib/date";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
+import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
 export interface UpcomingSectionProps {
   readonly reservations: readonly ReservationListItem[];
@@ -44,15 +44,7 @@ export function UpcomingSection({
         </Button>
       </div>
 
-      {isUnavailable && (
-        <Alert variant="destructive">
-          <AlertTitle>今後の予約を読み込めませんでした</AlertTitle>
-          <AlertDescription>
-            時間をおいて、画面を再読み込みしてください。
-            繰り返し表示される場合は事務局にご連絡ください。
-          </AlertDescription>
-        </Alert>
-      )}
+      {isUnavailable && <SectionUnavailableAlert what="今後の予約" />}
 
       {reservations.length === 0 && !isUnavailable && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card p-6 text-center">
