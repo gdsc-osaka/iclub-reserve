@@ -1,5 +1,6 @@
+import { cn } from "cn";
+
 import { formatMonthDay, formatTimeRange, tokyoMinutesOfDay } from "~/lib/date";
-import { cn } from "~/lib/utils";
 import type {
   AvailabilityFacility,
   AvailabilityReservation,

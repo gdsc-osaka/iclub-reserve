@@ -1,8 +1,8 @@
+import { cn } from "cn";
 import { ChevronRight } from "lucide-react";
 
 import { FacilityPhoto } from "~/components/facility/facility-photo";
 import { formatMonthDay } from "~/lib/date";
-import { cn } from "~/lib/utils";
 
 import { formatSlotRange } from "./reservation-slots";
 import type { ScheduleDraft } from "./use-schedule-draft";

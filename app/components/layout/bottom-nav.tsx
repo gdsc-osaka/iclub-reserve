@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { LogOut, MoreHorizontal, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
@@ -11,7 +12,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "~/components/ui/sheet";
-import { cn } from "~/lib/utils";
 import { useSignOut } from "~/lib/auth/use-sign-out";
 
 import { UserAvatar } from "./account-menu";

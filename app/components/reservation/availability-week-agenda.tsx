@@ -1,7 +1,7 @@
+import { cn } from "cn";
 import { Plus } from "lucide-react";
 
 import { formatMonthDay, formatMonthDayParts, formatTimeRange } from "~/lib/date";
-import { cn } from "~/lib/utils";
 import type {
   AvailabilityFacility,
   AvailabilityReservation,

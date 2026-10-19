@@ -1,5 +1,6 @@
+import { cn } from "cn";
+
 import { GroupStatus } from "~/domain/group";
-import { cn } from "~/lib/utils";
 
 /**
  * グループの状態を利用者向けの日本語にする。

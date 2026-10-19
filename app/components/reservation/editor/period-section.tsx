@@ -1,7 +1,7 @@
+import { cn } from "cn";
 import { useId } from "react";
 
 import { formatMonthDay } from "~/lib/date";
-import { cn } from "~/lib/utils";
 
 import { formatSlotRange } from "./reservation-slots";
 import { TimeRangeFields } from "./time-range-fields";

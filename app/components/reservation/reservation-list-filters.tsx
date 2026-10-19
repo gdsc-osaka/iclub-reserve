@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { Link, useNavigate } from "react-router";
 
 import {
@@ -8,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { cn } from "~/lib/utils";
 import type {
   ReservationListFacility,
   ReservationStatusCounts,

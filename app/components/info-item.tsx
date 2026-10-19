@@ -1,7 +1,6 @@
+import { cn } from "cn";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-
-import { cn } from "~/lib/utils";
 
 /**
  * 「アイコン付きの項目名 + 値」を 1 組だけ表示する。見出し付きのリスト（`<dl>`）の中に置く。

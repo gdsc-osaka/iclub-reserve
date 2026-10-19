@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import {
   CalendarClock,
   CalendarPlus,
@@ -27,7 +28,6 @@ import { Button } from "~/components/ui/button";
 import { membershipRoleLabel } from "~/domain/membership";
 import { GroupUnreadEventType, reservationDetailPath } from "~/domain/reservation";
 import { formatMonthDay, formatRelativeTime, formatTimeRange } from "~/lib/date";
-import { cn } from "~/lib/utils";
 import type { UserInvitationItem } from "~/query/group/user-invitations";
 import type { GroupUnreadUpdateItem } from "~/query/reservation/group-unread-updates";
 import { toFormPathForFacility } from "~/routes/reservations/new/paths";

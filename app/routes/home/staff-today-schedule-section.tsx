@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { CalendarDays } from "lucide-react";
 import { Link } from "react-router";
 
@@ -19,7 +20,6 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { reservationDetailPath, ReservationStatus } from "~/domain/reservation";
 import { formatTimeRange, startOfTokyoDay, tokyoMinutesOfDay } from "~/lib/date";
-import { cn } from "~/lib/utils";
 import type {
   TodayScheduleFacility,
   TodayScheduleReservation,

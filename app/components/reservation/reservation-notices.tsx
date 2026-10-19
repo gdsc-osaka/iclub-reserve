@@ -1,7 +1,7 @@
+import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 
 import { ReservationStatus } from "~/domain/reservation";
-import { cn } from "~/lib/utils";
 
 /**
  * 終了した予約のステータスかどうか（STATE-001）。

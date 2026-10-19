@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 
@@ -17,7 +18,6 @@ import {
   toTokyoDateKey,
 } from "~/lib/date";
 import { toReservationEditPath } from "~/lib/reservation-paths";
-import { cn } from "~/lib/utils";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
 import { ReservationActionButtons } from "./reservation-action-buttons";
 import {
