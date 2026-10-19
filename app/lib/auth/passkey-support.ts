@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { isPasskeyAutofillTurnedOffForDev } from "./dev-passkey-autofill-switch";
+
 /**
  * この環境でパスキーをどこまで使えるか。
  *
@@ -75,6 +77,10 @@ const detectPlatformAuthenticator = async (): Promise<boolean> => {
  * 持っていないブラウザがあるため、あるかどうかから確かめる。
  */
 const detectConditionalMediation = async (): Promise<boolean> => {
+  // 開発サーバーで、このブラウザのオートフィルが止められていれば、対応していないものとして扱う。
+  // 理由は `isPasskeyAutofillTurnedOffForDev` のコメントを参照。
+  if (isPasskeyAutofillTurnedOffForDev()) return false;
+
   try {
     return (await PublicKeyCredential.isConditionalMediationAvailable?.()) ?? false;
   } catch {

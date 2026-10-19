@@ -92,4 +92,4 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 ## 6. Bundled Skills
 
 - **`rdra`** — a requirement-analysis skill based on RDRA 3.0. The skill itself lives in `.agents/skills/rdra/`; `.claude/skills/rdra` is a symlink to it so that Claude Code picks it up. Use it for requirement analysis, PRD/ADR generation, requirement review, and requirement updates. Its outputs belong in `rdra/` and `docs/`.
-- **`local-login`** — ローカルの開発サーバーに、シードの利用者としてログインする手順。ブラウザで画面を確かめる途中でログインが要るときに使う。本体は `.agents/skills/local-login/`、`.claude/skills/local-login` はそこへのシンボリックリンク（`rdra` と同じ形）。アプリに開発用のログインの入口は足さず、本物の認証コードの流れを通る。
+- **`local-login`** — ローカルの開発サーバーに、シードの利用者としてログインする手順。ブラウザで画面を確かめる途中でログインが要るときに使う。本体は `.agents/skills/local-login/`、`.claude/skills/local-login` はそこへのシンボリックリンク（`rdra` と同じ形）。アプリに開発用のログインの入口は足さず、本物の認証コードの流れを通る。ログイン画面が開いただけで出す Windows のパスキーのダイアログは、開発サーバーでだけ効く印（`app/lib/auth/dev-passkey-autofill-switch.ts`）をエージェントのブラウザに入れて止める。
