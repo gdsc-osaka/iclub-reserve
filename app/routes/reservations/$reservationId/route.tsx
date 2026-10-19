@@ -48,7 +48,7 @@ import {
   reservationActionErrors,
   reservationErrorResponse,
 } from "~/routes/_shared/reservation-error.server";
-import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
+import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 import { getReservationUseCase } from "~/usecases/reservation/get-reservation";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
 import { sendReservationMessageUseCase } from "~/usecases/reservation/send-reservation-message";
@@ -256,23 +256,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
    * 操作の可否はユースケースの canTransition が見る。
    */
   const db = createDb(env.DB);
-  const result = await changeReservationStatusUseCase(
-    {
-      reservationRepository: createReservationRepository(db),
-      membershipRepository: createMembershipRepository(db),
-      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-      mailOutboxNotifier: createQueueMailOutboxNotifier(),
-    },
-    {
-      reservationId,
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-      transition,
-      reason: typeof reason === "string" ? reason : null,
-      now: new Date(),
-      appBaseUrl: resolveAppBaseUrl(request),
-    },
-  );
+  const result = await changeReservationStatus(db, request, user, {
+    reservationId,
+    transition,
+    reason,
+    now: new Date(),
+  });
 
   if (result.isErr()) {
     return reservationActionErrors(
