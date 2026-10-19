@@ -30,6 +30,7 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 - **Seed DB (Local)**: `pnpm run db:seed`
 - **Seed DB (Preview)**: `pnpm run db:seed:preview`
 - **Start development server**: `pnpm run dev`
+- **Read a sign-in code (Local)**: `pnpm -s run dev:otp [人物の名前かメールアドレス]`（ローカルの D1 からログインの認証コードを読む。引数なしならシードの人物の一覧。手順は `local-login` スキル）
 - **Run unit tests**: `pnpm test`
 - **Run E2E tests**: `pnpm run test:e2e`（ビルドしてから Playwright で、パソコンの Chromium・Firefox・WebKit とスマホの Chrome・Safari の 5 種類で動かす。1 種類だけなら `pnpm exec playwright test --project=chromium`。方針は `docs/adr/007-e2e-testing.md`）。テストは `e2e/<RDRA のコンテキスト>/uc-<番号>-*.spec.ts` に置き、`@UC-<番号>` のタグを付ける。UC を `docs/implementation-status.md` で ✅ にする PR には、その UC の E2E も含める。E2E で確かめるのは主な流れ・権限の境目・UC ごとに代表的な失敗 1 つだけで、業務ルールの分岐はユースケースの単体テスト（Vitest）に書く。
 - **Database**: We are using SQLite (D1), **NOT** PostgreSQL. Keep this in mind when writing Drizzle schema or migrations.
@@ -91,3 +92,4 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 ## 6. Bundled Skills
 
 - **`rdra`** — a requirement-analysis skill based on RDRA 3.0. The skill itself lives in `.agents/skills/rdra/`; `.claude/skills/rdra` is a symlink to it so that Claude Code picks it up. Use it for requirement analysis, PRD/ADR generation, requirement review, and requirement updates. Its outputs belong in `rdra/` and `docs/`.
+- **`local-login`** — ローカルの開発サーバーに、シードの利用者としてログインする手順。ブラウザで画面を確かめる途中でログインが要るときに使う。本体は `.agents/skills/local-login/`、`.claude/skills/local-login` はそこへのシンボリックリンク（`rdra` と同じ形）。アプリに開発用のログインの入口は足さず、本物の認証コードの流れを通る。

@@ -28,6 +28,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:preview": "tsx scripts/seed.ts --remote",
     "db:studio": "tsx scripts/run-studio.ts",
+    "dev:otp": "tsx scripts/dev-otp.ts",
     "icons:generate": "tsx scripts/generate-app-icons.ts"
   },
   "dependencies": {
