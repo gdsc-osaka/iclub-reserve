@@ -1,12 +1,12 @@
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { okAsync, ResultAsync } from "neverthrow";
 import { mailOutboxTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import {
   MailOutboxErrorCode,
   MailOutboxStatus,
   type MailOutbox,
   type MailOutboxEntry,
-  type MailOutboxError,
 } from "~/domain/mail/mail-outbox";
 import type { MailSendError } from "~/domain/mail/mail-sender";
 import type { Database } from "../db";
@@ -14,11 +14,10 @@ import type { Database } from "../db";
 /** 送信中のまま放置されたとみなすまでの時間。Worker が途中で落ちた行を救う（ADR-002 決定 4） */
 export const STUCK_AFTER_MS = 5 * 60 * 1000;
 
-const toMailOutboxError = (cause: unknown): MailOutboxError => ({
-  code: MailOutboxErrorCode.DatabaseError,
-  message: "outbox 操作に失敗しました。",
-  cause,
-});
+const toMailOutboxError = wrapError(
+  MailOutboxErrorCode.DatabaseError,
+  "outbox 操作に失敗しました。",
+);
 
 const formatMailSendError = (error: MailSendError): string => {
   const cause = error.cause ? String(error.cause) : "";

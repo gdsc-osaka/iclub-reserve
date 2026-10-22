@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import { user } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { UserErrorCode, type TermsAcceptanceRepository, type UserError } from "~/domain/user";
 import type { Database } from "../db";
 
@@ -26,11 +27,10 @@ export const createTermsAcceptanceRepository = (db: Database): TermsAcceptanceRe
         })
         .where(eq(user.id, userId))
         .returning({ id: user.id }),
-      (cause): UserError => ({
-        code: UserErrorCode.DatabaseError,
-        message: `ユーザー ${userId} の利用規約への同意を記録できなかった。`,
-        cause,
-      }),
+      wrapError(
+        UserErrorCode.DatabaseError,
+        `ユーザー ${userId} の利用規約への同意を記録できなかった。`,
+      ),
     ).andThen((rows) =>
       rows.length === 0
         ? errAsync<null, UserError>({

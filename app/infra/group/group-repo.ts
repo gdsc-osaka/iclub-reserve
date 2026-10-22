@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { groupMemberTable, groupTable } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import {
   GroupErrorCode,
   GroupStatus,
@@ -18,11 +19,10 @@ import type { Database } from "../db";
 import { toGroup } from "./group-converter";
 
 /** DB アクセスの失敗を、この層のエラーに包む。文言を 1 か所にまとめるためのもの。 */
-const databaseError = (error: unknown): GroupError => ({
-  code: GroupErrorCode.DatabaseError,
-  message: "団体テーブルを読み書きできなかった。",
-  cause: error,
-});
+const databaseError = wrapError(
+  GroupErrorCode.DatabaseError,
+  "団体テーブルを読み書きできなかった。",
+);
 
 /** 指定された ID の団体が無かったときのエラー */
 const groupNotFound = (id: string): GroupError => ({

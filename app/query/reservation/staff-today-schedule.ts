@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { calendarVisibleStatuses, type ReservationStatus } from "~/domain/reservation";
 import type { Database } from "~/infra/db";
 import { addDays, startOfTokyoDay } from "~/lib/date";
@@ -95,11 +96,7 @@ export const findStaffTodaySchedule = (
 
     const [facilities, reservations] = yield* ResultAsync.fromPromise(
       Promise.all([facilitiesQuery, reservationsQuery]),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "今日の予約状況の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "今日の予約状況の取得に失敗しました。"),
     );
 
     return ok({ facilities, reservations });

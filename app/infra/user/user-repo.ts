@@ -1,5 +1,6 @@
 import { err, ok, ResultAsync } from "neverthrow";
 import { user } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { UserErrorCode, type User, type UserError, type UserRepository } from "~/domain/user";
 import type { Database } from "../db";
 import { eq } from "drizzle-orm";
@@ -26,13 +27,7 @@ export const createUserRepository = (db: Database): UserRepository => {
   const findById = (id: string): ResultAsync<User, UserError> =>
     ResultAsync.fromPromise(
       db.select().from(user).where(eq(user.id, id)).limit(1),
-      (error): UserError => {
-        return {
-          code: UserErrorCode.DatabaseError,
-          message: "ユーザー情報の取得に失敗しました。",
-          cause: error,
-        };
-      },
+      wrapError(UserErrorCode.DatabaseError, "ユーザー情報の取得に失敗しました。"),
     ).andThen((rows) => {
       const row = rows.at(0);
 

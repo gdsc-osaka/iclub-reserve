@@ -1,5 +1,6 @@
 import { ResultAsync } from "neverthrow";
 
+import { wrapError } from "~/domain/error";
 import { HolidayErrorCode, type HolidayError } from "~/domain/holiday";
 
 /** Google の「日本の祝日」公開カレンダーの iCal URL（認証不要） */
@@ -42,10 +43,6 @@ export const fetchHolidayIcal = (
       }
       return await response.text();
     })(),
-    (cause): HolidayError => ({
-      code: HolidayErrorCode.FetchFailed,
-      message: "日本の祝日 iCal の取得に失敗しました。",
-      cause,
-    }),
+    wrapError(HolidayErrorCode.FetchFailed, "日本の祝日 iCal の取得に失敗しました。"),
   );
 };

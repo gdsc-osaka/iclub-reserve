@@ -2,6 +2,7 @@ import { and, asc, eq, gt } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { groupInvitationTable, groupTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { InvitationStatus } from "~/domain/invitation";
 import { normalizeInvitationEmail } from "~/domain/invitation/invitation-email";
 import type { MembershipRole } from "~/domain/membership";
@@ -59,11 +60,7 @@ export const findUserInvitations = (
           ),
         )
         .orderBy(asc(groupInvitationTable.expiresAt), asc(groupInvitationTable.id)),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "自分宛ての招待一覧の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "自分宛ての招待一覧の取得に失敗しました。"),
     );
 
     return ok(rows);

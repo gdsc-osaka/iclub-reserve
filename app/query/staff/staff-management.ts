@@ -2,6 +2,7 @@ import { and, asc, eq, gt } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { staffInvitationTable, user } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { InvitationStatus } from "~/domain/invitation";
 import type { Database } from "~/infra/db";
 import { ensureStaff } from "../_shared/staff";
@@ -82,11 +83,7 @@ export const findStaffManagement = (
 
     const [members, pendingInvitations] = yield* ResultAsync.fromPromise(
       Promise.all([membersQuery, pendingInvitationsQuery]),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "事務局管理画面データの取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "事務局管理画面データの取得に失敗しました。"),
     );
 
     return ok({ members, pendingInvitations });

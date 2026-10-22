@@ -2,21 +2,13 @@ import { asc, eq } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import { reservationMessageTable, user } from "~/db/schema";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { wrapError } from "~/domain/error";
+import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationMessageListQuery,
   ReservationMessageRow,
 } from "~/query/reservation/reservation-message-list";
 import type { Database } from "../db";
-
-/** DB アクセスの失敗を Query のエラーに変える */
-const toDatabaseError =
-  (message: string) =>
-  (error: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause: error,
-  });
 
 /**
  * Cloudflare D1 (Drizzle) を使った ReservationMessageListQuery の実装。
@@ -42,7 +34,7 @@ export const createReservationMessageListQuery = (db: Database): ReservationMess
 
     return ResultAsync.fromPromise(
       query,
-      toDatabaseError("予約メッセージ一覧の取得に失敗しました。"),
+      wrapError(QueryErrorCode.DatabaseError, "予約メッセージ一覧の取得に失敗しました。"),
     ).map((rows): readonly ReservationMessageRow[] => rows);
   },
 });

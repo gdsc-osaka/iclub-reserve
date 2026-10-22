@@ -1,6 +1,7 @@
 import { ResultAsync } from "neverthrow";
 
-import { UserErrorCode, type SessionRevoker, type UserError } from "~/domain/user";
+import { wrapError } from "~/domain/error";
+import { UserErrorCode, type SessionRevoker } from "~/domain/user";
 import { getAuth } from "./auth.server";
 
 /**
@@ -12,25 +13,17 @@ import { getAuth } from "./auth.server";
  * @param headers action が受け取ったリクエストのヘッダー
  */
 export const createSessionRevoker = (headers: Headers): SessionRevoker => {
-  const toUserError =
-    (message: string) =>
-    (cause: unknown): UserError => ({
-      code: UserErrorCode.DatabaseError,
-      message,
-      cause,
-    });
-
   return {
     revoke: (token) =>
       ResultAsync.fromPromise(
         getAuth().api.revokeSession({ body: { token }, headers }),
-        toUserError("セッションを終わらせられなかった。"),
+        wrapError(UserErrorCode.DatabaseError, "セッションを終わらせられなかった。"),
       ).map(() => undefined),
 
     revokeOthers: () =>
       ResultAsync.fromPromise(
         getAuth().api.revokeOtherSessions({ headers }),
-        toUserError("ほかの端末のセッションを終わらせられなかった。"),
+        wrapError(UserErrorCode.DatabaseError, "ほかの端末のセッションを終わらせられなかった。"),
       ).map(() => undefined),
   };
 };

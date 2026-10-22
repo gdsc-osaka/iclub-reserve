@@ -1,6 +1,7 @@
 import { ResultAsync } from "neverthrow";
 
 import { reservationMessageTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { ReservationErrorCode, type ReservationError } from "~/domain/reservation";
 import type {
@@ -25,22 +26,20 @@ export const createReservationMessageRepository = (db: Database): ReservationMes
     const insertMessageQuery = db.insert(reservationMessageTable).values(message);
 
     if (mails.length === 0) {
-      return ResultAsync.fromPromise(insertMessageQuery, (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約メッセージを書き込めなかった。",
-        cause: error,
-      })).map(() => ({ enqueuedMailIds: [] }));
+      return ResultAsync.fromPromise(
+        insertMessageQuery,
+        wrapError(ReservationErrorCode.DatabaseError, "予約メッセージを書き込めなかった。"),
+      ).map(() => ({ enqueuedMailIds: [] }));
     }
 
     const outbox = mailOutboxInserts(db, mails);
 
     return ResultAsync.fromPromise(
       db.batch([insertMessageQuery, ...outbox.statements]),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約メッセージと通知の outbox を書き込めなかった。",
-        cause: error,
-      }),
+      wrapError(
+        ReservationErrorCode.DatabaseError,
+        "予約メッセージと通知の outbox を書き込めなかった。",
+      ),
     ).map(() => ({
       enqueuedMailIds: outbox.ids,
     }));

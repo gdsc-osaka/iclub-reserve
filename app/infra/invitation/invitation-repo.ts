@@ -1,6 +1,7 @@
 import { and, desc, eq, getTableColumns, gt, sql } from "drizzle-orm";
 import { ok, ResultAsync } from "neverthrow";
 import { groupInvitationTable, groupMemberTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { GroupErrorCode, type GroupError } from "~/domain/group";
 import {
   InvitationStatus,
@@ -125,13 +126,8 @@ export const invitationAcceptStatements = (
 };
 
 /** DB アクセスの失敗をこの層のエラーに包む。文言を 1 か所にまとめるためのもの */
-const databaseError =
-  (action: string) =>
-  (error: unknown): GroupError => ({
-    code: GroupErrorCode.DatabaseError,
-    message: `招待の${action}に失敗しました。`,
-    cause: error,
-  });
+const databaseError = (action: string) =>
+  wrapError(GroupErrorCode.DatabaseError, `招待の${action}に失敗しました。`);
 
 export const createInvitationRepository = (db: Database): InvitationRepository => {
   const findPendingByGroupAndEmail = (

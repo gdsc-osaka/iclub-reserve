@@ -3,6 +3,7 @@ import { ResultAsync } from "neverthrow";
 
 import { auditLogTable, user } from "~/db/schema";
 import { AuditLogTargetType, parseAuditLogChanges } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import {
   GROUP_AUDIT_LOG_PAGE_SIZE,
@@ -100,9 +101,8 @@ const findGroupAuditLogs = async (
  */
 export const createGroupAuditLogListQuery = (db: Database): GroupAuditLogListQuery => ({
   findByGroupId: (groupId: string, page: number): ResultAsync<GroupAuditLogList, QueryError> =>
-    ResultAsync.fromPromise(findGroupAuditLogs(db, groupId, page), (error): QueryError => ({
-      code: QueryErrorCode.DatabaseError,
-      message: "団体操作履歴を読み取れなかった。",
-      cause: error,
-    })),
+    ResultAsync.fromPromise(
+      findGroupAuditLogs(db, groupId, page),
+      wrapError(QueryErrorCode.DatabaseError, "団体操作履歴を読み取れなかった。"),
+    ),
 });

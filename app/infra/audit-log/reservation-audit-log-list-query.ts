@@ -3,6 +3,7 @@ import { ResultAsync } from "neverthrow";
 
 import { auditLogTable, facilityTable, user } from "~/db/schema";
 import { AuditLogTargetType, parseAuditLogChanges } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import {
   RESERVATION_AUDIT_LOG_PAGE_SIZE,
@@ -111,10 +112,6 @@ export const createReservationAuditLogListQuery = (db: Database): ReservationAud
   ): ResultAsync<ReservationAuditLogList, QueryError> =>
     ResultAsync.fromPromise(
       findReservationAuditLogs(db, reservationId, page),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "予約の操作履歴を読み取れなかった。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "予約の操作履歴を読み取れなかった。"),
     ),
 });

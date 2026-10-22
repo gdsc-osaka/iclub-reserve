@@ -2,17 +2,13 @@ import { and, count, eq, sql } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 import { user } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { type StaffError, StaffErrorCode, type StaffMemberRepository } from "~/domain/staff";
 import { allOf, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import type { Database } from "../db";
 
-const databaseError =
-  (operation: string) =>
-  (cause: unknown): StaffError => ({
-    code: StaffErrorCode.DatabaseError,
-    message: `事務局メンバーの${operation}に失敗しました。`,
-    cause,
-  });
+const databaseError = (operation: string) =>
+  wrapError(StaffErrorCode.DatabaseError, `事務局メンバーの${operation}に失敗しました。`);
 
 export const createStaffMemberRepository = (db: Database): StaffMemberRepository => {
   const findStaffByEmail = (

@@ -24,6 +24,29 @@ export interface BaseError {
 }
 
 /**
+ * 投げられた例外を、決まったコードと説明のエラーに包む関数を作る。
+ *
+ * `ResultAsync.fromPromise` の第 2 引数に渡す。DB や外部 API が例外を投げたら、
+ * 例外そのものは `cause` に入り、`code` と `message` はここで渡した値になる。
+ *
+ * ```ts
+ * ResultAsync.fromPromise(
+ *   db.select().from(facilityTable),
+ *   wrapError(QueryErrorCode.DatabaseError, "施設の一覧を読めなかった。"),
+ * );
+ * ```
+ *
+ * `message` はログ用なので、利用者が入力した値を埋め込まないこと（ID は可）。
+ * `userMessage` や `field` も付けたいときは、この関数を使わずにオブジェクトを書く。
+ *
+ * @param code 各ドメインのエラーコード（例: `QueryErrorCode.DatabaseError`）
+ * @param message ログに残す説明
+ */
+export const wrapError =
+  <C extends string>(code: C, message: string) =>
+  (cause: unknown): BaseError & { readonly code: C } => ({ code, message, cause });
+
+/**
  * エラーコードの分類（ADR-004 決定 3）。
  *
  * HTTP の status・ログのレベル・`userMessage` を画面に出してよいかは、コードではなくこの分類で決まる。

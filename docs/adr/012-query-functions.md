@@ -66,7 +66,7 @@ export const findStaffTodaySchedule = (
 
     const [facilities, reservations] = yield* ResultAsync.fromPromise(
       Promise.all([facilitiesQuery, reservationsQuery]),
-      (error): QueryError => ({ code: QueryErrorCode.DatabaseError, message: "...", cause: error }),
+      wrapError(QueryErrorCode.DatabaseError, "..."),
     );
     return ok({ facilities, reservations });
   });

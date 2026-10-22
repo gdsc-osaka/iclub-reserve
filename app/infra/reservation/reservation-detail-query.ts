@@ -2,23 +2,15 @@ import { eq } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable, user } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { ReservationStatus } from "~/domain/reservation";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationDetailQuery,
   ReservationDetailRow,
 } from "~/query/reservation/reservation-detail";
 import type { Database } from "../db";
 import { hasOverlappingReservation } from "./reservation-overlap";
-
-/** DB アクセスの失敗を Query のエラーに変える */
-const toDatabaseError =
-  (message: string) =>
-  (error: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause: error,
-  });
 
 /**
  * Cloudflare D1 (Drizzle) を使った ReservationDetailQuery の実装。
@@ -54,8 +46,9 @@ export const createReservationDetailQuery = (db: Database): ReservationDetailQue
       .where(eq(reservationTable.id, reservationId))
       .limit(1);
 
-    return ResultAsync.fromPromise(query, toDatabaseError("予約詳細の取得に失敗しました。")).map(
-      (rows): ReservationDetailRow | null => rows.at(0) ?? null,
-    );
+    return ResultAsync.fromPromise(
+      query,
+      wrapError(QueryErrorCode.DatabaseError, "予約詳細の取得に失敗しました。"),
+    ).map((rows): ReservationDetailRow | null => rows.at(0) ?? null);
   },
 });

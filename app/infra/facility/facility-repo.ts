@@ -2,6 +2,7 @@ import { and, count, eq, gt, isNull, notExists, or } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { facilityTable, reservationTable } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import {
   FacilityErrorCode,
   type CreateFacilityInput,
@@ -32,11 +33,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
   const findById = (id: string): ResultAsync<Facility, FacilityError> =>
     ResultAsync.fromPromise(
       db.select().from(facilityTable).where(eq(facilityTable.id, id)).limit(1),
-      (error): FacilityError => ({
-        code: FacilityErrorCode.DatabaseError,
-        message: "施設テーブルを読み取れなかった。",
-        cause: error,
-      }),
+      wrapError(FacilityErrorCode.DatabaseError, "施設テーブルを読み取れなかった。"),
     ).andThen((rows) => {
       const row = rows.at(0);
 
@@ -72,11 +69,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
 
     return ResultAsync.fromPromise(
       db.batch([insertStatement, auditStatement]),
-      (error): FacilityError => ({
-        code: FacilityErrorCode.DatabaseError,
-        message: "施設テーブルに登録できなかった。",
-        cause: error,
-      }),
+      wrapError(FacilityErrorCode.DatabaseError, "施設テーブルに登録できなかった。"),
     ).map((results) => {
       const rows = results[0] as (typeof facilityTable.$inferSelect)[];
       return toFacility(rows[0]);
@@ -122,11 +115,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
 
     return ResultAsync.fromPromise(
       db.batch([auditStatement, ...calendarStatements, updateStatement]),
-      (error): FacilityError => ({
-        code: FacilityErrorCode.DatabaseError,
-        message: "施設テーブルを更新できなかった。",
-        cause: error,
-      }),
+      wrapError(FacilityErrorCode.DatabaseError, "施設テーブルを更新できなかった。"),
     ).andThen((results) => {
       const rows = results[results.length - 1] as (typeof facilityTable.$inferSelect)[];
       const row = rows.at(0);
@@ -173,11 +162,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
             ),
           ),
         ),
-      (error): FacilityError => ({
-        code: FacilityErrorCode.DatabaseError,
-        message: "予約テーブルの件数を読み取れなかった。",
-        cause: error,
-      }),
+      wrapError(FacilityErrorCode.DatabaseError, "予約テーブルの件数を読み取れなかった。"),
     ).map((rows) => rows.at(0)?.count ?? 0);
 
   /*
@@ -230,11 +215,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
 
     return ResultAsync.fromPromise(
       db.batch([auditStatement, updateStatement]),
-      (error): FacilityError => ({
-        code: FacilityErrorCode.DatabaseError,
-        message: "施設ステータスを更新できなかった。",
-        cause: error,
-      }),
+      wrapError(FacilityErrorCode.DatabaseError, "施設ステータスを更新できなかった。"),
     ).andThen((results) => {
       const rows = results[1] as (typeof facilityTable.$inferSelect)[];
       const row = rows.at(0);

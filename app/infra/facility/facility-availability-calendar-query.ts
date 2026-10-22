@@ -2,6 +2,7 @@ import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { calendarVisibleStatuses, ReservationStatus } from "~/domain/reservation";
 import { hasOverlappingReservation } from "~/infra/reservation/reservation-overlap";
 import { QueryErrorCode, type QueryError } from "~/query/error";
@@ -11,15 +12,6 @@ import type {
   FacilityAvailabilityCalendarQuery,
 } from "~/query/facility/facility-availability-calendar";
 import type { Database } from "../db";
-
-/** DB アクセスの失敗を Query のエラーに変える */
-const toDatabaseError =
-  (message: string) =>
-  (error: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause: error,
-  });
 
 /**
  * 切り替えに出す施設・設備の一覧を取る。
@@ -127,7 +119,7 @@ export const createFacilityAvailabilityCalendarQuery = (
   findByFacilityAndPeriod: (args) =>
     ResultAsync.fromPromise(
       selectFacilities(db),
-      toDatabaseError("施設・設備の一覧の取得に失敗しました。"),
+      wrapError(QueryErrorCode.DatabaseError, "施設・設備の一覧の取得に失敗しました。"),
     )
       .andThen((facilities) =>
         pickFacility(facilities, args.facilityId).map((facility) => ({ facilities, facility })),
@@ -135,7 +127,7 @@ export const createFacilityAvailabilityCalendarQuery = (
       .andThen(({ facilities, facility }) =>
         ResultAsync.fromPromise(
           selectReservations(db, facility.id, args.from, args.to),
-          toDatabaseError("予約の取得に失敗しました。"),
+          wrapError(QueryErrorCode.DatabaseError, "予約の取得に失敗しました。"),
         ).map((rows): FacilityAvailabilityCalendar => ({
           facilities,
           facility,

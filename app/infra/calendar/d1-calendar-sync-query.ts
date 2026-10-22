@@ -2,22 +2,15 @@ import { inArray, eq } from "drizzle-orm";
 import { okAsync, ResultAsync } from "neverthrow";
 
 import { facilityTable, reservationTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import type { ReservationStatus } from "~/domain/reservation";
 import type {
   CalendarSyncQuery,
   CalendarSyncReservationState,
   FacilityCalendarId,
 } from "~/query/calendar/calendar-sync-query";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { QueryErrorCode } from "~/query/error";
 import type { Database } from "../db";
-
-const toDatabaseError =
-  (message: string) =>
-  (error: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause: error,
-  });
 
 /**
  * Cloudflare D1 (Drizzle) を使った CalendarSyncQuery の実装。
@@ -48,7 +41,7 @@ export const createD1CalendarSyncQuery = (db: Database): CalendarSyncQuery => ({
 
     return ResultAsync.fromPromise(
       query,
-      toDatabaseError("カレンダー同期用予約状態の取得に失敗しました。"),
+      wrapError(QueryErrorCode.DatabaseError, "カレンダー同期用予約状態の取得に失敗しました。"),
     ).map((rows): readonly CalendarSyncReservationState[] =>
       rows.map((row) => ({
         id: row.id,
@@ -83,7 +76,7 @@ export const createD1CalendarSyncQuery = (db: Database): CalendarSyncQuery => ({
 
     return ResultAsync.fromPromise(
       query,
-      toDatabaseError("施設カレンダーIDの取得に失敗しました。"),
+      wrapError(QueryErrorCode.DatabaseError, "施設カレンダーIDの取得に失敗しました。"),
     ).map((rows): readonly FacilityCalendarId[] =>
       rows.map((row) => ({
         id: row.id,

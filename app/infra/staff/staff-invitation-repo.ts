@@ -2,6 +2,7 @@ import { and, desc, eq, exists, gt, sql } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 import { staffInvitationTable, user } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { InvitationStatus, type RejectInvitationInput } from "~/domain/invitation";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
@@ -17,13 +18,8 @@ import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit
 import type { Database } from "../db";
 import { mailOutboxInserts } from "../mail/mail-outbox-writes";
 
-const databaseError =
-  (operation: string) =>
-  (cause: unknown): StaffError => ({
-    code: StaffErrorCode.DatabaseError,
-    message: `事務局招待の${operation}に失敗しました。`,
-    cause,
-  });
+const databaseError = (operation: string) =>
+  wrapError(StaffErrorCode.DatabaseError, `事務局招待の${operation}に失敗しました。`);
 
 const toStaffInvitation = (row: typeof staffInvitationTable.$inferSelect): StaffInvitation => ({
   id: row.id,

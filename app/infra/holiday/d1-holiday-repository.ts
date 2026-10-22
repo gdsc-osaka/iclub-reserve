@@ -1,6 +1,7 @@
 import { ResultAsync } from "neverthrow";
 
 import { holidayTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import {
   HolidayErrorCode,
   type HolidayError,
@@ -43,10 +44,6 @@ export const createD1HolidayRepository = (db: Database): HolidayRepository => ({
         // 1 回の batch で全件削除と分割 INSERT を不可分に流す
         await db.batch([db.delete(holidayTable), ...insertStmts]);
       })(),
-      (cause): HolidayError => ({
-        code: HolidayErrorCode.DatabaseError,
-        message: "祝日テーブルの更新に失敗しました。",
-        cause,
-      }),
+      wrapError(HolidayErrorCode.DatabaseError, "祝日テーブルの更新に失敗しました。"),
     ),
 });

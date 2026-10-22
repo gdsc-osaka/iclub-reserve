@@ -2,7 +2,8 @@ import { asc, eq } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import { groupMemberTable, user } from "~/db/schema";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { wrapError } from "~/domain/error";
+import { QueryErrorCode } from "~/query/error";
 import type { GroupMemberList, GroupMemberListQuery } from "~/query/group/group-member-list";
 import type { Database } from "../db";
 import { toMembershipRole } from "../membership/membership-converter";
@@ -35,11 +36,7 @@ export const createGroupMemberListQuery = (db: Database): GroupMemberListQuery =
          * ユーザー名の昇順を第 1 キー、group_member テーブルの ID 昇順を第 2 キーにして固定する。
          */
         .orderBy(asc(user.name), asc(groupMemberTable.id)),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "団体メンバー一覧の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "団体メンバー一覧の取得に失敗しました。"),
     ).map((rows): GroupMemberList =>
       rows.map((row) => ({
         memberId: row.memberId,

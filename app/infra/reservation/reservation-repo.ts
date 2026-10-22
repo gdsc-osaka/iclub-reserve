@@ -5,6 +5,7 @@ import { err, ok, ResultAsync } from "neverthrow";
 
 import { reservationTable } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationErrorCode,
@@ -148,11 +149,10 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
     return ResultAsync.fromPromise(
       db.batch([auditStatement, updateQuery, ...outbox.statements, ...calendarSyncStatements]),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: `${subject}、操作履歴、通知の outbox、カレンダー同期タスクを書き込めなかった。`,
-        cause: error,
-      }),
+      wrapError(
+        ReservationErrorCode.DatabaseError,
+        `${subject}、操作履歴、通知の outbox、カレンダー同期タスクを書き込めなかった。`,
+      ),
     ).map((results) => {
       const updateRows = results[1] as { id: string }[];
       const applied = updateRows.length > 0;
@@ -166,11 +166,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
   const findById = (id: string): ResultAsync<Reservation, ReservationError> => {
     return ResultAsync.fromPromise(
       db.select().from(reservationTable).where(eq(reservationTable.id, id)).limit(1),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約テーブルを読み取れなかった。",
-        cause: error,
-      }),
+      wrapError(ReservationErrorCode.DatabaseError, "予約テーブルを読み取れなかった。"),
     ).andThen((rows) => {
       const row = rows.at(0);
 
@@ -204,11 +200,10 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
     return ResultAsync.fromPromise(
       db.batch([insertReservationQuery, auditStatement, ...outbox.statements]),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約、操作履歴、通知の outbox を書き込めなかった。",
-        cause: error,
-      }),
+      wrapError(
+        ReservationErrorCode.DatabaseError,
+        "予約、操作履歴、通知の outbox を書き込めなかった。",
+      ),
     ).map(() => ({
       enqueuedMailIds: outbox.ids,
     }));
@@ -271,11 +266,10 @@ export const createReservationRepository = (db: Database): ReservationRepository
 
     return ResultAsync.fromPromise(
       db.batch([auditStatement, insertQuery, ...calendarSyncStatements]),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "承認済みの予約、操作履歴、カレンダー同期タスクを書き込めなかった。",
-        cause: error,
-      }),
+      wrapError(
+        ReservationErrorCode.DatabaseError,
+        "承認済みの予約、操作履歴、カレンダー同期タスクを書き込めなかった。",
+      ),
     ).map((results) => {
       const rows = results[1] as { id: string }[];
       return { applied: rows.length > 0 };
@@ -308,11 +302,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
           ),
         )
         .limit(1),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "承認済みの予約との重なりを読み取れなかった。",
-        cause: error,
-      }),
+      wrapError(ReservationErrorCode.DatabaseError, "承認済みの予約との重なりを読み取れなかった。"),
     ).map((rows) => rows.length > 0);
 
   const applyStatusTransition = (

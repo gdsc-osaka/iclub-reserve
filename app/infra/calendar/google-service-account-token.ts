@@ -1,5 +1,6 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 import { CalendarErrorCode, type CalendarError } from "~/domain/calendar";
+import { wrapError } from "~/domain/error";
 import { classifyGoogleCalendarError } from "./google-calendar-error";
 
 /** OAuth 2.0 トークンエンドポイント */
@@ -173,19 +174,17 @@ export const createGoogleTokenSource = ({
           },
           body: bodyParams.toString(),
         }),
-        (err): CalendarError => ({
-          code: CalendarErrorCode.Unavailable,
-          message: "Google OAuth 2.0 トークンエンドポイントとの通信に失敗しました。",
-          cause: err,
-        }),
+        wrapError(
+          CalendarErrorCode.Unavailable,
+          "Google OAuth 2.0 トークンエンドポイントとの通信に失敗しました。",
+        ),
       ).andThen((response) =>
         ResultAsync.fromPromise(
           response.text().then((text) => ({ status: response.status, text })),
-          (err): CalendarError => ({
-            code: CalendarErrorCode.Unavailable,
-            message: "Google OAuth 2.0 応答の読み取りに失敗しました。",
-            cause: err,
-          }),
+          wrapError(
+            CalendarErrorCode.Unavailable,
+            "Google OAuth 2.0 応答の読み取りに失敗しました。",
+          ),
         ).andThen(({ status, text }) => {
           let parsedJson: unknown;
           try {

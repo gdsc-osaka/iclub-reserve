@@ -9,6 +9,7 @@ import {
   type AuditLogAction,
   type AuditLogChanges,
 } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { collectIds } from "~/infra/audit-log/collect-ids";
 import type { Database } from "~/infra/db";
 import { ensureStaff } from "../_shared/staff";
@@ -255,11 +256,7 @@ export const findAuditLogSearchResult = (
 
     const result = yield* ResultAsync.fromPromise(
       searchAuditLogs(db, args.filter, args.page),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "操作履歴を読み取れなかった。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "操作履歴を読み取れなかった。"),
     );
 
     return ok(result);
