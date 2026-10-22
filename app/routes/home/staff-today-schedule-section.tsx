@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { CalendarDays } from "lucide-react";
 import { Link } from "react-router";
 
@@ -14,16 +15,15 @@ import {
   ReservationStatusBadge,
 } from "~/components/reservation/reservation-status-badge";
 import { layoutTimelineItems } from "~/components/reservation/timeline-layout";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { reservationDetailPath, ReservationStatus } from "~/domain/reservation";
 import { formatTimeRange, startOfTokyoDay, tokyoMinutesOfDay } from "~/lib/date";
-import { cn } from "~/lib/utils";
 import type {
   TodayScheduleFacility,
   TodayScheduleReservation,
 } from "~/query/reservation/staff-today-schedule";
+import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
 export interface StaffTodayScheduleSectionProps {
   readonly facilities: readonly TodayScheduleFacility[];
@@ -69,15 +69,7 @@ export function StaffTodayScheduleSection({
         </div>
       </div>
 
-      {isUnavailable && (
-        <Alert variant="destructive">
-          <AlertTitle>今日の予約状況を読み込めませんでした</AlertTitle>
-          <AlertDescription>
-            時間をおいて、画面を再読み込みしてください。
-            繰り返し表示される場合はシステム管理者にご連絡ください。
-          </AlertDescription>
-        </Alert>
-      )}
+      {isUnavailable && <SectionUnavailableAlert what="今日の予約状況" forStaff />}
 
       {!isUnavailable && facilities.length === 0 && (
         <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">

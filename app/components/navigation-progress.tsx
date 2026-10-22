@@ -1,7 +1,6 @@
+import { cn } from "cn";
 import { useEffect, useState } from "react";
 import { useNavigation } from "react-router";
-
-import { cn } from "~/lib/utils";
 
 /**
  * バーの状態。

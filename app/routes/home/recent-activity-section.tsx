@@ -1,7 +1,6 @@
 import { Activity, Clock } from "lucide-react";
 import { Link } from "react-router";
 
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import {
   AuditLogTargetType,
@@ -10,6 +9,7 @@ import {
 } from "~/domain/audit-log";
 import { formatMonthDayParts, formatRelativeTime, formatTime } from "~/lib/date";
 import type { GroupRecentActivityView } from "~/usecases/audit-log/get-group-recent-activities";
+import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
 export interface RecentActivitySectionProps {
   readonly activities: readonly GroupRecentActivityView[];
@@ -38,15 +38,7 @@ export function RecentActivitySection({
         <p className="text-xs text-muted-foreground">同じ団体のメンバーの操作（直近 7 日）</p>
       </div>
 
-      {isUnavailable && (
-        <Alert variant="destructive">
-          <AlertTitle>団体の最近の動きを読み込めませんでした</AlertTitle>
-          <AlertDescription>
-            時間をおいて、画面を再読み込みしてください。
-            繰り返し表示される場合は事務局にご連絡ください。
-          </AlertDescription>
-        </Alert>
-      )}
+      {isUnavailable && <SectionUnavailableAlert what="団体の最近の動き" />}
 
       {activities.length === 0 && !isUnavailable && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card p-6 text-center">

@@ -6,7 +6,6 @@ import {
   ReservationOverlapNotice,
   reservationOverlapNotice,
 } from "~/components/reservation/reservation-notices";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { isShortNotice, reservationDetailPath, ReservationStatus } from "~/domain/reservation";
@@ -14,6 +13,7 @@ import { ReservationTransition } from "~/domain/reservation/transition";
 import { formatDaysUntil, formatMonthDay, formatTimeRange, tokyoDaysUntil } from "~/lib/date";
 import type { StaffPendingReservationItem } from "~/query/reservation/staff-pending-reservations";
 import type { HomeActionData } from "./home-intent";
+import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
 export interface StaffPendingSectionProps {
   /** 開始日時の近い順に最大 5 件 */
@@ -55,15 +55,7 @@ export function StaffPendingSection({
         </Button>
       </div>
 
-      {isUnavailable && (
-        <Alert variant="destructive">
-          <AlertTitle>承認待ちの予約を読み込めませんでした</AlertTitle>
-          <AlertDescription>
-            時間をおいて、画面を再読み込みしてください。
-            繰り返し表示される場合はシステム管理者にご連絡ください。
-          </AlertDescription>
-        </Alert>
-      )}
+      {isUnavailable && <SectionUnavailableAlert what="承認待ちの予約" forStaff />}
 
       {!isUnavailable && reservations.length === 0 && (
         <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">

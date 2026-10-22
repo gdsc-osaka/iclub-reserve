@@ -1,5 +1,6 @@
+import { cn } from "cn";
+
 import { MembershipRole, membershipRoleLabel } from "~/domain/membership";
-import { cn } from "~/lib/utils";
 
 /** 役割ごとの配色。管理者は primary 系で強調し、一般メンバーは muted 系で控えめにする。 */
 const membershipRoleStyle: Record<

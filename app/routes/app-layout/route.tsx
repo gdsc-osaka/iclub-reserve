@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { Outlet } from "react-router";
 
 import { DesktopHeader, MobileHeader } from "~/components/layout/app-header";
@@ -7,7 +8,6 @@ import type { ShellUser } from "~/components/layout/shell-user";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { cn } from "~/lib/utils";
 
 import type { Route } from "./+types/route";
 import { readSidebarDefaultOpen } from "./sidebar-cookie";
