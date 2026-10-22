@@ -1,4 +1,4 @@
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, count, eq, gt } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable } from "~/db/schema";
@@ -48,6 +48,19 @@ export interface FindStaffPendingReservationsArgs {
   readonly now: Date;
 }
 
+export interface CountStaffPendingReservationsArgs {
+  /** 事務局かどうか（COND-009）。承認待ちは全団体の予約なので、事務局だけが見られる */
+  readonly isStaff: boolean;
+  readonly now: Date;
+}
+
+/** 承認待ちの仮予約を絞り込む条件（開始日時が今より後の仮予約） */
+const staffPendingReservationsWhere = (now: Date) =>
+  and(
+    eq(reservationTable.status, ReservationStatus.Provisional),
+    gt(reservationTable.startAt, now),
+  );
+
 /**
  * 開始が近い順に並んだ仮予約から、区画に出す先頭の数件と、その件数を数える。
  *
@@ -88,12 +101,7 @@ export const findStaffPendingReservations = (
         .from(reservationTable)
         .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))
         .innerJoin(facilityTable, eq(reservationTable.facilityId, facilityTable.id))
-        .where(
-          and(
-            eq(reservationTable.status, ReservationStatus.Provisional),
-            gt(reservationTable.startAt, args.now),
-          ),
-        )
+        .where(staffPendingReservationsWhere(args.now))
         .orderBy(asc(reservationTable.startAt), asc(reservationTable.id)),
       (error): QueryError => ({
         code: QueryErrorCode.DatabaseError,
@@ -103,4 +111,29 @@ export const findStaffPendingReservations = (
     );
 
     return ok(toStaffPendingReservations(rows, args.now));
+  });
+
+/**
+ * 承認待ちの仮予約の件数を数える（SCR-022 / UC-006、ナビゲーションのバッジ）。
+ */
+export const countStaffPendingReservations = (
+  db: Database,
+  args: CountStaffPendingReservationsArgs,
+): ResultAsync<number, QueryError> =>
+  safeTry(async function* () {
+    yield* ensureStaff(args.isStaff, "事務局ではない人が、承認待ちの仮予約を数えようとした。");
+
+    const rows = yield* ResultAsync.fromPromise(
+      db
+        .select({ count: count() })
+        .from(reservationTable)
+        .where(staffPendingReservationsWhere(args.now)),
+      (error): QueryError => ({
+        code: QueryErrorCode.DatabaseError,
+        message: "承認待ちの仮予約の件数の取得に失敗しました。",
+        cause: error,
+      }),
+    );
+
+    return ok(rows.at(0)?.count ?? 0);
   });

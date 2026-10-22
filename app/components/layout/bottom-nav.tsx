@@ -15,7 +15,15 @@ import {
 import { useSignOut } from "~/lib/auth/use-sign-out";
 
 import { UserAvatar } from "./account-menu";
-import { isNavItemActive, toBottomNavItems, toOverflowNavItems, type NavItem } from "./nav-items";
+import { NavCountBadge, NavCountDot, NavCountText } from "./nav-count";
+import {
+  isNavItemActive,
+  toBottomNavItems,
+  toNavCount,
+  toOverflowNavItems,
+  type NavCounts,
+  type NavItem,
+} from "./nav-items";
 import type { ShellUser } from "./shell-user";
 
 /**
@@ -28,7 +36,7 @@ import type { ShellUser } from "./shell-user";
  * `useIsMobile()` のような JavaScript での判定は、最初の描画に間に合わず
  * サイドバーとボトムバーが一瞬両方出てしまう。
  */
-export function BottomNav({ user }: Readonly<{ user: ShellUser }>) {
+export function BottomNav({ user, counts }: Readonly<{ user: ShellUser; counts: NavCounts }>) {
   const items = toBottomNavItems(user.isStaff);
   const overflowItems = toOverflowNavItems(user.isStaff);
 
@@ -44,13 +52,13 @@ export function BottomNav({ user }: Readonly<{ user: ShellUser }>) {
       <ul className="grid grid-cols-5">
         {items.map((item) => (
           <li key={item.id}>
-            <BottomNavTab item={item} />
+            <BottomNavTab item={item} count={toNavCount(counts, item)} />
           </li>
         ))}
 
         {/* 5 つ目は、残りの項目とアカウント操作をまとめた「その他」に使う */}
         <li>
-          <OverflowMenu user={user} items={overflowItems} />
+          <OverflowMenu user={user} items={overflowItems} counts={counts} />
         </li>
       </ul>
     </nav>
@@ -62,7 +70,7 @@ const tabClassName =
   "flex h-14 w-full flex-col items-center justify-center gap-1 text-[10px] leading-none";
 
 /** ボトムバーのタブ 1 つ分。 */
-function BottomNavTab({ item }: Readonly<{ item: NavItem }>) {
+function BottomNavTab({ item, count }: Readonly<{ item: NavItem; count: number | undefined }>) {
   const { pathname } = useLocation();
   const Icon = item.icon;
 
@@ -83,8 +91,17 @@ function BottomNavTab({ item }: Readonly<{ item: NavItem }>) {
       aria-current={isActive ? "page" : undefined}
       className={cn(tabClassName, isActive ? "text-primary" : "text-muted-foreground")}
     >
-      <Icon aria-hidden className="size-5" />
-      <span className={cn(isActive && "font-medium")}>{item.label}</span>
+      {/* 件数はアイコンの右上に重ねる。タブの下に足すと、タブの高さが項目ごとに揃わなくなる */}
+      <span className="relative flex">
+        <Icon aria-hidden className="size-5" />
+        {count !== undefined && (
+          <NavCountBadge count={count} className="absolute -top-1.5 left-3.5" />
+        )}
+      </span>
+      <span className={cn(isActive && "font-medium")}>
+        {item.label}
+        {count !== undefined && <NavCountText count={count} />}
+      </span>
     </Link>
   );
 }
@@ -94,14 +111,30 @@ function BottomNavTab({ item }: Readonly<{ item: NavItem }>) {
  *
  * 下から出しているのは、開いた直後の指の位置がそのまま使えるようにするため。
  */
-function OverflowMenu({ user, items }: Readonly<{ user: ShellUser; items: readonly NavItem[] }>) {
+function OverflowMenu({
+  user,
+  items,
+  counts,
+}: Readonly<{ user: ShellUser; items: readonly NavItem[]; counts: NavCounts }>) {
   const { signOut, isSigningOut } = useSignOut();
+
+  /*
+   * 中の項目に件数があれば、「その他」にも点を付ける。付けないと、シートを開くまで気づけない。
+   * 数字にしないのは、種類の違う件数（承認待ちの予約と団体など）を足しても意味が無いため。
+   */
+  const hasCountInside = items.some((item) => toNavCount(counts, item) !== undefined);
 
   return (
     <Sheet>
       <SheetTrigger className={cn(tabClassName, "text-muted-foreground")}>
-        <MoreHorizontal aria-hidden className="size-5" />
-        <span>その他</span>
+        <span className="relative flex">
+          <MoreHorizontal aria-hidden className="size-5" />
+          {hasCountInside && <NavCountDot className="absolute -top-0.5 -right-0.5" />}
+        </span>
+        <span>
+          その他
+          {hasCountInside && <span className="sr-only">（件数のある項目があります）</span>}
+        </span>
       </SheetTrigger>
 
       <SheetContent side="bottom" className="rounded-t-xl pb-[env(safe-area-inset-bottom)]">
@@ -111,7 +144,7 @@ function OverflowMenu({ user, items }: Readonly<{ user: ShellUser; items: readon
 
         <div className="flex flex-col gap-1 px-4">
           {items.map((item) => (
-            <OverflowMenuItem key={item.id} item={item} />
+            <OverflowMenuItem key={item.id} item={item} count={toNavCount(counts, item)} />
           ))}
         </div>
 
@@ -151,7 +184,7 @@ function OverflowMenu({ user, items }: Readonly<{ user: ShellUser; items: readon
 }
 
 /** 「その他」の中に並べる 1 行。 */
-function OverflowMenuItem({ item }: Readonly<{ item: NavItem }>) {
+function OverflowMenuItem({ item, count }: Readonly<{ item: NavItem; count: number | undefined }>) {
   const { pathname } = useLocation();
   const Icon = item.icon;
   const rowClassName = "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm";
@@ -175,6 +208,12 @@ function OverflowMenuItem({ item }: Readonly<{ item: NavItem }>) {
       >
         <Icon aria-hidden className="size-4" />
         {item.label}
+        {count !== undefined && (
+          <>
+            <NavCountText count={count} />
+            <NavCountBadge count={count} className="ml-auto" />
+          </>
+        )}
       </Link>
     </SheetClose>
   );

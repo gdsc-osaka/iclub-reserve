@@ -221,4 +221,37 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
       })
       .toBe(ReservationStatus.Approved);
   });
+
+  test("事務局が承認すると、ナビの「予約の承認」の件数が 1 つ減る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    // ほかのテストが残した仮予約もあるので、件数は決め打ちせず、承認の前後の差で確かめる
+    const { facility } = await createProvisionalReservation(db);
+
+    await signInAs(personas.staff.id);
+    await openPage(page, "/staff/reservations");
+
+    // PC ではサイドバー、スマホではボトムバーの項目が見えている。件数は「予約の承認（3 件）」のようにリンクの名前に入る
+    const navLink = page.getByRole("link", { name: /^予約の承認/ });
+    const before = Number((await navLink.textContent())?.match(/（(\d+) 件）/)?.[1]);
+    expect(before).toBeGreaterThanOrEqual(1);
+
+    const row = page.getByRole("listitem").filter({ hasText: facility.name });
+    await row.getByRole("button", { name: "承認" }).click();
+    await page
+      .getByRole("alertdialog", { name: "仮予約の承認" })
+      .getByRole("button", { name: "承認する" })
+      .click();
+    await expect(row).toBeHidden();
+
+    /*
+     * 承認（GET 以外の送信）のあとに数え直される。0 件になったら件数は出さない。
+     * 読み上げ用の「（N 件）」は画面外に置いた要素なので、名前の計算では前に空白が入る
+     */
+    await expect(navLink).toHaveAccessibleName(
+      before === 1 ? "予約の承認" : new RegExp(`^予約の承認\\s*（${before - 1} 件）$`),
+    );
+  });
 });

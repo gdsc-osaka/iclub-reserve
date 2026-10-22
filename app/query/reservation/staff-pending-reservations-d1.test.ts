@@ -13,7 +13,10 @@ import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "~/infra/d1-test-db";
 import { seedFacility, seedGroup, seedReservation, seedUser } from "~/infra/d1-test-seeds";
 import { QueryErrorCode } from "../error";
-import { findStaffPendingReservations } from "./staff-pending-reservations";
+import {
+  countStaffPendingReservations,
+  findStaffPendingReservations,
+} from "./staff-pending-reservations";
 
 const testDb = useD1TestDb();
 
@@ -156,5 +159,46 @@ describe("findStaffPendingReservations", () => {
       res_pair_b: [false, true],
       res_alone: [false, false],
     });
+  });
+});
+
+describe("countStaffPendingReservations", () => {
+  it("事務局でない人には Forbidden を返す（COND-009）", async () => {
+    const result = await countStaffPendingReservations(testDb.db, { isStaff: false, now: NOW });
+
+    expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.Forbidden);
+  });
+
+  it("開始日時が今以前の仮予約と、仮予約でない予約は数えない", async () => {
+    // 今（12:00）より前に始まり、まだ終わっていない仮予約
+    await insertReservation(
+      "res_started",
+      new Date("2026-10-15T11:00:00+09:00"),
+      new Date("2026-10-15T13:00:00+09:00"),
+    );
+    // ちょうど今に始まる仮予約
+    await insertReservation("res_now", NOW, new Date("2026-10-15T14:00:00+09:00"));
+    // 承認済みの予約
+    await insertReservation(
+      "res_approved",
+      new Date("2026-10-16T10:00:00+09:00"),
+      new Date("2026-10-16T11:00:00+09:00"),
+      ReservationStatus.Approved,
+    );
+    // 未来の仮予約（数えられる対象）
+    await insertReservation(
+      "res_future_1",
+      new Date("2026-10-15T14:00:00+09:00"),
+      new Date("2026-10-15T16:00:00+09:00"),
+    );
+    await insertReservation(
+      "res_future_2",
+      new Date("2026-10-16T14:00:00+09:00"),
+      new Date("2026-10-16T16:00:00+09:00"),
+    );
+
+    const result = await countStaffPendingReservations(testDb.db, { isStaff: true, now: NOW });
+
+    expect(result._unsafeUnwrap()).toBe(2);
   });
 });

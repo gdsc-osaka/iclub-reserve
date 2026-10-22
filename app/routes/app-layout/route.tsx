@@ -1,5 +1,6 @@
+import { env } from "cloudflare:workers";
 import { cn } from "cn";
-import { Outlet } from "react-router";
+import { Outlet, type ShouldRevalidateFunctionArgs } from "react-router";
 
 import { DesktopHeader, MobileHeader } from "~/components/layout/app-header";
 import { AppSidebar } from "~/components/layout/app-sidebar";
@@ -7,19 +8,23 @@ import { BottomNav } from "~/components/layout/bottom-nav";
 import type { ShellUser } from "~/components/layout/shell-user";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { TooltipProvider } from "~/components/ui/tooltip";
+import { createDb } from "~/infra/db";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 
 import type { Route } from "./+types/route";
+import { shouldRecountNavCounts } from "./nav-counts";
+import { loadNavCounts } from "./nav-counts.server";
 import { readSidebarDefaultOpen } from "./sidebar-cookie";
 
 /**
  * 画面の共通部分に必要なものだけを渡す。
  *
- * ここで DB へ問い合わせないのは、共通部分がどの画面でも必ず動くようにするため。
- * 共通部分が DB に依存すると、DB が不調なときにアプリ全体が真っ白になる。
- * 所属団体のようなデータは、それを使う画面（ダッシュボードなど）の側で取る。
+ * DB へ問い合わせるのは、ナビに添える件数（承認待ちなど）を数えるときだけにする。
+ * 共通部分はどの画面でも動くので、ここが DB の不調で落ちるとアプリ全体が真っ白になる。
+ * そのため件数は数えられなくても例外にせず、その件数を出さずに画面を開く（`loadNavCounts`）。
+ * 所属団体のような画面ごとのデータは、それを使う画面（ダッシュボードなど）の側で取る。
  */
-export function loader({ request, context }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
 
   const shellUser: ShellUser = {
@@ -28,7 +33,22 @@ export function loader({ request, context }: Route.LoaderArgs) {
     isStaff: user.is_staff,
   };
 
-  return { user: shellUser, sidebarDefaultOpen: readSidebarDefaultOpen(request) };
+  return {
+    user: shellUser,
+    sidebarDefaultOpen: readSidebarDefaultOpen(request),
+    navCounts: await loadNavCounts(createDb(env.DB), user, new Date()),
+  };
+}
+
+/**
+ * 画面を移るたびに件数を数え直さないよう、この loader を走らせ直す時期を絞る（#189）。
+ *
+ * 走らせ直すのは、件数を持つタブを開いたとき・GET 以外の送信のあと・同じ URL の読み直しだけ。
+ * それ以外の移動では、前に数えた件数と利用者の情報をそのまま使う。
+ * どの場合に走らせ直すかは `shouldRecountNavCounts` に書いている。
+ */
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return shouldRecountNavCounts(args);
 }
 
 /**
@@ -45,7 +65,7 @@ export function loader({ request, context }: Route.LoaderArgs) {
  * 押せる項目が無いため。
  */
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
-  const { user, sidebarDefaultOpen } = loaderData;
+  const { user, sidebarDefaultOpen, navCounts } = loaderData;
 
   return (
     /*
@@ -55,7 +75,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
      */
     <TooltipProvider>
       <SidebarProvider defaultOpen={sidebarDefaultOpen}>
-        <AppSidebar user={user} />
+        <AppSidebar user={user} counts={navCounts} />
 
         <SidebarInset>
           <MobileHeader user={user} />
@@ -83,7 +103,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             <Outlet />
           </div>
 
-          <BottomNav user={user} />
+          <BottomNav user={user} counts={navCounts} />
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
