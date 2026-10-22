@@ -4,111 +4,78 @@ import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "../d1-test-db";
+import { seedAuditLog, seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createGroupRecentActivitiesQuery } from "./group-recent-activities-query";
 
 const testDb = useD1TestDb();
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_staff",
-      "事務局スタッフ",
-      "staff@osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      1,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_me",
-      "自分",
-      "me@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_other",
-      "他メンバー",
-      "other@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_1",
-      "テスト団体1",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, description, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_1",
-      "工作室",
-      "",
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "reservation" (id, facility_id, group_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      "res_1",
-      "fac_1",
-      "grp_1",
-      new Date("2026-10-20T10:00:00.000Z").getTime(),
-      new Date("2026-10-20T12:00:00.000Z").getTime(),
-      4,
-      ReservationStatus.Provisional,
-      "usr_other",
-      new Date("2026-10-14T10:00:00.000Z").getTime(),
-      new Date("2026-10-14T10:00:00.000Z").getTime(),
-    ],
+    seedUser({
+      id: "usr_staff",
+      name: "事務局スタッフ",
+      email: "staff@osaka-u.ac.jp",
+      is_staff: true,
+    }),
+    seedUser({ id: "usr_me", name: "自分", email: "me@ecs.osaka-u.ac.jp", is_staff: false }),
+    seedUser({
+      id: "usr_other",
+      name: "他メンバー",
+      email: "other@ecs.osaka-u.ac.jp",
+      is_staff: false,
+    }),
+    seedGroup({ id: "grp_1", name: "テスト団体1" }),
+    seedFacility({ id: "fac_1", name: "工作室", description: "", isActive: true }),
+    seedReservation({
+      id: "res_1",
+      facilityId: "fac_1",
+      groupId: "grp_1",
+      startAt: new Date("2026-10-20T10:00:00.000Z"),
+      endAt: new Date("2026-10-20T12:00:00.000Z"),
+      headCount: 4,
+      status: ReservationStatus.Provisional,
+      createdBy: "usr_other",
+      createdAt: new Date("2026-10-14T10:00:00.000Z"),
+      updatedAt: new Date("2026-10-14T10:00:00.000Z"),
+    }),
   );
 });
 
 describe("GroupRecentActivitiesQuery (D1 テスト)", () => {
-  const insertLogSql = `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`;
-
   it("一般メンバーには団体の予約の記録だけが出て、団体・メンバーシップ・招待の記録は出ない（COND-012 (2)）", async () => {
     const db = testDb.db;
     const query = createGroupRecentActivitiesQuery(db);
 
-    const occurredAt = new Date("2026-10-14T12:00:00.000Z").getTime();
+    const occurredAt = new Date("2026-10-14T12:00:00.000Z");
 
     // 予約の記録
-    await testDb.seed([
-      insertLogSql,
-      "log_res",
-      occurredAt,
-      "usr_other",
-      0,
-      AuditLogAction.ReservationApply,
-      AuditLogTargetType.Reservation,
-      "res_1",
-      "grp_1",
-      JSON.stringify({}),
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_res",
+        occurredAt,
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
+    );
 
     // 団体の記録
-    await testDb.seed([
-      insertLogSql,
-      "log_grp",
-      occurredAt + 10,
-      "usr_other",
-      0,
-      AuditLogAction.GroupUpdate,
-      AuditLogTargetType.Group,
-      "grp_1",
-      "grp_1",
-      JSON.stringify({ name: { before: "前", after: "後" } }),
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_grp",
+        occurredAt: new Date(occurredAt.getTime() + 10),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.GroupUpdate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_1",
+        groupId: "grp_1",
+        changes: { name: { before: "前", after: "後" } },
+      }),
+    );
 
     // 一般メンバーとして取得
     const result = await query.findRecentActivities({
@@ -141,57 +108,49 @@ describe("GroupRecentActivitiesQuery (D1 テスト)", () => {
     const db = testDb.db;
     const query = createGroupRecentActivitiesQuery(db);
 
-    const occurredAt = new Date("2026-10-14T12:00:00.000Z").getTime();
+    const occurredAt = new Date("2026-10-14T12:00:00.000Z");
 
     await testDb.seed(
-      [
-        insertLogSql,
-        "log_res",
+      seedAuditLog({
+        id: "log_res",
         occurredAt,
-        "usr_other",
-        0,
-        AuditLogAction.ReservationApply,
-        AuditLogTargetType.Reservation,
-        "res_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
-      [
-        insertLogSql,
-        "log_grp",
-        occurredAt + 10,
-        "usr_other",
-        0,
-        AuditLogAction.GroupUpdate,
-        AuditLogTargetType.Group,
-        "grp_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
-      [
-        insertLogSql,
-        "log_mem",
-        occurredAt + 20,
-        "usr_other",
-        0,
-        AuditLogAction.MembershipChangeRole,
-        AuditLogTargetType.Membership,
-        "mem_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
-      [
-        insertLogSql,
-        "log_inv",
-        occurredAt + 30,
-        "usr_other",
-        0,
-        AuditLogAction.InvitationSend,
-        AuditLogTargetType.Invitation,
-        "inv_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
+      seedAuditLog({
+        id: "log_grp",
+        occurredAt: new Date(occurredAt.getTime() + 10),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.GroupUpdate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_1",
+        groupId: "grp_1",
+      }),
+      seedAuditLog({
+        id: "log_mem",
+        occurredAt: new Date(occurredAt.getTime() + 20),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.MembershipChangeRole,
+        targetType: AuditLogTargetType.Membership,
+        targetId: "mem_1",
+        groupId: "grp_1",
+      }),
+      seedAuditLog({
+        id: "log_inv",
+        occurredAt: new Date(occurredAt.getTime() + 30),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.InvitationSend,
+        targetType: AuditLogTargetType.Invitation,
+        targetId: "inv_1",
+        groupId: "grp_1",
+      }),
     );
 
     // 管理者として取得
@@ -216,49 +175,49 @@ describe("GroupRecentActivitiesQuery (D1 テスト)", () => {
     const db = testDb.db;
     const query = createGroupRecentActivitiesQuery(db);
 
-    const occurredAt = new Date("2026-10-14T12:00:00.000Z").getTime();
+    const occurredAt = new Date("2026-10-14T12:00:00.000Z");
 
     // 本人の操作
-    await testDb.seed([
-      insertLogSql,
-      "log_my_action",
-      occurredAt + 1,
-      "usr_me",
-      0,
-      AuditLogAction.ReservationApply,
-      AuditLogTargetType.Reservation,
-      "res_1",
-      "grp_1",
-      JSON.stringify({}),
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_my_action",
+        occurredAt: new Date(occurredAt.getTime() + 1),
+        actorId: "usr_me",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
+    );
 
     // 予約に対する事務局の操作（未読に出るため最近の動きからは除く）
-    await testDb.seed([
-      insertLogSql,
-      "log_staff_reservation",
-      occurredAt + 2,
-      "usr_staff",
-      1,
-      AuditLogAction.ReservationApprove,
-      AuditLogTargetType.Reservation,
-      "res_1",
-      "grp_1",
-      JSON.stringify({}),
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_staff_reservation",
+        occurredAt: new Date(occurredAt.getTime() + 2),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.ReservationApprove,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
+    );
 
     // 他メンバーの操作
-    await testDb.seed([
-      insertLogSql,
-      "log_other_action",
-      occurredAt + 3,
-      "usr_other",
-      0,
-      AuditLogAction.ReservationApply,
-      AuditLogTargetType.Reservation,
-      "res_1",
-      "grp_1",
-      JSON.stringify({}),
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_other_action",
+        occurredAt: new Date(occurredAt.getTime() + 3),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
+    );
 
     const result = await query.findRecentActivities({
       actorUserId: "usr_me",
@@ -277,21 +236,22 @@ describe("GroupRecentActivitiesQuery (D1 テスト)", () => {
     const db = testDb.db;
     const query = createGroupRecentActivitiesQuery(db);
 
-    const occurredAt = new Date("2026-10-14T12:00:00.000Z").getTime();
+    const occurredAt = new Date("2026-10-14T12:00:00.000Z");
 
     // 団体に対する事務局の操作（団体の有効化）
-    await testDb.seed([
-      insertLogSql,
-      "log_staff_group_enable",
-      occurredAt,
-      "usr_staff",
-      1,
-      AuditLogAction.GroupEnable,
-      AuditLogTargetType.Group,
-      "grp_1",
-      "grp_1",
-      JSON.stringify({ status: { before: "pending", after: "enabled" } }),
-    ]);
+    await testDb.seed(
+      seedAuditLog({
+        id: "log_staff_group_enable",
+        occurredAt,
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.GroupEnable,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_1",
+        groupId: "grp_1",
+        changes: { status: { before: "pending", after: "enabled" } },
+      }),
+    );
 
     const result = await query.findRecentActivities({
       actorUserId: "usr_me",
@@ -314,76 +274,54 @@ describe("GroupRecentActivitiesQuery (D1 テスト)", () => {
   });
 
   it("役割は団体ごとに見て、所属していない団体の記録は出さない", async () => {
-    const occurredAt = new Date("2026-10-14T12:00:00.000Z").getTime();
+    const occurredAt = new Date("2026-10-14T12:00:00.000Z");
     await testDb.seed(
-      [
-        `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-        "grp_2",
-        "テスト団体2",
-        "enabled",
-        0,
-        0,
-      ],
-      [
-        `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-        "grp_3",
-        "所属していない団体",
-        "enabled",
-        0,
-        0,
-      ],
+      seedGroup({ id: "grp_2", name: "テスト団体2" }),
+      seedGroup({ id: "grp_3", name: "所属していない団体" }),
       // 管理者を務める団体 1 の団体の記録 → 出る
-      [
-        insertLogSql,
-        "log_grp1_group",
+      seedAuditLog({
+        id: "log_grp1_group",
         occurredAt,
-        "usr_other",
-        0,
-        AuditLogAction.GroupUpdate,
-        AuditLogTargetType.Group,
-        "grp_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.GroupUpdate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_1",
+        groupId: "grp_1",
+      }),
       // 一般メンバーである団体 2 の予約の記録 → 出る
-      [
-        insertLogSql,
-        "log_grp2_reservation",
-        occurredAt + 1,
-        "usr_other",
-        0,
-        AuditLogAction.ReservationApply,
-        AuditLogTargetType.Reservation,
-        "res_2",
-        "grp_2",
-        JSON.stringify({}),
-      ],
+      seedAuditLog({
+        id: "log_grp2_reservation",
+        occurredAt: new Date(occurredAt.getTime() + 1),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_2",
+        groupId: "grp_2",
+      }),
       // 一般メンバーである団体 2 の団体の記録 → 出ない
-      [
-        insertLogSql,
-        "log_grp2_group",
-        occurredAt + 2,
-        "usr_other",
-        0,
-        AuditLogAction.GroupUpdate,
-        AuditLogTargetType.Group,
-        "grp_2",
-        "grp_2",
-        JSON.stringify({}),
-      ],
+      seedAuditLog({
+        id: "log_grp2_group",
+        occurredAt: new Date(occurredAt.getTime() + 2),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.GroupUpdate,
+        targetType: AuditLogTargetType.Group,
+        targetId: "grp_2",
+        groupId: "grp_2",
+      }),
       // 所属していない団体 3 の予約の記録 → 出ない
-      [
-        insertLogSql,
-        "log_grp3_reservation",
-        occurredAt + 3,
-        "usr_other",
-        0,
-        AuditLogAction.ReservationApply,
-        AuditLogTargetType.Reservation,
-        "res_3",
-        "grp_3",
-        JSON.stringify({}),
-      ],
+      seedAuditLog({
+        id: "log_grp3_reservation",
+        occurredAt: new Date(occurredAt.getTime() + 3),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_3",
+        groupId: "grp_3",
+      }),
     );
 
     const result = await createGroupRecentActivitiesQuery(testDb.db).findRecentActivities({
@@ -406,55 +344,47 @@ describe("GroupRecentActivitiesQuery (D1 テスト)", () => {
     const since = new Date("2026-10-08T12:00:00.000Z");
     await testDb.seed(
       // 起点ちょうど → 出る
-      [
-        insertLogSql,
-        "log_at_since",
-        since.getTime(),
-        "usr_other",
-        0,
-        AuditLogAction.ReservationApply,
-        AuditLogTargetType.Reservation,
-        "res_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
+      seedAuditLog({
+        id: "log_at_since",
+        occurredAt: since,
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
       // 起点の 1 ミリ秒前 → 出ない
-      [
-        insertLogSql,
-        "log_before_since",
-        since.getTime() - 1,
-        "usr_other",
-        0,
-        AuditLogAction.ReservationApply,
-        AuditLogTargetType.Reservation,
-        "res_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
-      [
-        insertLogSql,
-        "log_newer",
-        since.getTime() + 1000,
-        "usr_other",
-        0,
-        AuditLogAction.ReservationEditProvisional,
-        AuditLogTargetType.Reservation,
-        "res_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
-      [
-        insertLogSql,
-        "log_newest",
-        since.getTime() + 2000,
-        "usr_other",
-        0,
-        AuditLogAction.ReservationWithdraw,
-        AuditLogTargetType.Reservation,
-        "res_1",
-        "grp_1",
-        JSON.stringify({}),
-      ],
+      seedAuditLog({
+        id: "log_before_since",
+        occurredAt: new Date(since.getTime() - 1),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationApply,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
+      seedAuditLog({
+        id: "log_newer",
+        occurredAt: new Date(since.getTime() + 1000),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationEditProvisional,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
+      seedAuditLog({
+        id: "log_newest",
+        occurredAt: new Date(since.getTime() + 2000),
+        actorId: "usr_other",
+        actedAsStaff: false,
+        action: AuditLogAction.ReservationWithdraw,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
     );
 
     const query = createGroupRecentActivitiesQuery(testDb.db);

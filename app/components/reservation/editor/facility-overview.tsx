@@ -1,5 +1,6 @@
+import { cn } from "cn";
+
 import { FacilityPhoto } from "~/components/facility/facility-photo";
-import { cn } from "~/lib/utils";
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
 
 /**

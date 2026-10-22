@@ -1,4 +1,4 @@
-import { cn } from "~/lib/utils";
+import { cn } from "cn";
 
 import { ICLUB_BOLT_BOX, ICLUB_BOLT_COLOR, ICLUB_BOLT_PATH } from "./iclub-bolt";
 

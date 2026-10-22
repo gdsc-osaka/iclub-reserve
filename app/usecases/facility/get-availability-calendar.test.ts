@@ -5,12 +5,12 @@ import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
-import type {
-  AvailabilityReservationRow,
-  FacilityAvailabilityCalendarQuery,
-} from "~/query/facility/facility-availability-calendar";
+import type { AvailabilityReservationRow } from "~/query/facility/facility-availability-calendar";
 import type { HolidayQuery } from "~/query/holiday";
-import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
+import type { UserGroupList } from "~/query/user/user-group-list";
+import { fakeFacilityAvailabilityCalendarQuery } from "~/testing/fakes/facility";
+import { fakeHolidayQuery } from "~/testing/fakes/holiday";
+import { fakeUserGroupListQuery } from "~/testing/fakes/user";
 import { getAvailabilityCalendarUseCase } from "./get-availability-calendar";
 
 const meetingRoomA = { id: "fac_meeting_a", name: "ミーティングルーム A", description: null };
@@ -69,20 +69,24 @@ const createDeps = (
     readonly holidayQuery?: HolidayQuery;
   },
 ) => {
-  const userGroupListQuery: UserGroupListQuery = { findByUserId: () => okAsync(groups) };
+  const userGroupListQuery = fakeUserGroupListQuery({
+    findByUserId: () => okAsync(groups),
+  });
 
-  const facilityAvailabilityCalendarQuery: FacilityAvailabilityCalendarQuery = {
+  const facilityAvailabilityCalendarQuery = fakeFacilityAvailabilityCalendarQuery({
     findByFacilityAndPeriod: () =>
       okAsync({
         facilities: [meetingRoomA],
         facility: meetingRoomA,
         reservations: [ownReservation, otherReservation],
       }),
-  };
+  });
 
-  const holidayQuery: HolidayQuery = overrides?.holidayQuery ?? {
-    findHolidaysBetween: () => okAsync([]),
-  };
+  const holidayQuery =
+    overrides?.holidayQuery ??
+    fakeHolidayQuery({
+      findHolidaysBetween: () => okAsync([]),
+    });
 
   return { userGroupListQuery, facilityAvailabilityCalendarQuery, holidayQuery };
 };
@@ -200,15 +204,17 @@ describe("getAvailabilityCalendarUseCase", () => {
 
   it("施設が見つからないときは NOT_FOUND がそのまま伝播する", async () => {
     const deps = {
-      userGroupListQuery: { findByUserId: () => okAsync(enabledMembership) } as UserGroupListQuery,
-      facilityAvailabilityCalendarQuery: {
+      userGroupListQuery: fakeUserGroupListQuery({
+        findByUserId: () => okAsync(enabledMembership),
+      }),
+      facilityAvailabilityCalendarQuery: fakeFacilityAvailabilityCalendarQuery({
         findByFacilityAndPeriod: () =>
           errAsync({
             code: QueryErrorCode.NotFound,
             message: "施設・設備 fac_unknown が有効な施設の中に見つからない。",
           }),
-      } as FacilityAvailabilityCalendarQuery,
-      holidayQuery: { findHolidaysBetween: () => okAsync([]) } as HolidayQuery,
+      }),
+      holidayQuery: fakeHolidayQuery({ findHolidaysBetween: () => okAsync([]) }),
     };
 
     const result = await getAvailabilityCalendarUseCase(deps, {

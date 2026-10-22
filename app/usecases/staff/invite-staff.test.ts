@@ -1,17 +1,15 @@
 import { okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { InvitationStatus } from "~/domain/invitation";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
-import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import {
-  type CreateStaffInvitationInput,
   type CreateStaffInvitationOutcome,
   StaffErrorCode,
   StaffField,
   type StaffInvitation,
-  type StaffInvitationRepository,
-  type StaffMemberRepository,
 } from "~/domain/staff";
+import { fakeMailOutboxNotifier } from "~/testing/fakes/mail";
+import { fakeStaffInvitationRepository, fakeStaffMemberRepository } from "~/testing/fakes/staff";
 import { inviteStaffUseCase, type InviteStaffArgs } from "./invite-staff";
 
 describe("inviteStaffUseCase", () => {
@@ -30,52 +28,35 @@ describe("inviteStaffUseCase", () => {
       pendingInvitation?: StaffInvitation | null;
     } = {},
   ) => {
-    let createdInput: CreateStaffInvitationInput | null = null;
-    let createdMails: readonly MailDraft[] = [];
-    let createdAuditLog: unknown = null;
-    const requestedMailIds: string[] = [];
+    const create = vi.fn((_input: unknown, _mails: readonly MailDraft[], _auditLog: unknown) =>
+      okAsync<CreateStaffInvitationOutcome>({
+        enqueuedMailIds: ["mail_created_1"],
+      }),
+    );
+    const notifyEnqueued = vi.fn((_ids: readonly string[]) => okAsync(null));
 
-    const staffMemberRepository: StaffMemberRepository = {
+    const staffMemberRepository = fakeStaffMemberRepository({
       findStaffByEmail: (_normalizedEmail) => {
         if (options.staffByEmail !== undefined) {
           return okAsync(options.staffByEmail);
         }
         return okAsync(null);
       },
-      findStaffById: () => okAsync(null),
-      countStaff: () => okAsync(2),
-      revoke: () => okAsync(1),
-    };
+    });
 
-    const staffInvitationRepository: StaffInvitationRepository = {
+    const staffInvitationRepository = fakeStaffInvitationRepository({
       findPendingByEmail: () => okAsync(options.pendingInvitation ?? null),
-      create: (input, mails, auditLog) => {
-        createdInput = input;
-        createdMails = mails;
-        createdAuditLog = auditLog;
-        return okAsync<CreateStaffInvitationOutcome>({
-          enqueuedMailIds: ["mail_created_1"],
-        });
-      },
-      cancel: () => okAsync(1),
-      findById: () => okAsync(null),
-      accept: () => okAsync(false),
-      reject: () => okAsync(0),
-    };
+      create,
+    });
 
-    const mailOutboxNotifier: MailOutboxNotifier = {
-      notifyEnqueued: (ids) => {
-        requestedMailIds.push(...ids);
-        return okAsync(null);
-      },
-    };
+    const mailOutboxNotifier = fakeMailOutboxNotifier({
+      notifyEnqueued,
+    });
 
     return {
       deps: { staffMemberRepository, staffInvitationRepository, mailOutboxNotifier },
-      getCreatedInput: () => createdInput,
-      getCreatedMails: () => createdMails,
-      getCreatedAuditLog: () => createdAuditLog,
-      getRequestedMailIds: () => requestedMailIds,
+      create,
+      notifyEnqueued,
     };
   };
 
@@ -150,37 +131,42 @@ describe("inviteStaffUseCase", () => {
       createdAt: new Date(now.getTime() - 50 * 3600 * 1000),
     };
 
-    const { deps, getCreatedInput, getCreatedMails, getRequestedMailIds } = setupDeps({
+    const { deps, create, notifyEnqueued } = setupDeps({
       pendingInvitation,
     });
     const result = await inviteStaffUseCase(deps, baseArgs);
 
     expect(result.isOk()).toBe(true);
-    expect(getCreatedInput()).not.toBeNull();
-    expect(getCreatedMails()).toHaveLength(1);
-    expect(getRequestedMailIds()).toEqual(["mail_created_1"]);
+    expect(create).toHaveBeenCalledTimes(1);
+    const [callInput, callMails] = create.mock.calls[0]!;
+    expect(callInput).not.toBeNull();
+    expect(callMails).toHaveLength(1);
+    expect(notifyEnqueued).toHaveBeenCalledWith(["mail_created_1"]);
   });
 
   it("正常に招待が作成され、メール下書き登録と即時配送依頼が行われる", async () => {
-    const { deps, getCreatedInput, getCreatedMails, getCreatedAuditLog, getRequestedMailIds } =
-      setupDeps();
+    const { deps, create, notifyEnqueued } = setupDeps();
     const result = await inviteStaffUseCase(deps, baseArgs);
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
       expect(result.value.invitationId).toBeDefined();
     }
-    const input = getCreatedInput();
-    expect(input?.email).toBe(baseArgs.email);
-    expect(input?.inviterId).toBe(baseArgs.actorUserId);
+    expect(create).toHaveBeenCalledTimes(1);
+    const [input, mails, auditLog] = create.mock.calls[0] as [
+      { email: string; inviterId: string },
+      readonly MailDraft[],
+      unknown,
+    ];
+    expect(input.email).toBe(baseArgs.email);
+    expect(input.inviterId).toBe(baseArgs.actorUserId);
 
-    const mails = getCreatedMails();
     expect(mails).toHaveLength(1);
     expect(mails[0].to.address).toBe(baseArgs.email);
 
-    expect(getRequestedMailIds()).toEqual(["mail_created_1"]);
+    expect(notifyEnqueued).toHaveBeenCalledWith(["mail_created_1"]);
 
-    expect(getCreatedAuditLog()).toMatchObject({
+    expect(auditLog).toMatchObject({
       action: "staff_role.invite",
       actorId: baseArgs.actorUserId,
       actedAsStaff: true,

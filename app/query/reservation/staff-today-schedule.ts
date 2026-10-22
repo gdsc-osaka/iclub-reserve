@@ -5,6 +5,10 @@ import { facilityTable, groupTable, reservationTable } from "~/db/schema";
 import { calendarVisibleStatuses, type ReservationStatus } from "~/domain/reservation";
 import type { Database } from "~/infra/db";
 import { addDays, startOfTokyoDay } from "~/lib/date";
+import {
+  reservationWithNamesColumns,
+  type ReservationWithNames,
+} from "../_shared/reservation-with-names";
 import { ensureStaff } from "../_shared/staff";
 import { QueryErrorCode, type QueryError } from "../error";
 
@@ -21,14 +25,8 @@ export interface TodayScheduleFacility {
  *
  * 見るのは事務局だけなので、他団体の予約も全項目を渡す（COND-008・COND-009）。
  */
-export interface TodayScheduleReservation {
+export interface TodayScheduleReservation extends ReservationWithNames {
   readonly id: string;
-  readonly groupId: string;
-  readonly groupName: string;
-  readonly facilityId: string;
-  readonly facilityName: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
   readonly status: ReservationStatus;
   readonly headCount: number;
 }
@@ -76,12 +74,7 @@ export const findStaffTodaySchedule = (
     const reservationsQuery = db
       .select({
         id: reservationTable.id,
-        groupId: reservationTable.groupId,
-        groupName: groupTable.name,
-        facilityId: reservationTable.facilityId,
-        facilityName: facilityTable.name,
-        startAt: reservationTable.startAt,
-        endAt: reservationTable.endAt,
+        ...reservationWithNamesColumns,
         status: reservationTable.status,
         headCount: reservationTable.headCount,
       })

@@ -8,11 +8,12 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
 import { createDb } from "~/infra/db";
-import { createFacilityManagementListQuery } from "~/infra/facility/facility-management-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import type { FacilityManagementItem } from "~/query/facility/facility-management-list";
+import {
+  findFacilityManagementList,
+  type FacilityManagementItem,
+} from "~/query/facility/facility-management-list";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
-import { listFacilitiesForManagementUseCase } from "~/usecases/facility/list-facilities-for-management";
 
 import type { Route } from "./+types/route";
 
@@ -23,20 +24,16 @@ export function meta() {
 /**
  * 事務局向け施設管理画面（SCR-009）のローダー。
  *
- * 事務局スタッフのみ閲覧可能（COND-009）。非スタッフはユースケースで Forbidden が返り、
+ * 事務局スタッフのみ閲覧可能（COND-009）。非スタッフは読み取りの関数が Forbidden を返し、
  * 403 エラーレスポンスとしてログに残る。
  */
 export async function loader({ context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
 
   const db = createDb(env.DB);
-  const result = await listFacilitiesForManagementUseCase(
-    { facilityManagementListQuery: createFacilityManagementListQuery(db) },
-    {
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-    },
-  );
+  const result = await findFacilityManagementList(db, {
+    isStaff: user.is_staff,
+  });
 
   if (result.isErr()) {
     throw queryErrorResponse({ where: "staff.facilities.loader", userId: user.id }, result.error);

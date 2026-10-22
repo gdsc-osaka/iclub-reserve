@@ -2,24 +2,16 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction } from "~/domain/audit-log";
-import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
-import {
-  MembershipErrorCode,
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
-import {
-  ReservationErrorCode,
-  ReservationStatus,
-  type Reservation,
-  type ReservationRepository,
-} from "~/domain/reservation";
+import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
+import { ReservationErrorCode, ReservationStatus, type Reservation } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
-import type {
-  ReservationMailAudience,
-  ReservationMailRecipientsQuery,
-} from "~/query/reservation/reservation-mail-recipients";
+import type { ReservationMailAudience } from "~/query/reservation/reservation-mail-recipients";
+import {
+  fakeMailOutboxNotifier,
+  fakeMembershipRepository,
+  fakeReservationMailRecipientsQuery,
+  fakeReservationRepository,
+} from "~/testing/fakes";
 import {
   changeReservationStatusUseCase,
   type ChangeReservationStatusArgs,
@@ -88,6 +80,7 @@ const createMockDeps = (options?: {
   applied?: boolean;
   enqueuedMailIds?: readonly string[];
   audience?: ReservationMailAudience;
+  audienceError?: boolean;
 }) => {
   const res = options?.reservation !== undefined ? options.reservation : baseProvisionalReservation;
   const membership = options?.membership === undefined ? memberMembership : options.membership;
@@ -111,48 +104,34 @@ const createMockDeps = (options?: {
       okAsync({ applied, enqueuedMailIds }),
   );
   const create = vi.fn((_res: unknown, _mails: unknown) => okAsync({ enqueuedMailIds: [] }));
-  // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-  const applyContentEdit = () =>
-    errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" });
 
-  const reservationRepository: ReservationRepository = {
+  const reservationRepository = fakeReservationRepository({
     findById,
     create,
-    createApproved: () =>
-      errAsync({ code: ReservationErrorCode.DatabaseError, message: "このテストでは使わない" }),
     existsApprovedOverlap,
     applyStatusTransition,
-    applyContentEdit,
-  };
+  });
 
   const findByGroupAndUser = vi.fn((_groupId: string, _userId: string) =>
     options?.membershipDbError === true
       ? errAsync({ code: MembershipErrorCode.DatabaseError, message: "db down" })
       : okAsync(membership),
   );
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser,
-    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateRole: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    remove: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  });
 
-  const findByReservationId = vi.fn((_reservationId: string) => okAsync(audience));
-  const reservationMailRecipientsQuery: ReservationMailRecipientsQuery = {
+  const findByReservationId = vi.fn((_reservationId: string) =>
+    options?.audienceError === true
+      ? errAsync({ code: "DATABASE_ERROR" as const, message: "DB error" })
+      : okAsync(audience),
+  );
+  const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findByReservationId,
-    findForNewReservation: () =>
-      errAsync({ code: "NOT_FOUND" as any, message: "not implemented in this mock" }),
-    findForMessage: () =>
-      errAsync({ code: "NOT_FOUND" as any, message: "not implemented in this mock" }),
-  };
+  });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);
-  const mailOutboxNotifier: MailOutboxNotifier = { notifyEnqueued };
+  const mailOutboxNotifier = fakeMailOutboxNotifier({ notifyEnqueued });
 
   const deps: ChangeReservationStatusDeps = {
     reservationRepository,
@@ -808,10 +787,10 @@ describe("changeReservationStatusUseCase", () => {
     });
 
     it("宛先取得に失敗した場合は DatabaseError となり applyStatusTransition は呼ばれない", async () => {
-      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
-      (deps.reservationMailRecipientsQuery as any).findByReservationId = vi.fn(() =>
-        errAsync({ code: "DATABASE_ERROR", message: "DB error" }),
-      );
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        audienceError: true,
+      });
 
       const args: ChangeReservationStatusArgs = {
         reservationId: "res_provisional_01",

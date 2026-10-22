@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { Calendar, CircleAlert, Plus } from "lucide-react";
+import type { Result } from "neverthrow";
 import { Link } from "react-router";
 
 import { toMyGroup, type MyGroup } from "~/components/group/my-group";
@@ -11,36 +12,34 @@ import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createGroupRecentActivitiesQuery } from "~/infra/audit-log/group-recent-activities-query";
 import { createDb, type Database } from "~/infra/db";
-import { createUserInvitationsQuery } from "~/infra/group/user-invitations-query";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
-import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
-import { createGroupUnreadUpdatesQuery } from "~/infra/reservation/group-unread-updates-query";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
-import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
-import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
 import { formatMonthDay } from "~/lib/date";
+import type { QueryError } from "~/query/error";
 import { findGroupSearchList } from "~/query/group/group-search";
+import { findUserInvitations } from "~/query/group/user-invitations";
+import {
+  createGroupUnreadUpdatesQuery,
+  findGroupUnreadUpdates,
+} from "~/query/reservation/group-unread-updates";
 import { findStaffPendingReservations } from "~/query/reservation/staff-pending-reservations";
 import { findStaffTodaySchedule } from "~/query/reservation/staff-today-schedule";
 import { findStaffUnreadMessages } from "~/query/reservation/staff-unread-messages";
+import { findUserGroupList, type UserGroupListQuery } from "~/query/user/user-group-list";
 import { invitationActionErrors } from "~/routes/_shared/group-error.server";
 import { logQueryError } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
+import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 import { getGroupRecentActivitiesUseCase } from "~/usecases/audit-log/get-group-recent-activities";
 import { acceptInvitationUseCase } from "~/usecases/group/accept-invitation";
-import { listMyInvitationsUseCase } from "~/usecases/group/list-my-invitations";
 import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
-import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
-import { getGroupUnreadUpdatesUseCase } from "~/usecases/reservation/get-group-unread-updates";
 import { listUpcomingReservationsUseCase } from "~/usecases/reservation/list-upcoming-reservations";
 import { markAllReservationsReadUseCase } from "~/usecases/reservation/mark-all-reservations-read";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
-import { listMyGroupsUseCase } from "~/usecases/user/list-my-groups";
 
 import type { Route } from "./+types/route";
 import { HomeIntent } from "./home-intent";
@@ -73,23 +72,24 @@ export async function loader({ context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
   const db = createDb(env.DB);
   const now = new Date();
+  const ctx: LoadContext = { db, user, now, userGroupListQuery: shareUserGroupList(db, user) };
 
   if (user.is_staff) {
     // 区画どうしは互いの結果を使わないので、D1 への問い合わせを並べて待つ
     const [groups, invitations, pending, unreadMessages, pendingGroups, today] = await Promise.all([
-      loadMyGroups(db, user),
+      loadMyGroups(ctx),
       // 団体に所属していない事務局にも、団体への招待は届く
-      loadInvitations(db, user, now),
-      loadStaffPending(db, user, now),
-      loadStaffUnreadMessages(db, user, now),
-      loadPendingGroups(db, user),
-      loadStaffToday(db, user, now),
+      loadInvitations(ctx),
+      loadStaffPending(ctx),
+      loadStaffUnreadMessages(ctx),
+      loadPendingGroups(ctx),
+      loadStaffToday(ctx),
     ]);
 
     // 団体側の未読と今後の予約は、団体に所属しているときだけ読む（所属が無ければ必ず空なので省く）
     const [groupUnread, upcoming] =
       groups.groups.length > 0
-        ? await Promise.all([loadGroupUnread(db, user, now), loadUpcoming(db, user, now)])
+        ? await Promise.all([loadGroupUnread(ctx), loadUpcoming(ctx)])
         : [null, null];
 
     return {
@@ -108,11 +108,11 @@ export async function loader({ context }: Route.LoaderArgs) {
   }
 
   const [groups, invitations, groupUnread, upcoming, recentActivities] = await Promise.all([
-    loadMyGroups(db, user),
-    loadInvitations(db, user, now),
-    loadGroupUnread(db, user, now),
-    loadUpcoming(db, user, now),
-    loadRecentActivities(db, user, now),
+    loadMyGroups(ctx),
+    loadInvitations(ctx),
+    loadGroupUnread(ctx),
+    loadUpcoming(ctx),
+    loadRecentActivities(ctx),
   ]);
 
   return {
@@ -131,133 +131,118 @@ export async function loader({ context }: Route.LoaderArgs) {
  * 区画の値（null など）として返す。例外にはしない。区画は「読めなかった」案内を自分で出す。
  */
 
-/** 所属団体（承認待ちの団体の案内と、所属が無いときの案内、事務局の「自分の団体」に使う） */
-const loadMyGroups = async (db: Database, user: SessionUser) => {
-  const result = await listMyGroupsUseCase(
-    { userGroupListQuery: createUserGroupListQuery(db) },
-    { actorUserId: user.id },
-  );
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.groups", userId: user.id }, result.error);
-  }
-  return {
-    groups: result.isOk() ? result.value.map(toMyGroup) : ([] as readonly MyGroup[]),
-    isUnavailable: result.isErr(),
-  };
-};
+/** 区画の読み込みに渡すもの */
+interface LoadContext {
+  readonly db: Database;
+  readonly user: SessionUser;
+  readonly now: Date;
+  /** 所属団体は 1 回だけ読んで使い回す（`shareUserGroupList`） */
+  readonly userGroupListQuery: UserGroupListQuery;
+}
 
-/** 自分宛ての招待（UC-022）。null は読めなかったことを表す */
-const loadInvitations = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await listMyInvitationsUseCase(
-    { userInvitationsQuery: createUserInvitationsQuery(db) },
-    { actorEmail: user.email, now },
-  );
+/** 区画を 1 つ読む。読めなければログに残して null を返す */
+const loadSection = async <T,>(
+  where: string,
+  user: SessionUser,
+  read: PromiseLike<Result<T, QueryError>>,
+): Promise<T | null> => {
+  const result = await read;
   if (result.isErr()) {
-    logQueryError({ where: "home.loader.invitations", userId: user.id }, result.error);
-    return null;
-  }
-  return result.value;
-};
-
-/** 団体側の未読（UC-037 / COND-026 (2)）。null は読めなかったことを表す */
-const loadGroupUnread = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await getGroupUnreadUpdatesUseCase(
-    { groupUnreadUpdatesQuery: createGroupUnreadUpdatesQuery(db) },
-    { actorUserId: user.id, now },
-  );
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.unread", userId: user.id }, result.error);
-    return null;
-  }
-  return result.value;
-};
-
-/** 今後の予約（UC-032）。null は読めなかったことを表す */
-const loadUpcoming = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await listUpcomingReservationsUseCase(
-    {
-      userGroupListQuery: createUserGroupListQuery(db),
-      reservationListQuery: createReservationListQuery(db),
-    },
-    { actorUserId: user.id, now },
-  );
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.upcoming", userId: user.id }, result.error);
-    return null;
-  }
-  return result.value;
-};
-
-/** 団体の最近の動き（UC-025）。null は読めなかったことを表す */
-const loadRecentActivities = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await getGroupRecentActivitiesUseCase(
-    {
-      userGroupListQuery: createUserGroupListQuery(db),
-      groupRecentActivitiesQuery: createGroupRecentActivitiesQuery(db),
-    },
-    { actorUserId: user.id, isStaff: user.is_staff, now },
-  );
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.recentActivities", userId: user.id }, result.error);
-    return null;
-  }
-  return result.value;
-};
-
-/** 承認待ちの予約と、その件数（UC-006）。null は読めなかったことを表す */
-const loadStaffPending = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await findStaffPendingReservations(db, { isStaff: user.is_staff, now });
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.staffPending", userId: user.id }, result.error);
-    return null;
-  }
-  return result.value;
-};
-
-/** 団体からの未読メッセージ（UC-037 / COND-026 (3)）。null は読めなかったことを表す */
-const loadStaffUnreadMessages = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await findStaffUnreadMessages(db, {
-    actorUserId: user.id,
-    isStaff: user.is_staff,
-    now,
-  });
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.staffUnread", userId: user.id }, result.error);
+    logQueryError({ where: `home.loader.${where}`, userId: user.id }, result.error);
     return null;
   }
   return result.value;
 };
 
 /**
- * 有効化を待っている団体と、その数（UC-014）。null は読めなかったことを表す。
+ * 本人の所属団体を 1 回だけ読む `UserGroupListQuery`。
+ *
+ * 所属団体は「自分の団体」の区画のほか、今後の予約と団体の最近の動きのユースケースも読む。
+ * それぞれに読ませると同じ問い合わせが 3 回走るので、最初に読んだ結果を使い回す。
+ */
+const shareUserGroupList = (db: Database, user: SessionUser): UserGroupListQuery => {
+  const groups = findUserGroupList(db, { actorUserId: user.id });
+  return {
+    findByUserId: (userId) =>
+      userId === user.id ? groups : findUserGroupList(db, { actorUserId: userId }),
+  };
+};
+
+/** 所属団体（承認待ちの団体の案内と、所属が無いときの案内、事務局の「自分の団体」に使う） */
+const loadMyGroups = async ({ user, userGroupListQuery }: LoadContext) => {
+  const groups = await loadSection("groups", user, userGroupListQuery.findByUserId(user.id));
+  return {
+    groups: groups === null ? ([] as readonly MyGroup[]) : groups.map(toMyGroup),
+    isUnavailable: groups === null,
+  };
+};
+
+/** 自分宛ての招待（UC-022） */
+const loadInvitations = ({ db, user, now }: LoadContext) =>
+  loadSection("invitations", user, findUserInvitations(db, { actorEmail: user.email, now }));
+
+/** 団体側の未読（UC-037 / COND-026 (2)） */
+const loadGroupUnread = ({ db, user, now }: LoadContext) =>
+  loadSection("unread", user, findGroupUnreadUpdates(db, { actorUserId: user.id, now }));
+
+/** 今後の予約（UC-032） */
+const loadUpcoming = ({ db, user, now, userGroupListQuery }: LoadContext) =>
+  loadSection(
+    "upcoming",
+    user,
+    listUpcomingReservationsUseCase(
+      { userGroupListQuery, reservationListQuery: createReservationListQuery(db) },
+      { actorUserId: user.id, now },
+    ),
+  );
+
+/** 団体の最近の動き（UC-025） */
+const loadRecentActivities = ({ db, user, now, userGroupListQuery }: LoadContext) =>
+  loadSection(
+    "recentActivities",
+    user,
+    getGroupRecentActivitiesUseCase(
+      { userGroupListQuery, groupRecentActivitiesQuery: createGroupRecentActivitiesQuery(db) },
+      { actorUserId: user.id, isStaff: user.is_staff, now },
+    ),
+  );
+
+/** 承認待ちの予約と、その件数（UC-006） */
+const loadStaffPending = ({ db, user, now }: LoadContext) =>
+  loadSection(
+    "staffPending",
+    user,
+    findStaffPendingReservations(db, { isStaff: user.is_staff, now }),
+  );
+
+/** 団体からの未読メッセージ（UC-037 / COND-026 (3)） */
+const loadStaffUnreadMessages = ({ db, user, now }: LoadContext) =>
+  loadSection(
+    "staffUnread",
+    user,
+    findStaffUnreadMessages(db, { actorUserId: user.id, isStaff: user.is_staff, now }),
+  );
+
+/**
+ * 有効化を待っている団体と、その数（UC-014）。
  *
  * 承認待ちで絞ると、団体の一覧は登録が古い順に並ぶ（`app/query/group/group-search.ts`）。
  * 待たせている団体から片付けられるよう、その並びのまま先頭の数件を出す。
  */
-const loadPendingGroups = async (db: Database, user: SessionUser) => {
-  const result = await findGroupSearchList(db, {
-    isStaff: user.is_staff,
-    status: GroupStatus.Pending,
-  });
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.pendingGroups", userId: user.id }, result.error);
-    return null;
-  }
-  return {
-    items: result.value.slice(0, STAFF_PENDING_GROUPS_LIMIT),
-    totalCount: result.value.length,
-  };
+const loadPendingGroups = async ({ db, user }: LoadContext) => {
+  const groups = await loadSection(
+    "pendingGroups",
+    user,
+    findGroupSearchList(db, { isStaff: user.is_staff, status: GroupStatus.Pending }),
+  );
+  return groups === null
+    ? null
+    : { items: groups.slice(0, STAFF_PENDING_GROUPS_LIMIT), totalCount: groups.length };
 };
 
-/** 今日の予約状況（UC-001）。null は読めなかったことを表す */
-const loadStaffToday = async (db: Database, user: SessionUser, now: Date) => {
-  const result = await findStaffTodaySchedule(db, { isStaff: user.is_staff, now });
-  if (result.isErr()) {
-    logQueryError({ where: "home.loader.staffToday", userId: user.id }, result.error);
-    return null;
-  }
-  return result.value;
-};
+/** 今日の予約状況（UC-001） */
+const loadStaffToday = ({ db, user, now }: LoadContext) =>
+  loadSection("staffToday", user, findStaffTodaySchedule(db, { isStaff: user.is_staff, now }));
 
 /**
  * ダッシュボードからの操作（確認済みにする・招待への応答・仮予約の承認/却下）を受ける。
@@ -282,23 +267,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     const reservationId = String(formData.get("reservationId") ?? "");
     const reason = formData.get("reason");
 
-    const result = await changeReservationStatusUseCase(
-      {
-        reservationRepository: createReservationRepository(db),
-        membershipRepository: createMembershipRepository(db),
-        reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-        mailOutboxNotifier: createQueueMailOutboxNotifier(),
-      },
-      {
-        reservationId,
-        actorUserId: user.id,
-        isStaff: user.is_staff,
-        transition,
-        reason: typeof reason === "string" ? reason : null,
-        now,
-        appBaseUrl: resolveAppBaseUrl(request),
-      },
-    );
+    const result = await changeReservationStatus(db, request, user, {
+      reservationId,
+      transition,
+      reason,
+      now,
+    });
 
     if (result.isErr()) {
       return reservationActionErrors(

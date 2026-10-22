@@ -496,6 +496,7 @@ export const STAFF_PENDING_RESERVATIONS_LIMIT = 5;
 export { APPLICATION_LEAD_DAYS, isShortNotice } from "./lead-time";
 
 export {
+  GroupUnreadEventType,
   UNREAD_ITEMS_LIMIT,
   UNREAD_LOOKBACK_DAYS,
   unreadEventsSince,

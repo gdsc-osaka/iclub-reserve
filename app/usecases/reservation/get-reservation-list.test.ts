@@ -7,11 +7,11 @@ import { ReservationStatus } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationListFacility,
-  ReservationListQuery,
   ReservationListRow,
   ReservationStatusCounts,
 } from "~/query/reservation/reservation-list";
-import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
+import type { UserGroupList } from "~/query/user/user-group-list";
+import { fakeReservationListQuery, fakeUserGroupListQuery } from "~/testing/fakes";
 import { getReservationListUseCase, type GetReservationListArgs } from "./get-reservation-list";
 
 const meetingRoomA: ReservationListFacility = {
@@ -97,17 +97,17 @@ const createDeps = (
   counts: ReservationStatusCounts = defaultCounts,
 ) => {
   const findByUserId = vi.fn((_userId: string) => okAsync(groups));
-  const userGroupListQuery: UserGroupListQuery = { findByUserId };
+  const userGroupListQuery = fakeUserGroupListQuery({ findByUserId });
 
   const findList = vi.fn((_args: unknown) => okAsync(rows));
   const countByStatus = vi.fn((_args: unknown) => okAsync(counts));
   const findFacilities = vi.fn(() => okAsync([meetingRoomA]));
 
-  const reservationListQuery: ReservationListQuery = {
+  const reservationListQuery = fakeReservationListQuery({
     findList,
     countByStatus,
     findFacilities,
-  };
+  });
 
   return {
     deps: { reservationListQuery, userGroupListQuery },

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useD1TestDb } from "../d1-test-db";
+
 import { InvitationStatus } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
-import { createUserInvitationsQuery } from "./user-invitations-query";
+import { useD1TestDb } from "~/infra/d1-test-db";
+import { seedGroup, seedGroupInvitation, seedUser } from "~/infra/d1-test-seeds";
+import { findUserInvitations } from "./user-invitations";
 
 const testDb = useD1TestDb();
 
@@ -13,32 +15,9 @@ const NOW = new Date("2026-10-20T12:00:00+09:00");
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      INVITER.id,
-      INVITER.name,
-      INVITER.email,
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_1",
-      "ロボット研究会",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_2",
-      "プログラミング同好会",
-      "enabled",
-      0,
-      0,
-    ],
+    seedUser({ id: INVITER.id, name: INVITER.name, email: INVITER.email }),
+    seedGroup({ id: "grp_1", name: "ロボット研究会" }),
+    seedGroup({ id: "grp_2", name: "プログラミング同好会" }),
   );
 });
 
@@ -50,23 +29,13 @@ async function insertInvitation(
   status: InvitationStatus,
   expiresAt: Date,
 ) {
-  await testDb.seed([
-    `INSERT INTO "group_invitation" (id, group_id, email, role, status, expires_at, created_at, inviter_id) VALUES (?,?,?,?,?,?,?,?)`,
-    id,
-    groupId,
-    email,
-    role,
-    status,
-    expiresAt.getTime(),
-    0,
-    INVITER.id,
-  ]);
+  await testDb.seed(
+    seedGroupInvitation({ id, groupId, email, role, status, expiresAt, inviterId: INVITER.id }),
+  );
 }
 
-describe("createUserInvitationsQuery (D1)", () => {
+describe("findUserInvitations", () => {
   it("指定メールアドレス宛ての、承諾待ちかつ期限内の招待のみを返す", async () => {
-    const query = createUserInvitationsQuery(testDb.db);
-
     // 1. 有効な招待（対象）
     await insertInvitation(
       "inv_valid_1",
@@ -127,7 +96,10 @@ describe("createUserInvitationsQuery (D1)", () => {
       new Date(NOW.getTime() + 86400000),
     );
 
-    const result = await query.findPendingInvitationsForEmail(TARGET_EMAIL, NOW);
+    const result = await findUserInvitations(testDb.db, {
+      actorEmail: TARGET_EMAIL,
+      now: NOW,
+    });
     expect(result.isOk()).toBe(true);
     if (!result.isOk()) return;
 
@@ -139,5 +111,23 @@ describe("createUserInvitationsQuery (D1)", () => {
     expect(result.value[1]?.id).toBe("inv_valid_2");
     expect(result.value[1]?.groupName).toBe("プログラミング同好会");
     expect(result.value[1]?.role).toBe(MembershipRole.Admin);
+  });
+
+  it("大文字と前後の空白を含むメールアドレスで呼んでも正規化されて見つかる", async () => {
+    await insertInvitation(
+      "inv_valid_1",
+      "grp_1",
+      TARGET_EMAIL,
+      MembershipRole.Member,
+      InvitationStatus.Pending,
+      new Date(NOW.getTime() + 86400000),
+    );
+
+    const result = await findUserInvitations(testDb.db, {
+      actorEmail: "  Target@EXAMPLE.com  ",
+      now: NOW,
+    });
+
+    expect(result._unsafeUnwrap().map((item) => item.id)).toEqual(["inv_valid_1"]);
   });
 });

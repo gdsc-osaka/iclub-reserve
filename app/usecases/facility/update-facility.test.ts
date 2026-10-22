@@ -15,6 +15,8 @@ import {
   type UpdateFacilityInput,
 } from "~/domain/facility";
 import type { FacilityPhotoStorage } from "~/domain/facility/facility-photo";
+import { fakeCalendarClient } from "~/testing/fakes/calendar";
+import { fakeFacilityPhotoStorage, fakeFacilityRepository } from "~/testing/fakes/facility";
 import { updateFacilityUseCase, type UpdateFacilityDeps } from "./update-facility";
 
 /** 先頭のバイトが本物の PNG・WebP になっている写真（形式は先頭のバイトで判定される） */
@@ -26,18 +28,16 @@ const WEBP_BYTES = new Uint8Array([
 const createMockCalendarClient = (
   access: CalendarWriteAccess | "error" = "writable",
   error?: CalendarError,
-): CalendarClient => ({
-  checkWriteAccess: vi
-    .fn()
-    .mockImplementation(() =>
-      access === "error"
-        ? errAsync(error ?? { code: CalendarErrorCode.Unavailable, message: "Unavailable" })
-        : okAsync(access),
-    ),
-  upsertEvent: vi.fn().mockReturnValue(okAsync(null)),
-  deleteEvent: vi.fn().mockReturnValue(okAsync(null)),
-  listManagedEvents: vi.fn().mockReturnValue(okAsync([])),
-});
+): CalendarClient =>
+  fakeCalendarClient({
+    checkWriteAccess: vi
+      .fn()
+      .mockImplementation(() =>
+        access === "error"
+          ? errAsync(error ?? { code: CalendarErrorCode.Unavailable, message: "Unavailable" })
+          : okAsync(access),
+      ),
+  });
 
 describe("updateFacilityUseCase", () => {
   const now = new Date("2026-10-01T12:00:00Z");
@@ -62,7 +62,7 @@ describe("updateFacilityUseCase", () => {
       calendarWriterEmail: string | null;
     }> = {},
   ): UpdateFacilityDeps => ({
-    facilityRepository: {
+    facilityRepository: fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(okAsync(existingFacility)),
       update: vi
         .fn()
@@ -70,12 +70,12 @@ describe("updateFacilityUseCase", () => {
           okAsync({ ...existingFacility, ...input }),
         ),
       ...overrides.facilityRepository,
-    } as unknown as FacilityRepository,
-    facilityPhotoStorage: {
+    }),
+    facilityPhotoStorage: fakeFacilityPhotoStorage({
       put: vi.fn().mockReturnValue(okAsync(undefined)),
       delete: vi.fn().mockReturnValue(okAsync(undefined)),
       ...overrides.facilityPhotoStorage,
-    } as unknown as FacilityPhotoStorage,
+    }),
     calendarClient: overrides.calendarClient ?? createMockCalendarClient("writable"),
     calendarWriterEmail:
       overrides.calendarWriterEmail !== undefined

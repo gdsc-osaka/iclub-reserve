@@ -7,14 +7,13 @@ import { StaffField } from "~/domain/staff";
 import { createDb } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createStaffInvitationRepository } from "~/infra/staff/staff-invitation-repo";
-import { createStaffManagementQuery } from "~/infra/staff/staff-management-query";
 import { createStaffMemberRepository } from "~/infra/staff/staff-member-repo";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { findStaffManagement } from "~/query/staff/staff-management";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { staffActionErrors } from "~/routes/_shared/staff-error.server";
 import { cancelStaffInvitationUseCase } from "~/usecases/staff/cancel-staff-invitation";
-import { getStaffManagementUseCase } from "~/usecases/staff/get-staff-management";
 import { inviteStaffUseCase } from "~/usecases/staff/invite-staff";
 import { revokeStaffUseCase } from "~/usecases/staff/revoke-staff";
 
@@ -36,10 +35,10 @@ export async function loader({ context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
   const db = createDb(env.DB);
 
-  const result = await getStaffManagementUseCase(
-    { staffManagementQuery: createStaffManagementQuery(db) },
-    { actorUserId: user.id, isStaff: user.is_staff, now: new Date() },
-  );
+  const result = await findStaffManagement(db, {
+    isStaff: user.is_staff,
+    now: new Date(),
+  });
 
   if (result.isErr()) {
     throw queryErrorResponse(

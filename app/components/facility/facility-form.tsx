@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
@@ -5,7 +6,6 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { FacilityField } from "~/domain/facility";
-import { cn } from "~/lib/utils";
 
 export interface FacilityFormValues {
   readonly name?: string;

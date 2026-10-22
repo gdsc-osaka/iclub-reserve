@@ -10,17 +10,12 @@ import { isStaffTransition, parseReservationTransition } from "~/domain/reservat
 import { createDb } from "~/infra/db";
 import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facility-availability-calendar-query";
 import { createD1HolidayQuery } from "~/infra/holiday/d1-holiday-query";
-import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
-import { createMembershipRepository } from "~/infra/membership/membership-repo";
-import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
-import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
-import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { addDays, parseTokyoDateKey, startOfTokyoWeek } from "~/lib/date";
+import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
-import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
+import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 import { getAvailabilityCalendarUseCase } from "~/usecases/facility/get-availability-calendar";
 
 import type { Route } from "./+types/route";
@@ -106,23 +101,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = createDb(env.DB);
-  const result = await changeReservationStatusUseCase(
-    {
-      reservationRepository: createReservationRepository(db),
-      membershipRepository: createMembershipRepository(db),
-      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-      mailOutboxNotifier: createQueueMailOutboxNotifier(),
-    },
-    {
-      reservationId,
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-      transition,
-      reason: typeof reason === "string" ? reason : null,
-      now: new Date(),
-      appBaseUrl: resolveAppBaseUrl(request),
-    },
-  );
+  const result = await changeReservationStatus(db, request, user, {
+    reservationId,
+    transition,
+    reason,
+    now: new Date(),
+  });
 
   if (result.isErr()) {
     return reservationActionErrors(

@@ -1,7 +1,8 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
+import { FacilityErrorCode, type Facility } from "~/domain/facility";
+import { fakeFacilityRepository } from "~/testing/fakes/facility";
 import { getFacilityUseCase } from "./get-facility";
 
 const mockFacility: Facility = {
@@ -19,9 +20,9 @@ const mockFacility: Facility = {
 describe("getFacilityUseCase", () => {
   it("事務局スタッフ（isStaff: true）であれば施設を取得できる", async () => {
     const findByIdMock = vi.fn().mockReturnValue(okAsync(mockFacility));
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: findByIdMock,
-    } as unknown as FacilityRepository;
+    });
 
     const result = await getFacilityUseCase(
       { facilityRepository },
@@ -39,9 +40,9 @@ describe("getFacilityUseCase", () => {
 
   it("事務局スタッフでなければ（isStaff: false）DB を引かずに Forbidden になる", async () => {
     const findByIdMock = vi.fn();
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: findByIdMock,
-    } as unknown as FacilityRepository;
+    });
 
     const result = await getFacilityUseCase(
       { facilityRepository },
@@ -59,9 +60,9 @@ describe("getFacilityUseCase", () => {
 
   it("施設 ID が空文字または空白のみの場合は DB を引かずに NotFound になる", async () => {
     const findByIdMock = vi.fn();
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: findByIdMock,
-    } as unknown as FacilityRepository;
+    });
 
     const result = await getFacilityUseCase(
       { facilityRepository },
@@ -78,14 +79,14 @@ describe("getFacilityUseCase", () => {
   });
 
   it("存在しない施設 ID の場合はリポジトリの NotFound が返る", async () => {
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(
         errAsync({
           code: FacilityErrorCode.NotFound,
           message: "施設が見つかりません。",
         }),
       ),
-    } as unknown as FacilityRepository;
+    });
 
     const result = await getFacilityUseCase(
       { facilityRepository },

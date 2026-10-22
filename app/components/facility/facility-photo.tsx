@@ -1,6 +1,5 @@
+import { cn } from "cn";
 import { Wrench } from "lucide-react";
-
-import { cn } from "~/lib/utils";
 
 /**
  * 施設・設備の写真。写真が登録されていなければ、代わりのアイコンを出す。

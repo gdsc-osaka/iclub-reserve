@@ -1,16 +1,25 @@
 /**
- * 団体側の未読問い合わせ（GroupUnreadUpdatesQuery）をローカル D1 に対して検証するテスト。
+ * 団体側の未読問い合わせ（findGroupUnreadUpdates）をローカル D1 に対して検証するテスト。
  *
  * COND-026 の団体側の各判定（対象者、対象の出来事、30日以内・開始日以降・既読日時との境目、1件1行集約と「ほか n 件」）を検証する。
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { useD1TestDb } from "../d1-test-db";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";
-import { ReservationStatus, unreadEventsSince } from "~/domain/reservation";
-import { GroupUnreadEventType } from "~/query/reservation/group-unread-updates";
-import { createGroupUnreadUpdatesQuery } from "./group-unread-updates-query";
+import { GroupUnreadEventType, ReservationStatus, unreadEventsSince } from "~/domain/reservation";
+import { useD1TestDb } from "~/infra/d1-test-db";
+import {
+  seedAuditLog,
+  seedFacility,
+  seedGroup,
+  seedMember,
+  seedReservation,
+  seedReservationMessage,
+  seedReservationRead,
+  seedUser,
+} from "~/infra/d1-test-seeds";
+import { findGroupUnreadUpdates } from "./group-unread-updates";
 
 const testDb = useD1TestDb();
 
@@ -23,78 +32,36 @@ const USER_STAFF = { id: "usr_staff", name: "事務局", email: "staff@example.c
 const NOW = new Date("2026-10-20T12:00:00+09:00");
 
 beforeEach(async () => {
-  // ユーザーの作成
-  for (const u of [USER_ADMIN, USER_APPLICANT, USER_MEMBER, USER_PRIOR_SENDER, USER_STAFF]) {
-    await testDb.seed([
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      u.id,
-      u.name,
-      u.email,
-      1,
-      0,
-      0,
-      u.id === USER_STAFF.id ? 1 : 0,
-    ]);
-  }
-
-  // 団体と施設
   await testDb.seed(
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_test",
-      "テスト団体",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, is_active, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "fac_1",
-      "会議室 1",
-      1,
-      0,
-      0,
-    ],
-  );
-
-  // メンバーシップ
-  await testDb.seed(
-    [
-      `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "mem_admin",
-      "grp_test",
-      USER_ADMIN.id,
-      MembershipRole.Admin,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "mem_applicant",
-      "grp_test",
-      USER_APPLICANT.id,
-      MembershipRole.Member,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "mem_member",
-      "grp_test",
-      USER_MEMBER.id,
-      MembershipRole.Member,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group_member" (id, group_id, user_id, role, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "mem_sender",
-      "grp_test",
-      USER_PRIOR_SENDER.id,
-      MembershipRole.Member,
-      0,
-      0,
-    ],
+    ...[USER_ADMIN, USER_APPLICANT, USER_MEMBER, USER_PRIOR_SENDER, USER_STAFF].map((u) =>
+      seedUser({ id: u.id, name: u.name, email: u.email, is_staff: u.id === USER_STAFF.id }),
+    ),
+    seedGroup({ id: "grp_test", name: "テスト団体" }),
+    seedFacility({ id: "fac_1", name: "会議室 1" }),
+    seedMember({
+      id: "mem_admin",
+      groupId: "grp_test",
+      userId: USER_ADMIN.id,
+      role: MembershipRole.Admin,
+    }),
+    seedMember({
+      id: "mem_applicant",
+      groupId: "grp_test",
+      userId: USER_APPLICANT.id,
+      role: MembershipRole.Member,
+    }),
+    seedMember({
+      id: "mem_member",
+      groupId: "grp_test",
+      userId: USER_MEMBER.id,
+      role: MembershipRole.Member,
+    }),
+    seedMember({
+      id: "mem_sender",
+      groupId: "grp_test",
+      userId: USER_PRIOR_SENDER.id,
+      role: MembershipRole.Member,
+    }),
   );
 });
 
@@ -103,19 +70,18 @@ async function insertReservation(
   createdBy: string,
   status: ReservationStatus = ReservationStatus.Provisional,
 ) {
-  await testDb.seed([
-    `INSERT INTO "reservation" (id, group_id, facility_id, start_at, end_at, head_count, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    id,
-    "grp_test",
-    "fac_1",
-    new Date("2026-10-25T10:00:00+09:00").getTime(),
-    new Date("2026-10-25T12:00:00+09:00").getTime(),
-    2,
-    status,
-    createdBy,
-    0,
-    0,
-  ]);
+  await testDb.seed(
+    seedReservation({
+      id,
+      groupId: "grp_test",
+      facilityId: "fac_1",
+      startAt: new Date("2026-10-25T10:00:00+09:00"),
+      endAt: new Date("2026-10-25T12:00:00+09:00"),
+      headCount: 2,
+      status,
+      createdBy,
+    }),
+  );
 }
 
 async function insertMessage(
@@ -126,15 +92,9 @@ async function insertMessage(
   body: string,
   sentAt: Date,
 ) {
-  await testDb.seed([
-    `INSERT INTO "reservation_message" (id, reservation_id, sender_id, sent_as_staff, body, sent_at) VALUES (?,?,?,?,?,?)`,
-    id,
-    reservationId,
-    senderId,
-    sentAsStaff ? 1 : 0,
-    body,
-    sentAt.getTime(),
-  ]);
+  await testDb.seed(
+    seedReservationMessage({ id, reservationId, senderId, sentAsStaff, body, sentAt }),
+  );
 }
 
 async function insertAuditLog(
@@ -145,32 +105,27 @@ async function insertAuditLog(
   action: AuditLogAction,
   occurredAt: Date,
 ) {
-  await testDb.seed([
-    `INSERT INTO "audit_log" (id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes) VALUES (?,?,?,?,?,?,?,?,?)`,
-    id,
-    occurredAt.getTime(),
-    actorId,
-    actedAsStaff ? 1 : 0,
-    action,
-    AuditLogTargetType.Reservation,
-    targetId,
-    "grp_test",
-    JSON.stringify({}),
-  ]);
+  await testDb.seed(
+    seedAuditLog({
+      id,
+      occurredAt,
+      actorId,
+      actedAsStaff,
+      action,
+      targetType: AuditLogTargetType.Reservation,
+      targetId,
+      groupId: "grp_test",
+      changes: {},
+    }),
+  );
 }
 
 async function insertReadRecord(reservationId: string, userId: string, lastReadAt: Date) {
-  await testDb.seed([
-    `INSERT INTO "reservation_read" (reservation_id, user_id, last_read_at) VALUES (?,?,?)`,
-    reservationId,
-    userId,
-    lastReadAt.getTime(),
-  ]);
+  await testDb.seed(seedReservationRead({ reservationId, userId, lastReadAt }));
 }
 
-describe("findUnreadForUser (D1)", () => {
+describe("findGroupUnreadUpdates", () => {
   it("事務局からのメッセージは申請者・管理者・過去の送信者に出るが、一般メンバーには出ない", async () => {
-    const query = createGroupUnreadUpdatesQuery(testDb.db);
     await insertReservation("res_1", USER_APPLICANT.id);
 
     // 過去送信者による団体側メッセージ
@@ -194,7 +149,10 @@ describe("findUnreadForUser (D1)", () => {
     );
 
     // 1. 申請者
-    const resApplicant = await query.findUnreadForUser(USER_APPLICANT.id, NOW);
+    const resApplicant = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_APPLICANT.id,
+      now: NOW,
+    });
     expect(resApplicant.isOk()).toBe(true);
     if (!resApplicant.isOk()) return;
     expect(resApplicant.value.items).toHaveLength(1);
@@ -208,26 +166,34 @@ describe("findUnreadForUser (D1)", () => {
     );
 
     // 2. 団体管理者
-    const resAdmin = await query.findUnreadForUser(USER_ADMIN.id, NOW);
+    const resAdmin = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_ADMIN.id,
+      now: NOW,
+    });
     expect(resAdmin.isOk()).toBe(true);
     if (!resAdmin.isOk()) return;
     expect(resAdmin.value.items).toHaveLength(1);
 
     // 3. 過去送信者
-    const resSender = await query.findUnreadForUser(USER_PRIOR_SENDER.id, NOW);
+    const resSender = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_PRIOR_SENDER.id,
+      now: NOW,
+    });
     expect(resSender.isOk()).toBe(true);
     if (!resSender.isOk()) return;
     expect(resSender.value.items).toHaveLength(1);
 
     // 4. 何もしていない一般メンバー（出ない）
-    const resMember = await query.findUnreadForUser(USER_MEMBER.id, NOW);
+    const resMember = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_MEMBER.id,
+      now: NOW,
+    });
     expect(resMember.isOk()).toBe(true);
     if (!resMember.isOk()) return;
     expect(resMember.value.items).toHaveLength(0);
   });
 
   it("団体を外れた人（group_member にいない）には出ない", async () => {
-    const query = createGroupUnreadUpdatesQuery(testDb.db);
     await insertReservation("res_1", USER_APPLICANT.id);
 
     await insertMessage(
@@ -242,14 +208,16 @@ describe("findUnreadForUser (D1)", () => {
     // 申請者をメンバーから削除
     await testDb.seed([`DELETE FROM "group_member" WHERE user_id = ?`, USER_APPLICANT.id]);
 
-    const res = await query.findUnreadForUser(USER_APPLICANT.id, NOW);
+    const res = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_APPLICANT.id,
+      now: NOW,
+    });
     expect(res.isOk()).toBe(true);
     if (!res.isOk()) return;
     expect(res.value.items).toHaveLength(0);
   });
 
   it("自分の操作は未読に含まれない", async () => {
-    const query = createGroupUnreadUpdatesQuery(testDb.db);
     await insertReservation("res_1", USER_ADMIN.id);
 
     // 管理者自身が事務局でもあり、事務局としてメッセージを送った場合
@@ -262,14 +230,16 @@ describe("findUnreadForUser (D1)", () => {
       new Date("2026-10-16T10:00:00+09:00"),
     );
 
-    const res = await query.findUnreadForUser(USER_ADMIN.id, NOW);
+    const res = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_ADMIN.id,
+      now: NOW,
+    });
     expect(res.isOk()).toBe(true);
     if (!res.isOk()) return;
     expect(res.value.items).toHaveLength(0);
   });
 
   it("last_read_at より前と、30 日より前の出来事は出ない", async () => {
-    const query = createGroupUnreadUpdatesQuery(testDb.db);
     const since = unreadEventsSince(NOW);
 
     // 1. 30 日の起点のすぐ前のメッセージ（出ない）
@@ -326,7 +296,10 @@ describe("findUnreadForUser (D1)", () => {
       new Date("2026-10-16T10:00:00+09:00"),
     );
 
-    const res = await query.findUnreadForUser(USER_APPLICANT.id, NOW);
+    const res = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_APPLICANT.id,
+      now: NOW,
+    });
     expect(res.isOk()).toBe(true);
     if (!res.isOk()) return;
 
@@ -338,7 +311,6 @@ describe("findUnreadForUser (D1)", () => {
   });
 
   it("同じ予約の複数の出来事が 1 行にまとまり、ほか n 件の数が合う", async () => {
-    const query = createGroupUnreadUpdatesQuery(testDb.db);
     await insertReservation("res_1", USER_APPLICANT.id, ReservationStatus.Approved);
 
     // 出来事 1: 承認
@@ -369,7 +341,10 @@ describe("findUnreadForUser (D1)", () => {
       new Date("2026-10-17T10:00:00+09:00"),
     );
 
-    const res = await query.findUnreadForUser(USER_APPLICANT.id, NOW);
+    const res = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_APPLICANT.id,
+      now: NOW,
+    });
     expect(res.isOk()).toBe(true);
     if (!res.isOk()) return;
 
@@ -382,8 +357,6 @@ describe("findUnreadForUser (D1)", () => {
   });
 
   it("10 件を超えた予約は overflowCount に反映され、allUnreadReservationIds にはすべて含まれる", async () => {
-    const query = createGroupUnreadUpdatesQuery(testDb.db);
-
     // 12 件の予約を作成し、それぞれメッセージを付ける
     for (let i = 1; i <= 12; i++) {
       const resId = `res_batch_${i}`;
@@ -398,7 +371,10 @@ describe("findUnreadForUser (D1)", () => {
       );
     }
 
-    const res = await query.findUnreadForUser(USER_APPLICANT.id, NOW);
+    const res = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_APPLICANT.id,
+      now: NOW,
+    });
     expect(res.isOk()).toBe(true);
     if (!res.isOk()) return;
 

@@ -1,17 +1,14 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
 import type { GroupError } from "~/domain/group";
 import { GroupErrorCode } from "~/domain/group";
-import { InvitationStatus, type Invitation, type InvitationRepository } from "~/domain/invitation";
-import type {
-  StoredMembership,
-  MembershipError,
-  MembershipRepository,
-  UpdateMembershipRoleInput,
-} from "~/domain/membership";
-import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
+import { InvitationStatus, type Invitation } from "~/domain/invitation";
+import type { StoredMembership, MembershipError } from "~/domain/membership";
+import { MembershipRole } from "~/domain/membership";
+import { fakeInvitationRepository } from "~/testing/fakes/invitation";
+import { fakeMembershipRepository } from "~/testing/fakes/membership";
 import { cancelInvitationUseCase, type CancelInvitationArgs } from "./cancel-invitation";
 
 const testGroupId = "grp_robotics";
@@ -55,39 +52,23 @@ const createFakeMembershipRepository = (
   initialMemberships: readonly StoredMembership[],
   options: FakeMembershipRepoOptions = {},
 ) => {
-  let findByGroupAndUserCallCount = 0;
   const memberships = [...initialMemberships];
 
-  const repository: MembershipRepository = {
-    findByGroupAndUser: (groupId, userId) => {
-      findByGroupAndUserCallCount += 1;
-      if (options.findByGroupAndUserResult) {
-        return options.findByGroupAndUserResult(groupId, userId);
-      }
-      const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
-      return okAsync(found ?? null);
-    },
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({
-        code: MembershipErrorCode.DatabaseError,
-        message: "countAdmins is not used in this test",
-      }),
-    updateRole: (_input: UpdateMembershipRoleInput) =>
-      errAsync({
-        code: MembershipErrorCode.DatabaseError,
-        message: "updateRole is not used in this test",
-      }),
-    remove: () =>
-      errAsync({
-        code: MembershipErrorCode.DatabaseError,
-        message: "remove is not used in this test",
-      }),
-  };
+  const findByGroupAndUser = vi.fn((groupId: string, userId: string) => {
+    if (options.findByGroupAndUserResult) {
+      return options.findByGroupAndUserResult(groupId, userId);
+    }
+    const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
+    return okAsync(found ?? null);
+  });
+
+  const repository = fakeMembershipRepository({
+    findByGroupAndUser,
+  });
 
   return {
     repository,
-    findByGroupAndUserCallCount: () => findByGroupAndUserCallCount,
+    findByGroupAndUser,
   };
 };
 
@@ -101,59 +82,29 @@ interface FakeInvitationRepoOptions {
 }
 
 const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {}) => {
-  let cancelCallCount = 0;
-  let lastCancelGroupId: string | null = null;
-  let lastCancelInvitationId: string | null = null;
-  let lastAuditLog: AuditLogDraft | null = null;
-  let findByIdCallCount = 0;
+  const cancel = vi.fn((groupId: string, invitationId: string, auditLog: AuditLogDraft) => {
+    if (options.cancelResult) {
+      return options.cancelResult(groupId, invitationId, auditLog);
+    }
+    return okAsync(1);
+  });
 
-  const repository: InvitationRepository = {
-    findPendingByGroupAndEmail: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "findPendingByGroupAndEmail is not used in this test",
-      }),
-    create: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "create is not used in this test",
-      }),
-    cancel: (groupId, invitationId, auditLog) => {
-      cancelCallCount += 1;
-      lastCancelGroupId = groupId;
-      lastCancelInvitationId = invitationId;
-      lastAuditLog = auditLog;
-      if (options.cancelResult) {
-        return options.cancelResult(groupId, invitationId, auditLog);
-      }
-      return okAsync(1);
-    },
-    findById: (invitationId) => {
-      findByIdCallCount += 1;
-      if (options.findByIdResult) {
-        return options.findByIdResult(invitationId);
-      }
-      return okAsync(defaultInvitation);
-    },
-    accept: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "accept is not used in this test",
-      }),
-    reject: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "reject is not used in this test",
-      }),
-  };
+  const findById = vi.fn((invitationId: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(invitationId);
+    }
+    return okAsync(defaultInvitation);
+  });
+
+  const repository = fakeInvitationRepository({
+    cancel,
+    findById,
+  });
 
   return {
     repository,
-    cancelCallCount: () => cancelCallCount,
-    lastCancelGroupId: () => lastCancelGroupId,
-    lastCancelInvitationId: () => lastCancelInvitationId,
-    lastAuditLog: () => lastAuditLog,
-    findByIdCallCount: () => findByIdCallCount,
+    cancel,
+    findById,
   };
 };
 
@@ -180,10 +131,10 @@ describe("cancelInvitationUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeInvitation.cancelCallCount()).toBe(1);
-    expect(fakeInvitation.lastCancelGroupId()).toBe(testGroupId);
-    expect(fakeInvitation.lastCancelInvitationId()).toBe(testInvitationId);
-    const auditLog = fakeInvitation.lastAuditLog();
+    expect(fakeInvitation.cancel).toHaveBeenCalledTimes(1);
+    expect(fakeInvitation.cancel.mock.calls[0]?.[0]).toBe(testGroupId);
+    expect(fakeInvitation.cancel.mock.calls[0]?.[1]).toBe(testInvitationId);
+    const auditLog = fakeInvitation.cancel.mock.calls[0]?.[2];
     expect(auditLog?.actedAsStaff).toBe(false);
   });
 
@@ -206,9 +157,9 @@ describe("cancelInvitationUseCase", () => {
 
     expect(result.isOk()).toBe(true);
     // COND-012: acted_as_staff 判定のため、事務局であっても操作者の所属を 1 回引く
-    expect(fakeMembership.findByGroupAndUserCallCount()).toBe(1);
-    expect(fakeInvitation.cancelCallCount()).toBe(1);
-    const auditLog = fakeInvitation.lastAuditLog();
+    expect(fakeMembership.findByGroupAndUser).toHaveBeenCalledTimes(1);
+    expect(fakeInvitation.cancel).toHaveBeenCalledTimes(1);
+    const auditLog = fakeInvitation.cancel.mock.calls[0]?.[2];
     expect(auditLog?.actedAsStaff).toBe(true);
   });
 
@@ -233,7 +184,7 @@ describe("cancelInvitationUseCase", () => {
       expect(result.error.code).toBe(GroupErrorCode.Forbidden);
       expect(result.error.userMessage).toBe("メンバーを招待できるのは管理者と事務局だけです。");
     }
-    expect(fakeInvitation.cancelCallCount()).toBe(0);
+    expect(fakeInvitation.cancel).not.toHaveBeenCalled();
   });
 
   // 4. 所属していない人は NotVisible（利用者への応答を 404 に揃えるのは画面の側）
@@ -257,7 +208,7 @@ describe("cancelInvitationUseCase", () => {
       expect(result.error.code).toBe(GroupErrorCode.NotVisible);
       expect(result.error.userMessage).toBeUndefined();
     }
-    expect(fakeInvitation.cancelCallCount()).toBe(0);
+    expect(fakeInvitation.cancel).not.toHaveBeenCalled();
   });
 
   // 5. groupId が空なら NotFound でリポジトリが呼ばれない
@@ -282,8 +233,8 @@ describe("cancelInvitationUseCase", () => {
       if (result.isErr()) {
         expect(result.error.code).toBe(GroupErrorCode.NotFound);
       }
-      expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
-      expect(fakeInvitation.cancelCallCount()).toBe(0);
+      expect(fakeMembership.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(fakeInvitation.cancel).not.toHaveBeenCalled();
     },
   );
 
@@ -310,8 +261,8 @@ describe("cancelInvitationUseCase", () => {
         expect(result.error.code).toBe(GroupErrorCode.InvalidInput);
         expect(result.error.userMessage).toBe("取り消す招待が指定されていません。");
       }
-      expect(fakeMembership.findByGroupAndUserCallCount()).toBe(0);
-      expect(fakeInvitation.cancelCallCount()).toBe(0);
+      expect(fakeMembership.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(fakeInvitation.cancel).not.toHaveBeenCalled();
     },
   );
 

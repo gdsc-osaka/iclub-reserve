@@ -9,20 +9,18 @@ import {
 } from "~/domain/reservation";
 import type { Database } from "~/infra/db";
 import { hasOverlappingReservation } from "~/infra/reservation/reservation-overlap";
+import {
+  reservationWithNamesColumns,
+  type ReservationWithNames,
+} from "../_shared/reservation-with-names";
 import { ensureStaff } from "../_shared/staff";
 import { QueryErrorCode, type QueryError } from "../error";
 
 /**
  * 事務局のダッシュボード「承認待ちの予約」に並ぶ仮予約 1 件分（SCR-022 / UC-006）。
  */
-export interface StaffPendingReservationItem {
+export interface StaffPendingReservationItem extends ReservationWithNames {
   readonly id: string;
-  readonly groupId: string;
-  readonly groupName: string;
-  readonly facilityId: string;
-  readonly facilityName: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
   readonly headCount: number;
   /** 申請日 */
   readonly createdAt: Date;
@@ -81,12 +79,7 @@ export const findStaffPendingReservations = (
       db
         .select({
           id: reservationTable.id,
-          groupId: reservationTable.groupId,
-          groupName: groupTable.name,
-          facilityId: reservationTable.facilityId,
-          facilityName: facilityTable.name,
-          startAt: reservationTable.startAt,
-          endAt: reservationTable.endAt,
+          ...reservationWithNamesColumns,
           headCount: reservationTable.headCount,
           createdAt: reservationTable.createdAt,
           hasApprovedOverlap: hasOverlappingReservation(db, ReservationStatus.Approved),

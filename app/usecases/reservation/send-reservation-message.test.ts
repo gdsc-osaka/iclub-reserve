@@ -3,26 +3,25 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import type { ReservationMessageAudience } from "~/domain/mail/reservation-message-mail";
-import {
-  MembershipErrorCode,
-  MembershipRole,
-  type StoredMembership,
-  type MembershipRepository,
-} from "~/domain/membership";
+import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
 import {
   ReservationErrorCode,
   ReservationField,
   ReservationStatus,
   type Reservation,
-  type ReservationRepository,
 } from "~/domain/reservation";
 import type {
   CreateReservationMessageOutcome,
   ReservationMessage,
-  ReservationMessageRepository,
 } from "~/domain/reservation/message";
 import { QueryErrorCode, type QueryError } from "~/query/error";
-import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
+import {
+  fakeMailOutboxNotifier,
+  fakeMembershipRepository,
+  fakeReservationMailRecipientsQuery,
+  fakeReservationMessageRepository,
+  fakeReservationRepository,
+} from "~/testing/fakes";
 import {
   sendReservationMessageUseCase,
   type SendReservationMessageArgs,
@@ -93,7 +92,7 @@ const createDeps = (
   const createReservation = vi.fn();
   const createApproved = vi.fn();
 
-  const reservationRepository: ReservationRepository = {
+  const reservationRepository = fakeReservationRepository({
     findById: vi.fn((_id: string) => {
       if (overrides.reservationError) {
         return errAsync({
@@ -114,7 +113,7 @@ const createDeps = (
     existsApprovedOverlap: vi.fn(() => okAsync(false)),
     applyStatusTransition,
     applyContentEdit,
-  };
+  });
 
   const findByGroupAndUser = vi.fn((_groupId: string, _userId: string) => {
     if (overrides.membershipError) {
@@ -135,13 +134,9 @@ const createDeps = (
     );
   });
 
-  const membershipRepository: MembershipRepository = {
+  const membershipRepository = fakeMembershipRepository({
     findByGroupAndUser,
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: vi.fn(() => okAsync(1)),
-    updateRole: vi.fn(),
-    remove: vi.fn(),
-  };
+  });
 
   const createMessage = vi.fn((_message: ReservationMessage, _mails: readonly MailDraft[]) => {
     if (overrides.messageCreateError) {
@@ -155,9 +150,9 @@ const createDeps = (
     });
   });
 
-  const reservationMessageRepository: ReservationMessageRepository = {
+  const reservationMessageRepository = fakeReservationMessageRepository({
     create: createMessage,
-  };
+  });
 
   const findForMessage = vi.fn((_reservationId: string) => {
     if (overrides.recipientsQueryError) {
@@ -166,20 +161,19 @@ const createDeps = (
     return okAsync(overrides.audience ?? defaultAudience);
   });
 
-  const reservationMailRecipientsQuery: ReservationMailRecipientsQuery = {
-    findByReservationId: vi.fn(),
-    findForNewReservation: vi.fn(),
+  const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findForMessage,
-  };
+  });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
+  const mailOutboxNotifier = fakeMailOutboxNotifier({ notifyEnqueued });
 
   const deps: SendReservationMessageDeps = {
     reservationRepository,
     membershipRepository,
     reservationMessageRepository,
     reservationMailRecipientsQuery,
-    mailOutboxNotifier: { notifyEnqueued },
+    mailOutboxNotifier,
   };
 
   return {

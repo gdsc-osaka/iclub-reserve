@@ -13,6 +13,11 @@ import {
 import { ReservationStatus } from "~/domain/reservation";
 import type { CalendarSyncQuery } from "~/query/calendar/calendar-sync-query";
 import {
+  fakeCalendarClient,
+  fakeCalendarSyncQuery,
+  fakeCalendarSyncTasks,
+} from "~/testing/fakes/calendar";
+import {
   processCalendarSyncTasksUseCase,
   toDeleteCalendarIds,
   toReservationSyncGroups,
@@ -85,24 +90,27 @@ describe("toDeleteCalendarIds", () => {
 });
 
 describe("processCalendarSyncTasksUseCase", () => {
-  const createMockCalendarSyncTasks = (): CalendarSyncTasks => ({
-    claimDue: vi.fn().mockReturnValue(okAsync([])),
-    complete: vi.fn().mockReturnValue(okAsync(undefined)),
-    fail: vi.fn().mockReturnValue(okAsync(undefined)),
-    enqueue: vi.fn().mockReturnValue(okAsync(undefined)),
-  });
+  const createMockCalendarSyncTasks = (): CalendarSyncTasks =>
+    fakeCalendarSyncTasks({
+      claimDue: vi.fn().mockReturnValue(okAsync([])),
+      complete: vi.fn().mockReturnValue(okAsync(undefined)),
+      fail: vi.fn().mockReturnValue(okAsync(undefined)),
+      enqueue: vi.fn().mockReturnValue(okAsync(undefined)),
+    });
 
-  const createMockQuery = (): CalendarSyncQuery => ({
-    fetchReservationStates: vi.fn().mockReturnValue(okAsync([])),
-    fetchFacilityCalendarIds: vi.fn().mockReturnValue(okAsync([])),
-  });
+  const createMockQuery = (): CalendarSyncQuery =>
+    fakeCalendarSyncQuery({
+      fetchReservationStates: vi.fn().mockReturnValue(okAsync([])),
+      fetchFacilityCalendarIds: vi.fn().mockReturnValue(okAsync([])),
+    });
 
-  const createMockCalendarClient = (): CalendarClient => ({
-    upsertEvent: vi.fn().mockReturnValue(okAsync(null)),
-    deleteEvent: vi.fn().mockReturnValue(okAsync(null)),
-    listManagedEvents: vi.fn().mockReturnValue(okAsync([])),
-    checkWriteAccess: vi.fn().mockReturnValue(okAsync("writable")),
-  });
+  const createMockCalendarClient = (): CalendarClient =>
+    fakeCalendarClient({
+      upsertEvent: vi.fn().mockReturnValue(okAsync(null)),
+      deleteEvent: vi.fn().mockReturnValue(okAsync(null)),
+      listManagedEvents: vi.fn().mockReturnValue(okAsync([])),
+      checkWriteAccess: vi.fn().mockReturnValue(okAsync("writable")),
+    });
 
   it("取り出したタスクが 0 件の場合は何もせず 0 件の結果を返す", async () => {
     const calendarSyncTasks = createMockCalendarSyncTasks();

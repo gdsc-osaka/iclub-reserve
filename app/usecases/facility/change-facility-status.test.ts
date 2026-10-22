@@ -1,7 +1,8 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { FacilityErrorCode, type Facility, type FacilityRepository } from "~/domain/facility";
+import { FacilityErrorCode, type Facility } from "~/domain/facility";
+import { fakeFacilityRepository } from "~/testing/fakes/facility";
 import { changeFacilityStatusUseCase } from "./change-facility-status";
 
 describe("changeFacilityStatusUseCase", () => {
@@ -27,7 +28,7 @@ describe("changeFacilityStatusUseCase", () => {
   };
 
   it("事務局スタッフでなければ Forbidden になる", async () => {
-    const facilityRepository = {} as unknown as FacilityRepository;
+    const facilityRepository = fakeFacilityRepository();
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },
@@ -45,7 +46,7 @@ describe("changeFacilityStatusUseCase", () => {
   });
 
   it.each(["", "   "])("施設 ID が空文字（%o）の場合は NotFound になる", async (id) => {
-    const facilityRepository = {} as unknown as FacilityRepository;
+    const facilityRepository = fakeFacilityRepository();
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },
@@ -65,7 +66,7 @@ describe("changeFacilityStatusUseCase", () => {
   it.each(["pending", "enabled", "disabled", "invalid", ""])(
     "不正な変更先ステータス（%s）は InvalidInput になる",
     async (status) => {
-      const facilityRepository = {} as unknown as FacilityRepository;
+      const facilityRepository = fakeFacilityRepository();
 
       const result = await changeFacilityStatusUseCase(
         { facilityRepository },
@@ -84,14 +85,14 @@ describe("changeFacilityStatusUseCase", () => {
   );
 
   it("存在しない施設 ID の場合は NotFound になる", async () => {
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(
         errAsync({
           code: FacilityErrorCode.NotFound,
           message: "not found",
         }),
       ),
-    } as unknown as FacilityRepository;
+    });
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },
@@ -112,9 +113,9 @@ describe("changeFacilityStatusUseCase", () => {
     { facility: activeFacility, targetStatus: "active" },
     { facility: inactiveFacility, targetStatus: "inactive" },
   ])("同じ状態への変更は InvalidTransition になる", async ({ facility, targetStatus }) => {
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(okAsync(facility)),
-    } as unknown as FacilityRepository;
+    });
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },
@@ -133,11 +134,11 @@ describe("changeFacilityStatusUseCase", () => {
 
   it("無効化時、今後の予約が残っている場合は HasUpcomingReservations となり件数が文言に入る", async () => {
     const countMock = vi.fn().mockReturnValue(okAsync(3));
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(okAsync(activeFacility)),
       countBlockingReservations: countMock,
       updateActiveStatus: vi.fn(),
-    } as unknown as FacilityRepository;
+    });
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },
@@ -162,11 +163,11 @@ describe("changeFacilityStatusUseCase", () => {
     const countMock = vi.fn().mockReturnValue(okAsync(0));
     const updateActiveStatusMock = vi.fn().mockReturnValue(okAsync(updatedFacility));
 
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(okAsync(activeFacility)),
       countBlockingReservations: countMock,
       updateActiveStatus: updateActiveStatusMock,
-    } as unknown as FacilityRepository;
+    });
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },
@@ -208,11 +209,11 @@ describe("changeFacilityStatusUseCase", () => {
     const countMock = vi.fn();
     const updateActiveStatusMock = vi.fn().mockReturnValue(okAsync(updatedFacility));
 
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(okAsync(inactiveFacility)),
       countBlockingReservations: countMock,
       updateActiveStatus: updateActiveStatusMock,
-    } as unknown as FacilityRepository;
+    });
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },
@@ -250,7 +251,7 @@ describe("changeFacilityStatusUseCase", () => {
   });
 
   it("更新件数が 0 行のとき（競合）、InvalidTransition を返す", async () => {
-    const facilityRepository = {
+    const facilityRepository = fakeFacilityRepository({
       findById: vi.fn().mockReturnValue(okAsync(inactiveFacility)),
       updateActiveStatus: vi.fn().mockReturnValue(
         errAsync({
@@ -258,7 +259,7 @@ describe("changeFacilityStatusUseCase", () => {
           message: "0 rows updated",
         }),
       ),
-    } as unknown as FacilityRepository;
+    });
 
     const result = await changeFacilityStatusUseCase(
       { facilityRepository },

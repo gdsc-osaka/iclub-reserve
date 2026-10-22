@@ -5,18 +5,13 @@ import { ReservationList } from "~/components/reservation/reservation-list";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
-import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
-import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
-import { createReservationRepository } from "~/infra/reservation/reservation-repo";
-import { createMembershipRepository } from "~/infra/membership/membership-repo";
-import { createUserGroupListQuery } from "~/infra/user/user-group-list-query";
-import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
+import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 import { parseReservationListParams } from "~/routes/reservations/list/query-params";
-import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { getReservationListUseCase } from "~/usecases/reservation/get-reservation-list";
 import type { Route } from "./+types/route";
 
@@ -98,23 +93,12 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = createDb(env.DB);
-  const result = await changeReservationStatusUseCase(
-    {
-      reservationRepository: createReservationRepository(db),
-      membershipRepository: createMembershipRepository(db),
-      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-      mailOutboxNotifier: createQueueMailOutboxNotifier(),
-    },
-    {
-      reservationId,
-      actorUserId: user.id,
-      isStaff: user.is_staff,
-      transition,
-      reason: typeof reason === "string" ? reason : null,
-      now: new Date(),
-      appBaseUrl: resolveAppBaseUrl(request),
-    },
-  );
+  const result = await changeReservationStatus(db, request, user, {
+    reservationId,
+    transition,
+    reason,
+    now: new Date(),
+  });
 
   if (result.isErr()) {
     /*

@@ -1,7 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { calendarSyncTaskTable, reservationTable } from "~/db/schema";
+import { calendarSyncTaskTable } from "~/db/schema";
 import { toCalendarEventId, type CalendarClient, type CalendarEvent } from "~/domain/calendar";
 import { FacilityErrorCode, type FacilityRepository } from "~/domain/facility";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
@@ -14,6 +14,7 @@ import { processCalendarSyncTasksUseCase } from "~/usecases/calendar/process-cal
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { editReservationDirectlyUseCase } from "~/usecases/reservation/edit-reservation-directly";
 import { useD1TestDb } from "../d1-test-db";
+import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createReservationRepository } from "../reservation/reservation-repo";
 import { createD1CalendarSyncQuery } from "./d1-calendar-sync-query";
 import { createD1CalendarSyncTasks } from "./d1-calendar-sync-tasks";
@@ -37,42 +38,10 @@ const calendar2 = "cal_2@group.calendar.google.com";
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_staff",
-      "スタッフ",
-      "staff@example.com",
-      1,
-      0,
-      0,
-      1,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_test",
-      "テストグループ",
-      "enabled",
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_1",
-      "第1会議室",
-      calendar1,
-      1,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_2",
-      "第2会議室",
-      calendar2,
-      1,
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_staff", name: "スタッフ", email: "staff@example.com", is_staff: true }),
+    seedGroup({ id: "grp_test", name: "テストグループ" }),
+    seedFacility({ id: "fac_1", name: "第1会議室", googleCalendarId: calendar1 }),
+    seedFacility({ id: "fac_2", name: "第2会議室", googleCalendarId: calendar2 }),
   );
 });
 
@@ -135,16 +104,18 @@ const facilityRepository: FacilityRepository = {
 };
 
 const insertReservation = (id: string, status: ReservationStatus) =>
-  testDb.db.insert(reservationTable).values({
-    id,
-    groupId: "grp_test",
-    facilityId: "fac_1",
-    status,
-    startAt,
-    endAt,
-    headCount: 3,
-    createdBy: "usr_staff",
-  });
+  testDb.seed(
+    seedReservation({
+      id,
+      groupId: "grp_test",
+      facilityId: "fac_1",
+      status,
+      startAt,
+      endAt,
+      headCount: 3,
+      createdBy: "usr_staff",
+    }),
+  );
 
 /**
  * 毎分の同期を 1 回だけ動かす。

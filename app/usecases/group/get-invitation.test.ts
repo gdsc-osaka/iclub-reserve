@@ -1,11 +1,13 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import type { Group, GroupError, GroupRepository } from "~/domain/group";
+import type { Group, GroupError } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
-import type { Invitation, InvitationRepository } from "~/domain/invitation";
+import type { Invitation } from "~/domain/invitation";
 import { InvitationStatus } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
+import { fakeGroupRepository } from "~/testing/fakes/group";
+import { fakeInvitationRepository } from "~/testing/fakes/invitation";
 import { getInvitationUseCase, type GetInvitationArgs } from "./get-invitation";
 
 const testInvitationId = "inv_123456";
@@ -40,49 +42,20 @@ const createFakeInvitationRepository = (
   initialInvitation: Invitation | null = validInvitation,
   options: FakeInvitationRepoOptions = {},
 ) => {
-  let findByIdCallCount = 0;
-  let lastFindByIdId: string | null = null;
+  const findById = vi.fn((invitationId: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(invitationId);
+    }
+    return okAsync(initialInvitation);
+  });
 
-  const repository: InvitationRepository = {
-    findPendingByGroupAndEmail: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "findPendingByGroupAndEmail is not used in this test",
-      }),
-    create: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "create is not used in this test",
-      }),
-    cancel: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "cancel is not used in this test",
-      }),
-    findById: (invitationId) => {
-      findByIdCallCount += 1;
-      lastFindByIdId = invitationId;
-      if (options.findByIdResult) {
-        return options.findByIdResult(invitationId);
-      }
-      return okAsync(initialInvitation);
-    },
-    accept: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "accept is not used in this test",
-      }),
-    reject: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "reject is not used in this test",
-      }),
-  };
+  const repository = fakeInvitationRepository({
+    findById,
+  });
 
   return {
     repository,
-    findByIdCallCount: () => findByIdCallCount,
-    lastFindByIdId: () => lastFindByIdId,
+    findById,
   };
 };
 
@@ -94,39 +67,20 @@ const createFakeGroupRepository = (
   initialGroup: Group = validGroup,
   options: FakeGroupRepoOptions = {},
 ) => {
-  let findByIdCallCount = 0;
-  let lastFindByIdId: string | null = null;
+  const findById = vi.fn((groupId: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(groupId);
+    }
+    return okAsync(initialGroup);
+  });
 
-  const repository: GroupRepository = {
-    findById: (groupId) => {
-      findByIdCallCount += 1;
-      lastFindByIdId = groupId;
-      if (options.findByIdResult) {
-        return options.findByIdResult(groupId);
-      }
-      return okAsync(initialGroup);
-    },
-    updateName: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "updateName is not used in this test",
-      }),
-    updateStatus: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "updateStatus is not used in this test",
-      }),
-    create: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは create は使わない",
-      }),
-  };
+  const repository = fakeGroupRepository({
+    findById,
+  });
 
   return {
     repository,
-    findByIdCallCount: () => findByIdCallCount,
-    lastFindByIdId: () => lastFindByIdId,
+    findById,
   };
 };
 
@@ -159,10 +113,10 @@ describe("getInvitationUseCase", () => {
         expiresAt: validInvitation.expiresAt,
       });
     }
-    expect(fakeInvitation.findByIdCallCount()).toBe(1);
-    expect(fakeInvitation.lastFindByIdId()).toBe(testInvitationId);
-    expect(fakeGroup.findByIdCallCount()).toBe(1);
-    expect(fakeGroup.lastFindByIdId()).toBe(testGroupId);
+    expect(fakeInvitation.findById).toHaveBeenCalledTimes(1);
+    expect(fakeInvitation.findById).toHaveBeenCalledWith(testInvitationId);
+    expect(fakeGroup.findById).toHaveBeenCalledTimes(1);
+    expect(fakeGroup.findById).toHaveBeenCalledWith(testGroupId);
   });
 
   // 2. 招待が無い（null）→ InvitationNotFound
@@ -305,7 +259,7 @@ describe("getInvitationUseCase", () => {
       expect(result.error.userMessage).toBeUndefined();
     }
     // 存在秘匿のため、団体を引きに行かないこと
-    expect(fakeGroup.findByIdCallCount()).toBe(0);
+    expect(fakeGroup.findById).not.toHaveBeenCalled();
   });
 
   // 8. 宛先の大文字・前後の空白が違うだけ → 成功する
@@ -325,7 +279,7 @@ describe("getInvitationUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(fakeGroup.findByIdCallCount()).toBe(1);
+    expect(fakeGroup.findById).toHaveBeenCalledTimes(1);
   });
 
   // 9. findById が DB エラー → DatabaseError

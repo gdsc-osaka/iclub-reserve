@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
 import { UserErrorCode, type TermsAcceptanceRepository, type UserError } from "~/domain/user";
+import { fakeTermsAcceptanceRepository } from "~/testing/fakes/user";
 import { acceptTermsUseCase } from "./accept-terms";
 
 const userId = "usr_user_1";
@@ -11,9 +12,10 @@ const now = new Date("2026-10-08T03:00:00Z");
 /** 記録の結果を決めた偽物の Repository を作る */
 const repositoryReturning = (
   result: ReturnType<TermsAcceptanceRepository["recordAcceptance"]>,
-): TermsAcceptanceRepository => ({
-  recordAcceptance: vi.fn(() => result),
-});
+): TermsAcceptanceRepository =>
+  fakeTermsAcceptanceRepository({
+    recordAcceptance: vi.fn(() => result),
+  });
 
 describe("acceptTermsUseCase", () => {
   it("同意の印があり、今の版なら、その版とサーバーの時刻で記録する", async () => {

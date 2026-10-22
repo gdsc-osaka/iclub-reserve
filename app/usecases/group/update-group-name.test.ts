@@ -1,11 +1,13 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
-import type { Group, GroupError, GroupRepository, UpdateGroupNameInput } from "~/domain/group";
+import type { Group, GroupError, UpdateGroupNameInput } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
-import type { StoredMembership, MembershipRepository } from "~/domain/membership";
+import type { StoredMembership } from "~/domain/membership";
 import { MembershipErrorCode, MembershipRole } from "~/domain/membership";
+import { fakeGroupRepository } from "~/testing/fakes/group";
+import { fakeMembershipRepository } from "~/testing/fakes/membership";
 import { updateGroupNameUseCase } from "./update-group-name";
 
 const testGroup: Group = {
@@ -38,80 +40,54 @@ interface FakeGroupRepositoryOptions {
   readonly findByIdResult?: (id: string) => ResultAsync<Group, GroupError>;
 }
 
-/** D1 を使わないダミーのグループリポジトリ。呼び出し回数と引数を自前で記録する */
+/** D1 を使わないダミーのグループリポジトリ */
 const createFakeGroupRepository = (options: FakeGroupRepositoryOptions = {}) => {
-  let findByIdCallCount = 0;
-  let updateNameCallCount = 0;
-  let lastUpdateNameInput: UpdateGroupNameInput | null = null;
-  let lastAuditLog: AuditLogDraft | null = null;
+  const findById = vi.fn((id: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(id);
+    }
+    return okAsync(testGroup);
+  });
 
-  const repository: GroupRepository = {
-    findById: (id) => {
-      findByIdCallCount += 1;
-      if (options.findByIdResult) {
-        return options.findByIdResult(id);
-      }
-      return okAsync(testGroup);
-    },
-    updateName: (input, auditLog) => {
-      updateNameCallCount += 1;
-      lastUpdateNameInput = input;
-      lastAuditLog = auditLog;
-      if (options.updateNameResult) {
-        return options.updateNameResult(input, auditLog);
-      }
-      return okAsync({
-        id: input.id,
-        name: input.name,
-        status: GroupStatus.Enabled,
-        createdAt: testGroup.createdAt,
-        updatedAt: input.updatedAt,
-      });
-    },
-    updateStatus: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは updateStatus は使わない",
-      }),
-    create: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "このテストでは create は使わない",
-      }),
-  };
+  const updateName = vi.fn((input: UpdateGroupNameInput, auditLog: AuditLogDraft) => {
+    if (options.updateNameResult) {
+      return options.updateNameResult(input, auditLog);
+    }
+    return okAsync({
+      id: input.id,
+      name: input.name,
+      status: GroupStatus.Enabled,
+      createdAt: testGroup.createdAt,
+      updatedAt: input.updatedAt,
+    });
+  });
+
+  const repository = fakeGroupRepository({
+    findById,
+    updateName,
+  });
 
   return {
     repository,
-    updateNameCallCount: () => updateNameCallCount,
-    findByIdCallCount: () => findByIdCallCount,
-    lastUpdateNameInput: () => lastUpdateNameInput,
-    lastAuditLog: () => lastAuditLog,
+    findById,
+    updateName,
   };
 };
 
 /** D1 を使わないダミーのメンバーシップリポジトリ */
 const createFakeMembershipRepository = (memberships: readonly StoredMembership[]) => {
-  let callCount = 0;
+  const findByGroupAndUser = vi.fn((groupId: string, userId: string) => {
+    const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
+    return okAsync(found ?? null);
+  });
 
-  const repository: MembershipRepository = {
-    findByGroupAndUser: (groupId, userId) => {
-      callCount += 1;
-      const found = memberships.find((m) => m.groupId === groupId && m.userId === userId);
-      return okAsync(found ?? null);
-    },
-    // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-    findByGroupAndEmail: () => okAsync(null),
-    countAdmins: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    updateRole: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    remove: () =>
-      errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-  };
+  const repository = fakeMembershipRepository({
+    findByGroupAndUser,
+  });
 
   return {
     repository,
-    callCount: () => callCount,
+    findByGroupAndUser,
   };
 };
 
@@ -135,8 +111,8 @@ describe("updateGroupNameUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(groups.updateNameCallCount()).toBe(1);
-    expect(groups.lastUpdateNameInput()).toEqual({
+    expect(groups.updateName).toHaveBeenCalledTimes(1);
+    expect(groups.updateName.mock.calls[0]?.[0]).toEqual({
       id: testGroup.id,
       name: "新しい団体名",
       updatedAt: baseNow,
@@ -144,7 +120,7 @@ describe("updateGroupNameUseCase", () => {
     const updatedGroup = result._unsafeUnwrap();
     expect(updatedGroup.name).toBe("新しい団体名");
     expect(updatedGroup.updatedAt).toEqual(baseNow);
-    const auditLog = groups.lastAuditLog();
+    const auditLog = groups.updateName.mock.calls[0]?.[1];
     expect(auditLog?.actedAsStaff).toBe(false);
     expect(auditLog?.changes).toEqual({
       name: { before: testGroup.name, after: "新しい団体名" },
@@ -169,10 +145,10 @@ describe("updateGroupNameUseCase", () => {
 
     expect(result.isOk()).toBe(true);
     // acted_as_staff 判定のため所属を 1 回引く（COND-012）
-    expect(memberships.callCount()).toBe(1);
-    expect(groups.updateNameCallCount()).toBe(1);
-    expect(groups.lastUpdateNameInput()?.name).toBe("事務局による変更名");
-    const auditLog = groups.lastAuditLog();
+    expect(memberships.findByGroupAndUser).toHaveBeenCalledTimes(1);
+    expect(groups.updateName).toHaveBeenCalledTimes(1);
+    expect(groups.updateName.mock.calls[0]?.[0]?.name).toBe("事務局による変更名");
+    const auditLog = groups.updateName.mock.calls[0]?.[1];
     expect(auditLog?.actedAsStaff).toBe(true);
   });
 
@@ -193,7 +169,7 @@ describe("updateGroupNameUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    expect(groups.updateNameCallCount()).toBe(0);
+    expect(groups.updateName).not.toHaveBeenCalled();
   });
 
   // 3. 一般メンバーは Forbidden になり、updateName が 1 度も呼ばれていない
@@ -216,7 +192,7 @@ describe("updateGroupNameUseCase", () => {
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.Forbidden);
     expect(error.userMessage).toBe("団体情報を編集できるのは管理者と事務局だけです。");
-    expect(groups.updateNameCallCount()).toBe(0);
+    expect(groups.updateName).not.toHaveBeenCalled();
   });
 
   // 4. 所属していない人（membership が null）は NotVisible になり、updateName が 1 度も呼ばれていない
@@ -238,7 +214,7 @@ describe("updateGroupNameUseCase", () => {
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.NotVisible);
-    expect(groups.updateNameCallCount()).toBe(0);
+    expect(groups.updateName).not.toHaveBeenCalled();
   });
 
   // 5. 4 のエラーが、存在しない団体を指定したときのエラーと message まで含めて完全に一致する（COND-011）
@@ -269,7 +245,7 @@ describe("updateGroupNameUseCase", () => {
     });
 
     expect(notMember._unsafeUnwrapErr()).toEqual(notExists._unsafeUnwrapErr());
-    expect(groups.updateNameCallCount()).toBe(0);
+    expect(groups.updateName).not.toHaveBeenCalled();
   });
 
   // 6. it.each(["", "   "]) で、空の groupId は NotFound になり、リポジトリが 1 つも呼ばれていない
@@ -292,8 +268,8 @@ describe("updateGroupNameUseCase", () => {
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotFound);
-      expect(memberships.callCount()).toBe(0);
-      expect(groups.updateNameCallCount()).toBe(0);
+      expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(groups.updateName).not.toHaveBeenCalled();
     },
   );
 
@@ -316,8 +292,8 @@ describe("updateGroupNameUseCase", () => {
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
     // 認可判定より先に検証しているため、リポジトリはいずれも呼ばれない
-    expect(memberships.callCount()).toBe(0);
-    expect(groups.updateNameCallCount()).toBe(0);
+    expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
+    expect(groups.updateName).not.toHaveBeenCalled();
   });
 
   // 8. 団体名が長すぎるとき（65 文字）は InvalidInput になる
@@ -338,29 +314,21 @@ describe("updateGroupNameUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.InvalidInput);
-    expect(memberships.callCount()).toBe(0);
-    expect(groups.updateNameCallCount()).toBe(0);
+    expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
+    expect(groups.updateName).not.toHaveBeenCalled();
   });
 
   // 9. membershipRepository が DB エラーを返したときは DatabaseError になる（NotFound に潰れていないこと）
   it("membershipRepository が DB エラーを返したときは DatabaseError になる", async () => {
     const groups = createFakeGroupRepository();
-    const failingMembershipRepo: MembershipRepository = {
+    const failingMembershipRepo = fakeMembershipRepository({
       findByGroupAndUser: () =>
         errAsync({
           code: MembershipErrorCode.DatabaseError,
           message: "メンバーシップの取得に失敗しました。",
           cause: new Error("DB error"),
         }),
-      // このテストでは呼ばれない前提。呼ばれたら失敗して気付けるようにしてある
-      findByGroupAndEmail: () => okAsync(null),
-      countAdmins: () =>
-        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-      updateRole: () =>
-        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-      remove: () =>
-        errAsync({ code: MembershipErrorCode.DatabaseError, message: "このテストでは使わない" }),
-    };
+    });
 
     const result = await updateGroupNameUseCase(
       { groupRepository: groups.repository, membershipRepository: failingMembershipRepo },
@@ -375,7 +343,7 @@ describe("updateGroupNameUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.DatabaseError);
-    expect(groups.updateNameCallCount()).toBe(0);
+    expect(groups.updateName).not.toHaveBeenCalled();
   });
 
   // 10. updateName が NotFound を返したとき（更新 0 件）は、そのまま NotFound が返る
@@ -402,6 +370,6 @@ describe("updateGroupNameUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(GroupErrorCode.NotFound);
-    expect(groups.updateNameCallCount()).toBe(1);
+    expect(groups.updateName).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,6 @@
+import { cn } from "cn";
 import { Link } from "react-router";
 
-import { cn } from "~/lib/utils";
 import type { AvailabilityFacility } from "~/query/facility/facility-availability-calendar";
 
 import { toCalendarPath } from "./paths";

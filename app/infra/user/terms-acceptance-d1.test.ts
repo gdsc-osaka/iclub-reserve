@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { user } from "~/db/schema";
 import { UserErrorCode } from "~/domain/user";
 import { useD1TestDb } from "../d1-test-db";
+import { seedUser } from "../d1-test-seeds";
 import { createTermsAcceptanceRepository } from "./terms-acceptance-repo";
 
 const ACCEPTED_AT = new Date("2026-10-08T03:00:00Z");
@@ -19,26 +20,8 @@ const testDb = useD1TestDb();
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_taro",
-      "",
-      "taro@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_hanako",
-      "花子",
-      "hanako@ecs.osaka-u.ac.jp",
-      1,
-      0,
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_taro", name: "", email: "taro@ecs.osaka-u.ac.jp" }),
+    seedUser({ id: "usr_hanako", name: "花子", email: "hanako@ecs.osaka-u.ac.jp" }),
   );
 });
 

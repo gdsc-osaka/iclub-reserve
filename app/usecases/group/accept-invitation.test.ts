@@ -1,16 +1,12 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import type { GroupError } from "~/domain/group";
 import { GroupErrorCode } from "~/domain/group";
-import {
-  InvitationStatus,
-  type AcceptInvitationInput,
-  type Invitation,
-  type InvitationRepository,
-} from "~/domain/invitation";
+import { InvitationStatus, type AcceptInvitationInput, type Invitation } from "~/domain/invitation";
 import { MembershipRole } from "~/domain/membership";
+import { fakeInvitationRepository } from "~/testing/fakes/invitation";
 import { acceptInvitationUseCase, type AcceptInvitationArgs } from "./accept-invitation";
 
 const testInvitationId = "inv_123456";
@@ -39,56 +35,29 @@ interface FakeInvitationRepoOptions {
 }
 
 const createFakeInvitationRepository = (options: FakeInvitationRepoOptions = {}) => {
-  let acceptCallCount = 0;
-  let lastAcceptInput: AcceptInvitationInput | null = null;
-  let lastAuditLog: AuditLogDraft | null = null;
-  let findByIdCallCount = 0;
+  const findById = vi.fn((invitationId: string) => {
+    if (options.findByIdResult) {
+      return options.findByIdResult(invitationId);
+    }
+    return okAsync(defaultInvitation);
+  });
 
-  const repository: InvitationRepository = {
-    findPendingByGroupAndEmail: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "findPendingByGroupAndEmail is not used in this test",
-      }),
-    create: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "create is not used in this test",
-      }),
-    cancel: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "cancel is not used in this test",
-      }),
-    findById: (invitationId) => {
-      findByIdCallCount += 1;
-      if (options.findByIdResult) {
-        return options.findByIdResult(invitationId);
-      }
-      return okAsync(defaultInvitation);
-    },
-    accept: (input, auditLog) => {
-      acceptCallCount += 1;
-      lastAcceptInput = input;
-      lastAuditLog = auditLog;
-      if (options.acceptResult) {
-        return options.acceptResult(input, auditLog);
-      }
-      return okAsync(testGroupId);
-    },
-    reject: () =>
-      errAsync({
-        code: GroupErrorCode.DatabaseError,
-        message: "reject is not used in this test",
-      }),
-  };
+  const accept = vi.fn((input: AcceptInvitationInput, auditLog: AuditLogDraft) => {
+    if (options.acceptResult) {
+      return options.acceptResult(input, auditLog);
+    }
+    return okAsync(testGroupId);
+  });
+
+  const repository = fakeInvitationRepository({
+    findById,
+    accept,
+  });
 
   return {
     repository,
-    acceptCallCount: () => acceptCallCount,
-    lastAcceptInput: () => lastAcceptInput,
-    lastAuditLog: () => lastAuditLog,
-    findByIdCallCount: () => findByIdCallCount,
+    findById,
+    accept,
   };
 };
 
@@ -127,8 +96,8 @@ describe("acceptInvitationUseCase", () => {
       },
     );
 
-    expect(fakeInvitation.acceptCallCount()).toBe(1);
-    const input = fakeInvitation.lastAcceptInput();
+    expect(fakeInvitation.accept).toHaveBeenCalledTimes(1);
+    const input = fakeInvitation.accept.mock.calls[0]?.[0];
     expect(input).not.toBeNull();
     expect(input?.invitationId).toBe(testInvitationId);
     expect(input?.email).toBe(testEmail); // 正規化されていること
@@ -172,7 +141,7 @@ describe("acceptInvitationUseCase", () => {
         expect(result.error.code).toBe(GroupErrorCode.InvitationNotFound);
         expect(result.error.userMessage).toBeUndefined();
       }
-      expect(fakeInvitation.acceptCallCount()).toBe(0);
+      expect(fakeInvitation.accept).not.toHaveBeenCalled();
     },
   );
 
@@ -204,8 +173,8 @@ describe("acceptInvitationUseCase", () => {
 
     await acceptInvitationUseCase({ invitationRepository: fakeInvitation.repository }, validArgs);
 
-    expect(fakeInvitation.findByIdCallCount()).toBe(1);
-    const auditLog = fakeInvitation.lastAuditLog();
+    expect(fakeInvitation.findById).toHaveBeenCalledTimes(1);
+    const auditLog = fakeInvitation.accept.mock.calls[0]?.[1];
     expect(auditLog).not.toBeNull();
     expect(auditLog?.action).toBe(AuditLogAction.InvitationAccept);
     expect(auditLog?.actorId).toBe(testUserId);

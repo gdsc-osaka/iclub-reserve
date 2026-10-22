@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { reservationTable } from "~/db/schema";
 import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "../d1-test-db";
+import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createD1CalendarReconcileQuery } from "./d1-calendar-reconcile-query";
 
 const testDb = useD1TestDb();
@@ -11,64 +11,36 @@ const rangeStart = new Date("2026-10-09T00:00:00.000Z");
 
 beforeEach(async () => {
   await testDb.seed(
-    [
-      `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at, is_staff) VALUES (?,?,?,?,?,?,?)`,
-      "usr_test",
-      "テストユーザー",
-      "test@example.com",
-      1,
-      0,
-      0,
-      0,
-    ],
-    [
-      `INSERT INTO "group" (id, name, status, created_at, updated_at) VALUES (?,?,?,?,?)`,
-      "grp_test",
-      "テストグループ",
-      "enabled",
-      0,
-      0,
-    ],
+    seedUser({ id: "usr_test", name: "テストユーザー", email: "test@example.com" }),
+    seedGroup({ id: "grp_test", name: "テストグループ" }),
     // 有効で Google Calendar ID あり
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_active_with_cal",
-      "吹田：3Dプリンター",
-      "cal_active@example.com",
-      1,
-      0,
-      0,
-    ],
+    seedFacility({
+      id: "fac_active_with_cal",
+      name: "吹田：3Dプリンター",
+      googleCalendarId: "cal_active@example.com",
+      isActive: true,
+    }),
     // 無効だが Google Calendar ID あり
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_inactive_with_cal",
-      "吹田：旧レーザーカッター",
-      "cal_inactive@example.com",
-      0,
-      0,
-      0,
-    ],
+    seedFacility({
+      id: "fac_inactive_with_cal",
+      name: "吹田：旧レーザーカッター",
+      googleCalendarId: "cal_inactive@example.com",
+      isActive: false,
+    }),
     // Google Calendar ID が null
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_no_cal",
-      "吹田：ミーティングスペース",
-      null,
-      1,
-      0,
-      0,
-    ],
+    seedFacility({
+      id: "fac_no_cal",
+      name: "吹田：ミーティングスペース",
+      googleCalendarId: null,
+      isActive: true,
+    }),
     // Google Calendar ID が空文字
-    [
-      `INSERT INTO "facility" (id, name, google_calendar_id, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-      "fac_empty_cal",
-      "吹田：作業台",
-      "   ",
-      1,
-      0,
-      0,
-    ],
+    seedFacility({
+      id: "fac_empty_cal",
+      name: "吹田：作業台",
+      googleCalendarId: "   ",
+      isActive: true,
+    }),
   );
 });
 
@@ -110,9 +82,9 @@ describe("createD1CalendarReconcileQuery", () => {
     it("範囲（endAt >= rangeStart）・状態（approved）・施設で正しく絞り込む", async () => {
       const query = createD1CalendarReconcileQuery(testDb.db);
 
-      await testDb.db.insert(reservationTable).values([
+      await testDb.seed(
         // 1. 対象: fac_active_with_cal, 承認済み, endAt >= rangeStart
-        {
+        seedReservation({
           id: "res_ok_1",
           groupId: "grp_test",
           facilityId: "fac_active_with_cal",
@@ -121,9 +93,9 @@ describe("createD1CalendarReconcileQuery", () => {
           endAt: new Date("2026-10-09T12:00:00.000Z"),
           headCount: 2,
           createdBy: "usr_test",
-        },
+        }),
         // 2. 対象: fac_inactive_with_cal, 承認済み, endAt >= rangeStart
-        {
+        seedReservation({
           id: "res_ok_2",
           groupId: "grp_test",
           facilityId: "fac_inactive_with_cal",
@@ -132,9 +104,9 @@ describe("createD1CalendarReconcileQuery", () => {
           endAt: new Date("2026-10-09T15:00:00.000Z"),
           headCount: 3,
           createdBy: "usr_test",
-        },
+        }),
         // 3. 対象外: endAt が rangeStart より前（過去の予約）
-        {
+        seedReservation({
           id: "res_past",
           groupId: "grp_test",
           facilityId: "fac_active_with_cal",
@@ -143,9 +115,9 @@ describe("createD1CalendarReconcileQuery", () => {
           endAt: new Date("2026-10-08T12:00:00.000Z"),
           headCount: 1,
           createdBy: "usr_test",
-        },
+        }),
         // 4. 対象外: 仮予約（provisional）
-        {
+        seedReservation({
           id: "res_provisional",
           groupId: "grp_test",
           facilityId: "fac_active_with_cal",
@@ -154,9 +126,9 @@ describe("createD1CalendarReconcileQuery", () => {
           endAt: new Date("2026-10-09T12:00:00.000Z"),
           headCount: 2,
           createdBy: "usr_test",
-        },
+        }),
         // 5. 対象外: キャンセル済み（cancelled）
-        {
+        seedReservation({
           id: "res_cancelled",
           groupId: "grp_test",
           facilityId: "fac_active_with_cal",
@@ -165,9 +137,9 @@ describe("createD1CalendarReconcileQuery", () => {
           endAt: new Date("2026-10-09T12:00:00.000Z"),
           headCount: 2,
           createdBy: "usr_test",
-        },
+        }),
         // 6. 対象外: 別施設（fac_no_cal）の予約
-        {
+        seedReservation({
           id: "res_other_fac",
           groupId: "grp_test",
           facilityId: "fac_no_cal",
@@ -176,8 +148,8 @@ describe("createD1CalendarReconcileQuery", () => {
           endAt: new Date("2026-10-09T12:00:00.000Z"),
           headCount: 1,
           createdBy: "usr_test",
-        },
-      ]);
+        }),
+      );
 
       const result = await query.fetchApprovedReservations(
         ["fac_active_with_cal", "fac_inactive_with_cal"],

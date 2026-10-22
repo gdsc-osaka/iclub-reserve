@@ -1,4 +1,4 @@
-import { cn } from "~/lib/utils";
+import { cn } from "cn";
 
 /**
  * 施設・設備の状態を利用者向けの日本語にする。

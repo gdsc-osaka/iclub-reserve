@@ -2,10 +2,8 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { QueryErrorCode, type QueryError } from "~/query/error";
-import type {
-  FacilityCalendarSubscriptionItem,
-  FacilityCalendarSubscriptionListQuery,
-} from "~/query/facility/facility-calendar-subscription-list";
+import type { FacilityCalendarSubscriptionItem } from "~/query/facility/facility-calendar-subscription-list";
+import { fakeFacilityCalendarSubscriptionListQuery } from "~/testing/fakes/facility";
 import { listFacilitiesForCalendarSubscriptionUseCase } from "./list-facilities-for-calendar-subscription";
 
 describe("listFacilitiesForCalendarSubscriptionUseCase", () => {
@@ -27,9 +25,9 @@ describe("listFacilitiesForCalendarSubscriptionUseCase", () => {
 
   it("ログインユーザーであれば施設一覧を取得できる", async () => {
     const listActiveMock = vi.fn().mockReturnValue(okAsync(mockItems));
-    const facilityCalendarSubscriptionListQuery = {
+    const facilityCalendarSubscriptionListQuery = fakeFacilityCalendarSubscriptionListQuery({
       listActive: listActiveMock,
-    } as unknown as FacilityCalendarSubscriptionListQuery;
+    });
 
     const result = await listFacilitiesForCalendarSubscriptionUseCase(
       { facilityCalendarSubscriptionListQuery },
@@ -47,9 +45,9 @@ describe("listFacilitiesForCalendarSubscriptionUseCase", () => {
       message: "DB接続失敗",
     };
     const listActiveMock = vi.fn().mockReturnValue(errAsync(dbError));
-    const facilityCalendarSubscriptionListQuery = {
+    const facilityCalendarSubscriptionListQuery = fakeFacilityCalendarSubscriptionListQuery({
       listActive: listActiveMock,
-    } as unknown as FacilityCalendarSubscriptionListQuery;
+    });
 
     const result = await listFacilitiesForCalendarSubscriptionUseCase(
       { facilityCalendarSubscriptionListQuery },
