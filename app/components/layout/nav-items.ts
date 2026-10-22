@@ -48,6 +48,25 @@ export interface NavItem {
 }
 
 /**
+ * 件数を添える項目の ID（#189）。
+ *
+ * - ダッシュボード: 確認が必要なこと（未読のある予約と、自分宛ての招待）の数
+ * - 予約の承認: 承認待ちの予約の数（事務局だけ）
+ * - 団体の管理: 有効化を待っている団体の数（事務局だけ）
+ *
+ * 件数は外枠の loader（`app/routes/app-layout/`）が数える。
+ */
+const countedNavItemIds = ["dashboard", "staff-approvals", "staff-groups"] as const;
+
+export type CountedNavItemId = (typeof countedNavItemIds)[number];
+
+/** ナビ項目に添える件数。null は数えなかった（事務局でない）か、数えられなかったことを表す */
+export type NavCounts = Readonly<Record<CountedNavItemId, number | null>>;
+
+const isCountedNavItemId = (id: string): id is CountedNavItemId =>
+  (countedNavItemIds as readonly string[]).includes(id);
+
+/**
  * どの利用者にも出す項目。
  *
  * 所属している団体が 0 件でも「所属団体」を隠さないのは、
@@ -215,3 +234,29 @@ export const toOverflowNavItems = (isStaff: boolean): readonly NavItem[] => {
  */
 export const findActiveNavItem = (isStaff: boolean, pathname: string): NavItem | undefined =>
   toNavItems(isStaff).find((item) => isNavItemActive(item, pathname));
+
+/**
+ * 開いた画面が、件数を添える項目の画面かどうか。
+ *
+ * 件数を数え直す時期を決めるのに使う（その画面を開いたら数え直す）。
+ * 現在地の判定と同じく、ダッシュボード（"/"）は完全一致、ほかは前方一致で判定する。
+ */
+export const isCountedNavPath = (pathname: string): boolean =>
+  toNavItems(true).some((item) => isCountedNavItemId(item.id) && isNavItemActive(item, pathname));
+
+/**
+ * その項目に添える件数を返す。件数を持たない項目と、0 件の項目は undefined。
+ *
+ * 0 件を出さないのは、「やることが無い」項目にまで印が付くと、印のある項目が目に留まらなくなるため。
+ */
+export const toNavCount = (counts: NavCounts, item: NavItem): number | undefined => {
+  const count = isCountedNavItemId(item.id) ? counts[item.id] : null;
+  return count !== null && count > 0 ? count : undefined;
+};
+
+/**
+ * バッジに出す件数の文字。100 件以上は "99+" にする。
+ *
+ * バッジは数字 2 桁分の幅しか無いので、3 桁にすると隣の文字に重なる。
+ */
+export const formatNavCount = (count: number): string => (count >= 100 ? "99+" : `${count}`);
