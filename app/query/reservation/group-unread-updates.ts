@@ -15,6 +15,10 @@ import { GroupUnreadEventType, unreadEventsSince } from "~/domain/reservation";
 import type { Database } from "~/infra/db";
 import { userQualifiesForReservationGroupAudience } from "~/infra/reservation/reservation-audience-condition";
 import { toUnreadRows } from "~/infra/reservation/unread-rows";
+import {
+  reservationWithNamesColumns,
+  type ReservationWithNames,
+} from "../_shared/reservation-with-names";
 import { QueryErrorCode, type QueryError } from "../error";
 
 /**
@@ -30,14 +34,8 @@ export interface GroupUnreadLatestEvent {
 /**
  * ダッシュボード「確認が必要なこと」に並ぶ予約 1 行分のデータ（COND-026 (1)）。
  */
-export interface GroupUnreadUpdateItem {
+export interface GroupUnreadUpdateItem extends ReservationWithNames {
   readonly reservationId: string;
-  readonly groupId: string;
-  readonly groupName: string;
-  readonly facilityId: string;
-  readonly facilityName: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
   /** 代表として出す最新の出来事 */
   readonly latestEvent: GroupUnreadLatestEvent;
   /** 代表以外の未読件数（COND-026 (1)「ほか n 件」） */
@@ -82,14 +80,8 @@ const auditActionToUnreadEventType = (action: AuditLogAction): GroupUnreadEventT
   }
 };
 
-interface RawEvent {
+interface RawEvent extends ReservationWithNames {
   reservationId: string;
-  groupId: string;
-  groupName: string;
-  facilityId: string;
-  facilityName: string;
-  startAt: Date;
-  endAt: Date;
   statusReason: string | null;
   type: GroupUnreadEventType;
   eventAt: Date;
@@ -112,12 +104,7 @@ export const findGroupUnreadUpdates = (
     /** 行に出す予約の情報。メッセージと操作のどちらの問い合わせでも同じ列を取る */
     const reservationColumns = {
       reservationId: reservationTable.id,
-      groupId: reservationTable.groupId,
-      groupName: groupTable.name,
-      facilityId: reservationTable.facilityId,
-      facilityName: facilityTable.name,
-      startAt: reservationTable.startAt,
-      endAt: reservationTable.endAt,
+      ...reservationWithNamesColumns,
       statusReason: reservationTable.statusReason,
     };
 

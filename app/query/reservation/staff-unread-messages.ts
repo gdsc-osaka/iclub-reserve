@@ -14,6 +14,10 @@ import { AuditLogTargetType } from "~/domain/audit-log";
 import { unreadEventsSince } from "~/domain/reservation";
 import type { Database } from "~/infra/db";
 import { toUnreadRows } from "~/infra/reservation/unread-rows";
+import {
+  reservationWithNamesColumns,
+  type ReservationWithNames,
+} from "../_shared/reservation-with-names";
 import { ensureStaff } from "../_shared/staff";
 import { QueryErrorCode, type QueryError } from "../error";
 
@@ -28,14 +32,8 @@ export interface StaffUnreadLatestMessage {
 /**
  * ダッシュボード「団体からの未読メッセージ」に並ぶ予約 1 行分のデータ（COND-026 (1)・(3)）。
  */
-export interface StaffUnreadMessageItem {
+export interface StaffUnreadMessageItem extends ReservationWithNames {
   readonly reservationId: string;
-  readonly groupId: string;
-  readonly groupName: string;
-  readonly facilityId: string;
-  readonly facilityName: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
   /** 代表として出す最新のメッセージ */
   readonly latestMessage: StaffUnreadLatestMessage;
   /** 代表以外の未読件数（COND-026 (1)「ほか n 件」） */
@@ -126,12 +124,7 @@ export const findStaffUnreadMessages = (
     const query = db
       .select({
         reservationId: reservationTable.id,
-        groupId: reservationTable.groupId,
-        groupName: groupTable.name,
-        facilityId: reservationTable.facilityId,
-        facilityName: facilityTable.name,
-        startAt: reservationTable.startAt,
-        endAt: reservationTable.endAt,
+        ...reservationWithNamesColumns,
         messageBody: reservationMessageTable.body,
         eventAt: reservationMessageTable.sentAt,
       })

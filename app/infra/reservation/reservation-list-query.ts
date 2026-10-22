@@ -3,6 +3,7 @@ import { okAsync, ResultAsync } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable, user } from "~/db/schema";
 import { ReservationStatus } from "~/domain/reservation";
+import { reservationWithNamesColumns } from "~/query/_shared/reservation-with-names";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
   ReservationListFacility,
@@ -80,12 +81,7 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
     let query = db
       .select({
         id: reservationTable.id,
-        groupId: reservationTable.groupId,
-        groupName: groupTable.name,
-        facilityId: reservationTable.facilityId,
-        facilityName: facilityTable.name,
-        startAt: reservationTable.startAt,
-        endAt: reservationTable.endAt,
+        ...reservationWithNamesColumns,
         status: reservationTable.status,
         statusReason: reservationTable.statusReason,
         headCount: reservationTable.headCount,

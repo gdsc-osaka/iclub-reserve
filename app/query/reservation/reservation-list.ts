@@ -1,6 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 
 import type { ReservationStatus } from "~/domain/reservation";
+import type { ReservationWithNames } from "../_shared/reservation-with-names";
 import type { QueryError } from "../error";
 
 /** 絞り込みドロップダウンで選べる施設・設備 1 件分。 */
@@ -19,14 +20,8 @@ export interface ReservationListFacility {
  * 落とし忘れを型で防ぐために、画面へ渡す {@link ReservationListItem} とは
  * わざと別の型に分けてある（ADR-001 / facility-availability-calendar.ts と同様の理由）。
  */
-export interface ReservationListRow {
+export interface ReservationListRow extends ReservationWithNames {
   readonly id: string;
-  readonly groupId: string;
-  readonly groupName: string;
-  readonly facilityId: string;
-  readonly facilityName: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
   readonly status: ReservationStatus;
   readonly statusReason: string | null;
   readonly headCount: number;
