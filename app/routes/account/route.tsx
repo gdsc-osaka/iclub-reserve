@@ -27,7 +27,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -430,30 +429,32 @@ function EmailChangeDialog({
   /*
    * 途中でやめられるのは「キャンセル」と Esc だけにする。
    *
-   * Dialog ではなく AlertDialog にしているのは、外側を押しただけで閉じて、
-   * 届いた認証コードを入れる前に最初からやり直しになるのを防ぐため。
+   * 中身は入力のフォームなので Dialog にするが、外側を押しても閉じないようにし、右上の × も出さない。
+   * 外側を押しただけで閉じると、届いた認証コードを入れる前に最初からやり直しになってしまうため。
    * 通信中は Esc でも閉じない。閉じたあとに応答が返ると、次に開いたとき途中の段階から始まってしまう。
    */
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent
-        className="data-[size=default]:max-w-[calc(100%-2rem)] data-[size=default]:sm:max-w-md"
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={false}
+        onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => {
           if (pending) e.preventDefault();
         }}
       >
-        <AlertDialogHeader>
-          <AlertDialogTitle>
+        <DialogHeader>
+          <DialogTitle>
             {step === 1 && "メールアドレスの変更 (1/3)"}
             {step === 2 && "現在のアドレスでの確認 (2/3)"}
             {step === 3 && "新しいアドレスでの確認 (3/3)"}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
+          </DialogTitle>
+          <DialogDescription>
             {step === 1 && "新しく設定したい大阪大学のメールアドレスを入力してください。"}
             {step === 2 && "本人確認のため、現在のアドレスへ届いた認証コードを入力してください。"}
             {step === 3 && "新しいメールアドレスへ届いた認証コードを入力してください。"}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         {errorText && (
           <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
@@ -478,12 +479,16 @@ function EmailChangeDialog({
                 {ALLOWED_EMAIL_DOMAINS_LABEL} のアドレスがご利用いただけます。
               </p>
             </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={pending}>キャンセル</AlertDialogCancel>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline" disabled={pending}>
+                  キャンセル
+                </Button>
+              </DialogClose>
               <Button type="submit" disabled={pending || newEmail.trim() === ""}>
                 {pending ? "送信中…" : "次へ（認証コード送信）"}
               </Button>
-            </AlertDialogFooter>
+            </DialogFooter>
           </form>
         )}
 
@@ -558,17 +563,21 @@ function EmailChangeDialog({
             <EmailChangeCancelFooter pending={pending} />
           </div>
         )}
-      </AlertDialogContent>
-    </AlertDialog>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /** 認証コードを入れる段階で、変更をやめるためのフッター */
 function EmailChangeCancelFooter({ pending }: Readonly<{ pending: boolean }>) {
   return (
-    <AlertDialogFooter>
-      <AlertDialogCancel disabled={pending}>キャンセル</AlertDialogCancel>
-    </AlertDialogFooter>
+    <DialogFooter>
+      <DialogClose asChild>
+        <Button variant="outline" disabled={pending}>
+          キャンセル
+        </Button>
+      </DialogClose>
+    </DialogFooter>
   );
 }
 
@@ -932,8 +941,8 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
 /**
  * 端末をログアウトさせる前の確認（UC-031）。
  *
- * AlertDialog ではなく Dialog にしているのは、外側を押して閉じても「やめる」と同じで困らないため。
- * ログアウトさせた端末も、ログインし直せばまた使える。
+ * 「ログアウトしますか？」に 2 択で答えてもらう確認なので、パスキーの削除などと同じく AlertDialog にする。
+ * 開いたときはキャンセルにフォーカスが移るので、Enter を押しただけでログアウトさせることはない。
  */
 function RevokeConfirmDialog({
   triggerLabel,
@@ -951,29 +960,25 @@ function RevokeConfirmDialog({
   onConfirm: () => void;
 }>) {
   return (
-    <Dialog>
-      <DialogTrigger asChild>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
         <Button variant="outline" size="sm" disabled={disabled} className={triggerClassName}>
           {triggerLabel}
         </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">キャンセル</Button>
-          </DialogClose>
-          <DialogClose asChild>
-            <Button variant="destructive" onClick={onConfirm}>
-              ログアウトする
-            </Button>
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>キャンセル</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={onConfirm}>
+            ログアウトする
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
