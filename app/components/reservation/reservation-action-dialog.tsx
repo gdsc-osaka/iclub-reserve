@@ -176,7 +176,7 @@ export function ReservationActionDialog({
         <AlertDialogTrigger asChild disabled={disabled}>
           {trigger}
         </AlertDialogTrigger>
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent>
           <FormComponent method="post" className="flex flex-col gap-4">
             <input type="hidden" name="intent" value={transition} />
             <input type="hidden" name="reservationId" value={item.id} />

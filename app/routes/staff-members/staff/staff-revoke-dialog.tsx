@@ -58,7 +58,7 @@ export function StaffRevokeDialog({
     <>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent>
           <Form method="post" className="flex flex-col gap-4">
             <input type="hidden" name="intent" value="revoke-staff" />
             <input type="hidden" name="user_id" value={targetUserId} />
