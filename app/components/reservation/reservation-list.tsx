@@ -70,8 +70,8 @@ export function ReservationList({
           "-mx-4 -mt-4 px-4 pt-4 md:-mx-6 md:-mt-6 md:px-6 md:pt-6",
         )}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-bold tracking-tight md:text-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="shrink-0 text-xl font-bold tracking-tight md:text-2xl">
             {scope === "all" ? "予約の承認・管理" : "予約一覧"}
           </h1>
 

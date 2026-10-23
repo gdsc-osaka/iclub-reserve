@@ -19,7 +19,10 @@ import {
   toReservationListPath,
   type ParsedReservationListParams,
 } from "~/routes/reservations/list/query-params";
-import type { ReservationListStatusFilter } from "~/usecases/reservation/get-reservation-list";
+import type {
+  ReservationListPeriodFilter,
+  ReservationListStatusFilter,
+} from "~/usecases/reservation/get-reservation-list";
 
 interface ReservationListFiltersProps {
   readonly counts: ReservationStatusCounts;
@@ -42,6 +45,16 @@ const statusTabs: readonly {
   { key: "approved", label: "承認済み", countKey: "approved" },
   { key: "ended", label: "キャンセル・却下", countKey: "ended" },
 ];
+
+const periodOptions: readonly {
+  readonly value: ReservationListPeriodFilter;
+  readonly label: string;
+}[] = [
+  { value: "upcoming", label: "これからの予約" },
+  { value: "past", label: "過去の予約" },
+];
+
+const ALL_FACILITIES_LABEL = "すべての施設・設備";
 
 /**
  * 施設・期間の Select のトリガー。
@@ -89,10 +102,13 @@ export function ReservationListGroupSwitcher({
         void navigate(toReservationListPath({ ...params, group: groupId }, "own"));
       }}
     >
-      <SelectTrigger aria-label="団体の切り替え" className="max-w-64">
+      {/* 長い団体名は見出しの横で省略し、改行させない（固定したブロックが高くなるため） */}
+      <SelectTrigger aria-label="団体の切り替え" className="min-w-0 max-w-64">
         <Users className="size-4 shrink-0 text-muted-foreground" />
         {/* 中身を渡しておくと、読み込み直後（サーバーで描いた時点）から団体名が出る */}
-        <SelectValue>{selectedGroup.name}</SelectValue>
+        <SelectValue>
+          <span className="truncate">{selectedGroup.name}</span>
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
@@ -118,9 +134,16 @@ export function ReservationListGroupSwitcher({
  * 小さな Select にして、形で役割を見分けられるようにしている。
  *
  * タブの下線は、見出しごと固定したブロックの下端（一覧との境目）を兼ねる。
- * そのため PC ではタブの右に Select を並べ、スマホでは Select をタブの上に回す。
- * スマホで Select をタブの下に置くと、固定したブロックの下端に区切りが無くなり、
+ * そのため横に余裕があればタブの右に Select を並べ、狭ければ Select をタブの上に回す。
+ * Select をタブの下に置くと、固定したブロックの下端に区切りが無くなり、
  * 後ろを流れる行が Select の真下で途切れて見える。
+ *
+ * 並べるかどうかは画面の幅（md:）ではなく、この欄に使える幅（コンテナクエリ @4xl:）で決める。
+ * PC でもサイドバーを開くと中身の幅が 256px 減り、1 行に並べるとページが横にはみ出すため。
+ *
+ * 境目の線は border ではなく内側の影（inset の box-shadow）で引く。
+ * 影は子より先に描かれるので、選択中のタブの下線（2px）がそのまま線の上に重なる。
+ * border に負のマージンで重ねる形だと、横スクロールする nav の中ではタブの下端が切れる。
  */
 export function ReservationListFilters({
   counts,
@@ -130,97 +153,116 @@ export function ReservationListFilters({
 }: Readonly<ReservationListFiltersProps>) {
   const navigate = useNavigate();
 
-  return (
-    <div className="flex flex-col-reverse gap-3 md:flex-row md:items-end md:justify-between md:border-b">
-      {/*
-       * 状態のタブ。URL を変えるリンクなので、Radix の Tabs ではなく nav とリンクで作る。
-       * 幅に収まらないスマホでは横にスクロールさせ、スクロールバーは出さない。
-       */}
-      <nav
-        aria-label="ステータスの絞り込み"
-        className="-mx-4 overflow-x-auto border-b px-4 [scrollbar-width:none] md:mx-0 md:overflow-visible md:border-b-0 md:px-0 [&::-webkit-scrollbar]:hidden"
-      >
-        <ul className="flex w-max gap-1 md:gap-2">
-          {statusTabs.map((tab) => {
-            const isCurrent = params.status === tab.key;
-            const count = counts[tab.countKey];
+  /*
+   * 選んでいる施設・期間の名前。SelectValue に中身を渡しておくと、読み込み直後
+   * （サーバーで描いた時点）から値が出る。一覧に無い施設 ID のときは渡さず、Radix に任せる。
+   */
+  const facilityLabel =
+    params.facility === null
+      ? ALL_FACILITIES_LABEL
+      : facilities.find((fac) => fac.id === params.facility)?.name;
+  const periodLabel = periodOptions.find((option) => option.value === params.period)?.label;
 
-            return (
-              <li key={tab.key}>
-                <Link
-                  to={toReservationListPath({ ...params, status: tab.key }, scope)}
-                  aria-current={isCurrent ? "page" : undefined}
-                  className={cn(
-                    // タップ領域は 44px 以上。選択中の下線（2px）は境界線（1px）に重ねる
-                    "-mb-px inline-flex h-11 items-center gap-1.5 border-b-2 px-3 text-sm transition-colors",
-                    isCurrent
-                      ? "border-primary font-medium text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <span>{tab.label}</span>
-                  <span
+  return (
+    <div className="@container">
+      <div className="flex flex-col-reverse gap-3 @4xl:flex-row @4xl:items-end @4xl:justify-between @4xl:shadow-[inset_0_-1px_0_var(--color-border)]">
+        {/*
+         * 状態のタブ。URL を変えるリンクなので、Radix の Tabs ではなく nav とリンクで作る。
+         * 幅に収まらないときは横にスクロールさせ、スクロールバーは出さない。
+         * 縦に並べるときは、固定したブロックの左右の余白（px-4 md:px-6）まで線を伸ばす。
+         */}
+        <nav
+          aria-label="ステータスの絞り込み"
+          className="-mx-4 overflow-x-auto px-4 shadow-[inset_0_-1px_0_var(--color-border)] [scrollbar-width:none] md:-mx-6 md:px-6 @4xl:mx-0 @4xl:px-0 @4xl:shadow-none [&::-webkit-scrollbar]:hidden"
+        >
+          <ul className="flex w-max gap-1 @4xl:gap-2">
+            {statusTabs.map((tab) => {
+              const isCurrent = params.status === tab.key;
+              const count = counts[tab.countKey];
+
+              return (
+                <li key={tab.key}>
+                  <Link
+                    to={toReservationListPath({ ...params, status: tab.key }, scope)}
+                    aria-current={isCurrent ? "page" : undefined}
                     className={cn(
-                      "rounded-full px-1.5 py-0.5 text-xs",
-                      isCurrent ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                      // タップ領域は 44px 以上
+                      "inline-flex h-11 items-center gap-1.5 border-b-2 px-3 text-sm transition-colors",
+                      isCurrent
+                        ? "border-primary font-medium text-foreground"
+                        : "border-transparent text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {count}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      {/* 施設・設備と期間。スマホでは期間を中身の幅にし、残りを施設・設備に回す */}
-      <div className="flex items-center gap-2 md:pb-2">
-        <div className="min-w-0 flex-1 md:w-48 md:flex-none">
-          <Select
-            value={params.facility ?? "all"}
-            onValueChange={(val) => {
-              const nextFacility = val === "all" ? null : val;
-              void navigate(toReservationListPath({ ...params, facility: nextFacility }, scope));
-            }}
-          >
-            <SelectTrigger aria-label="施設・設備で絞り込み" className={filterTriggerClassName}>
-              <MapPin className="size-4 shrink-0 text-muted-foreground" />
-              <SelectValue placeholder="すべての施設・設備" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">すべての施設・設備</SelectItem>
-                {facilities.map((fac) => (
-                  <SelectItem key={fac.id} value={fac.id}>
-                    {fac.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="shrink-0 md:w-40">
-          <Select
-            value={params.period}
-            onValueChange={(val) => {
-              void navigate(
-                toReservationListPath({ ...params, period: val as "upcoming" | "past" }, scope),
+                    <span>{tab.label}</span>
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 py-0.5 text-xs",
+                        isCurrent ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {count}
+                    </span>
+                  </Link>
+                </li>
               );
-            }}
-          >
-            <SelectTrigger aria-label="期間で絞り込み" className={filterTriggerClassName}>
-              <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="upcoming">これからの予約</SelectItem>
-                <SelectItem value="past">過去の予約</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+            })}
+          </ul>
+        </nav>
+
+        {/* 施設・設備と期間。縦に並べるときは期間を中身の幅にし、残りを施設・設備に回す */}
+        <div className="flex items-center gap-2 @4xl:pb-2">
+          <div className="min-w-0 flex-1 @4xl:w-48 @4xl:flex-none">
+            <Select
+              value={params.facility ?? "all"}
+              onValueChange={(val) => {
+                const nextFacility = val === "all" ? null : val;
+                void navigate(toReservationListPath({ ...params, facility: nextFacility }, scope));
+              }}
+            >
+              <SelectTrigger aria-label="施設・設備で絞り込み" className={filterTriggerClassName}>
+                <MapPin className="size-4 shrink-0 text-muted-foreground" />
+                <SelectValue placeholder={ALL_FACILITIES_LABEL}>{facilityLabel}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">{ALL_FACILITIES_LABEL}</SelectItem>
+                  {facilities.map((fac) => (
+                    <SelectItem key={fac.id} value={fac.id}>
+                      {fac.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="shrink-0 @4xl:w-40">
+            <Select
+              value={params.period}
+              onValueChange={(val) => {
+                void navigate(
+                  toReservationListPath(
+                    { ...params, period: val as ReservationListPeriodFilter },
+                    scope,
+                  ),
+                );
+              }}
+            >
+              <SelectTrigger aria-label="期間で絞り込み" className={filterTriggerClassName}>
+                <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                <SelectValue>{periodLabel}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {periodOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
     </div>
