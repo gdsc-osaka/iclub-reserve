@@ -52,8 +52,8 @@ test.describe("UC-007 承認済み予約をキャンセルする（事務局）"
     // 承認済みではなくなったので、この一覧からは消える
     await expect(row).toBeHidden();
 
-    // 「終了」に絞り込むと、事務局キャンセル済みとして並んでいる
-    await statusFilter.getByRole("link", { name: /終了/ }).click();
+    // 「キャンセル・却下」に絞り込むと、事務局キャンセル済みとして並んでいる
+    await statusFilter.getByRole("link", { name: /キャンセル・却下/ }).click();
     await expect(row.getByText("事務局キャンセル済み", { exact: true })).toBeVisible();
 
     // 申請者への通知（EVT-007）が、理由つきで積まれている

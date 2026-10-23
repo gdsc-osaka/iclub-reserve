@@ -136,10 +136,10 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     // 仮予約ではなくなったので、既定の一覧からは消える
     await expect(row).toBeHidden();
 
-    // 「終了」に絞り込むと、却下済みとして並んでいる
+    // 「キャンセル・却下」に絞り込むと、却下済みとして並んでいる
     await page
       .getByRole("navigation", { name: "ステータスの絞り込み" })
-      .getByRole("link", { name: /終了/ })
+      .getByRole("link", { name: /キャンセル・却下/ })
       .click();
     await expect(row.getByText("却下済み", { exact: true })).toBeVisible();
 
