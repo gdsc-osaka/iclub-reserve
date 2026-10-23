@@ -56,7 +56,7 @@ export interface GetReservationListArgs {
 
 /** 画面へ渡す予約一覧の集約結果 */
 export interface ReservationListResult {
-  /** 団体の切り替えタブ用一覧（/reservations で 2 件以上のときに表示） */
+  /** 団体の切り替え用の一覧（/reservations の見出しの横に出す。2 件以上のときだけ切り替えられる） */
   readonly groups: UserGroupList;
   /** 現在選択されている団体（/reservations のみ。所属 0 件のときは null） */
   readonly selectedGroup: UserGroupListItem | null;

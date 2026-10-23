@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -5,7 +6,7 @@ import type { ReservationActor } from "~/domain/reservation/transition";
 import type { ParsedReservationListParams } from "~/routes/reservations/list/query-params";
 import type { ReservationListResult } from "~/usecases/reservation/get-reservation-list";
 import { ReservationListEmpty } from "./reservation-list-empty";
-import { ReservationListFilters } from "./reservation-list-filters";
+import { ReservationListFilters, ReservationListGroupSwitcher } from "./reservation-list-filters";
 import { ReservationListRow } from "./reservation-list-row";
 
 interface ReservationListProps {
@@ -20,7 +21,7 @@ interface ReservationListProps {
  * 予約一覧・管理画面（SCR-003）の共通表示コンポーネント。
  *
  * /reservations（自団体）と /staff/reservations（全団体・事務局）で共有する。
- * 両者の違いは「取得データのスコープ」と「団体名バッジを表示するか」のみ。
+ * 両者の違いは「取得データのスコープ」と、見出しの団体の切り替え・行の団体名バッジのどちらを出すかだけ。
  */
 export function ReservationList({
   result,
@@ -53,16 +54,46 @@ export function ReservationList({
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-6">
-      {/* 画面ヘッダー */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-bold tracking-tight md:text-2xl">
-          {scope === "all" ? "予約の承認・管理" : "予約一覧"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {scope === "all"
-            ? "全団体の予約の確認・承認待ち申請の一覧です。"
-            : "所属団体の予約状況を確認できます。"}
-        </p>
+      {/*
+       * 見出しと絞り込みは、スクロールしてもアプリの上部バーのすぐ下に残す（sticky）。
+       * 一覧の途中まで読み進めても、いまどの団体・状態を見ているのかが分かり、すぐに切り替えられる。
+       *
+       * - main の余白（p-4 md:p-6）の分も背景で塗るため、負のマージンで横と上へ広げる。
+       *   広げないと、余白の隙間から後ろを流れる行が透けて見える。
+       * - 重なり順は、上部バー（z-20）より下、行の操作ボタン（relative z-10）より上。
+       *   同じ z-10 だと、後に描かれる行のボタンが見出しの上に出てしまう。
+       * - 下端はタブの下線にそろえ、一覧との境目にする（`ReservationListFilters` を参照）。
+       */}
+      <div
+        className={cn(
+          "sticky top-(--app-header-height) z-15 flex flex-col gap-3 bg-background md:gap-4",
+          "-mx-4 -mt-4 px-4 pt-4 md:-mx-6 md:-mt-6 md:px-6 md:pt-6",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="shrink-0 text-xl font-bold tracking-tight md:text-2xl">
+            {scope === "all" ? "予約の承認・管理" : "予約一覧"}
+          </h1>
+
+          {/* 団体の切り替え（事務局の画面は全団体を見るので出さない） */}
+          {scope === "own" && (
+            <ReservationListGroupSwitcher
+              groups={groups}
+              selectedGroup={selectedGroup}
+              params={params}
+            />
+          )}
+        </div>
+
+        {/* 絞り込み（所属 0 件のときは表示しない） */}
+        {!noGroups && (
+          <ReservationListFilters
+            counts={counts}
+            facilities={facilities}
+            params={params}
+            scope={scope}
+          />
+        )}
       </div>
 
       {/* アクション実行失敗時のエラー表示 */}
@@ -72,18 +103,6 @@ export function ReservationList({
           <AlertTitle>操作に失敗しました</AlertTitle>
           <AlertDescription>{actionError}</AlertDescription>
         </Alert>
-      )}
-
-      {/* 絞り込みフィルター（所属 0 件のときは表示しない） */}
-      {!noGroups && (
-        <ReservationListFilters
-          groups={groups}
-          selectedGroup={selectedGroup}
-          counts={counts}
-          facilities={facilities}
-          params={params}
-          scope={scope}
-        />
       )}
 
       {/* 一覧本体または空状態 */}

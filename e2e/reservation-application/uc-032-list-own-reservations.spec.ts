@@ -48,13 +48,14 @@ test.describe("UC-032 自団体の予約一覧を確認する", { tag: "@UC-032"
     await signInAs(member.id);
 
     await openPage(page, "/reservations");
-    const groupTabs = page.getByRole("navigation", { name: "団体の切り替え" });
 
-    await groupTabs.getByRole("link", { name: groupB.name }).click();
+    await page.getByRole("combobox", { name: "団体の切り替え" }).click();
+    await page.getByRole("option", { name: groupB.name }).click();
     await expect(rowOf(page, facilityB.name)).toBeVisible();
     await expect(rowOf(page, facilityA.name)).toBeHidden();
 
-    await groupTabs.getByRole("link", { name: groupA.name }).click();
+    await page.getByRole("combobox", { name: "団体の切り替え" }).click();
+    await page.getByRole("option", { name: groupA.name }).click();
     await expect(rowOf(page, facilityA.name)).toBeVisible();
     await expect(rowOf(page, facilityB.name)).toBeHidden();
   });
