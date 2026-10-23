@@ -62,6 +62,12 @@ const ALL_FACILITIES_LABEL = "すべての施設・設備";
  */
 const filterTriggerClassName = "w-full *:data-[slot=select-value]:flex-1";
 
+/*
+ * この画面の Select（団体・施設・期間）は、選択肢を欄のすぐ下に開く（position="popper"）。
+ * 既定の item-aligned は、選んでいる項目を欄の上に重ねて開くため、欄の中のアイコンのぶん
+ * 横にずれ、欄から浮いて見える。
+ */
+
 /**
  * 見出しの横に置く、団体の切り替え（/reservations のみ）。
  *
@@ -110,7 +116,8 @@ export function ReservationListGroupSwitcher({
           <span className="truncate">{selectedGroup.name}</span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      {/* 見出しの右端にあるので、右端をそろえて開く */}
+      <SelectContent position="popper" align="end">
         <SelectGroup>
           {groups.map((group) => (
             <SelectItem key={group.id} value={group.id}>
@@ -209,7 +216,10 @@ export function ReservationListFilters({
           </ul>
         </nav>
 
-        {/* 施設・設備と期間。縦に並べるときは期間を中身の幅にし、残りを施設・設備に回す */}
+        {/*
+         * 施設・設備と期間。期間はいつも中身の幅にして、文字を見切れさせない。
+         * 縦に並べるときは残りの幅を施設・設備に回し、収まらない名前は「…」で省略する。
+         */}
         <div className="flex items-center gap-2 @4xl:pb-2">
           <div className="min-w-0 flex-1 @4xl:w-48 @4xl:flex-none">
             <Select
@@ -221,9 +231,11 @@ export function ReservationListFilters({
             >
               <SelectTrigger aria-label="施設・設備で絞り込み" className={filterTriggerClassName}>
                 <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                <SelectValue placeholder={ALL_FACILITIES_LABEL}>{facilityLabel}</SelectValue>
+                <SelectValue placeholder={ALL_FACILITIES_LABEL}>
+                  {facilityLabel && <span className="truncate">{facilityLabel}</span>}
+                </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" align="start">
                 <SelectGroup>
                   <SelectItem value="all">{ALL_FACILITIES_LABEL}</SelectItem>
                   {facilities.map((fac) => (
@@ -236,7 +248,7 @@ export function ReservationListFilters({
             </Select>
           </div>
 
-          <div className="shrink-0 @4xl:w-40">
+          <div className="shrink-0">
             <Select
               value={params.period}
               onValueChange={(val) => {
@@ -252,7 +264,7 @@ export function ReservationListFilters({
                 <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                 <SelectValue>{periodLabel}</SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" align="start">
                 <SelectGroup>
                   {periodOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
