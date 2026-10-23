@@ -55,7 +55,7 @@ contexts:
   - id: "BIZ-002"
     name: "reservation-approval"
     display_name: "予約承認"
-    description: "事務局による全団体の予約の一覧確認、仮予約の承認・却下、直接予約の作成・変更、メッセージ送受信、施設の解錠の手配。"
+    description: "事務局による全団体の予約の一覧・空き状況カレンダーでの確認、仮予約の承認・却下、直接予約の作成・変更、メッセージ送受信、施設の解錠の手配。"
     primary_actors: ["ACTOR-001"]
     goals: ["GOAL-001", "GOAL-002", "GOAL-003", "GOAL-005", "GOAL-007"]
   - id: "BIZ-003"
@@ -73,9 +73,9 @@ contexts:
   - id: "BIZ-005"
     name: "calendar-integration"
     display_name: "カレンダー連携"
-    description: "承認済み予約のGoogle Calendarへの自動登録・更新・削除。団体・事務局へのカレンダー購読URL公開を含む。"
+    description: "承認済み予約のGoogle Calendarへの自動登録・更新・削除。団体・事務局へのカレンダー購読URL公開と、団体ごとの予約カレンダー（利用者のカレンダーアプリが購読のURLから読み込む）の提供を含む。"
     primary_actors: ["ACTOR-001", "ACTOR-002", "ACTOR-003"]
-    goals: ["GOAL-004"]
+    goals: ["GOAL-004", "GOAL-001"]
   - id: "BIZ-006"
     name: "user-authentication"
     display_name: "ユーザー認証・権限"
