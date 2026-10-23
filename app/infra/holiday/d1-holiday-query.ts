@@ -2,17 +2,10 @@ import { and, asc, gte, lte } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import { holidayTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type { HolidayQuery } from "~/query/holiday";
 import type { Database } from "../db";
-
-const toDatabaseError =
-  (message: string) =>
-  (cause: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause,
-  });
 
 /**
  * Cloudflare D1 を使った HolidayQuery の実装を作成する。
@@ -25,8 +18,9 @@ export const createD1HolidayQuery = (db: Database): HolidayQuery => ({
       .where(and(gte(holidayTable.date, from), lte(holidayTable.date, to)))
       .orderBy(asc(holidayTable.date));
 
-    return ResultAsync.fromPromise(query, toDatabaseError("祝日一覧の取得に失敗しました。")).map(
-      (rows) => rows.map((row) => row.date),
-    );
+    return ResultAsync.fromPromise(
+      query,
+      wrapError(QueryErrorCode.DatabaseError, "祝日一覧の取得に失敗しました。"),
+    ).map((rows) => rows.map((row) => row.date));
   },
 });

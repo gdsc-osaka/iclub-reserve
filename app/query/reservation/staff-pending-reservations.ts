@@ -2,6 +2,7 @@ import { and, asc, count, eq, gt } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import {
   ReservationStatus,
   STAFF_PENDING_RESERVATIONS_LIMIT,
@@ -103,11 +104,7 @@ export const findStaffPendingReservations = (
         .innerJoin(facilityTable, eq(reservationTable.facilityId, facilityTable.id))
         .where(staffPendingReservationsWhere(args.now))
         .orderBy(asc(reservationTable.startAt), asc(reservationTable.id)),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "承認待ちの仮予約の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "承認待ちの仮予約の取得に失敗しました。"),
     );
 
     return ok(toStaffPendingReservations(rows, args.now));

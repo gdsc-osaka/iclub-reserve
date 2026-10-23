@@ -1,6 +1,7 @@
 import { and, eq, isNotNull, or } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
 import { groupMemberTable, reservationMessageTable, reservationTable, user } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { MembershipRole } from "~/domain/membership";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
@@ -221,11 +222,7 @@ export const createReservationMailRecipientsQuery = (
 
       return ResultAsync.fromPromise(
         db.batch([reservationCheckQuery, applicantQuery, groupMembersQuery, staffQuery()]),
-        (error): QueryError => ({
-          code: QueryErrorCode.DatabaseError,
-          message: "予約通知先アドレスの取得に失敗しました。",
-          cause: error,
-        }),
+        wrapError(QueryErrorCode.DatabaseError, "予約通知先アドレスの取得に失敗しました。"),
       ).andThen(([reservationRows, applicantRows, memberRows, staffRows]) => {
         if (reservationRows.length === 0) {
           return err<ReservationMailAudience, QueryError>({
@@ -267,11 +264,7 @@ export const createReservationMailRecipientsQuery = (
 
       return ResultAsync.fromPromise(
         db.batch([applicantQuery, groupMembersQuery, staffQuery()]),
-        (error): QueryError => ({
-          code: QueryErrorCode.DatabaseError,
-          message: "予約通知先アドレスの取得に失敗しました。",
-          cause: error,
-        }),
+        wrapError(QueryErrorCode.DatabaseError, "予約通知先アドレスの取得に失敗しました。"),
       ).map(([applicantRows, memberRows, staffRows]) =>
         buildAudience(buildGroupRecipients(applicantRows, memberRows), staffRows),
       );
@@ -295,11 +288,10 @@ export const createReservationMailRecipientsQuery = (
           staffQuery(),
           priorSendersQuery,
         ]),
-        (error): QueryError => ({
-          code: QueryErrorCode.DatabaseError,
-          message: "予約メッセージ通知先アドレスの取得に失敗しました。",
-          cause: error,
-        }),
+        wrapError(
+          QueryErrorCode.DatabaseError,
+          "予約メッセージ通知先アドレスの取得に失敗しました。",
+        ),
       ).andThen(([reservationRows, applicantRows, memberRows, staffRows, priorSenderRows]) => {
         if (reservationRows.length === 0) {
           return err<ReservationMessageAudience, QueryError>({

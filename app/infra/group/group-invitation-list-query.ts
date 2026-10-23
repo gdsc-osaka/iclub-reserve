@@ -2,7 +2,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import { groupInvitationTable } from "~/db/schema";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { wrapError } from "~/domain/error";
+import { QueryErrorCode } from "~/query/error";
 import type {
   GroupInvitationList,
   GroupInvitationListQuery,
@@ -39,11 +40,7 @@ export const createGroupInvitationListQuery = (db: Database): GroupInvitationLis
          * 同一期限の行の順序が安定するよう、ID を第 2 キーにする。
          */
         .orderBy(asc(groupInvitationTable.expiresAt), asc(groupInvitationTable.id)),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "承諾待ちの招待一覧の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "承諾待ちの招待一覧の取得に失敗しました。"),
     ).map((rows): GroupInvitationList =>
       rows.map((row) => ({
         id: row.id,

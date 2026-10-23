@@ -4,7 +4,8 @@ import { ResultAsync } from "neverthrow";
 import { passkey, passkeyLastUsedTable, session } from "~/db/schema";
 import { toDeviceName, toPasskeyLabel } from "~/domain/authn/device-name";
 import { findPasskeyProvider } from "~/domain/authn/passkey-provider";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { wrapError } from "~/domain/error";
+import { QueryErrorCode } from "~/query/error";
 import type { AccountSettingsData, AccountSettingsQuery } from "~/query/user/account-settings";
 import type { Database } from "../db";
 
@@ -44,11 +45,7 @@ export const createAccountSettingsQuery = (db: Database): AccountSettingsQuery =
           .where(and(eq(session.userId, userId), gt(session.expiresAt, now)))
           .orderBy(desc(session.updatedAt)),
       ]),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "アカウント設定情報の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "アカウント設定情報の取得に失敗しました。"),
     ).map(([passkeyRows, sessionRows]): AccountSettingsData => ({
       passkeys: passkeyRows.map((row) => ({
         id: row.id,

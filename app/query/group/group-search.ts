@@ -2,6 +2,7 @@ import { asc, count, eq } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { groupTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { GroupStatus } from "~/domain/group";
 import type { Database } from "~/infra/db";
 import { memberCountsByGroup } from "~/infra/group/member-count";
@@ -67,11 +68,10 @@ export const findGroupSearchList = (
         ? queryWithFilter.orderBy(asc(groupTable.createdAt), asc(groupTable.id))
         : queryWithFilter.orderBy(asc(groupTable.name), asc(groupTable.id));
 
-    const rows = yield* ResultAsync.fromPromise(queryWithOrder, (error): QueryError => ({
-      code: QueryErrorCode.DatabaseError,
-      message: "団体一覧の取得に失敗しました。",
-      cause: error,
-    }));
+    const rows = yield* ResultAsync.fromPromise(
+      queryWithOrder,
+      wrapError(QueryErrorCode.DatabaseError, "団体一覧の取得に失敗しました。"),
+    );
 
     return ok(
       rows.map((row): GroupSearchItem => ({
@@ -102,11 +102,7 @@ export const countGroupsByStatus = (
         })
         .from(groupTable)
         .groupBy(groupTable.status),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "ステータス別団体数の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "ステータス別団体数の取得に失敗しました。"),
     );
 
     // 1 件も無い状態は行が返らないので、0 で埋めてから上書きする

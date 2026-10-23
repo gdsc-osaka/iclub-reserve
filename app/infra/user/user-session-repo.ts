@@ -2,7 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import { session } from "~/db/schema";
-import { UserErrorCode, type UserError, type UserSessionRepository } from "~/domain/user";
+import { wrapError } from "~/domain/error";
+import { UserErrorCode, type UserSessionRepository } from "~/domain/user";
 import type { Database } from "../db";
 
 /**
@@ -20,10 +21,9 @@ export const createUserSessionRepository = (db: Database): UserSessionRepository
         .from(session)
         .where(and(eq(session.id, sessionId), eq(session.userId, userId)))
         .limit(1),
-      (cause): UserError => ({
-        code: UserErrorCode.DatabaseError,
-        message: `ユーザー ${userId} のセッション ${sessionId} を読めなかった。`,
-        cause,
-      }),
+      wrapError(
+        UserErrorCode.DatabaseError,
+        `ユーザー ${userId} のセッション ${sessionId} を読めなかった。`,
+      ),
     ).map((rows) => rows.at(0)?.token ?? null),
 });

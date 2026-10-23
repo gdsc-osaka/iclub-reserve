@@ -2,9 +2,10 @@ import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
 import { facilityTable, groupMemberTable, groupTable, reservationTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { GroupStatus } from "~/domain/group";
 import { calendarVisibleStatuses } from "~/domain/reservation";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationFormData,
   ReservationFormFacility,
@@ -13,15 +14,6 @@ import type {
   ReservationFormReservationRow,
 } from "~/query/reservation/reservation-form";
 import type { Database } from "../db";
-
-/** DB アクセスの失敗を Query のエラーに変える */
-const toDatabaseError =
-  (message: string) =>
-  (error: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause: error,
-  });
 
 /**
  * 申請元として選べる団体を取る。
@@ -137,15 +129,15 @@ export const createReservationFormQuery = (db: Database): ReservationFormQuery =
     ResultAsync.combine([
       ResultAsync.fromPromise(
         selectGroups(db, args.memberUserId),
-        toDatabaseError("申請できる団体の取得に失敗しました。"),
+        wrapError(QueryErrorCode.DatabaseError, "申請できる団体の取得に失敗しました。"),
       ),
       ResultAsync.fromPromise(
         selectFacilities(db),
-        toDatabaseError("施設・設備の一覧の取得に失敗しました。"),
+        wrapError(QueryErrorCode.DatabaseError, "施設・設備の一覧の取得に失敗しました。"),
       ),
       ResultAsync.fromPromise(
         selectReservations(db, args.from, args.to),
-        toDatabaseError("予約の取得に失敗しました。"),
+        wrapError(QueryErrorCode.DatabaseError, "予約の取得に失敗しました。"),
       ),
     ]).map(([groups, facilities, reservations]): ReservationFormData => ({
       groups,

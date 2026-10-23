@@ -2,6 +2,7 @@ import { asc, desc } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { facilityTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import type { Database } from "~/infra/db";
 import { ensureStaff } from "../_shared/staff";
 import { QueryErrorCode, type QueryError } from "../error";
@@ -59,11 +60,7 @@ export const findFacilityManagementList = (
         })
         .from(facilityTable)
         .orderBy(desc(facilityTable.isActive), asc(facilityTable.name), asc(facilityTable.id)),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "施設一覧を読み取れなかった。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "施設一覧を読み取れなかった。"),
     );
 
     return ok(

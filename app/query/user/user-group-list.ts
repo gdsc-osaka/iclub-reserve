@@ -2,6 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { ok, ResultAsync, safeTry } from "neverthrow";
 
 import { groupMemberTable, groupTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import type { GroupStatus } from "~/domain/group";
 import type { MembershipRole } from "~/domain/membership";
 import type { Database } from "~/infra/db";
@@ -97,11 +98,7 @@ export const findUserGroupList = (
          * 団体名には一意制約がなく、名前だけで並べると同名どうしの順序を SQL が保証しない。
          */
         .orderBy(asc(groupTable.name), asc(groupTable.id)),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "所属している団体の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "所属している団体の取得に失敗しました。"),
     );
 
     return ok(

@@ -11,6 +11,7 @@ import {
   reservationTable,
 } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { GroupUnreadEventType, unreadEventsSince } from "~/domain/reservation";
 import type { Database } from "~/infra/db";
 import { userQualifiesForReservationGroupAudience } from "~/infra/reservation/reservation-audience-condition";
@@ -192,11 +193,7 @@ export const findGroupUnreadUpdates = (
      */
     const [messageRows, auditLogRows] = yield* ResultAsync.fromPromise(
       Promise.all([messageQuery, auditLogQuery]),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "団体側の未読情報の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(QueryErrorCode.DatabaseError, "団体側の未読情報の取得に失敗しました。"),
     );
 
     const allEvents: RawEvent[] = [

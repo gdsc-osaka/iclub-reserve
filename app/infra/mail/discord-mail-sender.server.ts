@@ -1,4 +1,5 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
+import { wrapError } from "~/domain/error";
 import type { MailAddressee, MailMessage } from "~/domain/mail/mail-message";
 import { MailSendErrorCode, type MailSender, type MailSendError } from "~/domain/mail/mail-sender";
 
@@ -128,11 +129,7 @@ export const createDiscordMailSender = (config: DiscordWebhookConfig): MailSende
       }),
       // fetch が例外を投げるのは、接続そのものに失敗したときと時間切れのとき。
       // HTTP のエラー応答は例外にならないので、そちらは下の toResult で扱う。
-      (cause): MailSendError => ({
-        code: MailSendErrorCode.ConnectionFailed,
-        message: "Discord へ接続できませんでした。",
-        cause,
-      }),
+      wrapError(MailSendErrorCode.ConnectionFailed, "Discord へ接続できませんでした。"),
     ).andThen(toResult);
   },
 });

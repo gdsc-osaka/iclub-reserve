@@ -2,9 +2,10 @@ import { and, asc, desc, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm
 import { okAsync, ResultAsync } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable, user } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { ReservationStatus } from "~/domain/reservation";
 import { reservationWithNamesColumns } from "~/query/_shared/reservation-with-names";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationListFacility,
   ReservationListQuery,
@@ -13,15 +14,6 @@ import type {
 } from "~/query/reservation/reservation-list";
 import type { Database } from "../db";
 import { hasOverlappingReservation } from "./reservation-overlap";
-
-/** DB アクセスの失敗を Query のエラーに変える */
-const toDatabaseError =
-  (message: string) =>
-  (error: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause: error,
-  });
 
 /**
  * 終了した予約のステータス一覧。
@@ -103,9 +95,10 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
       query = query.limit(args.limit) as typeof query;
     }
 
-    return ResultAsync.fromPromise(query, toDatabaseError("予約一覧の取得に失敗しました。")).map(
-      (rows): readonly ReservationListRow[] => rows,
-    );
+    return ResultAsync.fromPromise(
+      query,
+      wrapError(QueryErrorCode.DatabaseError, "予約一覧の取得に失敗しました。"),
+    ).map((rows): readonly ReservationListRow[] => rows);
   },
 
   countByStatus: (args) => {
@@ -149,21 +142,22 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
       .from(reservationTable)
       .where(conditions.length > 0 ? and(...conditions) : undefined);
 
-    return ResultAsync.fromPromise(query, toDatabaseError("予約件数の集計に失敗しました。")).map(
-      (rows): ReservationStatusCounts => {
-        const head = rows.at(0);
-        if (head === undefined) {
-          return { all: 0, provisional: 0, approved: 0, ended: 0 };
-        }
+    return ResultAsync.fromPromise(
+      query,
+      wrapError(QueryErrorCode.DatabaseError, "予約件数の集計に失敗しました。"),
+    ).map((rows): ReservationStatusCounts => {
+      const head = rows.at(0);
+      if (head === undefined) {
+        return { all: 0, provisional: 0, approved: 0, ended: 0 };
+      }
 
-        return {
-          all: Number(head.allCount),
-          provisional: Number(head.provisionalCount),
-          approved: Number(head.approvedCount),
-          ended: Number(head.endedCount),
-        };
-      },
-    );
+      return {
+        all: Number(head.allCount),
+        provisional: Number(head.provisionalCount),
+        approved: Number(head.approvedCount),
+        ended: Number(head.endedCount),
+      };
+    });
   },
 
   findFacilities: () =>
@@ -176,7 +170,7 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
         .from(facilityTable)
         .where(eq(facilityTable.isActive, true))
         .orderBy(asc(facilityTable.name), asc(facilityTable.id)),
-      toDatabaseError("施設・設備一覧の取得に失敗しました。"),
+      wrapError(QueryErrorCode.DatabaseError, "施設・設備一覧の取得に失敗しました。"),
     ).map((rows): readonly ReservationListFacility[] =>
       rows.map((row) => ({ id: row.id, name: row.name })),
     ),

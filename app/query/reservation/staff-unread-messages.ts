@@ -11,6 +11,7 @@ import {
   reservationTable,
 } from "~/db/schema";
 import { AuditLogTargetType } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { unreadEventsSince } from "~/domain/reservation";
 import type { Database } from "~/infra/db";
 import { toUnreadRows } from "~/infra/reservation/unread-rows";
@@ -152,11 +153,10 @@ export const findStaffUnreadMessages = (
         ),
       );
 
-    const rows = yield* ResultAsync.fromPromise(query, (error): QueryError => ({
-      code: QueryErrorCode.DatabaseError,
-      message: "事務局側の未読メッセージの取得に失敗しました。",
-      cause: error,
-    }));
+    const rows = yield* ResultAsync.fromPromise(
+      query,
+      wrapError(QueryErrorCode.DatabaseError, "事務局側の未読メッセージの取得に失敗しました。"),
+    );
 
     return ok(
       toUnreadRows(rows, (latest, otherCount): StaffUnreadMessageItem => ({

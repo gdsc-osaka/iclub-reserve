@@ -10,9 +10,9 @@ import {
   isRetryableCalendarError,
   type CalendarError,
   type CalendarSyncTask,
-  type CalendarSyncTaskError,
   type CalendarSyncTasks,
 } from "~/domain/calendar";
+import { wrapError } from "~/domain/error";
 
 import type { Database } from "../db";
 import { reconcileCalendarSyncTaskInserts } from "./calendar-sync-task-writes";
@@ -20,11 +20,10 @@ import { reconcileCalendarSyncTaskInserts } from "./calendar-sync-task-writes";
 /** 処理中のまま放置されたとみなすまでの時間（5分）。Worker が途中で落ちた行を救う（ADR-008） */
 export const CALENDAR_SYNC_STUCK_AFTER_MS = 5 * 60 * 1000;
 
-const toCalendarSyncTaskError = (cause: unknown): CalendarSyncTaskError => ({
-  code: CalendarSyncTaskErrorCode.DatabaseError,
-  message: "カレンダー同期タスクの操作に失敗しました。",
-  cause,
-});
+const toCalendarSyncTaskError = wrapError(
+  CalendarSyncTaskErrorCode.DatabaseError,
+  "カレンダー同期タスクの操作に失敗しました。",
+);
 
 const formatCalendarError = (error: CalendarError): string => {
   const cause = error.cause ? String(error.cause) : "";

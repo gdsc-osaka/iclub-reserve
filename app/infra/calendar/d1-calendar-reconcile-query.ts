@@ -2,22 +2,15 @@ import { and, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
 import { okAsync, ResultAsync } from "neverthrow";
 
 import { facilityTable, reservationTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
 import { ReservationStatus } from "~/domain/reservation";
 import type {
   CalendarReconcileFacility,
   CalendarReconcileQuery,
   CalendarReconcileReservation,
 } from "~/query/calendar/calendar-reconcile-query";
-import { QueryErrorCode, type QueryError } from "~/query/error";
+import { QueryErrorCode } from "~/query/error";
 import type { Database } from "../db";
-
-const toDatabaseError =
-  (message: string) =>
-  (error: unknown): QueryError => ({
-    code: QueryErrorCode.DatabaseError,
-    message,
-    cause: error,
-  });
 
 /** D1 の 1 クエリあたりバインド変数上限（100個）を下回るようにするための IN 句チャンクサイズ */
 const FACILITY_IDS_CHUNK_SIZE = 90;
@@ -40,7 +33,7 @@ export const createD1CalendarReconcileQuery = (db: Database): CalendarReconcileQ
 
     return ResultAsync.fromPromise(
       query,
-      toDatabaseError("突き合わせ対象施設の取得に失敗しました。"),
+      wrapError(QueryErrorCode.DatabaseError, "突き合わせ対象施設の取得に失敗しました。"),
     ).map((rows): readonly CalendarReconcileFacility[] =>
       rows
         .map((row) => ({
@@ -88,7 +81,7 @@ export const createD1CalendarReconcileQuery = (db: Database): CalendarReconcileQ
 
     return ResultAsync.fromPromise(
       Promise.all(queries).then((results) => results.flat()),
-      toDatabaseError("突き合わせ対象予約の取得に失敗しました。"),
+      wrapError(QueryErrorCode.DatabaseError, "突き合わせ対象予約の取得に失敗しました。"),
     ).map((rows): readonly CalendarReconcileReservation[] =>
       rows.map((row) => ({
         id: row.id,

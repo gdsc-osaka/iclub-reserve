@@ -1,4 +1,5 @@
 import { ok, ResultAsync } from "neverthrow";
+import { wrapError } from "~/domain/error";
 import { FacilityErrorCode, type FacilityError } from "~/domain/facility";
 import type {
   FacilityPhotoStorage,
@@ -23,26 +24,29 @@ export const createR2FacilityPhotoStorage = (bucket: R2Bucket): FacilityPhotoSto
           contentType: input.contentType,
         },
       }),
-      (error): FacilityError => ({
-        code: FacilityErrorCode.PhotoStorageError,
-        message: `R2 への写真 ${input.photoName} の保存に失敗した。`,
-        cause: error,
-      }),
+      wrapError(
+        FacilityErrorCode.PhotoStorageError,
+        `R2 への写真 ${input.photoName} の保存に失敗した。`,
+      ),
     ).map(() => undefined);
 
   const deletePhoto = (photoName: string): ResultAsync<void, FacilityError> =>
-    ResultAsync.fromPromise(bucket.delete(toR2Key(photoName)), (error): FacilityError => ({
-      code: FacilityErrorCode.PhotoStorageError,
-      message: `R2 からの写真 ${photoName} の削除に失敗した。`,
-      cause: error,
-    })).map(() => undefined);
+    ResultAsync.fromPromise(
+      bucket.delete(toR2Key(photoName)),
+      wrapError(
+        FacilityErrorCode.PhotoStorageError,
+        `R2 からの写真 ${photoName} の削除に失敗した。`,
+      ),
+    ).map(() => undefined);
 
   const get = (photoName: string): ResultAsync<FacilityPhotoStorageItem | null, FacilityError> =>
-    ResultAsync.fromPromise(bucket.get(toR2Key(photoName)), (error): FacilityError => ({
-      code: FacilityErrorCode.PhotoStorageError,
-      message: `R2 からの写真 ${photoName} の取得に失敗した。`,
-      cause: error,
-    })).andThen((object) => {
+    ResultAsync.fromPromise(
+      bucket.get(toR2Key(photoName)),
+      wrapError(
+        FacilityErrorCode.PhotoStorageError,
+        `R2 からの写真 ${photoName} の取得に失敗した。`,
+      ),
+    ).andThen((object) => {
       if (object === null) {
         return ok(null);
       }

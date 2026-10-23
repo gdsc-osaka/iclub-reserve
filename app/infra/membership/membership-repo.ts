@@ -3,6 +3,7 @@ import { ok, ResultAsync } from "neverthrow";
 
 import { groupMemberTable, user } from "~/db/schema";
 import type { AuditLogDraft } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import {
   MembershipErrorCode,
   MembershipRole,
@@ -26,11 +27,7 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
         .from(groupMemberTable)
         .where(and(eq(groupMemberTable.groupId, groupId), eq(groupMemberTable.userId, userId)))
         .limit(1),
-      (error): MembershipError => ({
-        code: MembershipErrorCode.DatabaseError,
-        message: "メンバーシップの取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(MembershipErrorCode.DatabaseError, "メンバーシップの取得に失敗しました。"),
     ).andThen((rows) => {
       const row = rows.at(0);
 
@@ -60,11 +57,10 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
           ),
         )
         .limit(1),
-      (error): MembershipError => ({
-        code: MembershipErrorCode.DatabaseError,
-        message: "メールアドレスによるメンバーシップの取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(
+        MembershipErrorCode.DatabaseError,
+        "メールアドレスによるメンバーシップの取得に失敗しました。",
+      ),
     ).map((rows) => {
       const row = rows.at(0);
       // findByGroupAndUser と同じく、所属していないのは異常ではないので null を返す
@@ -88,11 +84,7 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
             eq(groupMemberTable.role, MembershipRole.Admin),
           ),
         ),
-      (error): MembershipError => ({
-        code: MembershipErrorCode.DatabaseError,
-        message: "管理者人数の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(MembershipErrorCode.DatabaseError, "管理者人数の取得に失敗しました。"),
     ).map((rows) => rows.at(0)?.count ?? 0);
 
   const updateRole = (
@@ -120,11 +112,7 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
 
     return ResultAsync.fromPromise(
       db.batch([auditStatement, updateStatement]),
-      (error): MembershipError => ({
-        code: MembershipErrorCode.DatabaseError,
-        message: "メンバーの役割の更新に失敗しました。",
-        cause: error,
-      }),
+      wrapError(MembershipErrorCode.DatabaseError, "メンバーの役割の更新に失敗しました。"),
     ).map((results) => results[1].length);
   };
 
@@ -153,11 +141,7 @@ export const createMembershipRepository = (db: Database): MembershipRepository =
 
     return ResultAsync.fromPromise(
       db.batch([auditStatement, deleteStatement]),
-      (error): MembershipError => ({
-        code: MembershipErrorCode.DatabaseError,
-        message: "メンバーの削除に失敗しました。",
-        cause: error,
-      }),
+      wrapError(MembershipErrorCode.DatabaseError, "メンバーの削除に失敗しました。"),
     ).map((results) => results[1].length);
   };
 

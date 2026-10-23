@@ -7,6 +7,7 @@ import {
   parseAuditLogChanges,
   visibleAuditLogTargetTypesForRole,
 } from "~/domain/audit-log";
+import { wrapError } from "~/domain/error";
 import { MembershipRole } from "~/domain/membership";
 import type {
   FindRecentGroupActivitiesArgs,
@@ -102,10 +103,9 @@ export const createGroupRecentActivitiesQuery = (db: Database): GroupRecentActiv
       return okAsync([]);
     }
 
-    return ResultAsync.fromPromise(findRecentActivities(db, args), (error): QueryError => ({
-      code: QueryErrorCode.DatabaseError,
-      message: "団体の最近の動きを読み取れなかった。",
-      cause: error,
-    }));
+    return ResultAsync.fromPromise(
+      findRecentActivities(db, args),
+      wrapError(QueryErrorCode.DatabaseError, "団体の最近の動きを読み取れなかった。"),
+    );
   },
 });

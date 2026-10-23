@@ -2,11 +2,8 @@ import { and, eq, lt } from "drizzle-orm";
 import { ok, okAsync, ResultAsync } from "neverthrow";
 
 import { reservationReadTable } from "~/db/schema";
-import {
-  ReservationErrorCode,
-  type ReservationError,
-  type ReservationReadRepository,
-} from "~/domain/reservation";
+import { wrapError } from "~/domain/error";
+import { ReservationErrorCode, type ReservationReadRepository } from "~/domain/reservation";
 import type { Database } from "../db";
 
 /**
@@ -29,11 +26,7 @@ export const createReservationReadRepository = (db: Database): ReservationReadRe
   upsert: (userId, reservationId, readAt) =>
     ResultAsync.fromPromise(
       upsertReadStatement(db, userId, reservationId, readAt),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "既読日時の更新に失敗しました。",
-        cause: error,
-      }),
+      wrapError(ReservationErrorCode.DatabaseError, "既読日時の更新に失敗しました。"),
     ).map(() => undefined),
 
   upsertMany: (userId, reservationIds, readAt) => {
@@ -44,11 +37,10 @@ export const createReservationReadRepository = (db: Database): ReservationReadRe
       return okAsync(undefined);
     }
 
-    return ResultAsync.fromPromise(db.batch([first, ...rest]), (error): ReservationError => ({
-      code: ReservationErrorCode.DatabaseError,
-      message: "既読日時の一括更新に失敗しました。",
-      cause: error,
-    })).map(() => undefined);
+    return ResultAsync.fromPromise(
+      db.batch([first, ...rest]),
+      wrapError(ReservationErrorCode.DatabaseError, "既読日時の一括更新に失敗しました。"),
+    ).map(() => undefined);
   },
 
   findByUserAndReservation: (userId, reservationId) =>
@@ -63,11 +55,7 @@ export const createReservationReadRepository = (db: Database): ReservationReadRe
           ),
         )
         .limit(1),
-      (error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "既読日時の取得に失敗しました。",
-        cause: error,
-      }),
+      wrapError(ReservationErrorCode.DatabaseError, "既読日時の取得に失敗しました。"),
     ).andThen((rows) => {
       const row = rows.at(0);
       if (!row) {
