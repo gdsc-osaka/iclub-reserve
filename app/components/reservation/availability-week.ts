@@ -274,16 +274,11 @@ export const toAxisPercent = (minutes: number): number => (minutes / AXIS_MINUTE
 /**
  * 帯の配色。
  *
- * 色みで**ステータス**だけを表す。自団体かどうかは色で表さない。
- * 以前は同じ色の濃淡（20% と 10%）で分けていたが、離れた列どうしでは
- * 見比べられず、色の見え方によっては差がほとんど消えてしまう。
+ * 色みで**ステータス**を表す。`isOwnGroup` が true の帯は、枠線・面・左端の線を濃くする。
  *
- * 代わりに自団体の帯は、色以外の印を重ねて目立たせている（`availability-week-grid.tsx`）。
- *
- * - 左端の線を太くする
- * - 枠線を濃くする
- * - 団体名を太字にする
- * - 高さに余裕があれば「自団体」と書く（`blockContent`）
+ * 自団体と他団体を見分ける必要があるのは、団体の利用者も使う申請フォームの 1 日のタイムライン
+ * （`editor/reservation-timeline.tsx`）だけである。事務局だけが見る空き状況カレンダー（SCR-001）と
+ * ダッシュボードの「今日の予約状況」では、どの団体の予約も同じに扱うので、すべて true で描く（ADR-013）。
  */
 export const blockStyle = (
   status: ReservationStatus,
@@ -341,7 +336,7 @@ const linesInBlock = (durationMinutes: number): number => {
 export interface BlockContent {
   /** 時刻を出すか */
   readonly showTime: boolean;
-  /** ステータス（と自団体かどうか）を出すか */
+  /** ステータスを出すか */
   readonly showStatus: boolean;
   /** 使用人数を出すか */
   readonly showHeadCount: boolean;

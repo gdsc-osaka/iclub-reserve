@@ -41,7 +41,7 @@ import { getReservationFormUseCase } from "~/usecases/reservation/get-reservatio
 
 import type { Route } from "./+types/route";
 import { CreatedPanel } from "./created-panel";
-import { toCalendarPath } from "./paths";
+import { toBackLink } from "./paths";
 
 export function meta() {
   return [{ title: "仮予約の申請 | iclub-reserve" }];
@@ -225,11 +225,12 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
 
   if (form.created !== null) {
     return (
-      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey}>
+      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey} isStaff={isStaff}>
         <CreatedPanel
           created={form.created}
           facilityId={initial.facilityId}
           dateKey={initial.dateKey}
+          isStaff={isStaff}
         />
       </PageShell>
     );
@@ -237,7 +238,7 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
 
   if (form.groups.length === 0 || form.facilities.length === 0) {
     return (
-      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey}>
+      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey} isStaff={isStaff}>
         <CannotApplyCard
           hasGroup={form.groups.length > 0}
           hasFacility={form.facilities.length > 0}
@@ -248,7 +249,7 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
   }
 
   return (
-    <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey}>
+    <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey} isStaff={isStaff}>
       <ReservationEditorForm
         purpose={{
           kind: "create",
@@ -266,20 +267,28 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
   );
 }
 
-/** 見出しと戻る導線。どの状態でも同じ位置に出す */
+/**
+ * 見出しと戻る導線。どの状態でも同じ位置に出す。
+ *
+ * 空き状況カレンダー（SCR-001）は事務局専用なので（ADR-013）、
+ * 事務局はそこへ、団体の利用者は予約一覧へ戻す。
+ */
 function PageShell({
   facilityId,
   dateKey,
+  isStaff,
   children,
-}: Readonly<{ facilityId: string; dateKey: string; children: ReactNode }>) {
+}: Readonly<{ facilityId: string; dateKey: string; isStaff: boolean; children: ReactNode }>) {
+  const back = toBackLink(isStaff, facilityId, dateKey);
+
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-col gap-1">
         <Link
-          to={toCalendarPath(facilityId, dateKey)}
+          to={back.to}
           className="w-fit text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
-          ← 空き状況カレンダーへ戻る
+          ← {back.label}
         </Link>
 
         <h1 className="text-xl font-semibold">仮予約の申請</h1>
@@ -342,8 +351,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <CardContent className="flex flex-col gap-4 text-sm">
           <p className="text-muted-foreground">時間をおいて、もう一度お試しください。</p>
 
-          <Link to="/availability" className="text-primary underline underline-offset-4">
-            空き状況カレンダーへ戻る
+          <Link to="/" className="text-primary underline underline-offset-4">
+            ホームへ戻る
           </Link>
         </CardContent>
       </Card>

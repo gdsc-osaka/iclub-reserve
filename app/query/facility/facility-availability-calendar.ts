@@ -1,8 +1,21 @@
-import type { ResultAsync } from "neverthrow";
+import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
+import { err, ok, ResultAsync, safeTry, type Result } from "neverthrow";
 
-import type { ReservationStatus } from "~/domain/reservation";
-import type { ReservationTransition } from "~/domain/reservation/transition";
-import type { QueryError } from "../error";
+import { facilityTable, groupTable, reservationTable } from "~/db/schema";
+import { wrapError } from "~/domain/error";
+import { calendarVisibleStatuses, ReservationStatus } from "~/domain/reservation";
+import {
+  allowedTransitions,
+  isStaffTransition,
+  type ReservationActor,
+  type ReservationTransition,
+} from "~/domain/reservation/transition";
+import type { Database } from "~/infra/db";
+import { createD1HolidayQuery } from "~/infra/holiday/d1-holiday-query";
+import { hasOverlappingReservation } from "~/infra/reservation/reservation-overlap";
+import { addDays, toTokyoDateKey } from "~/lib/date";
+import { ensureStaff } from "../_shared/staff";
+import { QueryErrorCode, type QueryError } from "../error";
 
 /** カレンダーで切り替えられる施設・設備 1 件分。 */
 export interface AvailabilityFacility {
@@ -12,51 +25,11 @@ export interface AvailabilityFacility {
 }
 
 /**
- * DB から読んだままの予約 1 件分。**画面へそのまま渡してはいけない。**
+ * 空き状況カレンダーに描く予約 1 件分（UC-001 / SCR-001）。
  *
- * 使用人数・備考は自団体のメンバーと事務局にしか見せない項目なので（COND-008）、
- * 誰が見ているかを知っているユースケース層で落としてから画面へ渡す。
- * 画面側で隠す（CSS で非表示にする等）のでは、通信の中身を見れば読めてしまうため意味がない。
- *
- * 落とし忘れを型で防ぐために、画面へ渡す {@link AvailabilityReservation} とは
- * わざと別の形にしてある。同じ形にすると、ユースケースを通さずに
- * そのまま返すコードが書けてしまう。
- */
-export interface AvailabilityReservationRow {
-  readonly id: string;
-  readonly groupId: string;
-  readonly groupName: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
-  readonly status: ReservationStatus;
-  readonly headCount: number;
-  readonly note: string | null;
-  /** 同一施設・同一時間帯にほかの承認済み予約があるか（COND-001） */
-  readonly hasApprovedOverlap: boolean;
-}
-
-/** Query が返す、マスク前の画面 1 つ分のデータ。 */
-export interface FacilityAvailabilityCalendar {
-  /** 有効な施設・設備の一覧。画面上部の切り替えに使う */
-  readonly facilities: readonly AvailabilityFacility[];
-  /** いま表示している施設・設備 */
-  readonly facility: AvailabilityFacility;
-  /** 期間内の予約。開始日時の昇順 */
-  readonly reservations: readonly AvailabilityReservationRow[];
-}
-
-/** 自団体のメンバーと事務局にだけ見せる項目（COND-008 の 1 段階目）。 */
-export interface AvailabilityReservationDetail {
-  readonly headCount: number;
-  readonly note: string | null;
-}
-
-/**
- * 画面へ渡してよい予約 1 件分。COND-008 に従ってマスク済み。
- *
- * 団体の ID を持たせていないのは、COND-008 が他団体に見せてよいとしているのが
- * 団体「名」までのため。画面は団体名しか出さないので ID は要らない。
- * 使わない識別子を載せると、通信の中身を見れば団体を特定できてしまう。
+ * 見るのは事務局だけなので、どの団体の予約も全項目を渡す（COND-008・COND-009）。
+ * 以前は団体の利用者も見ていたため、他団体の予約から使用人数と備考を落としていたが、
+ * 事務局専用にしたので（ADR-013）落とす必要が無くなった。
  */
 export interface AvailabilityReservation {
   readonly id: string;
@@ -64,22 +37,9 @@ export interface AvailabilityReservation {
   readonly startAt: Date;
   readonly endAt: Date;
   readonly status: ReservationStatus;
-  /**
-   * 見ている人が所属している団体の予約かどうか。
-   *
-   * 見た目を変えるために使う。事務局はすべての予約の中身を見られるので、
-   * `detail` の有無では自団体かどうかを判別できない。
-   */
-  readonly isOwnGroup: boolean;
-  /**
-   * 自団体の予約と、事務局が見ている場合にだけ入る。他団体の予約では null。
-   *
-   * `headCount` と `note` を直接ぶら下げて「他団体では undefined」にしていないのは、
-   * 値が入っているかを確かめずに画面へ書いてしまう事故を防ぐため。
-   * 入れ子にしておけば、null を外さないと中身に触れない。
-   */
-  readonly detail: AvailabilityReservationDetail | null;
-  /** 見ている人がこの予約に対して実行できる事務局の操作（承認・却下・事務局キャンセル） */
+  readonly headCount: number;
+  readonly note: string | null;
+  /** 事務局がこの予約に対して実行できる操作（承認・却下・事務局キャンセル） */
   readonly transitions: readonly ReservationTransition[];
   /**
    * 同一施設・同一時間帯に、ほかの承認済みの予約があるかどうか（COND-001）。
@@ -89,27 +49,14 @@ export interface AvailabilityReservation {
   readonly hasApprovedOverlap: boolean;
 }
 
-/** 画面へ渡してよい、空き状況カレンダー 1 画面分のデータ。 */
+/** 空き状況カレンダー 1 画面分のデータ。 */
 export interface AvailabilityCalendar {
+  /** 有効な施設・設備の一覧。画面上部の切り替えに使う */
   readonly facilities: readonly AvailabilityFacility[];
+  /** いま表示している施設・設備 */
   readonly facility: AvailabilityFacility;
+  /** 期間内の予約。開始日時の昇順 */
   readonly reservations: readonly AvailabilityReservation[];
-  /**
-   * 見ている人が、いま予約を申請できる状態かどうか（COND-006）。
-   *
-   * 有効な団体に 1 つも所属していない人（承認待ちの団体だけの人を含む）は false。
-   * 事務局は所属に関わらず予約を直接作成できるので true（COND-009）。
-   *
-   * false のときに申請の導線を消してしまわないこと。押せないだけの状態で残し、
-   * なぜ押せないかを画面に書く。消すと不具合だと思って何度も試すことになる。
-   */
-  readonly canApplyReservation: boolean;
-  /**
-   * 見ている人が、承認済みの予約を直接作成できるかどうか（UC-008 / COND-009）。
-   *
-   * 権限表の CreateDirect から導く。事務局スタッフのときだけ true になる。
-   */
-  readonly canCreateDirectly: boolean;
   /**
    * 表示期間内の日本の祝日の日付キー（"YYYY-MM-DD"）一覧。
    *
@@ -118,8 +65,9 @@ export interface AvailabilityCalendar {
   readonly holidayDateKeys: readonly string[];
 }
 
-/** {@link FacilityAvailabilityCalendarQuery.findByFacilityAndPeriod} への入力。 */
-export interface FacilityAvailabilityCalendarArgs {
+export interface FindFacilityAvailabilityCalendarArgs {
+  /** 事務局かどうか（COND-009）。この画面は事務局専用（ADR-013） */
+  readonly isStaff: boolean;
   /**
    * 表示する施設・設備の ID。
    *
@@ -134,29 +82,151 @@ export interface FacilityAvailabilityCalendarArgs {
 }
 
 /**
- * 空き状況カレンダー（SCR-001）の読み取り専用の窓口（ポート）。
+ * 切り替えに出す施設・設備の一覧を取る。
  *
- * 返る型はドメインの不変条件を持たないので、
- * **この結果を使って更新してはいけない**。更新は必ず Repository を通すこと。
+ * 無効な施設（`is_active = false`）を外しているのは、
+ * これから予約できない施設の空き状況を見ても意味がないため。
+ * 無効化には将来の予約がすべて終了していることが条件なので（COND-003）、
+ * 外したせいで見えなくなる予約は無い。
  */
-export interface FacilityAvailabilityCalendarQuery {
-  /**
-   * 施設 1 件分の、期間内の予約を取得する。
-   *
-   * - 有効な施設が 1 件も無い場合: err(NOT_FOUND)
-   * - `facilityId` の施設が存在しない、または無効な場合: err(NOT_FOUND)
-   * - 期間内に予約が無い場合: ok（`reservations` が空の配列）
-   *
-   * 取得するのは仮予約と承認済みだけ（`calendarVisibleStatuses`）。
-   * 終了した予約まで描くと、空いている時間帯が埋まって見えてしまう。
-   *
-   * 他団体の予約も取得する。この画面は「施設がいつ空いているか」を知るためのもので、
-   * 自団体の予約だけでは空いているかどうかが分からないため。
-   *
-   * 並び順は開始日時の昇順で固定する。同じ時刻に始まる予約は予約 ID の昇順で並べる。
-   * 順序を決めずに返すと、再読み込みのたびに重なった帯の左右が入れ替わって見える。
-   */
-  findByFacilityAndPeriod(
-    args: FacilityAvailabilityCalendarArgs,
-  ): ResultAsync<FacilityAvailabilityCalendar, QueryError>;
-}
+const selectFacilities = (db: Database) =>
+  db
+    .select({
+      id: facilityTable.id,
+      name: facilityTable.name,
+      description: facilityTable.description,
+    })
+    .from(facilityTable)
+    .where(eq(facilityTable.isActive, true))
+    /*
+     * 同名の施設があっても並びが入れ替わらないよう、主キーを第 2 キーにする。
+     * 施設名には一意制約がなく、名前だけで並べると同名どうしの順序を SQL が保証しない。
+     */
+    .orderBy(asc(facilityTable.name), asc(facilityTable.id));
+
+/**
+ * 指定した施設の、期間と重なる予約を取る。
+ *
+ * 重なりの条件が `開始 < 期間の終わり` かつ `終わり > 期間の始まり` なのは、
+ * 期間をまたぐ予約も拾うため。「開始日時が期間の中にあるもの」だけを条件にすると、
+ * 前の週から続いている予約が消えて、空いているように見えてしまう。
+ *
+ * 団体名は結合で一緒に取る。予約の件数だけ団体を引き直すと、
+ * その回数だけ D1 との往復が増える（N+1 問題）。
+ *
+ * 並び順は開始日時の昇順で固定する。同じ時刻に始まる予約は予約 ID の昇順で並べる。
+ * 順序を決めずに返すと、再読み込みのたびに重なった帯の左右が入れ替わって見える。
+ */
+const selectReservations = (db: Database, facilityId: string, from: Date, to: Date) =>
+  db
+    .select({
+      id: reservationTable.id,
+      groupName: groupTable.name,
+      startAt: reservationTable.startAt,
+      endAt: reservationTable.endAt,
+      status: reservationTable.status,
+      headCount: reservationTable.headCount,
+      note: reservationTable.note,
+      hasApprovedOverlap: hasOverlappingReservation(db, ReservationStatus.Approved),
+    })
+    .from(reservationTable)
+    .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))
+    .where(
+      and(
+        eq(reservationTable.facilityId, facilityId),
+        // 終了した予約は描かない。理由は calendarVisibleStatuses の説明を参照
+        inArray(reservationTable.status, [...calendarVisibleStatuses]),
+        lt(reservationTable.startAt, to),
+        gt(reservationTable.endAt, from),
+      ),
+    )
+    .orderBy(asc(reservationTable.startAt), asc(reservationTable.id));
+
+/**
+ * 一覧の中から、表示する施設を 1 件選ぶ。
+ *
+ * `facilityId` が null（＝画面を開いた直後でまだ選んでいない）のときは先頭を使う。
+ * URL を直接書き換えて存在しない ID を渡された場合は、
+ * 黙って先頭に戻さず NOT_FOUND にする。戻してしまうと、
+ * 共有されたリンクが別の施設を指していても気づけない。
+ */
+const pickFacility = (
+  facilities: readonly AvailabilityFacility[],
+  facilityId: string | null,
+): Result<AvailabilityFacility, QueryError> => {
+  if (facilityId === null) {
+    const first = facilities.at(0);
+
+    return first === undefined
+      ? err({
+          code: QueryErrorCode.NotFound,
+          message: "有効な施設・設備が 1 件も無い。",
+        })
+      : ok(first);
+  }
+
+  const found = facilities.find((facility) => facility.id === facilityId);
+
+  return found === undefined
+    ? err({
+        code: QueryErrorCode.NotFound,
+        message: `施設・設備 ${facilityId} が有効な施設の中に見つからない。`,
+      })
+    : ok(found);
+};
+
+/**
+ * 事務局として操作する人。
+ *
+ * 事務局の操作（承認・却下・事務局キャンセル）は所属を見ずに判定できるので、
+ * 見ている事務局がその団体に所属しているかどうかは引かない。
+ */
+const staffActor: ReservationActor = { isStaff: true, membership: null };
+
+/**
+ * 有効な施設・設備の一覧と、選んだ施設の期間内の承認済み・仮予約を取得する（UC-001 / SCR-001）。
+ *
+ * 事務局専用の画面なので、事務局でなければ問い合わせる前に Forbidden で止める（ADR-013）。
+ * 他団体の予約も含めて全項目を返す。
+ *
+ * 施設の一覧を取ってから予約を取る、という 2 回の問い合わせに分けている。
+ * `facilityId` が null のときに「どの施設を表示するか」が
+ * 一覧を見るまで決まらないため、1 回にまとめられない。
+ * 予約の件数に関係なく必ず 2 回で済むので、N+1 にはならない。
+ * 祝日は施設に関係なく決まるので、予約と同時に読む。
+ */
+export const findFacilityAvailabilityCalendar = (
+  db: Database,
+  args: FindFacilityAvailabilityCalendarArgs,
+): ResultAsync<AvailabilityCalendar, QueryError> =>
+  safeTry(async function* () {
+    yield* ensureStaff(args.isStaff, "事務局ではない人が、空き状況カレンダーを取得しようとした。");
+
+    const facilities = yield* ResultAsync.fromPromise(
+      selectFacilities(db),
+      wrapError(QueryErrorCode.DatabaseError, "施設・設備の一覧の取得に失敗しました。"),
+    );
+    const facility = yield* pickFacility(facilities, args.facilityId);
+
+    const [rows, holidayDateKeys] = yield* ResultAsync.combine([
+      ResultAsync.fromPromise(
+        selectReservations(db, facility.id, args.from, args.to),
+        wrapError(QueryErrorCode.DatabaseError, "予約の取得に失敗しました。"),
+      ),
+      createD1HolidayQuery(db).findHolidaysBetween(
+        toTokyoDateKey(args.from),
+        // args.to は終了時刻（排他、翌週日曜 0 時など）のため、期間内の末日（直前の日）を終端とする
+        toTokyoDateKey(addDays(args.to, -1)),
+      ),
+    ]);
+
+    return ok({
+      facilities,
+      facility,
+      reservations: rows.map((row): AvailabilityReservation => ({
+        ...row,
+        transitions: allowedTransitions(row, staffActor).filter(isStaffTransition),
+      })),
+      holidayDateKeys,
+    });
+  });

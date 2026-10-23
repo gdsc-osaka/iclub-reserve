@@ -5,7 +5,10 @@ import {
   formatNavCount,
   isCountedNavPath,
   staffNavItems,
+  toBottomNavItems,
   toNavCount,
+  toNavItems,
+  toOverflowNavItems,
   type NavCounts,
   type NavItem,
 } from "./nav-items";
@@ -15,6 +18,40 @@ const navItem = (id: string): NavItem => {
   if (item === undefined) throw new Error(`ナビ項目 ${id} がありません`);
   return item;
 };
+
+const ids = (items: readonly NavItem[]): readonly string[] => items.map((item) => item.id);
+
+describe("toNavItems", () => {
+  it("空き状況（SCR-001）は事務局にだけ出す（ADR-013）", () => {
+    expect(ids(toNavItems(false))).not.toContain("availability");
+    expect(ids(toNavItems(true))).toContain("availability");
+  });
+});
+
+describe("toBottomNavItems / toOverflowNavItems", () => {
+  it("団体の利用者は 4 つの項目がすべてボトムバーに並び、「その他」には項目が入らない", () => {
+    expect(ids(toBottomNavItems(false))).toEqual([
+      "dashboard",
+      "reservations",
+      "calendars",
+      "groups",
+    ]);
+    expect(toOverflowNavItems(false)).toEqual([]);
+  });
+
+  it("事務局のボトムバーには空き状況と予約の承認を並べ、残りは「その他」に入る", () => {
+    expect(ids(toBottomNavItems(true))).toEqual([
+      "dashboard",
+      "availability",
+      "staff-approvals",
+      "reservations",
+    ]);
+    // ボトムバーと「その他」を合わせると、サイドバーの項目がちょうどそろう
+    const shown = [...ids(toBottomNavItems(true)), ...ids(toOverflowNavItems(true))];
+    expect(shown).toHaveLength(toNavItems(true).length);
+    expect(shown).toEqual(expect.arrayContaining([...ids(toNavItems(true))]));
+  });
+});
 
 describe("isCountedNavPath", () => {
   it("ダッシュボード（/）は完全一致でのみ true を返す", () => {

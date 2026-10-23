@@ -82,14 +82,6 @@ export const commonNavItems: readonly NavItem[] = [
     screen: "SCR-022",
   },
   {
-    id: "availability",
-    label: "空き状況",
-    to: "/availability",
-    icon: CalendarDays,
-    enabled: true,
-    screen: "SCR-001",
-  },
-  {
     id: "reservations",
     label: "予約",
     to: "/reservations",
@@ -122,6 +114,10 @@ export const commonNavItems: readonly NavItem[] = [
  * 上の共通項目を差し替えるのではなく、後ろに足す形にしている。
  * 事務局の人も自分の団体の予約を申請するし、
  * 団体に所属していない事務局の人もいる。
+ *
+ * 空き状況（SCR-001）もここに置く（ADR-013）。団体の利用者にとっては
+ * 週全体に並ぶ他団体の予約が、自分たちの予約を探す妨げにしかならないため。
+ * 団体の利用者は、申請フォームの日時の選択で空きを確かめる。
  */
 export const staffNavItems: readonly NavItem[] = [
   {
@@ -131,6 +127,14 @@ export const staffNavItems: readonly NavItem[] = [
     icon: ClipboardCheck,
     enabled: true,
     screen: "SCR-003",
+  },
+  {
+    id: "availability",
+    label: "空き状況",
+    to: "/availability",
+    icon: CalendarDays,
+    enabled: true,
+    screen: "SCR-001",
   },
   {
     id: "staff-groups",
@@ -196,9 +200,12 @@ export const toNavItems = (isStaff: boolean): readonly NavItem[] =>
  * サイドバーの上から 4 つをそのまま使うのではなく、ここで選び直している。
  * 事務局の人にとって毎日いちばん使うのは「予約の承認」なので、
  * これを「その他」の中に埋めてしまうと、スマホでの仕事が回らなくなる。
+ *
+ * 団体の利用者の項目はちょうど 4 つなので、すべてボトムバーに並び、
+ * 「その他」にはアカウントの操作だけが入る。
  */
 const bottomNavIds: Readonly<Record<"member" | "staff", readonly string[]>> = {
-  member: ["dashboard", "availability", "reservations", "groups"],
+  member: ["dashboard", "reservations", "calendars", "groups"],
   staff: ["dashboard", "availability", "staff-approvals", "reservations"],
 };
 

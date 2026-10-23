@@ -7,7 +7,6 @@ import { ReservationActionButtons } from "./reservation-action-buttons";
 import type { ReservationDraft } from "./availability-week";
 import { ReservationStatusBadge } from "./reservation-status-badge";
 import { Button } from "../ui/button";
-import { Badge } from "../ui/badge";
 import { Link } from "react-router";
 
 /**
@@ -42,12 +41,9 @@ const toApplicationPath = (draft: ReservationDraft, mode?: "direct"): string => 
  * 押した予約の内容。
  *
  * タイムラインの帯には時刻と団体名しか入らないので、残りをここに出す。
- * 使用人数と備考は、申請した団体のメンバーと事務局にしか渡していない（COND-008）。
- * 渡していない相手には `detail` が `null` で届くため、
- * ここで隠しているのではなく、そもそも手元に無い。
+ * この画面を見るのは事務局だけなので（ADR-013）、どの団体の予約も使用人数と備考まで出す（COND-009）。
  *
- * 事務局スタッフには実行可能な状態変更操作ボタン（承認・却下・キャンセル）を出す。
- * 予約詳細（SCR-005）へのリンクは、見ている人全員に出す。
+ * 実行できる状態変更の操作（承認・却下・事務局キャンセル）のボタンと、予約詳細（SCR-005）へのリンクを出す。
  */
 export function AvailabilityReservationCard({
   reservation,
@@ -60,7 +56,6 @@ export function AvailabilityReservationCard({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <ReservationStatusBadge status={reservation.status} />
-        {reservation.isOwnGroup && <Badge>自団体</Badge>}
       </div>
 
       <p className="text-sm font-medium break-words">{reservation.groupName}</p>
@@ -71,29 +66,14 @@ export function AvailabilityReservationCard({
           {formatTimeRange(reservation.startAt, reservation.endAt)}
         </CardItem>
 
-        {reservation.detail !== null && (
-          <>
-            <CardItem label="使用人数">{reservation.detail.headCount} 名</CardItem>
-            <CardItem label="備考">
-              {reservation.detail.note ?? (
-                <span className="font-normal text-muted-foreground">なし</span>
-              )}
-            </CardItem>
-          </>
-        )}
+        <CardItem label="使用人数">{reservation.headCount} 名</CardItem>
+        <CardItem label="備考">
+          {reservation.note ?? <span className="font-normal text-muted-foreground">なし</span>}
+        </CardItem>
       </dl>
 
-      {reservation.detail === null && (
-        <p className="text-xs text-muted-foreground">
-          使用人数と備考は、申請した団体のメンバーと事務局だけが見られます。
-        </p>
-      )}
-
-      {/*
-       * 見ている人が実行できる操作があるときは操作ボタンを出す。
-       * 事務局には detail が必ず入るが、型の上で null を外してから使用する。
-       */}
-      {reservation.transitions.length > 0 && reservation.detail !== null && (
+      {/* 実行できる操作があるときだけ操作ボタンを出す（終わった予約などには無い） */}
+      {reservation.transitions.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <ReservationActionButtons
             item={{
@@ -102,7 +82,7 @@ export function AvailabilityReservationCard({
               groupName: reservation.groupName,
               startAt: reservation.startAt,
               endAt: reservation.endAt,
-              headCount: reservation.detail.headCount,
+              headCount: reservation.headCount,
               status: reservation.status,
               hasApprovedOverlap: reservation.hasApprovedOverlap,
             }}
@@ -125,14 +105,11 @@ export function AvailabilityReservationCard({
  * 押した場所によって、申請フォームへ持っていける情報が変わる。
  * 何が決まっていて何がまだ決まっていないかを先に見せておかないと、
  * フォームを開いてから「日付が入っていない」と戸惑うことになる。
+ *
+ * 見るのは事務局だけなので、仮予約の申請と承認済みでの直接作成（UC-008）の両方へ進める。
+ * 事務局は所属に関わらず、どの有効な団体としても申請できる（COND-009）。
  */
-export function AvailabilityDraftCard({
-  draft,
-  canCreateDirectly = false,
-}: Readonly<{
-  draft: ReservationDraft;
-  canCreateDirectly?: boolean;
-}>) {
+export function AvailabilityDraftCard({ draft }: Readonly<{ draft: ReservationDraft }>) {
   return (
     <div className="flex flex-col gap-2">
       <dl className="flex flex-col gap-1 text-sm">
@@ -154,11 +131,9 @@ export function AvailabilityDraftCard({
         <Link to={toApplicationPath(draft)}>仮予約を申請</Link>
       </Button>
 
-      {canCreateDirectly && (
-        <Button asChild variant="secondary" size="sm" className="w-full">
-          <Link to={toApplicationPath(draft, "direct")}>承認済みで直接作成</Link>
-        </Button>
-      )}
+      <Button asChild variant="secondary" size="sm" className="w-full">
+        <Link to={toApplicationPath(draft, "direct")}>承認済みで直接作成</Link>
+      </Button>
 
       <p className="text-xs text-muted-foreground">
         ここで選んだ内容は申請フォームに引き継がれます。まだ決まっていない項目はフォームで選べます。

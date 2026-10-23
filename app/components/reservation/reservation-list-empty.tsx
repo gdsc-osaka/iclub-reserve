@@ -1,4 +1,4 @@
-import { CalendarDays, FilterX, Users } from "lucide-react";
+import { FilterX, Plus, Users } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
@@ -18,7 +18,7 @@ interface ReservationListEmptyProps {
 /**
  * 予約一覧の空状態コンポーネント。
  *
- * 1. 所属団体が 0 件のとき: 理由を説明し空き状況カレンダーへの導線を残す
+ * 1. 所属団体が 0 件のとき: 理由を説明し、団体を登録する画面への導線を出す
  * 2. 事務局の承認待ちが 0 件のとき: 待機中の申請がない旨を表示
  * 3. 絞り込みの結果が 0 件のとき: 条件に合う予約がない旨と、絞り込み解除リンクを表示
  */
@@ -39,14 +39,14 @@ export function ReservationListEmpty({
           <CardTitle className="text-lg">まだどの団体にも所属していません</CardTitle>
           <CardDescription className="max-w-md">
             予約を申請するには、団体に参加するか新しい団体を作成して事務局の承認を受ける必要があります。
-            空き状況の確認は所属がなくてもご利用いただけます。
+            団体から招待されたときは、ダッシュボードから参加できます。
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-2">
           <Button asChild>
-            <Link to="/availability" className="inline-flex items-center gap-2">
-              <CalendarDays className="size-4" />
-              空き状況カレンダーを見る
+            <Link to="/groups/new" className="inline-flex items-center gap-2">
+              <Plus className="size-4" />
+              団体を登録する
             </Link>
           </Button>
         </CardContent>

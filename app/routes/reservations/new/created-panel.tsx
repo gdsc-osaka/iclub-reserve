@@ -10,7 +10,7 @@ import { formatMonthDay, formatTimeRange } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { CreatedReservation } from "~/query/reservation/reservation-form";
 
-import { toCalendarPath, toFormPath } from "./paths";
+import { toBackLink, toFormPath } from "./paths";
 
 /**
  * 申請が終わったあとの控え。
@@ -23,9 +23,17 @@ export function CreatedPanel({
   created,
   facilityId,
   dateKey,
-}: Readonly<{ created: CreatedReservation; facilityId: string; dateKey: string }>) {
+  isStaff,
+}: Readonly<{
+  created: CreatedReservation;
+  facilityId: string;
+  dateKey: string;
+  /** 事務局かどうか。戻る先（空き状況カレンダーか予約一覧か）を決める */
+  isStaff: boolean;
+}>) {
   /** 事務局が承認済みで直接作成した（UC-008）か。仮予約の申請とは案内が変わる */
   const isDirectCreated = created.status === ReservationStatus.Approved;
+  const back = toBackLink(isStaff, facilityId, dateKey);
 
   return (
     <Card>
@@ -71,7 +79,7 @@ export function CreatedPanel({
           </Button>
 
           <Button asChild variant="outline">
-            <Link to={toCalendarPath(facilityId, dateKey)}>空き状況カレンダーへ戻る</Link>
+            <Link to={back.to}>{back.label}</Link>
           </Button>
         </div>
       </CardContent>

@@ -25,15 +25,15 @@ import { WeekNavigation } from "./week-navigation";
  * 次に狙っていた枠が逃げてしまっていた。
  *
  * 施設や週を切り替えると、帯も空き枠も作り直されるので吹き出しは閉じる。
- * 別の施設・別の日の内容が残ったままになることはない（COND-008）。
+ * 別の施設・別の日の内容が残ったままになることはない。
+ *
+ * 見るのは事務局だけなので（ADR-013）、空き枠からはいつでも申請・直接作成へ進める。
  */
 export function CalendarCard({
   facility,
   reservations,
   weekStart,
   now,
-  canApply,
-  canCreateDirectly = false,
   holidayDateKeys,
 }: Readonly<{
   facility: AvailabilityFacility;
@@ -41,10 +41,6 @@ export function CalendarCard({
   weekStart: Date;
   /** ローダーが読んだ現在時刻。今日の列に「いま」の線を引くのに使う */
   now: Date;
-  /** 空き枠を押して申請へ進めるかどうか（COND-006） */
-  canApply: boolean;
-  /** 承認済みで直接作成できるか（事務局のみ） */
-  canCreateDirectly?: boolean;
   /** 表示期間内の日本の祝日の日付キー一覧 */
   holidayDateKeys: readonly string[];
 }>) {
@@ -58,23 +54,18 @@ export function CalendarCard({
           <span className="truncate">{facility.name}</span>
         </CardTitle>
 
-        {canApply && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button type="button" size="sm">
-                <Plus aria-hidden />
-                仮予約を申請
-              </Button>
-            </PopoverTrigger>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button type="button" size="sm">
+              <Plus aria-hidden />
+              仮予約を申請
+            </Button>
+          </PopoverTrigger>
 
-            <PopoverContent align="start" className="w-72">
-              <AvailabilityDraftCard
-                draft={{ facility, day: null, startHour: null }}
-                canCreateDirectly={canCreateDirectly}
-              />
-            </PopoverContent>
-          </Popover>
-        )}
+          <PopoverContent align="start" className="w-72">
+            <AvailabilityDraftCard draft={{ facility, day: null, startHour: null }} />
+          </PopoverContent>
+        </Popover>
 
         <WeekNavigation facilityId={facility.id} weekStart={weekStart} today={now} />
       </CardHeader>
@@ -93,8 +84,6 @@ export function CalendarCard({
             reservations={reservations}
             facility={facility}
             now={now}
-            canApply={canApply}
-            canCreateDirectly={canCreateDirectly}
           />
         </div>
 
@@ -105,8 +94,6 @@ export function CalendarCard({
             reservations={reservations}
             facility={facility}
             now={now}
-            canApply={canApply}
-            canCreateDirectly={canCreateDirectly}
           />
         </div>
       </CardContent>
@@ -117,8 +104,7 @@ export function CalendarCard({
 /**
  * 色と印の意味を説明する凡例。
  *
- * 色みでステータス、左端の線の太さで自団体かどうかを表しているので、
- * 説明が無いと「太い細いに意味があるのか」が分からない。
+ * 色みでステータスを、枠線の実線・破線で確定しているかどうかを表している。
  */
 function Legend() {
   return (
@@ -133,10 +119,6 @@ function Legend() {
           className="size-3 rounded-sm border border-dashed border-amber-500/50 bg-amber-500/20"
         />
         仮予約
-      </li>
-      <li className="flex items-center gap-1.5">
-        <span aria-hidden className="h-3 w-1 rounded-sm bg-primary" />
-        左端の線が太いものが自団体の予約
       </li>
       <li className="ml-auto hidden md:block">
         予約を押すと内容、空いている時間を押すとその日時で申請に進めます（{FACILITY_OPEN_HOUR}

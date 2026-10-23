@@ -1,6 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
 import { atTokyoTime, formatFullDate, formatMonthDay } from "~/lib/date";
-import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { nextWeekAt, Weekday } from "../support/dates.js";
@@ -14,9 +13,10 @@ import { expect, personas, test } from "../support/fixtures.js";
 import { openPage } from "../support/page.js";
 
 /**
- * UC-001 空き状況を確認する（`rdra/contexts/reservation-application.md`）
+ * UC-001 空き状況を確認する（`rdra/contexts/reservation-approval.md`）
  *
- * 空き状況カレンダー（SCR-001、`/availability`）は、画面の幅で並べ方が変わる。
+ * 空き状況カレンダー（SCR-001、`/availability`）は事務局専用の画面（ADR-013）。
+ * 画面の幅で並べ方が変わる。
  * - パソコンの幅: 週の表。予約は帯になり、押すと吹き出しに中身が出る。空いている 1 時間ごとの枠から申請へ進める
  * - スマホの幅: 日ごとの一覧。予約の中身ははじめから出ている。日付ごとの「＋」から申請へ進める（時刻はフォームで選ぶ）
  * 確かめることは同じにして、操作だけを `isMobile` で分ける。
@@ -51,17 +51,18 @@ async function closeReservation(page: Page, isMobile: boolean) {
     await page.keyboard.press("Escape");
   }
 }
+
 test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
-  test("施設と週を切り替えるとその週の予約が並び、他団体の予約は人数と備考が見えない", async ({
+  test("事務局が施設と週を切り替えると、その週の予約がどの団体の分も使用人数と備考まで並ぶ", async ({
     page,
     db,
     signInAs,
     isMobile,
   }) => {
-    // 前提: 自団体と他団体が、同じ施設の来週に 1 件ずつ予約している
-    const member = await createUser(db);
-    const ownGroup = await createGroup(db, {
-      members: [{ userId: member.id, role: MembershipRole.Member }],
+    // 前提: 2 つの団体が、同じ施設の来週に 1 件ずつ予約している
+    const applicant = await createUser(db);
+    const robotGroup = await createGroup(db, {
+      members: [{ userId: applicant.id, role: MembershipRole.Member }],
     });
     const otherApplicant = await createUser(db);
     const otherGroup = await createGroup(db, {
@@ -70,13 +71,13 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     const facility = await createFacility(db);
     const anotherFacility = await createFacility(db);
     await createReservation(db, {
-      groupId: ownGroup.id,
+      groupId: robotGroup.id,
       facilityId: facility.id,
-      createdBy: member.id,
+      createdBy: applicant.id,
       startAt: nextWeekAt(Weekday.Wednesday, 10),
       endAt: nextWeekAt(Weekday.Wednesday, 12),
       headCount: 4,
-      note: "自団体の備考",
+      note: "1 つ目の団体の備考",
     });
     await createReservation(db, {
       groupId: otherGroup.id,
@@ -86,9 +87,9 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
       endAt: nextWeekAt(Weekday.Thursday, 15),
       status: ReservationStatus.Approved,
       headCount: 7,
-      note: "他団体の備考",
+      note: "2 つ目の団体の備考",
     });
-    await signInAs(member.id);
+    await signInAs(personas.staff.id);
 
     // 施設を選び、来週へ進む。
     // 「次の週」のリンクは表示中の施設を指すので、施設の切り替えが終わってから押す
@@ -101,34 +102,25 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     const nextWeekLabel = page.getByText(formatFullDate(nextWeekAt(Weekday.Sunday, 0)));
     await expect(nextWeekLabel).toBeVisible();
 
-    // 自団体の予約は、使用人数と備考まで見られる
-    const ownDetail = await showReservation(
+    // 事務局には、どの団体の予約も使用人数と備考まで見える（COND-009）
+    const robotDetail = await showReservation(
       page,
       isMobile,
-      ownGroup.name,
-      `${ownGroup.name} 仮予約`,
+      robotGroup.name,
+      `${robotGroup.name} 仮予約`,
     );
-    await expect(ownDetail.getByText("自団体", { exact: true })).toBeVisible();
-    await expect(ownDetail.getByText("4 名")).toBeVisible();
-    await expect(ownDetail.getByText("自団体の備考")).toBeVisible();
+    await expect(robotDetail.getByText("4 名")).toBeVisible();
+    await expect(robotDetail.getByText("1 つ目の団体の備考")).toBeVisible();
     await closeReservation(page, isMobile);
 
-    // 他団体の予約は、団体名・日時・状態まで。使用人数と備考は見えない（COND-008）
     const otherDetail = await showReservation(
       page,
       isMobile,
       otherGroup.name,
       `${otherGroup.name} 承認済み`,
     );
-    await expect(otherDetail.getByText(otherGroup.name)).toBeVisible();
-    if (!isMobile) {
-      // パソコンの吹き出しには、見えない理由も書いてある
-      await expect(
-        otherDetail.getByText("使用人数と備考は、申請した団体のメンバーと事務局だけが見られます。"),
-      ).toBeVisible();
-    }
-    await expect(otherDetail.getByText("7 名")).toBeHidden();
-    await expect(otherDetail.getByText("他団体の備考")).toBeHidden();
+    await expect(otherDetail.getByText("7 名")).toBeVisible();
+    await expect(otherDetail.getByText("2 つ目の団体の備考")).toBeVisible();
     await closeReservation(page, isMobile);
 
     // 別の施設に切り替えると、同じ週のまま、この施設の予約は並ばなくなる
@@ -136,7 +128,7 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     await anotherTab.click();
     await expect(anotherTab).toHaveAttribute("aria-current", "page");
     await expect(nextWeekLabel).toBeVisible();
-    await expect(page.getByText(ownGroup.name)).toBeHidden();
+    await expect(page.getByText(robotGroup.name)).toBeHidden();
     await expect(page.getByText(otherGroup.name)).toBeHidden();
   });
 
@@ -146,10 +138,11 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     signInAs,
     isMobile,
   }) => {
+    // 事務局はどの有効な団体としても申請できるので（COND-009）、申請元にできる団体を 1 つ用意する
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
     const facility = await createFacility(db);
-    await signInAs(member.id);
+    await signInAs(personas.staff.id);
 
     const day = nextWeekAt(Weekday.Wednesday, 0);
     await openPage(page, `/availability?facility=${facility.id}`);
@@ -186,39 +179,28 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     }
   });
 
-  test("承認待ちの団体にしか入っていない人には、申請への導線が出ない", async ({
+  test("事務局でない人には空き状況をナビに出さず、開いても事務局専用である旨と申請・予約一覧への導線を出す", async ({
     page,
     db,
     signInAs,
-    isMobile,
   }) => {
     const member = await createUser(db);
-    await createGroup(db, {
-      status: GroupStatus.Pending,
-      members: [{ userId: member.id, role: MembershipRole.Admin }],
-    });
+    await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
     const facility = await createFacility(db);
     await signInAs(member.id);
 
-    await openPage(page, `/availability?facility=${facility.id}`);
-    /*
-     * 今週だと、土曜の夜などは枠がすべて過ぎていて、「過ぎている」ことが理由で押せなくなる。
-     * 承認待ちであることが理由で押せないのを確かめたいので、どの枠もまだ始まっていない来週で見る。
-     */
-    await page.getByRole("link", { name: "次の週" }).click();
-    await expect(page.getByText(formatFullDate(nextWeekAt(Weekday.Sunday, 0)))).toBeVisible();
+    // ナビ（パソコンのサイドバー・スマホのボトムバー）に空き状況が無い
+    await openPage(page, "/");
+    await expect(page.getByRole("link", { name: "空き状況" })).toHaveCount(0);
 
-    // 申請できない理由が出て、申請のボタンは無く、空いている枠からも申請できない（COND-006）
-    await expect(page.getByText("まだ予約を申請できません")).toBeVisible();
-    await expect(page.getByRole("button", { name: "仮予約を申請", exact: true })).toBeHidden();
-    if (isMobile) {
-      // スマホでは、日ごとの一覧に日付ごとの「＋」が出ない
-      await expect(page.getByText("終日空いています").first()).toBeVisible();
-      await expect(page.getByRole("button", { name: /の仮予約を申請$/ })).toHaveCount(0);
-    } else {
-      // パソコンでは、週の表の枠が押せない
-      await expect(page.getByRole("button", { name: /から仮予約を申請$/ }).first()).toBeDisabled();
-    }
+    // 古いリンクなどから開いても、カレンダーは出さずに案内する（ADR-013）
+    await openPage(page, `/availability?facility=${facility.id}`);
+    await expect(page.getByText("事務局スタッフ専用ページです")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "施設・設備の切り替え" })).toHaveCount(0);
+
+    // 案内から申請フォームへ進める
+    await page.getByRole("link", { name: "予約を申請する" }).click();
+    await expect(page).toHaveURL(/\/reservations\/new/);
   });
 
   test("事務局のダッシュボードの「今日の予約状況」に今日の予約が出る", async ({

@@ -6,8 +6,23 @@
  */
 
 /** 空き状況カレンダー（SCR-001）の URL を組み立てる */
-export const toCalendarPath = (facilityId: string, dateKey: string): string =>
+const toCalendarPath = (facilityId: string, dateKey: string): string =>
   `/availability?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
+
+/**
+ * この画面から戻る先と、その文言。
+ *
+ * 空き状況カレンダー（SCR-001）は事務局専用なので（ADR-013）、事務局は見ていた施設・日付のカレンダーへ、
+ * 団体の利用者は予約一覧へ戻す。団体の利用者をカレンダーへ戻すと、開けずに 403 の案内が出てしまう。
+ */
+export const toBackLink = (
+  isStaff: boolean,
+  facilityId: string,
+  dateKey: string,
+): { readonly to: string; readonly label: string } =>
+  isStaff
+    ? { to: toCalendarPath(facilityId, dateKey), label: "空き状況カレンダーへ戻る" }
+    : { to: "/reservations", label: "予約一覧へ戻る" };
 
 /**
  * 施設だけを選んだ状態でこの画面を開く URL。日付は画面の既定（今日）になる。

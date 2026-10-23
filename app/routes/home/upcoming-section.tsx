@@ -50,10 +50,10 @@ export function UpcomingSection({
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card p-6 text-center">
           <p className="text-sm font-medium">今後の予約はありません</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            空き状況を確認して、予約を申請できます。
+            申請フォームで施設と日付を選ぶと、その日の空き状況を確かめて申請できます。
           </p>
           <Button asChild size="sm" variant="outline" className="mt-3">
-            <Link to="/availability">空き状況を見る</Link>
+            <Link to="/reservations/new">予約を申請</Link>
           </Button>
         </div>
       )}

@@ -68,8 +68,6 @@ export function AvailabilityWeekGrid({
   reservations,
   facility,
   now,
-  canApply,
-  canCreateDirectly = false,
 }: Readonly<{
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
@@ -77,10 +75,6 @@ export function AvailabilityWeekGrid({
   facility: AvailabilityFacility;
   /** ローダーが読んだ現在時刻。今日の列に「いま」の線を引くのに使う */
   now: Date;
-  /** 空き枠を押して申請へ進めるかどうか（COND-006） */
-  canApply: boolean;
-  /** 承認済みの予約を直接作成できるかどうか（UC-008） */
-  canCreateDirectly?: boolean;
 }>) {
   return (
     /*
@@ -117,8 +111,6 @@ export function AvailabilityWeekGrid({
             reservations={reservations}
             facility={facility}
             now={now}
-            canApply={canApply}
-            canCreateDirectly={canCreateDirectly}
           />
         ))}
       </div>
@@ -212,15 +204,11 @@ function DayColumn({
   reservations,
   facility,
   now,
-  canApply,
-  canCreateDirectly = false,
 }: Readonly<{
   day: AvailabilityDay;
   reservations: readonly AvailabilityReservation[];
   facility: AvailabilityFacility;
   now: Date;
-  canApply: boolean;
-  canCreateDirectly?: boolean;
 }>) {
   const blocks = toDayBlocks(day, reservations);
   const placements = layoutTimelineItems(blocks);
@@ -260,8 +248,6 @@ function DayColumn({
            * 過ぎた日（前の週へ送れば出てくる）の枠がここに入る。
            */
           isPast={isPastHour(day, hour, now)}
-          canApply={canApply}
-          canCreateDirectly={canCreateDirectly}
         />
       ))}
 
@@ -298,8 +284,6 @@ function AvailableSlot({
   facility,
   isOccupied,
   isPast,
-  canApply,
-  canCreateDirectly = false,
 }: Readonly<{
   day: AvailabilityDay;
   hour: number;
@@ -307,8 +291,6 @@ function AvailableSlot({
   isOccupied: boolean;
   /** 開始時刻が過ぎた枠かどうか。過ぎた時間帯では申請を始められない */
   isPast: boolean;
-  canApply: boolean;
-  canCreateDirectly?: boolean;
 }>) {
   const label = isOccupied
     ? `${formatMonthDay(day.date)} ${hour}:00 は予約済み`
@@ -327,7 +309,7 @@ function AvailableSlot({
     isPast && "bg-muted/40",
   );
 
-  if (!canApply || isOccupied || isPast) {
+  if (isOccupied || isPast) {
     return <button type="button" disabled aria-label={label} className={className} />;
   }
 
@@ -338,10 +320,7 @@ function AvailableSlot({
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-72">
-        <AvailabilityDraftCard
-          draft={{ facility, day, startHour: hour }}
-          canCreateDirectly={canCreateDirectly}
-        />
+        <AvailabilityDraftCard draft={{ facility, day, startHour: hour }} />
       </PopoverContent>
     </Popover>
   );
@@ -359,6 +338,9 @@ function AvailableSlot({
  *
  * 中身は上から詰める。縦の中央に置くと、長い帯では上下に余白が散って
  * 書ける行数が減るうえ、隣の帯と行の高さがそろわない。
+ *
+ * 見るのは事務局だけなので（ADR-013）、どの団体の帯も同じ濃さで描く。
+ * 事務局のダッシュボードの「今日の予約状況」（`blockStyle(status, true)`）とそろえている。
  */
 function ReservationBlock({
   block,
@@ -372,7 +354,7 @@ function ReservationBlock({
   facilityName: string;
 }>) {
   const { reservation } = block;
-  const style = blockStyle(reservation.status, reservation.isOwnGroup);
+  const style = blockStyle(reservation.status, true);
   const statusLabel = reservationStatusLabel[reservation.status];
   const content = blockContent(block.endMinutes - block.startMinutes, columnCount);
 
@@ -392,9 +374,8 @@ function ReservationBlock({
           type="button"
           aria-label={`${timeRange} ${reservation.groupName} ${statusLabel} の詳細を見る`}
           className={cn(
-            "absolute flex flex-col overflow-hidden rounded-md border py-1 pr-1.5 text-left transition-shadow gap-0.5",
-            // 自団体は左端の線が太いぶん、文字の始まりも右へずらす
-            reservation.isOwnGroup ? "pl-2.5" : "pl-2",
+            // 左端の線（w-1）のぶん、文字の始まりを右へずらす
+            "absolute flex flex-col overflow-hidden rounded-md border py-1 pr-1.5 pl-2.5 text-left transition-shadow gap-0.5",
             "hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
             style.box,
             // 吹き出しを開いている帯は輪郭を強めて、どれの詳細を出しているかが分かるようにする
@@ -409,15 +390,8 @@ function ReservationBlock({
           }}
           title={`${timeRange}｜${reservation.groupName}｜${statusLabel}`}
         >
-          {/* 左端の線。自団体の予約ほど太くして、探しているものを見つけやすくする */}
-          <span
-            aria-hidden
-            className={cn(
-              "absolute inset-y-0 left-0",
-              reservation.isOwnGroup ? "w-1" : "w-0.5",
-              style.rail,
-            )}
-          />
+          {/* 左端の線。色みでステータスを表す */}
+          <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", style.rail)} />
 
           {content.showTime && (
             <p className="truncate text-[11px] leading-tight font-medium tabular-nums">
@@ -427,23 +401,19 @@ function ReservationBlock({
 
           <p
             className={cn(
-              "text-[11px] leading-tight wrap-anywhere",
+              "text-[11px] leading-tight font-medium wrap-anywhere",
               nameClampClass[content.nameLines],
-              reservation.isOwnGroup && "font-medium",
             )}
           >
             {reservation.groupName}
           </p>
 
           {content.showStatus && (
-            <p className="truncate text-[11px] leading-tight">
-              {statusLabel}
-              {reservation.isOwnGroup && "・自団体"}
-            </p>
+            <p className="truncate text-[11px] leading-tight">{statusLabel}</p>
           )}
 
-          {content.showHeadCount && reservation.detail !== null && (
-            <p className="truncate text-[11px] leading-tight">{reservation.detail.headCount} 名</p>
+          {content.showHeadCount && (
+            <p className="truncate text-[11px] leading-tight">{reservation.headCount} 名</p>
           )}
         </button>
       </PopoverTrigger>

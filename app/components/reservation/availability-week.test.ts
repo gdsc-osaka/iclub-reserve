@@ -36,8 +36,8 @@ const reservation = (
   startAt: new Date(startAt),
   endAt: new Date(endAt),
   status,
-  isOwnGroup: false,
-  detail: null,
+  headCount: 3,
+  note: null,
   transitions: [],
   hasApprovedOverlap: false,
 });

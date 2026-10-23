@@ -19,7 +19,6 @@ import {
 import { ReservationStatusBadge, reservationStatusLabel } from "./reservation-status-badge";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Badge } from "../ui/badge";
 
 /**
  * 1 週間分の予約を日ごとに縦に並べたもの（スマホ向け）。
@@ -37,8 +36,6 @@ export function AvailabilityWeekAgenda({
   reservations,
   facility,
   now,
-  canApply,
-  canCreateDirectly = false,
 }: Readonly<{
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
@@ -46,10 +43,6 @@ export function AvailabilityWeekAgenda({
   facility: AvailabilityFacility;
   /** ローダーが読んだ現在時刻。申請できる枠が残っている日かの判定に使う */
   now: Date;
-  /** 申請へ進めるかどうか（COND-006） */
-  canApply: boolean;
-  /** 承認済みで直接作成できるか（事務局のみ） */
-  canCreateDirectly?: boolean;
 }>) {
   return (
     <ul className="divide-y">
@@ -77,7 +70,7 @@ export function AvailabilityWeekAgenda({
                * 時刻を選ばずに日付だけを渡す導線なので、その日の枠がすべて
                * 過ぎていると、フォームへ進んでも選べるものが 1 つも無い。
                */}
-              {canApply && !isPastDay(day, now) && (
+              {!isPastDay(day, now) && (
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -91,10 +84,7 @@ export function AvailabilityWeekAgenda({
                   </PopoverTrigger>
 
                   <PopoverContent align="end" className="w-72">
-                    <AvailabilityDraftCard
-                      draft={{ facility, day, startHour: null }}
-                      canCreateDirectly={canCreateDirectly}
-                    />
+                    <AvailabilityDraftCard draft={{ facility, day, startHour: null }} />
                   </PopoverContent>
                 </Popover>
               )}
@@ -108,7 +98,11 @@ export function AvailabilityWeekAgenda({
   );
 }
 
-/** その日に入っている予約の一覧。1 件も無ければ空いていることを書く。 */
+/**
+ * その日に入っている予約の一覧。1 件も無ければ空いていることを書く。
+ *
+ * 見るのは事務局だけなので（ADR-013）、どの団体の予約も同じ濃さで描き、使用人数と備考まで出す。
+ */
 function DayReservations({
   day,
   reservations,
@@ -127,7 +121,7 @@ function DayReservations({
   return (
     <ul className="mt-2 flex flex-col gap-2">
       {blocks.map(({ reservation }) => {
-        const style = blockStyle(reservation.status, reservation.isOwnGroup);
+        const style = blockStyle(reservation.status, true);
         const timeRange = formatTimeRange(reservation.startAt, reservation.endAt);
         const statusLabel = reservationStatusLabel[reservation.status];
 
@@ -155,24 +149,13 @@ function DayReservations({
                      */}
                     <span className="text-sm font-medium tabular-nums">{timeRange}</span>
                     <ReservationStatusBadge status={reservation.status} />
-                    {reservation.isOwnGroup && <Badge>自団体</Badge>}
                   </div>
 
-                  {/* 自団体の団体名は太字にする。色の濃さだけでは自分たちの予約を見つけにくい */}
-                  <p className={cn("mt-1 text-sm", reservation.isOwnGroup && "font-medium")}>
-                    {reservation.groupName}
-                  </p>
+                  <p className="mt-1 text-sm font-medium">{reservation.groupName}</p>
 
-                  {/*
-                   * 使用人数と備考は自団体のメンバーと事務局にしか渡していない（COND-008）。
-                   * 他団体の予約では detail が null になるので、ここは描かれない。
-                   */}
-                  {reservation.detail !== null && (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {reservation.detail.headCount} 名
-                      {reservation.detail.note !== null && `／${reservation.detail.note}`}
-                    </p>
-                  )}
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {reservation.headCount} 名{reservation.note !== null && `／${reservation.note}`}
+                  </p>
                 </button>
               </PopoverTrigger>
 

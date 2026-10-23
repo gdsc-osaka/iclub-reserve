@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { Calendar, CircleAlert, Plus } from "lucide-react";
+import { Calendar, CalendarCheck, CircleAlert, Plus } from "lucide-react";
 import type { Result } from "neverthrow";
 import { Link } from "react-router";
 
@@ -548,7 +548,12 @@ function StaffDashboard({ data, now }: Readonly<{ data: StaffLoaderData; now: Da
   );
 }
 
-/** 今日の日付と、よく使う画面への入口 */
+/**
+ * 今日の日付と、よく使う画面への入口。
+ *
+ * 空き状況（SCR-001）は事務局専用なので（ADR-013）、団体の利用者には代わりに予約一覧への入口を出す。
+ * 団体の利用者は、空きを申請フォームの日時の選択で確かめる。
+ */
 function DashboardHeader({ now, isStaff }: Readonly<{ now: Date; isStaff: boolean }>) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -559,10 +564,17 @@ function DashboardHeader({ now, isStaff }: Readonly<{ now: Date; isStaff: boolea
       {/* スマホでは 2 つを 2 列・全幅に並べる */}
       <div className="grid grid-cols-2 gap-2 sm:flex">
         <Button asChild variant="outline" size="lg">
-          <Link to="/availability">
-            <Calendar aria-hidden />
-            空き状況を見る
-          </Link>
+          {isStaff ? (
+            <Link to="/availability">
+              <Calendar aria-hidden />
+              空き状況を見る
+            </Link>
+          ) : (
+            <Link to="/reservations">
+              <CalendarCheck aria-hidden />
+              予約一覧を見る
+            </Link>
+          )}
         </Button>
         <Button asChild size="lg">
           <Link to="/reservations/new">
