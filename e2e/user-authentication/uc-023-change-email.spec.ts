@@ -33,7 +33,7 @@ test.describe("UC-023 メールアドレスを変更する", { tag: "@UC-023" },
 
     await openPage(page, "/account");
     await accountCard(page, "メールアドレス").getByRole("button", { name: "変更" }).click();
-    const dialog = page.getByRole("alertdialog");
+    const dialog = page.getByRole("dialog");
 
     // 1. 新しいアドレスを入れる
     await dialog.getByLabel("新しいメールアドレス").fill(newEmail);
@@ -75,7 +75,7 @@ test.describe("UC-023 メールアドレスを変更する", { tag: "@UC-023" },
 
     await openPage(page, "/account");
     await accountCard(page, "メールアドレス").getByRole("button", { name: "変更" }).click();
-    const dialog = page.getByRole("alertdialog");
+    const dialog = page.getByRole("dialog");
 
     await dialog.getByLabel("新しいメールアドレス").fill(`e2e-${uniqueSuffix()}@example.com`);
     await dialog.getByRole("button", { name: "次へ（認証コード送信）" }).click();

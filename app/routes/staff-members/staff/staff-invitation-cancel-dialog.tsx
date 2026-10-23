@@ -53,7 +53,7 @@ export function StaffInvitationCancelDialog({
     <>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent>
           <Form method="post" className="flex flex-col gap-4">
             <input type="hidden" name="intent" value="cancel-staff-invitation" />
             <input type="hidden" name="invitation_id" value={invitationId} />

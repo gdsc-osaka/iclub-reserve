@@ -34,7 +34,7 @@ test.describe("UC-031 ログイン中の端末を管理する", { tag: "@UC-031"
     await expect(logoutButton).toHaveCount(1);
     await logoutButton.click();
 
-    const dialog = page.getByRole("dialog", { name: "端末からログアウトしますか？" });
+    const dialog = page.getByRole("alertdialog", { name: "端末からログアウトしますか？" });
     await expect(dialog.getByText("「Android の Chrome」をログアウトします。")).toBeVisible();
     await dialog.getByRole("button", { name: "ログアウトする" }).click();
 
@@ -56,7 +56,9 @@ test.describe("UC-031 ログイン中の端末を管理する", { tag: "@UC-031"
     const card = accountCard(page, "ログイン中の端末");
     await card.getByRole("button", { name: "この端末以外をすべてログアウト" }).click();
 
-    const dialog = page.getByRole("dialog", { name: "他のすべての端末からログアウトしますか？" });
+    const dialog = page.getByRole("alertdialog", {
+      name: "他のすべての端末からログアウトしますか？",
+    });
     await expect(dialog.getByText(/（2 台）/)).toBeVisible();
     await dialog.getByRole("button", { name: "ログアウトする" }).click();
 

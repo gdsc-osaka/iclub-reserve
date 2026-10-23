@@ -232,7 +232,7 @@ function InvitationRow({
                 辞退
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent className="max-w-md">
+            <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>招待を辞退しますか？</AlertDialogTitle>
                 <AlertDialogDescription>
