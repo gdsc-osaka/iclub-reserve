@@ -40,7 +40,7 @@ test.describe("UC-004 承認済み予約をキャンセルする", { tag: "@UC-0
     const row = page.getByRole("listitem").filter({ hasText: facility.name });
     await row.getByRole("button", { name: "キャンセル" }).click();
 
-    // 確認のダイアログで、理由を添えてキャンセルする
+    // 確認のダイアログで、理由を添えてキャンセルする（理由は必須。COND-002）
     const dialog = page.getByRole("alertdialog", { name: "予約のキャンセル" });
     await dialog.getByLabel(/キャンセル理由/).fill("サークルの予定が変わったため");
     await dialog.getByRole("button", { name: "キャンセルする" }).click();

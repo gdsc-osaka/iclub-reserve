@@ -130,48 +130,60 @@ export const parseReservationTransition = (value: unknown): ReservationTransitio
 export type ReservationActor = Actor;
 
 /**
+ * 理由が空だったときに返す、ログ用の説明（`message`）と利用者に見せる文言（`userMessage`）。
+ *
+ * 理由を取る操作（承認以外のすべて）を並べる。承認は理由を取らないので載せない。
+ */
+const missingReasonMessages = {
+  [ReservationTransition.Withdraw]: {
+    message: "団体による取り消しの理由が空である。",
+    userMessage: "取り消し理由を入力してください。",
+  },
+  [ReservationTransition.Cancel]: {
+    message: "団体によるキャンセルの理由が空である。",
+    userMessage: "キャンセル理由を入力してください。",
+  },
+  [ReservationTransition.Reject]: {
+    message: "却下理由が空である。",
+    userMessage: "却下理由を入力してください。",
+  },
+  [ReservationTransition.StaffCancel]: {
+    message: "事務局キャンセルの理由が空である。",
+    userMessage: "キャンセル理由を入力してください。",
+  },
+} as const satisfies Record<
+  Exclude<ReservationTransition, typeof ReservationTransition.Approve>,
+  { readonly message: string; readonly userMessage: string }
+>;
+
+/**
  * 操作理由の妥当性を検証する（COND-002）。
  *
- * 事務局による却下（reject）およびキャンセル（staffCancel）は理由入力が必須（空文字・空白のみも拒否）。
- * 団体による取り消し（withdraw）およびキャンセル（cancel）は任意。
- * 承認（approve）は理由不要（null を返す）。
+ * 承認（approve）以外の操作、つまり団体による取り消し（withdraw）・キャンセル（cancel）と
+ * 事務局による却下（reject）・キャンセル（staffCancel）は、どれも理由の入力が必須
+ * （空文字・空白のみも拒否）。前後の空白を除いた値を返す。
+ * 団体の取り消し・キャンセルにも理由を求めるのは、理由を書く手間によって、
+ * 安易な予約の申請と取り消しを抑えるため。
+ * 承認は理由を取らない（null を返す）。
  */
 export const validateTransitionReason = (
   transition: ReservationTransition,
   reason?: string | null,
 ): Result<string | null, ReservationError> => {
-  const trimmed = reason?.trim() ?? "";
-
-  switch (transition) {
-    case ReservationTransition.Reject:
-      if (trimmed === "") {
-        return err({
-          code: ReservationErrorCode.InvalidInput,
-          field: ReservationField.StatusReason,
-          message: "却下理由が空である。",
-          userMessage: "却下理由を入力してください。",
-        });
-      }
-      return ok(trimmed);
-
-    case ReservationTransition.StaffCancel:
-      if (trimmed === "") {
-        return err({
-          code: ReservationErrorCode.InvalidInput,
-          field: ReservationField.StatusReason,
-          message: "事務局キャンセルの理由が空である。",
-          userMessage: "キャンセル理由を入力してください。",
-        });
-      }
-      return ok(trimmed);
-
-    case ReservationTransition.Withdraw:
-    case ReservationTransition.Cancel:
-      return ok(trimmed !== "" ? trimmed : null);
-
-    case ReservationTransition.Approve:
-      return ok(null);
+  if (transition === ReservationTransition.Approve) {
+    return ok(null);
   }
+
+  const trimmed = reason?.trim() ?? "";
+  if (trimmed === "") {
+    return err({
+      code: ReservationErrorCode.InvalidInput,
+      field: ReservationField.StatusReason,
+      ...missingReasonMessages[transition],
+    });
+  }
+
+  return ok(trimmed);
 };
 
 /**

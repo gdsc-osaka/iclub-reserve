@@ -53,7 +53,7 @@ export interface ChangeReservationStatusArgs {
   readonly isStaff: boolean;
   /** 実行する状態遷移操作 */
   readonly transition: ReservationTransition;
-  /** 操作の理由（却下・事務局キャンセルは必須、取り消し・キャンセルは任意） */
+  /** 操作の理由（承認では使わず、それ以外の操作では必須。COND-002） */
   readonly reason?: string | null;
   /** 更新日時の基準となる日時（テスト容易化のため任意指定可能） */
   readonly now?: Date;

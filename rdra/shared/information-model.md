@@ -40,7 +40,7 @@ entities:
       - name: "status_reason"
         type: "string"
         required: false
-        description: "却下・キャンセル理由。status が rejected（事務局却下）または cancelled_by_staff（事務局キャンセル）の場合は必須（COND-002）。withdrawn（団体取り消し）・cancelled（団体キャンセル）の場合は任意。開示範囲: 自団体のメンバーと事務局のみ（COND-008）。"
+        description: "取り消し・却下・キャンセルの理由。status が withdrawn（団体取り消し）・cancelled（団体キャンセル）・rejected（事務局却下）・cancelled_by_staff（事務局キャンセル）になるときは必須（COND-002）。団体の取り消し・キャンセルを必須にする前に終えた予約には、理由の無いものが残っているため、項目としては任意のままにする。開示範囲: 自団体のメンバーと事務局のみ（COND-008）。"
       - name: "unlock_arrangement"
         type: "enum"
         required: false

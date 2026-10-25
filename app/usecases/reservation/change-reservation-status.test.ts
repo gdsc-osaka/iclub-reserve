@@ -209,28 +209,6 @@ describe("changeReservationStatusUseCase", () => {
       );
     });
 
-    it("1b. 団体メンバーが理由なしで仮予約を取り消す（理由は任意）", async () => {
-      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
-
-      const args: ChangeReservationStatusArgs = {
-        reservationId: "res_provisional_01",
-        actorUserId: "usr_student_01",
-        isStaff: false,
-        transition: ReservationTransition.Withdraw,
-        appBaseUrl: "https://reserve.example.com",
-        reason: null,
-        now: testNow,
-      };
-
-      const result = await changeReservationStatusUseCase(deps, args);
-      expect(result.isOk()).toBe(true);
-      expect(result._unsafeUnwrap().statusReason).toBeNull();
-
-      const passedMails = (spies.applyStatusTransition.mock.calls[0] as unknown[])[1] as any[];
-      expect(passedMails).toHaveLength(1);
-      expect(passedMails[0]?.text).not.toContain("理由:");
-    });
-
     it("2. 団体メンバーが承認済み予約をキャンセルする（approved → cancelled）", async () => {
       const { deps, spies } = createMockDeps({ reservation: baseApprovedReservation });
 
@@ -553,6 +531,7 @@ describe("changeReservationStatusUseCase", () => {
         isStaff: false,
         transition: ReservationTransition.Withdraw,
         appBaseUrl: "https://reserve.example.com",
+        reason: "都合がつかなくなったため",
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_student_01");
@@ -574,6 +553,7 @@ describe("changeReservationStatusUseCase", () => {
         isStaff: true,
         transition: ReservationTransition.Withdraw,
         appBaseUrl: "https://reserve.example.com",
+        reason: "都合がつかなくなったため",
       });
 
       expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
@@ -592,6 +572,7 @@ describe("changeReservationStatusUseCase", () => {
         isStaff: false,
         transition: ReservationTransition.Withdraw,
         appBaseUrl: "https://reserve.example.com",
+        reason: "都合がつかなくなったため",
       });
 
       expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.DatabaseError);
@@ -635,6 +616,64 @@ describe("changeReservationStatusUseCase", () => {
       expect(result._unsafeUnwrapErr().userMessage).toContain("キャンセル理由を入力してください");
     });
 
+    it("理由なしの取り消しは弾かれ、予約を更新しない（COND-002）", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
+        reason: null,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("取り消し理由を入力してください");
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
+    it("理由なしのキャンセルは弾かれ、予約を更新しない（COND-002）", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseApprovedReservation });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_approved_01",
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        transition: ReservationTransition.Cancel,
+        appBaseUrl: "https://reserve.example.com",
+        reason: "   ",
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.InvalidInput);
+      expect(result._unsafeUnwrapErr().userMessage).toContain("キャンセル理由を入力してください");
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
+    /*
+     * 権限を理由より先に確かめる。所属していない人に「理由を入力してください」と返すと、
+     * 入力し直しても結局は弾かれる。
+     */
+    it("所属していない人の取り消しは、理由が空でも Forbidden になる", async () => {
+      const { deps } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        membership: null,
+      });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_other_01",
+        isStaff: false,
+        transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
+        reason: "",
+      });
+
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
+    });
+
     it("他団体所属のユーザーによる取り消しは拒否される（自団体の突き合わせ）", async () => {
       const { deps } = createMockDeps({
         reservation: baseProvisionalReservation,
@@ -647,6 +686,7 @@ describe("changeReservationStatusUseCase", () => {
         isStaff: false,
         transition: ReservationTransition.Withdraw,
         appBaseUrl: "https://reserve.example.com",
+        reason: "都合がつかなくなったため",
       };
 
       const result = await changeReservationStatusUseCase(deps, args);
@@ -739,6 +779,7 @@ describe("changeReservationStatusUseCase", () => {
         isStaff: false,
         transition: ReservationTransition.Withdraw,
         appBaseUrl: "https://reserve.example.com",
+        reason: "都合がつかなくなったため",
       };
 
       const result = await changeReservationStatusUseCase(deps, args);
@@ -779,6 +820,7 @@ describe("changeReservationStatusUseCase", () => {
         isStaff: false,
         transition: ReservationTransition.Withdraw,
         appBaseUrl: "https://reserve.example.com",
+        reason: "都合がつかなくなったため",
       };
 
       const result = await changeReservationStatusUseCase(deps, args);
