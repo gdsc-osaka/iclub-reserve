@@ -46,8 +46,8 @@ interface DialogConfig {
   readonly title: string;
   readonly actionLabel: string;
   readonly actionVariant: "default" | "destructive";
+  /** 理由の欄を出すか。欄を出す操作では、理由はどれも必須（COND-002） */
   readonly hasReason: boolean;
-  readonly isReasonRequired: boolean;
   readonly reasonLabel: string;
   readonly reasonPlaceholder: string;
 }
@@ -60,9 +60,8 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         actionLabel: "取り消す",
         actionVariant: "destructive",
         hasReason: true,
-        isReasonRequired: false,
-        reasonLabel: "取り消し理由（任意）",
-        reasonPlaceholder: "取り消しの理由があれば入力してください",
+        reasonLabel: "取り消し理由",
+        reasonPlaceholder: "取り消しの理由を入力してください",
       };
     case ReservationTransition.Cancel:
       return {
@@ -70,9 +69,8 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         actionLabel: "キャンセルする",
         actionVariant: "destructive",
         hasReason: true,
-        isReasonRequired: false,
-        reasonLabel: "キャンセル理由（任意）",
-        reasonPlaceholder: "キャンセルの理由があれば入力してください",
+        reasonLabel: "キャンセル理由",
+        reasonPlaceholder: "キャンセルの理由を入力してください",
       };
     case ReservationTransition.Approve:
       return {
@@ -80,7 +78,6 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         actionLabel: "承認する",
         actionVariant: "default",
         hasReason: false,
-        isReasonRequired: false,
         reasonLabel: "",
         reasonPlaceholder: "",
       };
@@ -90,7 +87,6 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         actionLabel: "却下する",
         actionVariant: "destructive",
         hasReason: true,
-        isReasonRequired: true,
         reasonLabel: "却下理由",
         reasonPlaceholder: "却下の理由を入力してください",
       };
@@ -100,7 +96,6 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         actionLabel: "キャンセルする",
         actionVariant: "destructive",
         hasReason: true,
-        isReasonRequired: true,
         reasonLabel: "キャンセル理由",
         reasonPlaceholder: "キャンセルの理由を入力してください",
       };
@@ -111,7 +106,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
  * 予約一覧の操作確認ダイアログ。
  *
  * 予約の要約（日時・施設名・人数・事務局画面では団体名）と、
- * 必要に応じた理由入力欄（却下・事務局キャンセルは COND-002 により必須）を表示する。
+ * 承認以外の操作では理由の入力欄（COND-002 により必須）を表示する。
  *
  * `<Form method="post">` による通常のフォーム送信で構成し、JavaScript が無効でも動作する。
  */
@@ -128,7 +123,7 @@ export function ReservationActionDialog({
   const navigation = useNavigation();
 
   const config = getDialogConfig(transition);
-  const isSubmitDisabled = config.isReasonRequired && reason.trim() === "";
+  const isSubmitDisabled = config.hasReason && reason.trim() === "";
 
   // この予約のこの操作が送信中か。同じ画面に他の予約のボタンが並ぶので、
   // intent（操作）だけでなく reservationId まで見て、押したボタンだけを見分ける
@@ -202,9 +197,7 @@ export function ReservationActionDialog({
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor={`reason-${item.id}-${transition}`} className="text-sm">
                   {config.reasonLabel}
-                  {config.isReasonRequired && (
-                    <span className="ml-1.5 text-xs font-semibold text-destructive">(必須)</span>
-                  )}
+                  <span className="ml-1.5 text-xs font-semibold text-destructive">(必須)</span>
                 </Label>
                 <Textarea
                   id={`reason-${item.id}-${transition}`}
@@ -213,7 +206,7 @@ export function ReservationActionDialog({
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder={config.reasonPlaceholder}
-                  required={config.isReasonRequired}
+                  required
                   className="text-sm"
                 />
               </div>
@@ -235,7 +228,7 @@ export function ReservationActionDialog({
           <input type="hidden" name="intent" value={transition} />
           <input type="hidden" name="reservationId" value={item.id} />
           {/*
-            理由の欄はダイアログと同じくここにも置く。却下・事務局キャンセルは理由が必須
+            理由の欄はダイアログと同じくここにも置く。承認以外の操作は理由が必須
             （COND-002）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
           */}
           {config.hasReason && (
@@ -248,7 +241,7 @@ export function ReservationActionDialog({
                 name="reason"
                 rows={2}
                 placeholder={config.reasonPlaceholder}
-                required={config.isReasonRequired}
+                required
                 className="text-sm"
               />
             </>
