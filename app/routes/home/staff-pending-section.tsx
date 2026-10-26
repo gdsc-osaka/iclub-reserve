@@ -153,19 +153,18 @@ function PendingReservationRow({
 
       {/* スマホでは行の下に 2 列・全幅で並べる */}
       <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
-        <Button
-          size="sm"
+        <ReservationActionDialog
+          item={item}
+          transition={ReservationTransition.Approve}
+          showGroupName
+          fetcher={fetcher}
           disabled={item.hasApprovedOverlap}
-          onClick={() =>
-            fetcher.submit(
-              { intent: ReservationTransition.Approve, reservationId: item.id },
-              { method: "post" },
-            )
+          trigger={
+            <Button size="sm" disabled={item.hasApprovedOverlap} className="h-9">
+              承認
+            </Button>
           }
-          className="h-9"
-        >
-          承認
-        </Button>
+        />
         <ReservationActionDialog
           item={item}
           transition={ReservationTransition.Reject}

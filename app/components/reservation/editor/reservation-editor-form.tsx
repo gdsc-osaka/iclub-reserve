@@ -25,9 +25,14 @@ import {
   type ScheduleDraft,
 } from "~/components/reservation/editor/use-schedule-draft";
 import {
+  shouldShowApplicationNotice,
+  shouldShowShortNoticeAlert,
+} from "~/components/reservation/editor/notice";
+import {
   ReservationStatusBadge,
   reservationStatusLabel,
 } from "~/components/reservation/reservation-status-badge";
+import { UnlockArrangementField } from "~/components/reservation/unlock-arrangement-field";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -48,7 +53,13 @@ import {
   RESERVATION_NOTE_MAX_LENGTH,
   RESERVATION_STEP_MINUTES,
   ReservationStatus,
+  type UnlockArrangement,
 } from "~/domain/reservation";
+import { APPLICATION_DEADLINE_NOTICE, SHORT_NOTICE_ALERT } from "~/domain/reservation/lead-time";
+import {
+  requiresUnlockArrangementReselection,
+  unlockArrangementLabel,
+} from "~/domain/reservation/unlock-arrangement";
 import {
   changedContentFields,
   editTargetStatus,
@@ -217,6 +228,10 @@ export function ReservationEditorForm({
       purpose.canCreateDirectly === true &&
       (submitted?.mode ?? initial.mode) === "direct",
   );
+  /** 選んだ解錠の手配（COND-027）。直接作成と、承認済みの予約の施設・日時の直接変更で選ぶ */
+  const [unlockArrangement, setUnlockArrangement] = useState<UnlockArrangement | null>(
+    submitted?.unlockArrangement ?? null,
+  );
   /** スマホの全画面の選択を開いているか */
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   /** 確認ダイアログを開いているか */
@@ -239,17 +254,48 @@ export function ReservationEditorForm({
   const needsReapproval =
     !isDirectEdit && editPreview?.outcome === ReservationEditOutcome.Reapproval;
 
+  /** 申請の期限の目安（COND-028）の、いつも出す案内と、7 日を切ったときの注意を出すか */
+  const noticeContext =
+    purpose.kind === "create"
+      ? ({ kind: "create", isDirect } as const)
+      : ({ kind: "edit", isDirect: isDirectEdit, outcome: editPreview?.outcome ?? null } as const);
+  const showApplicationNotice = shouldShowApplicationNotice(noticeContext);
+  const showShortNotice = shouldShowShortNoticeAlert(
+    noticeContext,
+    range === null ? null : atTokyoMinutes(draft.day, range.startMinutes),
+    now,
+  );
+
+  /*
+   * 解錠の手配（COND-027）の欄を出すか。直接作成ではいつも出す。
+   * 直接変更では、承認済みの予約の施設・日時を変えたときだけ出す（判定は action と同じドメインの関数）。
+   * 欄を消したときは、選んでいた値も送らない（欄ごと消えるので、ラジオの値も送られない）。
+   */
+  const showUnlockArrangementForCreate = purpose.kind === "create" && isDirect;
+  const showUnlockArrangementForEdit =
+    isDirectEdit &&
+    editPreview !== null &&
+    requiresUnlockArrangementReselection(purpose.reservation.status, editPreview.changed);
+  const showUnlockArrangement = showUnlockArrangementForCreate || showUnlockArrangementForEdit;
+  /** 解錠の手配の欄を出しているのに、まだ選んでいない。確認へ進ませない */
+  const isUnlockArrangementMissing = showUnlockArrangement && unlockArrangement === null;
+
   /*
    * 確認へ進めるのは、時間帯を選んでいて、承認済みの予約と重なっておらず（COND-001）、
-   * 画面が次の状態へ移っている最中でなく、変更なら 1 項目以上変えているときだけ。
+   * 画面が次の状態へ移っている最中でなく、変更なら 1 項目以上変えていて、
+   * 解錠の手配の欄を出していればそれを選んでいるときだけ。
    *
    * 未選択でも止めるのは、そのすぐ上に「時間帯は未選択」と出しているため。
    * 承認済みと重なっているときも、すぐ上に理由の警告を出している。
-   * 何も変えていないときも、ボタンのすぐ上にそう出している。
+   * 何も変えていないときと、解錠の手配を選んでいないときも、ボタンのすぐ上にそう出している。
    * 理由の見えない場所で止めているわけではない。
    */
   const canConfirm =
-    range !== null && draft.approvedConflicts.length === 0 && !isBusy && !isUnchanged;
+    range !== null &&
+    draft.approvedConflicts.length === 0 &&
+    !isBusy &&
+    !isUnchanged &&
+    !isUnlockArrangementMissing;
 
   /** 変更前の施設。確認のダイアログで「変更前」を添えるために使う */
   const originalFacility =
@@ -366,26 +412,67 @@ export function ReservationEditorForm({
 
           <FieldError id={ids.periodError} message={fieldErrors.period} />
 
+          {/* 1 週間前までの申請の案内と、7 日を切ったときの注意（COND-028） */}
+          {showApplicationNotice && (
+            <p className="text-xs text-muted-foreground">{APPLICATION_DEADLINE_NOTICE}</p>
+          )}
+
+          {showShortNotice && (
+            <Alert className="border-amber-500/30 bg-amber-500/5">
+              <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+              <AlertDescription>{SHORT_NOTICE_ALERT}</AlertDescription>
+            </Alert>
+          )}
+
           <ScheduleConflictAlerts draft={draft} />
 
           {/* 送る前に気づけるよう、確認のダイアログを開く前から出しておく */}
           {needsReapproval && <ReapprovalAlert />}
           {isDirectEdit && <DirectEditAlert />}
 
+          {showUnlockArrangementForEdit && (
+            <div className="flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。
+              </p>
+              <UnlockArrangementField
+                idPrefix="direct-edit"
+                value={unlockArrangement}
+                onValueChange={setUnlockArrangement}
+                error={fieldErrors.unlockArrangement}
+              />
+            </div>
+          )}
+
           {purpose.kind === "create" && purpose.canCreateDirectly === true && (
             <>
               <Separator />
 
-              <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
-                <div className="flex flex-col gap-0.5">
-                  <Label htmlFor="direct-mode-switch" className="text-sm font-medium">
-                    承認済みとして直接作成する
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    仮予約を経ずに最初から承認済みとして登録します（事務局専用）。
-                  </p>
+              <div className="flex flex-col gap-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-col gap-0.5">
+                    <Label htmlFor="direct-mode-switch" className="text-sm font-medium">
+                      承認済みとして直接作成する
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      仮予約を経ずに最初から承認済みとして登録します（事務局専用）。
+                    </p>
+                  </div>
+                  <Switch
+                    id="direct-mode-switch"
+                    checked={isDirect}
+                    onCheckedChange={setIsDirect}
+                  />
                 </div>
-                <Switch id="direct-mode-switch" checked={isDirect} onCheckedChange={setIsDirect} />
+
+                {showUnlockArrangementForCreate && (
+                  <UnlockArrangementField
+                    idPrefix="direct-create"
+                    value={unlockArrangement}
+                    onValueChange={setUnlockArrangement}
+                    error={fieldErrors.unlockArrangement}
+                  />
+                )}
               </div>
             </>
           )}
@@ -495,6 +582,11 @@ export function ReservationEditorForm({
                 まだ何も変更していません。
               </p>
             )}
+            {isUnlockArrangementMissing && (
+              <p className="text-center text-xs text-muted-foreground">
+                解錠の手配を選んでください。
+              </p>
+            )}
             <Button type="submit" size="lg" disabled={!canConfirm} className="w-full">
               <ClipboardCheck aria-hidden />
               {purpose.kind === "edit" ? "変更内容を確認する" : "内容を確認する"}
@@ -579,6 +671,11 @@ export function ReservationEditorForm({
           <SummaryItem label="団体">
             {purpose.kind === "edit" ? purpose.reservation.groupName : (group?.name ?? null)}
           </SummaryItem>
+          {showUnlockArrangement && unlockArrangement !== null && (
+            <SummaryItem label="解錠の手配">
+              {unlockArrangementLabel[unlockArrangement]}
+            </SummaryItem>
+          )}
           <SummaryItem label="使用人数">
             <div className="flex flex-col">
               <span>{headCount.trim() === "" ? null : `${headCount} 名`}</span>

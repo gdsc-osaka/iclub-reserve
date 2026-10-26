@@ -74,10 +74,18 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     await page.getByLabel("使用人数").fill("6");
     await page.getByLabel("備考").fill("事務局による直接変更の備考");
 
+    // 日時を変更したため解錠の手配を選び直す欄が出現し、選ぶまで進めない
+    await expect(
+      page.getByText("承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。"),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
+    await page.getByLabel("手配済み").click();
+
     // 確認ダイアログを開く
     await page.getByRole("button", { name: "変更内容を確認する" }).click();
     const confirm = page.getByRole("alertdialog", { name: "この内容で変更しますか？" });
     await expect(confirm).toBeVisible();
+    await expect(confirm.getByText("手配済み", { exact: true })).toBeVisible();
     await expect(
       confirm.getByText("変更すると、申請者と団体の管理者にお知らせのメールが届きます。"),
     ).toBeVisible();

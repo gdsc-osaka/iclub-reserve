@@ -5,7 +5,11 @@ import {
   createReservationMailDrafts,
   type ReservationMailEvent,
 } from "~/domain/mail/reservation-mail";
-import { ReservationErrorCode, type ReservationError } from "~/domain/reservation";
+import {
+  ReservationErrorCode,
+  type ReservationError,
+  type UnlockArrangement,
+} from "~/domain/reservation";
 import type { ReservationContent } from "~/domain/reservation/edit";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { ensureNoApprovedOverlap, type ApprovedOverlapDeps } from "./approved-overlap";
@@ -37,6 +41,8 @@ export interface ResolveEditOverlapAndMailsArgs {
   readonly mailEvent: ReservationMailEvent;
   /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
   readonly appBaseUrl: string;
+  /** 通知メールに載せる解錠の手配 */
+  readonly unlockArrangement: UnlockArrangement | null;
 }
 
 /**
@@ -68,6 +74,7 @@ export const resolveEditOverlapAndMails = (
           startAt: args.content.startAt,
           endAt: args.content.endAt,
           statusReason: null,
+          unlockArrangement: args.unlockArrangement,
           updatedAt: args.now,
         },
         audience,

@@ -14,8 +14,10 @@ import {
   type Reservation,
   type ReservationError,
   type ReservationRepository,
+  type UnlockArrangement,
 } from "~/domain/reservation";
 import { toReservationCreatedChanges } from "~/domain/reservation/audit-log";
+import { validateUnlockArrangement } from "~/domain/reservation/unlock-arrangement";
 import { validateReservationDraft } from "~/domain/reservation/validation";
 import { APPROVED_OVERLAP_MESSAGE, ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
@@ -37,6 +39,8 @@ export interface CreateDirectReservationArgs {
   readonly isStaff: boolean;
   /** 「過去の日時か」を判定する基準になる現在時刻 */
   readonly now: Date;
+  /** 承認済みで作るため、解錠の手配を必ず指定する（COND-027） */
+  readonly unlockArrangement: UnlockArrangement | null;
   readonly reservation: {
     readonly facilityId: string;
     readonly groupId: string;
@@ -64,7 +68,8 @@ export interface CreateDirectReservationReturns {
  * 予約の作成と同じ batch で書き込む（`createApproved`）。
  *
  * 【確かめる順序の理由】
- * DB を引かずに分かる入力の検証（validateReservationDraft）を先に、権限の確認をその次に置く。
+ * DB を引かずに分かる入力の検証（validateReservationDraft・解錠の手配の validateUnlockArrangement）を先に、
+ * 権限の確認をその次に置く。
  * 権限を団体の確認より先に置かないと、事務局でない人が団体 ID を当てずっぽうに送るだけで
  * 「その団体が有効かどうか」を読み取れてしまう。
  * 施設・団体の確認後に、重複の確認（COND-001）を作成の直前に置き、確認から作成までの間隔を短くする。
@@ -77,18 +82,22 @@ export const createDirectReservationUseCase = (
   safeTry(async function* () {
     const id = createId();
     const now = args.now;
+
+    yield* validateReservationDraft(args.reservation, now);
+    const unlockArrangement = yield* validateUnlockArrangement(args.unlockArrangement);
+
     const reservation: Reservation = {
       ...args.reservation,
       id,
       status: ReservationStatus.Approved,
       statusReason: null,
+      unlockArrangement,
       createdBy: args.actorUserId,
       createdAt: now,
       requestedAt: now,
       updatedAt: now,
     };
 
-    yield* validateReservationDraft(args.reservation, now);
     yield* ensureReservationPermission(
       deps,
       args.reservation.groupId,
@@ -118,6 +127,7 @@ export const createDirectReservationUseCase = (
         headCount: args.reservation.headCount,
         note: args.reservation.note,
         status: ReservationStatus.Approved,
+        unlockArrangement,
       }),
     };
 

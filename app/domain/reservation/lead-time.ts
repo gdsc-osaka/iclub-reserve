@@ -6,6 +6,18 @@ import { addDays } from "~/lib/date";
 export const APPLICATION_LEAD_DAYS = 7;
 
 /**
+ * 1 週間前までの申請を求める案内文（COND-028）。
+ */
+export const APPLICATION_DEADLINE_NOTICE =
+  "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。";
+
+/**
+ * 利用日まで 7 日を切ったときの注意文（COND-028）。
+ */
+export const SHORT_NOTICE_ALERT =
+  "利用日まで7日を切っています。承認や施設の解錠の手配が間に合わないことがあります。";
+
+/**
  * 利用日まで 7 日を切っているかを判定する純粋関数（COND-028）。
  *
  * 開始日時が今からちょうど 7 日後より前なら true。ちょうど 7 日後に始まる予約は

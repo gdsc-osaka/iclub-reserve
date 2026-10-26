@@ -9,7 +9,7 @@ import {
   transitionAuditLogAction,
 } from "./audit-log";
 import { ReservationEditOutcome } from "./edit";
-import { ReservationStatus } from "./index";
+import { ReservationStatus, UnlockArrangement } from "./index";
 import { ReservationTransition } from "./transition";
 
 describe("reservation/audit-log", () => {
@@ -73,12 +73,36 @@ describe("reservation/audit-log", () => {
         status: { before: null, after: "provisional" },
       });
     });
+
+    it("直接作成で unlockArrangement を指定した場合は changes に含める", () => {
+      const startAt = new Date("2026-10-10T10:00:00.000Z");
+      const endAt = new Date("2026-10-10T12:00:00.000Z");
+      const changes = toReservationCreatedChanges({
+        facilityId: "fac_1",
+        startAt,
+        endAt,
+        headCount: 3,
+        note: "メモ",
+        status: ReservationStatus.Approved,
+        unlockArrangement: UnlockArrangement.Required,
+      });
+
+      expect(changes).toEqual({
+        facility_id: { before: null, after: "fac_1" },
+        start_at: { before: null, after: "2026-10-10T10:00:00.000Z" },
+        end_at: { before: null, after: "2026-10-10T12:00:00.000Z" },
+        head_count: { before: null, after: 3 },
+        note: { before: null, after: "メモ" },
+        status: { before: null, after: "approved" },
+        unlock_arrangement: { before: null, after: "required" },
+      });
+    });
   });
 
   describe("toReservationStatusChanges", () => {
     it("status と status_reason の両方を必ず含める", () => {
       const changes = toReservationStatusChanges(
-        { status: ReservationStatus.Provisional, statusReason: null },
+        { status: ReservationStatus.Provisional, statusReason: null, unlockArrangement: null },
         { status: ReservationStatus.Approved, statusReason: null },
       );
 
@@ -90,13 +114,46 @@ describe("reservation/audit-log", () => {
 
     it("理由がある場合も反映される", () => {
       const changes = toReservationStatusChanges(
-        { status: ReservationStatus.Provisional, statusReason: null },
+        { status: ReservationStatus.Provisional, statusReason: null, unlockArrangement: null },
         { status: ReservationStatus.Rejected, statusReason: "定員超過のため" },
       );
 
       expect(changes).toEqual({
         status: { before: "provisional", after: "rejected" },
         status_reason: { before: null, after: "定員超過のため" },
+      });
+    });
+
+    it("承認時に unlockArrangement を指定した場合は changes に含める", () => {
+      const changes = toReservationStatusChanges(
+        {
+          status: ReservationStatus.Provisional,
+          statusReason: null,
+          unlockArrangement: null,
+        },
+        {
+          status: ReservationStatus.Approved,
+          statusReason: null,
+          unlockArrangement: UnlockArrangement.Arranged,
+        },
+      );
+
+      expect(changes).toEqual({
+        status: { before: "provisional", after: "approved" },
+        status_reason: { before: null, after: null },
+        unlock_arrangement: { before: null, after: "arranged" },
+      });
+    });
+
+    it("unlockArrangement を渡さない状態変更では unlock_arrangement を含めない", () => {
+      const changes = toReservationStatusChanges(
+        { status: ReservationStatus.Provisional, statusReason: null, unlockArrangement: null },
+        { status: ReservationStatus.Withdrawn, statusReason: "取り消し理由" },
+      );
+
+      expect(changes).toEqual({
+        status: { before: "provisional", after: "withdrawn" },
+        status_reason: { before: null, after: "取り消し理由" },
       });
     });
   });
@@ -113,6 +170,7 @@ describe("reservation/audit-log", () => {
         note: "メモ1",
         status: ReservationStatus.Approved,
         statusReason: null,
+        unlockArrangement: UnlockArrangement.Required,
       };
       const after = {
         facilityId: "fac_1",
@@ -122,6 +180,7 @@ describe("reservation/audit-log", () => {
         note: "メモ1",
         status: ReservationStatus.Approved,
         statusReason: null,
+        unlockArrangement: UnlockArrangement.Required,
       };
 
       const changes = toReservationContentEditChanges(before, after);
@@ -142,6 +201,7 @@ describe("reservation/audit-log", () => {
         note: "メモ1",
         status: ReservationStatus.Approved,
         statusReason: null,
+        unlockArrangement: UnlockArrangement.Required,
       };
       const after = {
         facilityId: "fac_1",
@@ -151,6 +211,7 @@ describe("reservation/audit-log", () => {
         note: "メモ1",
         status: ReservationStatus.Provisional,
         statusReason: null,
+        unlockArrangement: null,
       };
 
       const changes = toReservationContentEditChanges(before, after);
@@ -164,6 +225,43 @@ describe("reservation/audit-log", () => {
           after: "provisional",
         },
         status_reason: { before: null, after: null },
+        unlock_arrangement: {
+          before: "required",
+          after: null,
+        },
+      });
+    });
+
+    it("直接変更で unlockArrangement が変わったときだけ差分に含まれる", () => {
+      const startAt1 = new Date("2026-10-10T10:00:00.000Z");
+      const endAt1 = new Date("2026-10-10T12:00:00.000Z");
+      const before = {
+        facilityId: "fac_1",
+        startAt: startAt1,
+        endAt: endAt1,
+        headCount: 2,
+        note: "メモ1",
+        status: ReservationStatus.Approved,
+        statusReason: null,
+        unlockArrangement: UnlockArrangement.Required,
+      };
+      const after = {
+        facilityId: "fac_1",
+        startAt: startAt1,
+        endAt: endAt1,
+        headCount: 2,
+        note: "メモ1",
+        status: ReservationStatus.Approved,
+        statusReason: null,
+        unlockArrangement: UnlockArrangement.Arranged,
+      };
+
+      const changes = toReservationContentEditChanges(before, after);
+      expect(changes).toEqual({
+        unlock_arrangement: {
+          before: "required",
+          after: "arranged",
+        },
       });
     });
   });

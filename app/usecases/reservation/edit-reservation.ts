@@ -26,6 +26,7 @@ import {
   ReservationEditOutcome,
   type ReservationContent,
 } from "~/domain/reservation/edit";
+import { unlockArrangementAfterGroupEdit } from "~/domain/reservation/unlock-arrangement";
 import { validateReservationDraft } from "~/domain/reservation/validation";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
@@ -138,6 +139,11 @@ export const editReservationUseCase = (
       return okAsync({ reservationId: reservation.id, outcome, status: reservation.status });
     }
 
+    const nextUnlockArrangement = unlockArrangementAfterGroupEdit(
+      outcome,
+      reservation.unlockArrangement,
+    );
+
     if (changed.has("facilityId")) {
       yield* ensureFacilityIsAvailable(deps, content.facilityId);
     }
@@ -154,6 +160,7 @@ export const editReservationUseCase = (
         "選んだ時間帯には、すでに承認済みの予約が入っています。別の時間帯を選んでください。",
       mailEvent: editMailEvent[outcome],
       appBaseUrl: args.appBaseUrl,
+      unlockArrangement: nextUnlockArrangement,
     });
 
     const status = editTargetStatus[outcome];
@@ -169,6 +176,7 @@ export const editReservationUseCase = (
         ...content,
         status,
         statusReason: reservation.statusReason,
+        unlockArrangement: nextUnlockArrangement,
       }),
     };
 
@@ -201,6 +209,7 @@ export const editReservationUseCase = (
         status,
         // 施設・日時を変えたら申し込み直したことになり、申請日時が変更した日時になる（INFO-001.requested_at）
         requestedAt: resolveRequestedAtAfterEdit(reservation, content, changed, now),
+        unlockArrangement: nextUnlockArrangement,
         updatedAt: now,
         requireNoApprovedOverlap: checksOverlap,
       },

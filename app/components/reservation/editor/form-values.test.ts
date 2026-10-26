@@ -5,6 +5,7 @@ import {
   RESERVATION_NOTE_MAX_LENGTH,
   ReservationErrorCode,
   ReservationField,
+  UnlockArrangement,
   type ReservationError,
 } from "~/domain/reservation";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
@@ -31,6 +32,7 @@ const values = (overrides: Partial<FormValues> = {}): FormValues => ({
   headCount: "4",
   note: "",
   mode: "provisional",
+  unlockArrangement: null,
   ...overrides,
 });
 
@@ -73,7 +75,15 @@ describe("readValues", () => {
       headCount: "4",
       note: "定例ミーティング",
       mode: "provisional",
+      unlockArrangement: null,
     });
+  });
+
+  it("unlockArrangement が送られてきたら正しくパースして読む", () => {
+    const formData = new FormData();
+    formData.set("unlockArrangement", "required");
+
+    expect(readValues(formData).unlockArrangement).toBe(UnlockArrangement.Required);
   });
 
   it("欄が無いときや、文字列でないものが送られてきたときは空文字にする", () => {
@@ -300,6 +310,17 @@ describe("申請のエラーを出す欄", () => {
         }),
       ).fieldErrors,
     ).toEqual({ note: "備考は 500 文字以内で入力してください。" });
+
+    expect(
+      formErrorsOf(
+        error(ReservationErrorCode.InvalidInput, {
+          field: ReservationField.UnlockArrangement,
+          userMessage: "解錠の手配を「要手配」「手配済み」「不要」から選んでください。",
+        }),
+      ).fieldErrors,
+    ).toEqual({
+      unlockArrangement: "解錠の手配を「要手配」「手配済み」「不要」から選んでください。",
+    });
   });
 
   it("項目を持たない失敗は、フォームの上に出す", () => {

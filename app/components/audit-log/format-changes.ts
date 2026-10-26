@@ -3,6 +3,11 @@ import { reservationStatusLabel } from "~/components/reservation/reservation-sta
 import { AuditLogTargetType, type AuditLogChanges, type AuditLogValue } from "~/domain/audit-log";
 import { invitationStatusLabel } from "~/domain/invitation";
 import { membershipRoleLabel } from "~/domain/membership";
+import {
+  UNLOCK_ARRANGEMENT_UNDECIDED_LABEL,
+  parseUnlockArrangement,
+  unlockArrangementLabel,
+} from "~/domain/reservation/unlock-arrangement";
 import { formatDateTime } from "~/lib/date";
 
 /**
@@ -18,6 +23,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
   note: "備考",
   status: "状態",
   status_reason: "理由",
+  unlock_arrangement: "解錠の手配",
   name: "名称",
   role: "役割",
   user_id: "ユーザー",
@@ -51,6 +57,15 @@ export const formatChangeValue = (
   value: AuditLogValue,
   options: FormatChangesOptions,
 ): string => {
+  // 解錠の手配（COND-027）は、値が無いことが「未定」という状態を表すので、「（なし）」より先に見る
+  if (key === "unlock_arrangement") {
+    if (value === null) {
+      return UNLOCK_ARRANGEMENT_UNDECIDED_LABEL;
+    }
+    const parsed = parseUnlockArrangement(value);
+    return parsed === null ? String(value) : unlockArrangementLabel[parsed];
+  }
+
   if (value === null) {
     return "（なし）";
   }

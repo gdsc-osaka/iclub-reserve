@@ -4,8 +4,9 @@ import {
   type AppliedReservationEdit,
   type DirectReservationEditOutcome,
 } from "~/domain/reservation/edit";
-import { reservationDetailPath } from "~/domain/reservation";
+import { reservationDetailPath, type UnlockArrangement } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
+import { unlockArrangementGroupNotice } from "~/domain/reservation/unlock-arrangement";
 import type { MailDraft } from "./mail-outbox";
 
 /** 予約に関する通知メールの種別。値は idempotencyKey にそのまま入るので変えないこと */
@@ -97,6 +98,8 @@ interface EventMailCopy {
   readonly subject: string;
   readonly opening: string;
   readonly allowsReason: boolean;
+  /** 解錠の手配の案内を載せるか（EVT-005） */
+  readonly includesUnlockNotice: boolean;
 }
 
 const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
@@ -104,53 +107,63 @@ const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
     subject: "【i-Club予約システム】施設・設備の利用予約が申請されました",
     opening: "施設・設備の利用予約が申請されました。",
     allowsReason: false,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.Withdrawn]: {
     subject: "【i-Club予約システム】施設・設備の仮予約が取り消されました",
     opening: "申請されていた仮予約が取り消されました。",
     allowsReason: true,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.Cancelled]: {
     subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
     opening: "承認済みの利用予約がキャンセルされました。",
     allowsReason: true,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.Approved]: {
     subject: "【i-Club予約システム】施設・設備の利用予約が承認されました",
     opening: "申請されていた利用予約が承認されました。",
     allowsReason: false,
+    includesUnlockNotice: true,
   },
   [ReservationMailEvent.Rejected]: {
     subject: "【i-Club予約システム】施設・設備の利用予約が却下されました",
     opening: "申請されていた利用予約が却下されました。",
     allowsReason: true,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.CancelledByStaff]: {
     subject: "【i-Club予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
     opening: "承認済みの利用予約が事務局によりキャンセルされました。",
     allowsReason: true,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.ApprovedEdited]: {
     subject: "【i-Club予約システム】施設・設備の利用予約の内容が変更されました",
     opening:
       "承認済みの利用予約の内容（使用人数・備考）が変更されました。承認済みのまま変わりません。",
     allowsReason: false,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.ReapprovalRequested]: {
     subject: "【i-Club予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
     opening:
       "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。事務局が改めて承認するまで、施設・設備は利用できません。",
     allowsReason: false,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.ProvisionalEdited]: {
     subject: "【i-Club予約システム】施設・設備の仮予約の内容が変更されました",
     opening: "申請されていた仮予約の内容が変更されました。",
     allowsReason: false,
+    includesUnlockNotice: false,
   },
   [ReservationMailEvent.EditedByStaff]: {
     subject: "【i-Club予約システム】施設・設備の利用予約が事務局により変更されました",
     opening: "利用予約の内容が事務局により変更されました。予約のステータスは変わりません。",
     allowsReason: false,
+    includesUnlockNotice: false,
   },
 };
 
@@ -160,6 +173,12 @@ export interface ReservationMailSubject {
   readonly startAt: Date;
   readonly endAt: Date;
   readonly statusReason: string | null;
+  /**
+   * 施設の解錠の手配（COND-027 / EVT-005）。
+   *
+   * 承認通知で案内を載せるのに使う。未定の場合は null。
+   */
+  readonly unlockArrangement: UnlockArrangement | null;
   /**
    * この通知を出した書き込みで、予約に入れた更新日時。
    *
@@ -192,6 +211,13 @@ const buildBody = (
 
   if (copy.allowsReason && reservation.statusReason !== null) {
     lines.push("", `理由: ${reservation.statusReason}`);
+  }
+
+  if (copy.includesUnlockNotice && reservation.unlockArrangement !== null) {
+    const notice = unlockArrangementGroupNotice[reservation.unlockArrangement];
+    if (notice !== null) {
+      lines.push("", notice);
+    }
   }
 
   lines.push(
