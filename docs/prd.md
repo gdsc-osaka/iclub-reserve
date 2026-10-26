@@ -561,21 +561,21 @@ graph LR
 
 **主要エンティティ**
 
-| エンティティ                     | 主要属性                                                                                                                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INFO-001 予約                    | id, group_id, facility_id, start_at, end_at, headcount, note, status, status_reason, unlock_arrangement（required/arranged/not_required。値なしは未定）, created_by |
-| INFO-002 施設/設備               | id, name, description, photo_url, google_calendar_id, calendar_url, is_active                                                                                       |
-| INFO-003 団体                    | id, name, status（pending/enabled/disabled）                                                                                                                        |
-| INFO-004 メッセージ              | id, reservation_id, sender_id, sent_as_staff, body, sent_at                                                                                                         |
-| INFO-005 メンバーシップ          | id, user_id, group_id, role（admin/member）                                                                                                                         |
-| INFO-006 ユーザー                | id, email, name, email_verified, image, is_staff, terms_version, terms_accepted_at                                                                                  |
-| INFO-007 招待                    | id, group_id, email, role, status（pending/accepted/rejected/canceled）, expires_at, inviter_id                                                                     |
-| INFO-008 操作履歴                | id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes                                                                        |
-| INFO-009 事務局招待              | id, email, status（pending/accepted/rejected/canceled）, expires_at, inviter_id                                                                                     |
-| INFO-010 パスキー                | id, user_id, name, credential_id, aaguid, backed_up, created_at, last_used_at                                                                                       |
-| INFO-011 ログインセッション      | id, user_id, user_agent, created_at, updated_at, expires_at                                                                                                         |
-| INFO-012 既読の記録              | user_id, reservation_id, last_read_at（利用者と予約の組ごとに 1 行）                                                                                                |
-| INFO-013 予約カレンダーの購読URL | id, membership_id（所属ごとに 1 つまで。所属が消えると一緒に消える）, token, created_at, updated_at                                                                 |
+| エンティティ                     | 主要属性                                                                                                                                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INFO-001 予約                    | id, group_id, facility_id, start_at, end_at, headcount, note, status, status_reason, unlock_arrangement（required/arranged/not_required。値なしは未定）, created_by, requested_at（申請日時） |
+| INFO-002 施設/設備               | id, name, description, photo_url, google_calendar_id, calendar_url, is_active                                                                                                                 |
+| INFO-003 団体                    | id, name, status（pending/enabled/disabled）                                                                                                                                                  |
+| INFO-004 メッセージ              | id, reservation_id, sender_id, sent_as_staff, body, sent_at                                                                                                                                   |
+| INFO-005 メンバーシップ          | id, user_id, group_id, role（admin/member）                                                                                                                                                   |
+| INFO-006 ユーザー                | id, email, name, email_verified, image, is_staff, terms_version, terms_accepted_at                                                                                                            |
+| INFO-007 招待                    | id, group_id, email, role, status（pending/accepted/rejected/canceled）, expires_at, inviter_id                                                                                               |
+| INFO-008 操作履歴                | id, occurred_at, actor_id, acted_as_staff, action, target_type, target_id, group_id, changes                                                                                                  |
+| INFO-009 事務局招待              | id, email, status（pending/accepted/rejected/canceled）, expires_at, inviter_id                                                                                                               |
+| INFO-010 パスキー                | id, user_id, name, credential_id, aaguid, backed_up, created_at, last_used_at                                                                                                                 |
+| INFO-011 ログインセッション      | id, user_id, user_agent, created_at, updated_at, expires_at                                                                                                                                   |
+| INFO-012 既読の記録              | user_id, reservation_id, last_read_at（利用者と予約の組ごとに 1 行）                                                                                                                          |
+| INFO-013 予約カレンダーの購読URL | id, membership_id（所属ごとに 1 つまで。所属が消えると一緒に消える）, token, created_at, updated_at                                                                                           |
 
 > 認証基盤（Better Auth）が内部で管理するテーブルのうち、外部アカウント・認証コードは業務上の情報ではないため、情報モデルには含めない。パスキー（INFO-010）とログインセッション（INFO-011）は、利用者がアカウント設定で見て操作するため含める。その場合も、画面に出す・判定に使う属性だけを載せる（公開鍵やセッションのトークンなどは載せない）。
 
