@@ -4,10 +4,9 @@ import { Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent } from "~/components/ui/card";
 import { createDb } from "~/infra/db";
-import { createFacilityCalendarSubscriptionListQuery } from "~/infra/facility/facility-calendar-subscription-list-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { findFacilityCalendarSubscriptionList } from "~/query/facility/facility-calendar-subscription-list";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
-import { listFacilitiesForCalendarSubscriptionUseCase } from "~/usecases/facility/list-facilities-for-calendar-subscription";
 
 import type { Route } from "./+types/route";
 import { CalendarSubscriptionCard } from "./calendar-subscription-card";
@@ -17,30 +16,20 @@ export function meta() {
 }
 
 /**
- * カレンダー一覧・購読ページ（SCR-010 / UC-018）のローダー。
+ * 事務局向けカレンダー一覧・購読ページ（SCR-010 / UC-018 / ADR-013 決定 7）のローダー。
  *
- * 【認可・可視性についての判断】
- * この画面はログインしていれば誰でも閲覧可能とする（requireRequestUser）。
- * 所属団体の有無や事務局権限では絞り込まない。
- * なぜなら、カレンダー購読用 URL は一度手に入れた後は外部のカレンダーアプリ経由で
- * 誰でも追加・参照できる公開情報であるため（REQ-030）、
- * ログイン以上の強い制限を課すことには意味が無いためである。
+ * 事務局スタッフ限定の画面であり、事務局でない利用者は ensureStaff によって 403 Forbidden になる。
  */
 export async function loader({ context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
 
   const db = createDb(env.DB);
-  const result = await listFacilitiesForCalendarSubscriptionUseCase(
-    {
-      facilityCalendarSubscriptionListQuery: createFacilityCalendarSubscriptionListQuery(db),
-    },
-    {
-      actorUserId: user.id,
-    },
-  );
+  const result = await findFacilityCalendarSubscriptionList(db, {
+    isStaff: user.is_staff,
+  });
 
   if (result.isErr()) {
-    throw queryErrorResponse({ where: "calendars.loader", userId: user.id }, result.error);
+    throw queryErrorResponse({ where: "staff.calendars.loader", userId: user.id }, result.error);
   }
 
   return {
@@ -49,9 +38,9 @@ export async function loader({ context }: Route.LoaderArgs) {
 }
 
 /**
- * カレンダー一覧・購読ページ（SCR-010 / UC-018）。
+ * 事務局向けカレンダー一覧・購読ページ（SCR-010 / UC-018 / ADR-013 決定 7）。
  */
-export default function CalendarsPage({ loaderData }: Route.ComponentProps) {
+export default function StaffCalendarsPage({ loaderData }: Route.ComponentProps) {
   const { facilities } = loaderData;
 
   return (

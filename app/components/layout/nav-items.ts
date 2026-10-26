@@ -98,14 +98,6 @@ export const commonNavItems: readonly NavItem[] = [
     screen: "SCR-003",
   },
   {
-    id: "calendars",
-    label: "カレンダー購読",
-    to: "/calendars",
-    icon: CalendarPlus,
-    enabled: true,
-    screen: "SCR-010",
-  },
-  {
     id: "groups",
     label: "所属団体",
     to: "/groups",
@@ -147,6 +139,14 @@ export const staffNavItems: readonly NavItem[] = [
     icon: Settings2,
     enabled: true,
     screen: "SCR-009",
+  },
+  {
+    id: "staff-calendars",
+    label: "カレンダー購読",
+    to: "/staff/calendars",
+    icon: CalendarPlus,
+    enabled: true,
+    screen: "SCR-010",
   },
   {
     id: "staff-audit-log",

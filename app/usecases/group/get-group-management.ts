@@ -1,15 +1,20 @@
-import { errAsync, ResultAsync } from "neverthrow";
+import { errAsync, okAsync, ResultAsync } from "neverthrow";
 
 import type { AuditLogEntryView } from "~/domain/audit-log";
 import { toAuditLogEntryView } from "~/domain/audit-log";
+import type { GroupCalendarFeedRepository } from "~/domain/calendar";
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
 import { GroupAction, groupPermissions } from "~/domain/group";
-import type { MembershipRepository, MembershipRole } from "~/domain/membership";
+import type {
+  Actor,
+  MembershipRepository,
+  MembershipRole,
+  StoredMembership,
+} from "~/domain/membership";
 import { canAct } from "~/domain/membership";
 import {
   ensureGroupIsVisible,
   groupNotFound,
-  resolveGroupActor,
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import type { GroupAuditLogListQuery } from "~/query/audit-log/group-audit-log-list";
@@ -22,6 +27,7 @@ import type { GroupMemberList, GroupMemberListQuery } from "~/query/group/group-
 export interface GetGroupManagementDeps {
   readonly groupRepository: GroupRepository;
   readonly membershipRepository: MembershipRepository;
+  readonly groupCalendarFeedRepository: GroupCalendarFeedRepository;
   readonly groupMemberListQuery: GroupMemberListQuery;
   readonly groupInvitationListQuery: GroupInvitationListQuery;
   readonly groupAuditLogListQuery: GroupAuditLogListQuery;
@@ -47,37 +53,65 @@ export interface GroupMemberSummary {
 }
 
 /**
+ * 見る人自身のカレンダー購読（UC-039 / ADR-013 決定 6）。
+ * 団体の管理権限ではなく所属で決まるので、`canManage` のどちらの形にも付く。
+ */
+export interface OwnCalendarFeedView {
+  /** 見る人がこの団体に所属しているか。所属していなければ、事務局でも購読のカードを出さない */
+  readonly isMember: boolean;
+  /** 発行済みならそのトークン。所属していない・まだ発行していなければ null */
+  readonly calendarFeed: { readonly token: string } | null;
+}
+
+/**
  * 画面 1 つ分のデータ。`canManage` で 2 つの形に分かれる（判別可能なユニオン）。
  * こうしておくと、管理権限が無い経路では `email` や `auditLogs` に触れるコードが
  * そもそも型エラーになり、うっかり漏らせなくなる。
  */
-export type GroupManagementView =
-  | {
-      readonly canManage: false;
-      readonly group: Group;
-      readonly members: readonly GroupMemberSummary[];
-    }
-  | {
-      readonly canManage: true;
-      readonly group: Group;
-      readonly members: GroupMemberList;
-      readonly invitations: GroupInvitationList;
-      readonly auditLogs: {
-        readonly items: readonly AuditLogEntryView[];
-        readonly hasNextPage: boolean;
-        readonly page: number;
-        readonly userNames: Readonly<Record<string, string>>;
-      };
-    };
+export type GroupManagementView = OwnCalendarFeedView &
+  (
+    | {
+        readonly canManage: false;
+        readonly group: Group;
+        readonly members: readonly GroupMemberSummary[];
+      }
+    | {
+        readonly canManage: true;
+        readonly group: Group;
+        readonly members: GroupMemberList;
+        readonly invitations: GroupInvitationList;
+        readonly auditLogs: {
+          readonly items: readonly AuditLogEntryView[];
+          readonly hasNextPage: boolean;
+          readonly page: number;
+          readonly userNames: Readonly<Record<string, string>>;
+        };
+      }
+  );
+
+/**
+ * 見る人自身のカレンダー購読を読む（ADR-013 決定 6）。
+ * 所属していなければ、事務局でも発行できないので読まずに null を返す。
+ */
+const findOwnCalendarFeed = (
+  deps: Pick<GetGroupManagementDeps, "groupCalendarFeedRepository">,
+  membership: StoredMembership | null,
+): ResultAsync<OwnCalendarFeedView["calendarFeed"], GroupError> =>
+  membership === null
+    ? okAsync(null)
+    : deps.groupCalendarFeedRepository
+        .findByMembershipId(membership.id)
+        .map((feed) => (feed === null ? null : { token: feed.token }));
 
 /**
  * 団体管理画面（SCR-007）の表示に必要なデータを取得するユースケース。
  *
  * 【処理の流れと設計上の配慮】
  * 1. groupId が空文字または空白のみの場合、DB 問い合わせを行わず即座に NOT_FOUND を返す。
- * 2. 認可判定（resolveGroupActor と ensureGroupIsVisible）:
- *    事務局は所属を引かずに通る（COND-009）。一般利用者は先に所属を確認し、
- *    閲覧権限（GroupAction.View）が無ければ団体本体を取りに行かずに存在を秘匿する（COND-011）。
+ * 2. 認可判定（所属の読み取りと ensureGroupIsVisible）:
+ *    事務局は所属が無くても通る（COND-009）が、所属は事務局でも読む。
+ *    自分が所属している団体では、事務局にもカレンダー購読のカードを出すため（ADR-013 決定 6）。
+ *    一般利用者は、閲覧権限（GroupAction.View）が無ければ団体本体を取りに行かずに存在を秘匿する（COND-011）。
  *    先に団体を取りに行くと、存在する団体のときだけ DB クエリが 1 回増え、
  *    応答時間の差から団体の存在を推測できてしまう。
  *    見られないときは NotVisible を返す。利用者への応答を 404 に揃えるのは画面の側である（ADR-004 決定 4）。
@@ -96,6 +130,7 @@ export type GroupManagementView =
  *      操作履歴は自団体の管理者および事務局にのみ開示する（COND-012(3)）。
  *      自団体の管理者に対しては、事務局権限による操作（actedAsStaff: true）の個人名や ID を伏せ、
  *      「事務局」として詰め替えて返す（COND-012）。
+ *    - どちらでも、見る人が所属していれば、その人のカレンダー購読を読む（UC-039）。
  */
 export const getGroupManagementUseCase = (
   deps: GetGroupManagementDeps,
@@ -108,51 +143,62 @@ export const getGroupManagementUseCase = (
     return errAsync(groupNotFound());
   }
 
-  // 2. 認可判定（事務局は所属を引かずに通る。COND-009 / COND-011）
-  return resolveGroupActor(deps, { ...args, groupId }).andThen((actor) =>
-    ensureGroupIsVisible(actor).andThen(() => {
-      /*
-       * 管理できる人（管理者と事務局）にだけ、承諾待ちの招待・メンバーのメールアドレス・操作履歴を渡す。
-       * 一般メンバーには招待や操作履歴を取りに行かず、メールアドレスは実データごと落とす。
-       * 型を絞るだけでは、通信の中身を見れば読めてしまう。
-       */
-      const canManage = canAct(groupPermissions, actor, GroupAction.Update);
+  // 2. 認可判定（事務局も所属を読む。所属していればカレンダー購読のカードを出すため）
+  return deps.membershipRepository
+    .findByGroupAndUser(groupId, args.actorUserId)
+    .mapErr(toGroupDatabaseError)
+    .andThen((membership) => {
+      const actor: Actor = { isStaff: args.isStaff, membership };
+      return ensureGroupIsVisible(actor).andThen(() => {
+        /*
+         * 管理できる人（管理者と事務局）にだけ、承諾待ちの招待・メンバーのメールアドレス・操作履歴を渡す。
+         * 一般メンバーには招待や操作履歴を取りに行かず、メールアドレスは実データごと落とす。
+         * 型を絞るだけでは、通信の中身を見れば読めてしまう。
+         */
+        const canManage = canAct(groupPermissions, actor, GroupAction.Update);
+        const isMember = membership !== null;
 
-      if (canManage) {
+        if (canManage) {
+          return ResultAsync.combine([
+            deps.groupRepository.findById(groupId),
+            deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
+            deps.groupInvitationListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
+            deps.groupAuditLogListQuery
+              .findByGroupId(groupId, args.auditLogPage)
+              .mapErr(toGroupDatabaseError),
+            findOwnCalendarFeed(deps, membership),
+          ]).map(([group, members, invitations, auditLogs, calendarFeed]): GroupManagementView => ({
+            canManage: true,
+            group,
+            members,
+            invitations: invitations.filter((inv) => inv.expiresAt.getTime() > args.now.getTime()),
+            auditLogs: {
+              items: auditLogs.items.map((item) => toAuditLogEntryView(item, actor)),
+              hasNextPage: auditLogs.hasNextPage,
+              page: args.auditLogPage,
+              userNames: auditLogs.userNames,
+            },
+            isMember,
+            calendarFeed,
+          }));
+        }
+
         return ResultAsync.combine([
           deps.groupRepository.findById(groupId),
           deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-          deps.groupInvitationListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-          deps.groupAuditLogListQuery
-            .findByGroupId(groupId, args.auditLogPage)
-            .mapErr(toGroupDatabaseError),
-        ]).map(([group, members, invitations, auditLogs]): GroupManagementView => ({
-          canManage: true,
+          findOwnCalendarFeed(deps, membership),
+        ]).map(([group, rawMembers, calendarFeed]): GroupManagementView => ({
+          canManage: false,
           group,
-          members,
-          invitations: invitations.filter((inv) => inv.expiresAt.getTime() > args.now.getTime()),
-          auditLogs: {
-            items: auditLogs.items.map((item) => toAuditLogEntryView(item, actor)),
-            hasNextPage: auditLogs.hasNextPage,
-            page: args.auditLogPage,
-            userNames: auditLogs.userNames,
-          },
+          members: rawMembers.map((m) => ({
+            memberId: m.memberId,
+            userId: m.userId,
+            name: m.name,
+            role: m.role,
+          })),
+          isMember,
+          calendarFeed,
         }));
-      }
-
-      return ResultAsync.combine([
-        deps.groupRepository.findById(groupId),
-        deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-      ]).map(([group, rawMembers]): GroupManagementView => ({
-        canManage: false,
-        group,
-        members: rawMembers.map((m) => ({
-          memberId: m.memberId,
-          userId: m.userId,
-          name: m.name,
-          role: m.role,
-        })),
-      }));
-    }),
-  );
+      });
+    });
 };
