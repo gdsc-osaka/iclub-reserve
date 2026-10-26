@@ -15,4 +15,5 @@ export type GroupActionData =
   | ({ readonly section: "name" } & GroupNameFormState)
   | { readonly section: "members"; readonly formError: string | null }
   | ({ readonly section: "invite" } & GroupInviteFormState)
-  | { readonly section: "invitations"; readonly formError: string | null };
+  | { readonly section: "invitations"; readonly formError: string | null }
+  | { readonly section: "calendar-feed"; readonly formError: string | null };

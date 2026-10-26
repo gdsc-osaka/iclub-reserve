@@ -6,6 +6,7 @@ import {
   isCountedNavPath,
   staffNavItems,
   toNavCount,
+  toNavItems,
   type NavCounts,
   type NavItem,
 } from "./nav-items";
@@ -38,6 +39,7 @@ describe("isCountedNavPath", () => {
 
   it("件数を持たない事務局画面では false を返す", () => {
     expect(isCountedNavPath("/staff/facilities")).toBe(false);
+    expect(isCountedNavPath("/staff/calendars")).toBe(false);
     expect(isCountedNavPath("/staff/audit-log")).toBe(false);
     expect(isCountedNavPath("/staff/staff-members")).toBe(false);
   });
@@ -72,5 +74,22 @@ describe("toNavCount", () => {
   it("件数を持たない項目は undefined を返す", () => {
     expect(toNavCount(counts, navItem("availability"))).toBeUndefined();
     expect(toNavCount(counts, navItem("staff-facilities"))).toBeUndefined();
+    expect(toNavCount(counts, navItem("staff-calendars"))).toBeUndefined();
+  });
+});
+
+describe("toNavItems", () => {
+  it("一般ユーザーにはカレンダー購読項目が出ない", () => {
+    const items = toNavItems(false);
+    expect(items.some((item) => item.id === "calendars" || item.id === "staff-calendars")).toBe(
+      false,
+    );
+  });
+
+  it("事務局には /staff/calendars のカレンダー購読項目が出る", () => {
+    const items = toNavItems(true);
+    const calendarItem = items.find((item) => item.id === "staff-calendars");
+    expect(calendarItem).toBeDefined();
+    expect(calendarItem?.to).toBe("/staff/calendars");
   });
 });

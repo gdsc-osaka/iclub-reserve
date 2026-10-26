@@ -4,7 +4,6 @@
 import type { FacilityRepository } from "~/domain/facility";
 import type { FacilityPhotoStorage } from "~/domain/facility/facility-photo";
 import type { FacilityAvailabilityCalendarQuery } from "~/query/facility/facility-availability-calendar";
-import type { FacilityCalendarSubscriptionListQuery } from "~/query/facility/facility-calendar-subscription-list";
 import { createUnimplementedFake } from "./stub";
 
 /**
@@ -33,13 +32,4 @@ export function fakeFacilityAvailabilityCalendarQuery(
   overrides: Partial<FacilityAvailabilityCalendarQuery> = {},
 ): FacilityAvailabilityCalendarQuery {
   return createUnimplementedFake("FacilityAvailabilityCalendarQuery", overrides);
-}
-
-/**
- * テスト用の FacilityCalendarSubscriptionListQuery の偽物を生成する。
- */
-export function fakeFacilityCalendarSubscriptionListQuery(
-  overrides: Partial<FacilityCalendarSubscriptionListQuery> = {},
-): FacilityCalendarSubscriptionListQuery {
-  return createUnimplementedFake("FacilityCalendarSubscriptionListQuery", overrides);
 }
