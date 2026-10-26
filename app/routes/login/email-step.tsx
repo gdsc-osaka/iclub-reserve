@@ -1,9 +1,9 @@
 import { Fragment, type ReactNode } from "react";
 
+import { AllowedEmailHint } from "~/components/auth/allowed-email-hint";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { ALLOWED_EMAIL_DOMAINS_LABEL } from "~/domain/authn/allowed-email-domain";
 import type { LoginMethod } from "~/domain/authn/login-method";
 
 /**
@@ -101,7 +101,7 @@ function EmailOtpForm({
           aria-describedby="email-hint"
         />
         <p id="email-hint" className="text-xs text-muted-foreground">
-          {ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスのみご利用いただけます。
+          <AllowedEmailHint suffix="のみご利用いただけます。" />
         </p>
       </div>
 
