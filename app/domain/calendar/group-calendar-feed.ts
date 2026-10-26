@@ -43,11 +43,24 @@ export interface GroupCalendarReservation {
   readonly startAt: Date;
   readonly endAt: Date;
   readonly updatedAt: Date;
+  /** 施設の更新日時。施設名が予定のタイトルと場所に出るので、予定の最終更新に含める */
+  readonly facilityUpdatedAt: Date;
 }
 
 /** 予約詳細の URL を組み立てる。baseUrl は末尾にスラッシュの無い origin */
 const toReservationDetailUrl = (baseUrl: string, reservationId: string): string =>
   `${baseUrl}${reservationDetailPath(reservationId)}`;
+
+/**
+ * 予定の最終更新日時（DTSTAMP・LAST-MODIFIED）を決める。
+ *
+ * 予約と施設のうち、後に更新された方の日時を使う。施設名を変えただけでも日時が進むので、
+ * 最終更新日時で書き換えるかどうかを決めるカレンダーアプリにも、新しい施設名が届く。
+ */
+const toEventLastModified = (reservation: GroupCalendarReservation): Date =>
+  reservation.facilityUpdatedAt.getTime() > reservation.updatedAt.getTime()
+    ? reservation.facilityUpdatedAt
+    : reservation.updatedAt;
 
 /**
  * 予約 1 件から iCal の説明文（DESCRIPTION）を組み立てる。
@@ -98,12 +111,13 @@ export function toGroupCalendarEvents(
     const summary = `${summaryPrefix}${reservation.facilityName}`;
     const detailUrl = toReservationDetailUrl(baseUrl, reservation.id);
     const description = toGroupCalendarDescription(reservation, baseUrl);
+    const lastModified = formatIcalDateTimeUtc(toEventLastModified(reservation));
 
     eventLines.push(
       "BEGIN:VEVENT",
       `UID:${reservation.id}@iclub-reserve`,
-      `DTSTAMP:${formatIcalDateTimeUtc(reservation.updatedAt)}`,
-      `LAST-MODIFIED:${formatIcalDateTimeUtc(reservation.updatedAt)}`,
+      `DTSTAMP:${lastModified}`,
+      `LAST-MODIFIED:${lastModified}`,
       `DTSTART:${formatIcalDateTimeUtc(reservation.startAt)}`,
       `DTEND:${formatIcalDateTimeUtc(reservation.endAt)}`,
       `SUMMARY:${escapeIcalText(summary)}`,

@@ -72,6 +72,7 @@ export const findGroupCalendarFeed = (
           startAt: reservationTable.startAt,
           endAt: reservationTable.endAt,
           updatedAt: reservationTable.updatedAt,
+          facilityUpdatedAt: facilityTable.updatedAt,
         })
         .from(reservationTable)
         .innerJoin(facilityTable, eq(reservationTable.facilityId, facilityTable.id))

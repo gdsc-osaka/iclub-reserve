@@ -104,6 +104,31 @@ describe("findGroupCalendarFeed", () => {
     expect(resIds).toEqual(["res_own_approved", "res_own_provisional"]);
   });
 
+  it("予約ごとに施設名と施設の更新日時を返す（施設名の変更を予定の最終更新日時に含めるため）", async () => {
+    const facilityUpdatedAt = new Date("2026-04-20T06:30:00.000Z");
+    await testDb.seed(
+      seedFacility({ id: "fac_laser", name: "レーザー加工機", updatedAt: facilityUpdatedAt }),
+      seedReservation({
+        id: "res_laser",
+        groupId: GROUP_ID,
+        facilityId: "fac_laser",
+        status: ReservationStatus.Approved,
+        startAt: new Date("2026-05-10T10:00:00.000Z"),
+        endAt: new Date("2026-05-10T12:00:00.000Z"),
+        createdBy: USER_ID,
+      }),
+    );
+
+    const result = await findGroupCalendarFeed(testDb.db, {
+      token: TOKEN_VALID,
+      since: SINCE,
+    });
+
+    const reservation = result._unsafeUnwrap()?.reservations.at(0);
+    expect(reservation?.facilityName).toBe("レーザー加工機");
+    expect(reservation?.facilityUpdatedAt).toEqual(facilityUpdatedAt);
+  });
+
   it("終わった予約（キャンセル・却下・取り消し・事務局キャンセル）は含まない", async () => {
     await testDb.seed(
       seedReservation({
