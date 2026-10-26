@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ALLOWED_EMAIL_DOMAINS_LABEL, isAllowedEmailAddress } from "./allowed-email-domain";
+import {
+  ALLOWED_EMAIL_ADDRESSES_HINT,
+  ALLOWED_EMAIL_DOMAINS_LABEL,
+  isAllowedEmailAddress,
+} from "./allowed-email-domain";
 
 describe("isAllowedEmailAddress", () => {
   it.each([
@@ -29,5 +33,13 @@ describe("isAllowedEmailAddress", () => {
 describe("ALLOWED_EMAIL_DOMAINS_LABEL", () => {
   it("画面に出せる形（@ 付き）になっている", () => {
     expect(ALLOWED_EMAIL_DOMAINS_LABEL).toBe("@osaka-u.ac.jp");
+  });
+});
+
+describe("ALLOWED_EMAIL_ADDRESSES_HINT", () => {
+  it("サブドメインの例を添えて、学生のアドレスも使えると分かるようにしている", () => {
+    expect(ALLOWED_EMAIL_ADDRESSES_HINT).toBe(
+      "大阪大学のメールアドレス（@osaka-u.ac.jp・@ecs.osaka-u.ac.jp など）",
+    );
   });
 });
