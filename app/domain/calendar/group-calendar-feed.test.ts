@@ -39,6 +39,7 @@ describe("toGroupCalendarDescription", () => {
     startAt: new Date("2026-05-01T10:00:00.000Z"),
     endAt: new Date("2026-05-01T12:00:00.000Z"),
     updatedAt: new Date("2026-04-01T10:00:00.000Z"),
+    facilityUpdatedAt: new Date("2026-03-01T00:00:00.000Z"),
   };
 
   it("備考が無いときは備考の行を出さず、空行を挟んで予約詳細リンクを置く", () => {
@@ -75,6 +76,7 @@ describe("toGroupCalendarEvents", () => {
     startAt: new Date("2026-05-01T01:00:00.000Z"),
     endAt: new Date("2026-05-01T03:00:00.000Z"),
     updatedAt: new Date("2026-04-15T09:00:00.000Z"),
+    facilityUpdatedAt: new Date("2026-03-01T00:00:00.000Z"),
   };
 
   it("承認済みの予約は接頭辞なしの SUMMARY と CONFIRMED ステータスになる", () => {
@@ -102,6 +104,18 @@ describe("toGroupCalendarEvents", () => {
     expect(lines).toContain(`SUMMARY:${GROUP_CALENDAR_FEED_TENTATIVE_PREFIX}レーザーカッター`);
     expect(lines).toContain("STATUS:TENTATIVE");
   });
+
+  it("予約より後に施設が更新されたとき（施設名の変更など）は、施設の更新日時を最終更新日時にする", () => {
+    const renamed: GroupCalendarReservation = {
+      ...baseReservation,
+      facilityName: "レーザー加工機",
+      facilityUpdatedAt: new Date("2026-04-20T06:30:00.000Z"),
+    };
+    const lines = toGroupCalendarEvents([renamed], "https://example.com");
+    expect(lines).toContain("SUMMARY:レーザー加工機");
+    expect(lines).toContain("DTSTAMP:20260420T063000Z");
+    expect(lines).toContain("LAST-MODIFIED:20260420T063000Z");
+  });
 });
 
 describe("toGroupCalendarFeedIcs", () => {
@@ -115,6 +129,7 @@ describe("toGroupCalendarFeedIcs", () => {
       startAt: new Date("2026-05-01T01:00:00.000Z"),
       endAt: new Date("2026-05-01T02:00:00.000Z"),
       updatedAt: new Date("2026-04-01T00:00:00.000Z"),
+      facilityUpdatedAt: new Date("2026-03-01T00:00:00.000Z"),
     };
 
     const ics = toGroupCalendarFeedIcs({
