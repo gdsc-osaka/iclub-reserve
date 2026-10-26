@@ -97,6 +97,7 @@ const args = {
   facilityId: null,
   from: new Date("2026-09-07T00:00:00+09:00"),
   to: new Date("2026-09-14T00:00:00+09:00"),
+  now: new Date("2026-09-08T10:00:00+09:00"),
 };
 
 describe("getAvailabilityCalendarUseCase", () => {
@@ -260,5 +261,53 @@ describe("getAvailabilityCalendarUseCase", () => {
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.DatabaseError);
+  });
+
+  describe("canEdit（変更できるか）", () => {
+    it("自団体のメンバーの開始前の仮予約は true", async () => {
+      const provisional: AvailabilityReservationRow = {
+        ...ownReservation,
+        status: ReservationStatus.Provisional,
+      };
+      const deps = createDeps(enabledMembership);
+      deps.facilityAvailabilityCalendarQuery.findByFacilityAndPeriod = () =>
+        okAsync({
+          facilities: [meetingRoomA],
+          facility: meetingRoomA,
+          reservations: [provisional],
+        });
+
+      const result = await getAvailabilityCalendarUseCase(deps, args);
+      const reservation = result._unsafeUnwrap().reservations[0];
+      expect(reservation?.canEdit).toBe(true);
+    });
+
+    it("他団体の予約は false", async () => {
+      const result = await getAvailabilityCalendarUseCase(createDeps(enabledMembership), args);
+      const other = result._unsafeUnwrap().reservations.find((r) => r.id === "res_other");
+      expect(other?.canEdit).toBe(false);
+    });
+
+    it("事務局は自団体でなくても true（直接変更）", async () => {
+      const result = await getAvailabilityCalendarUseCase(createDeps([]), {
+        ...args,
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+      });
+      const reservations = result._unsafeUnwrap().reservations;
+      expect(reservations.length).toBeGreaterThan(0);
+      expect(reservations.every((r) => r.canEdit)).toBe(true);
+    });
+
+    it("開始日時を過ぎた予約は false", async () => {
+      // 予約の開始日時（2026-09-12T10:00）より後の now を渡す
+      const pastNow = new Date("2026-09-12T10:01:00+09:00");
+      const result = await getAvailabilityCalendarUseCase(createDeps(enabledMembership), {
+        ...args,
+        now: pastNow,
+      });
+      const own = result._unsafeUnwrap().reservations.find((r) => r.id === "res_own");
+      expect(own?.canEdit).toBe(false);
+    });
   });
 });

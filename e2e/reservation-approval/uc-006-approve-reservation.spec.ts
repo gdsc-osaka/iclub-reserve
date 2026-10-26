@@ -36,11 +36,7 @@ async function createProvisionalReservation(db: E2eDb) {
 }
 
 test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, () => {
-  test("空き状況カレンダー（SCR-001）の吹き出しからも承認できる", async ({
-    page,
-    db,
-    signInAs,
-  }) => {
+  test("空き状況カレンダー（SCR-001）の欄からも承認できる", async ({ page, db, signInAs }) => {
     const { facility, reservation } = await createProvisionalReservation(db);
 
     await signInAs(personas.staff.id);
@@ -48,20 +44,22 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     const dateKey = toDateKey(reservation.startAt);
     await openPage(page, `/availability?facility=${facility.id}&date=${dateKey}`);
 
-    // 予約の帯をクリックして吹き出しを開く
+    // 予約の帯をクリックして欄を開く
     const reservationBlock = page.getByRole("button", { name: /詳細を見る/ });
-    await reservationBlock.first().click();
+    await reservationBlock.click();
 
-    // 吹き出し内に予約詳細リンクがあることを確認
-    const detailLink = page.getByRole("link", { name: "予約詳細を見る" });
+    const panel = page.getByRole("region", { name: "予約の内容" });
+    await expect(panel).toBeVisible();
+
+    // 欄内に予約詳細リンクがあることを確認
+    const detailLink = panel.getByRole("link", { name: "予約詳細を見る" });
     await expect(detailLink).toBeVisible();
     await expect(detailLink).toHaveAttribute("href", `/reservations/${reservation.id}`);
 
-    // 吹き出し内の承認ボタンをクリック
-    const popover = page.getByRole("dialog");
-    await popover.getByRole("button", { name: "承認" }).click();
+    // 欄内の承認ボタンをクリック
+    await panel.getByRole("button", { name: "承認" }).click();
 
-    // 確認ダイアログが吹き出しと一緒に閉じずに開いていることを確認
+    // 確認ダイアログが開いていることを確認
     const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "承認する" }).click();
@@ -69,10 +67,13 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     /*
      * 承認の結果は、同じカレンダーに戻って帯が「承認済み」に変わったことで待つ。
      * 帯の読み上げ名には状態が入っているので、変わればこの名前で見つかる。
-     * 承認後にカレンダーから離れていないこと（施設と日付が残っていること）も合わせて確かめる。
+     * 欄は開いたまま承認済みになり、URL は facility・date・reservation を保っていることを確かめる。
      */
     await expect(page.getByRole("button", { name: /承認済み の詳細を見る/ })).toBeVisible();
-    await expect(page).toHaveURL(`/availability?facility=${facility.id}&date=${dateKey}`);
+    await expect(panel.getByText("承認済み", { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(
+      `/availability?facility=${facility.id}&date=${dateKey}&reservation=${reservation.id}`,
+    );
 
     const [saved] = await db
       .select()
