@@ -22,6 +22,7 @@ import {
   editTargetStatus,
   requiresOverlapCheck,
   resolveEditOutcome,
+  resolveRequestedAtAfterEdit,
   ReservationEditOutcome,
   type ReservationContent,
 } from "~/domain/reservation/edit";
@@ -198,6 +199,8 @@ export const editReservationUseCase = (
         headCount: content.headCount,
         note: content.note,
         status,
+        // 施設・日時を変えたら申し込み直したことになり、申請日時が変更した日時になる（INFO-001.requested_at）
+        requestedAt: resolveRequestedAtAfterEdit(reservation, content, changed, now),
         updatedAt: now,
         requireNoApprovedOverlap: checksOverlap,
       },

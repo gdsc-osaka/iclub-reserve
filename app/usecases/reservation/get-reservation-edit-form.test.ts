@@ -45,6 +45,7 @@ const defaultReservation: Reservation = {
   statusReason: null,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-14T09:00:00+09:00"),
+  requestedAt: new Date("2026-09-14T09:00:00+09:00"),
   updatedAt: new Date("2026-09-14T09:00:00+09:00"),
 };
 

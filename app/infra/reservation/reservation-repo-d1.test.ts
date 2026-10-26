@@ -29,6 +29,8 @@ import { createReservationRepository } from "./reservation-repo";
 
 const testDb = useD1TestDb();
 
+/** 予約を読んだときの申請日時 */
+const REQUESTED_AT = new Date("2026-09-18T09:00:00+09:00");
 /** 予約を読んだときの更新日時 */
 const READ_AT = new Date("2026-09-19T09:00:00+09:00");
 /** 変更を書き込む日時 */
@@ -81,6 +83,7 @@ const insertReservation = (row: ReservationRow) =>
       headCount: row.headCount ?? 4,
       status: row.status,
       createdBy: "usr_taro",
+      requestedAt: REQUESTED_AT,
       updatedAt: row.updatedAt ?? READ_AT,
     }),
   );
@@ -89,7 +92,7 @@ const insertReservation = (row: ReservationRow) =>
 const rowOf = (id: string) =>
   testDb.d1
     .prepare(
-      `SELECT facility_id, start_at, end_at, head_count, note, status, updated_at FROM "reservation" WHERE id = ?`,
+      `SELECT facility_id, start_at, end_at, head_count, note, status, requested_at, updated_at FROM "reservation" WHERE id = ?`,
     )
     .bind(id)
     .first();
@@ -105,6 +108,7 @@ const editArgs = (overrides: Partial<ApplyContentEditArgs>): ApplyContentEditArg
   headCount: 4,
   note: null,
   status: ReservationStatus.Provisional,
+  requestedAt: REQUESTED_AT,
   updatedAt: EDITED_AT,
   requireNoApprovedOverlap: false,
   ...overrides,
@@ -112,7 +116,7 @@ const editArgs = (overrides: Partial<ApplyContentEditArgs>): ApplyContentEditArg
 
 describe("applyContentEdit を SQLite で実行する", () => {
   describe("読んだときから変わっていないこと（楽観的ロック）", () => {
-    it("読んだときのままなら、内容・ステータス・更新日時をすべて書き換える", async () => {
+    it("読んだときのままなら、内容・ステータス・申請日時・更新日時をすべて書き換える", async () => {
       const repository = createReservationRepository(testDb.db);
       await insertReservation({
         id: "res_target",
@@ -130,6 +134,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
           headCount: 8,
           note: "機材あり",
           status: ReservationStatus.Provisional,
+          requestedAt: EDITED_AT,
         }),
         [],
         dummyAuditLog(),
@@ -144,6 +149,7 @@ describe("applyContentEdit を SQLite で実行する", () => {
         head_count: 8,
         note: "機材あり",
         status: ReservationStatus.Provisional,
+        requested_at: EDITED_AT.getTime(),
         updated_at: EDITED_AT.getTime(),
       });
       const auditRows = await testDb.db.select().from(auditLogTable);
@@ -444,6 +450,10 @@ describe("existsApprovedOverlap を SQLite で実行する", () => {
 });
 
 describe("createApproved を SQLite で実行する", () => {
+  /*
+   * 作成日時・申請日時・更新日時は、わざと別々の値にしてある。
+   * 同じ値だと、INSERT ... SELECT で隣り合う日時の列を取り違えても、読み戻した予約が一致してしまう。
+   */
   const directReservation = (overrides?: Partial<Reservation>): Reservation => ({
     id: "res_direct",
     groupId: "grp_robotics",
@@ -456,7 +466,8 @@ describe("createApproved を SQLite で実行する", () => {
     statusReason: null,
     createdBy: "usr_taro",
     createdAt: at("09:00"),
-    updatedAt: at("09:00"),
+    requestedAt: at("09:01"),
+    updatedAt: at("09:02"),
     ...overrides,
   });
 
@@ -579,6 +590,7 @@ describe("カレンダー同期タスクの書き込み", () => {
     statusReason: null,
     createdBy: "usr_taro",
     createdAt: at("09:00"),
+    requestedAt: at("09:00"),
     updatedAt: at("09:00"),
     ...overrides,
   });
@@ -757,6 +769,7 @@ describe("create を SQLite で実行する", () => {
       statusReason: null,
       createdBy: "usr_taro",
       createdAt: at("09:00"),
+      requestedAt: at("09:00"),
       updatedAt: at("09:00"),
     };
     const auditLog = dummyAuditLog({

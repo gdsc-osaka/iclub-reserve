@@ -27,6 +27,7 @@ const sampleReservation: Reservation = {
   statusReason: null,
   createdBy: "usr_other",
   createdAt: new Date("2026-10-14T09:00:00+09:00"),
+  requestedAt: new Date("2026-10-14T09:00:00+09:00"),
   updatedAt: new Date("2026-10-14T09:00:00+09:00"),
 };
 

@@ -107,6 +107,7 @@ export const toReservationDetailView = (
           statusReason: row.statusReason,
           createdByName: row.createdByName,
           createdAt: row.createdAt,
+          requestedAt: row.requestedAt,
           hasApprovedOverlap: row.hasApprovedOverlap,
           hasProvisionalOverlap: row.hasProvisionalOverlap,
         },

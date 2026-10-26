@@ -20,9 +20,11 @@ import { openPage } from "../support/page.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 test.describe("UC-033 全団体の予約一覧を確認する（事務局）", { tag: "@UC-033" }, () => {
-  test("既定では、全団体の仮予約が申請の古い順に並ぶ", async ({ page, db, signInAs }) => {
+  test("既定では、全団体の仮予約が申請日時の古い順に並ぶ", async ({ page, db, signInAs }) => {
     // 前提: 2 つの団体が仮予約を 1 件ずつ申請している。
-    // 先に申請したほうを、利用日は後にしておく（利用日の順ではなく申請の順に並ぶことを確かめるため）
+    // 先に申請したほうを、利用日は後にしておく（利用日の順ではなく申請の順に並ぶことを確かめるため）。
+    // 後に申請したほうは、作ったのは先だが、時間帯を変えて申し込み直したことにする
+    // （作成日時ではなく申請日時〈INFO-001.requested_at〉の順に並ぶことを確かめるため）
     const applicantA = await createUser(db);
     const groupA = await createGroup(db, {
       members: [{ userId: applicantA.id, role: MembershipRole.Member }],
@@ -48,7 +50,8 @@ test.describe("UC-033 全団体の予約一覧を確認する（事務局）", {
       createdBy: applicantB.id,
       startAt: nextWeekAt(Weekday.Monday, 10),
       endAt: nextWeekAt(Weekday.Monday, 12),
-      createdAt: new Date(Date.now() - 1 * DAY_MS),
+      createdAt: new Date(Date.now() - 3 * DAY_MS),
+      requestedAt: new Date(Date.now() - 1 * DAY_MS),
     });
     // 承認済みの予約は、既定の一覧には出ない
     await createReservation(db, {
@@ -71,6 +74,9 @@ test.describe("UC-033 全団体の予約一覧を確認する（事務局）", {
     await expect(
       page.getByRole("listitem").filter({ hasText: approvedFacility.name }),
     ).toBeHidden();
+
+    // 申請日時は、同じ日の申請も見分けられるよう時刻まで出る
+    await expect(earlierRow.getByText(/申請日時: \d+月\d+日\(.\) \d{2}:\d{2}/)).toBeVisible();
 
     // 先に申請したほうが上に来る
     const rowTexts = await page.getByRole("listitem").allInnerTexts();

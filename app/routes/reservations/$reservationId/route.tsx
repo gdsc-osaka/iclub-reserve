@@ -343,7 +343,18 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
                   {view.reservation.createdByName ?? "不明"}
                 </InfoItem>
                 <InfoItem icon={CalendarPlus} label="申請日時">
-                  {formatDateTime(view.reservation.createdAt)}
+                  {formatDateTime(view.reservation.requestedAt)}
+                  {/*
+                   * 施設・日時を変えて申し込み直した予約には、最初に申請した日時も添える。
+                   * 申請日時だけだと、「先に申請したのに後ろに並んでいる」理由が分からない。
+                   */}
+                  {view.reservation.requestedAt.getTime() !==
+                    view.reservation.createdAt.getTime() && (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      最初の申請: {formatDateTime(view.reservation.createdAt)}
+                      （施設・日時を変更して申請し直し）
+                    </span>
+                  )}
                 </InfoItem>
                 <InfoItem icon={StickyNote} label="備考" className="sm:col-span-2">
                   <span className="font-normal whitespace-pre-wrap">

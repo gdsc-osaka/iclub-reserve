@@ -67,7 +67,7 @@ describe("listUpcomingReservationsUseCase", () => {
       headCount: 4,
       note: "ミーティング",
       createdByName: "ユーザー1",
-      createdAt: new Date("2026-10-10T10:00:00.000Z"),
+      requestedAt: new Date("2026-10-10T10:00:00.000Z"),
       hasApprovedOverlap: false,
       hasProvisionalOverlap: false,
     };
@@ -109,7 +109,7 @@ describe("listUpcomingReservationsUseCase", () => {
       headCount: 4,
       note: "ミーティング",
       createdByName: "ユーザー1",
-      createdAt: new Date("2026-10-10T10:00:00.000Z"),
+      requestedAt: new Date("2026-10-10T10:00:00.000Z"),
       hasApprovedOverlap: false,
       hasProvisionalOverlap: false,
     });

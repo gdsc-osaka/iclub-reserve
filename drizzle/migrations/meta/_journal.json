@@ -169,6 +169,13 @@
       "when": 1792947807250,
       "tag": "0023_mushy_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793014405363,
+      "tag": "0024_fine_celestials",
+      "breakpoints": true
     }
   ]
 }

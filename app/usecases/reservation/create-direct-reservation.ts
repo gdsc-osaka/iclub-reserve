@@ -84,6 +84,7 @@ export const createDirectReservationUseCase = (
       statusReason: null,
       createdBy: args.actorUserId,
       createdAt: now,
+      requestedAt: now,
       updatedAt: now,
     };
 

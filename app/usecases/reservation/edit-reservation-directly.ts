@@ -166,6 +166,11 @@ export const editReservationDirectlyUseCase = (
         headCount: content.headCount,
         note: content.note,
         status,
+        /*
+         * 施設・日時を動かしても、申請日時は引き継ぐ（INFO-001.requested_at）。
+         * 事務局が動かした時間帯は団体が申し込み直したものではないので、団体の順番を後ろへ回さない。
+         */
+        requestedAt: reservation.requestedAt,
         updatedAt: now,
         requireNoApprovedOverlap: checksOverlap,
       },

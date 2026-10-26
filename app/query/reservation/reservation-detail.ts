@@ -27,6 +27,7 @@ export interface ReservationDetailRow {
   readonly note: string | null;
   readonly createdByName: string | null;
   readonly createdAt: Date;
+  readonly requestedAt: Date;
   /** 同一施設・同一時間帯に承認済みの予約が存在するかどうか（COND-001） */
   readonly hasApprovedOverlap: boolean;
   /**
@@ -65,7 +66,14 @@ export interface ReservationDetailFull extends ReservationDetailSummary {
   readonly note: string | null;
   readonly statusReason: string | null;
   readonly createdByName: string | null;
+  /** 作成日時。最初に申請した日時で、施設・日時を変えても変わらない */
   readonly createdAt: Date;
+  /**
+   * 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）。
+   *
+   * 団体が施設・日時を変えると、作成日時より後になる。画面はそのとき、最初に申請した日時も添える。
+   */
+  readonly requestedAt: Date;
   /** 同一施設・同一時間帯に承認済みの予約が存在するかどうか（COND-001） */
   readonly hasApprovedOverlap: boolean;
   /** 同一施設・同一時間帯に他の仮予約が存在するかどうか */

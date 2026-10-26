@@ -23,8 +23,8 @@ import { QueryErrorCode, type QueryError } from "../error";
 export interface StaffPendingReservationItem extends ReservationWithNames {
   readonly id: string;
   readonly headCount: number;
-  /** 申請日 */
-  readonly createdAt: Date;
+  /** 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at） */
+  readonly requestedAt: Date;
   /** 同じ施設・時間帯に承認済みの予約があるか。あれば承認できない（COND-001） */
   readonly hasApprovedOverlap: boolean;
   /** 同じ施設・時間帯にほかの仮予約があるか。承認されるのはどちらか一方になる */
@@ -95,7 +95,7 @@ export const findStaffPendingReservations = (
           id: reservationTable.id,
           ...reservationWithNamesColumns,
           headCount: reservationTable.headCount,
-          createdAt: reservationTable.createdAt,
+          requestedAt: reservationTable.requestedAt,
           hasApprovedOverlap: hasOverlappingReservation(db, ReservationStatus.Approved),
           hasProvisionalOverlap: hasOverlappingReservation(db, ReservationStatus.Provisional),
         })

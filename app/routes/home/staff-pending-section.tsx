@@ -140,7 +140,7 @@ function PendingReservationRow({
           {item.facilityName}
           <span className="text-muted-foreground">
             {" "}
-            · {item.groupName} · {item.headCount} 人 · 申請 {formatMonthDay(item.createdAt)}
+            · {item.groupName} · {item.headCount} 人 · 申請 {formatMonthDay(item.requestedAt)}
           </span>
         </p>
         <ReservationOverlapNotice notice={overlapNotice} />

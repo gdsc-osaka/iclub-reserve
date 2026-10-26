@@ -64,8 +64,8 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
     }
 
     const orderClauses =
-      args.sort === "created_at_asc"
-        ? [asc(reservationTable.createdAt), asc(reservationTable.id)]
+      args.sort === "requested_at_asc"
+        ? [asc(reservationTable.requestedAt), asc(reservationTable.id)]
         : args.sort === "start_at_desc"
           ? [desc(reservationTable.startAt), asc(reservationTable.id)]
           : [asc(reservationTable.startAt), asc(reservationTable.id)];
@@ -79,7 +79,7 @@ export const createReservationListQuery = (db: Database): ReservationListQuery =
         headCount: reservationTable.headCount,
         note: reservationTable.note,
         createdByName: user.name,
-        createdAt: reservationTable.createdAt,
+        requestedAt: reservationTable.requestedAt,
         hasApprovedOverlap: hasOverlappingReservation(db, ReservationStatus.Approved),
         hasProvisionalOverlap: hasOverlappingReservation(db, ReservationStatus.Provisional),
       })

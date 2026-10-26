@@ -18,7 +18,7 @@ export const toReservationListItem = (row: ReservationListRow): ReservationListI
   headCount: row.headCount,
   note: row.note,
   createdByName: row.createdByName,
-  createdAt: row.createdAt,
+  requestedAt: row.requestedAt,
   hasApprovedOverlap: row.hasApprovedOverlap ?? false,
   hasProvisionalOverlap: row.hasProvisionalOverlap ?? false,
 });
