@@ -3,6 +3,7 @@ import { ResultAsync } from "neverthrow";
 import { GroupStatus } from "~/domain/group";
 import { canAct, type Actor, type MembershipRole } from "~/domain/membership";
 import { ReservationAction, reservationPermissions } from "~/domain/reservation";
+import { canChangeReservationContent } from "~/domain/reservation/edit";
 import { allowedTransitions, isStaffTransition } from "~/domain/reservation/transition";
 import { canViewReservationDetail } from "~/domain/reservation/visibility";
 import { addDays, toTokyoDateKey } from "~/lib/date";
@@ -37,6 +38,8 @@ export interface GetAvailabilityCalendarArgs {
   readonly from: Date;
   /** 表示する期間の終了（この時刻を含まない） */
   readonly to: Date;
+  /** 「開始日時を過ぎたか」の基準になる現在時刻 */
+  readonly now: Date;
 }
 
 /** カレンダーを見ている人。行ごとに所属を判定するために持ち回る */
@@ -69,6 +72,7 @@ interface CalendarViewer {
 const toVisibleReservation = (
   row: AvailabilityReservationRow,
   viewer: CalendarViewer,
+  now: Date,
 ): AvailabilityReservation => {
   const role = viewer.rolesByGroupId.get(row.groupId);
   const actor: Actor = {
@@ -87,6 +91,7 @@ const toVisibleReservation = (
     isOwnGroup: role !== undefined,
     detail: canViewReservationDetail(actor) ? { headCount: row.headCount, note: row.note } : null,
     transitions,
+    canEdit: canChangeReservationContent(row, actor, now).isOk(),
     hasApprovedOverlap: row.hasApprovedOverlap,
   };
 };
@@ -139,7 +144,7 @@ export const getAvailabilityCalendarUseCase = (
     return {
       facilities: calendar.facilities,
       facility: calendar.facility,
-      reservations: calendar.reservations.map((row) => toVisibleReservation(row, viewer)),
+      reservations: calendar.reservations.map((row) => toVisibleReservation(row, viewer, args.now)),
       canApplyReservation: canApplyReservation(groups, args.isStaff),
       canCreateDirectly: canAct(
         reservationPermissions,

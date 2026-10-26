@@ -81,6 +81,8 @@ export interface AvailabilityReservation {
   readonly detail: AvailabilityReservationDetail | null;
   /** 見ている人がこの予約に対して実行できる事務局の操作（承認・却下・事務局キャンセル） */
   readonly transitions: readonly ReservationTransition[];
+  /** 見ている人がこの予約の内容を変更できるか。欄の「変更」のボタンを出すかに使う */
+  readonly canEdit: boolean;
   /**
    * 同一施設・同一時間帯に、ほかの承認済みの予約があるかどうか（COND-001）。
    *

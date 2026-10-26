@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
 import {
@@ -21,8 +22,10 @@ import { NavCountBadge, NavCountDot, NavCountText } from "./nav-count";
 import {
   commonNavItems,
   isNavItemActive,
+  newReservationPath,
   staffNavItems,
   toNavCount,
+  toNewReservationLabel,
   type NavCounts,
   type NavItem,
 } from "./nav-items";
@@ -48,6 +51,26 @@ export function AppSidebar({ user, counts }: Readonly<{ user: ShellUser; counts:
       </SidebarHeader>
 
       <SidebarContent>
+        {/* 新規予約の入口。常に最上部に置く（ADR-014 決定 9） */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  tooltip={toNewReservationLabel(user.isStaff)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/80 active:text-primary-foreground"
+                >
+                  <Link to={newReservationPath}>
+                    <Plus aria-hidden />
+                    <span>{toNewReservationLabel(user.isStaff)}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>

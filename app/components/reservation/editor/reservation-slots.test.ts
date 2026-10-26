@@ -8,8 +8,10 @@ import {
   findOverlapping,
   formatDuration,
   formatSlotRange,
+  isRangeAvailable,
   selectSlot,
   toBlockedSlots,
+  toDefaultRange,
   toPastSlots,
   toTimelineReservations,
 } from "./reservation-slots";
@@ -211,5 +213,49 @@ describe("formatDuration", () => {
 describe("formatSlotRange", () => {
   it("開始〜終了に長さを添えて書く", () => {
     expect(formatSlotRange({ startMinutes: 780, endMinutes: 900 })).toBe("13:00〜15:00（2 時間）");
+  });
+});
+
+describe("toDefaultRange", () => {
+  it("何も無ければ 1 時間にする", () => {
+    expect(toDefaultRange(600, new Set())).toEqual({ startMinutes: 600, endMinutes: 660 });
+  });
+
+  it("30 分後の枠が承認済みと重なるなら 30 分にする", () => {
+    expect(toDefaultRange(600, new Set([630]))).toEqual({ startMinutes: 600, endMinutes: 630 });
+  });
+
+  it("20:30 開始は 21:00 を超えるので 30 分にする", () => {
+    expect(toDefaultRange(1230, new Set())).toEqual({ startMinutes: 1230, endMinutes: 1260 });
+  });
+
+  it("20:00 開始は 21:00 までの 1 時間を取れる", () => {
+    expect(toDefaultRange(1200, new Set())).toEqual({ startMinutes: 1200, endMinutes: 1260 });
+  });
+});
+
+describe("isRangeAvailable", () => {
+  it("空いており開始時刻を過ぎていなければ true を返す", () => {
+    const range = { startMinutes: 600, endMinutes: 660 }; // 10:00〜11:00
+    expect(isRangeAvailable(range, new Set(), new Set())).toBe(true);
+  });
+
+  it("開始枠が過ぎている（pastSlots に含まれる）場合は false を返す", () => {
+    const range = { startMinutes: 600, endMinutes: 660 };
+    expect(isRangeAvailable(range, new Set(), new Set([600]))).toBe(false);
+  });
+
+  it("時間帯のいずれかの枠が承認済みと重なる（blockedSlots に含まれる）場合は false を返す", () => {
+    const range = { startMinutes: 600, endMinutes: 660 }; // 600, 630
+    // 10:30 (630) が重なっている
+    expect(isRangeAvailable(range, new Set([630]), new Set())).toBe(false);
+    // 10:00 (600) が重なっている
+    expect(isRangeAvailable(range, new Set([600]), new Set())).toBe(false);
+  });
+
+  it("時間帯の外の枠だけが塞がれていても true を返す", () => {
+    const range = { startMinutes: 600, endMinutes: 660 };
+    // 11:00 (660) や 9:30 (570) が塞がれていても影響しない
+    expect(isRangeAvailable(range, new Set([570, 660]), new Set([570]))).toBe(true);
   });
 });

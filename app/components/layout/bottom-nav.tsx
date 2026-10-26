@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { LogOut, MoreHorizontal, Settings } from "lucide-react";
+import { LogOut, MoreHorizontal, Plus, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
 import { Button } from "~/components/ui/button";
@@ -18,8 +18,10 @@ import { UserAvatar } from "./account-menu";
 import { NavCountBadge, NavCountDot, NavCountText } from "./nav-count";
 import {
   isNavItemActive,
+  newReservationPath,
   toBottomNavItems,
   toNavCount,
+  toNewReservationLabel,
   toOverflowNavItems,
   type NavCounts,
   type NavItem,
@@ -50,7 +52,18 @@ export function BottomNav({ user, counts }: Readonly<{ user: ShellUser; counts: 
       className="fixed inset-x-0 bottom-0 z-30 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="grid grid-cols-5">
-        {items.map((item) => (
+        {items.slice(0, 2).map((item) => (
+          <li key={item.id}>
+            <BottomNavTab item={item} count={toNavCount(counts, item)} />
+          </li>
+        ))}
+
+        {/* 入口は真ん中（2 つ目と 3 つ目の間）に置く（ADR-014 決定 9） */}
+        <li>
+          <BottomNavAction isStaff={user.isStaff} />
+        </li>
+
+        {items.slice(2).map((item) => (
           <li key={item.id}>
             <BottomNavTab item={item} count={toNavCount(counts, item)} />
           </li>
@@ -62,6 +75,24 @@ export function BottomNav({ user, counts }: Readonly<{ user: ShellUser; counts: 
         </li>
       </ul>
     </nav>
+  );
+}
+
+/** ボトムバーの真ん中に置く、予約の申請（事務局は作成）の入口 */
+function BottomNavAction({ isStaff }: Readonly<{ isStaff: boolean }>) {
+  const label = toNewReservationLabel(isStaff);
+
+  return (
+    <Link to={newReservationPath} className={cn(tabClassName, "text-muted-foreground")}>
+      {/*
+       * セル自体が Link なので、中に Button は入れず span で丸を描く。
+       * 他のタブと同じく高さ h-14 の中に収めるため size-10 にする。
+       */}
+      <span className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs">
+        <Plus aria-hidden className="size-5" />
+      </span>
+      <span>{label}</span>
+    </Link>
   );
 }
 

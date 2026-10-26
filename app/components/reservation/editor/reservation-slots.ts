@@ -78,6 +78,13 @@ export const toTimelineReservations = (
     }));
 };
 
+/** `toBlockedSlots` が読む項目だけの形。申請フォームの帯と空き状況カレンダーの帯の両方を渡せる */
+export interface BlockedSlotItem {
+  readonly reservation: { readonly status: ReservationStatus };
+  readonly startMinutes: number;
+  readonly endMinutes: number;
+}
+
 /**
  * 申請できない枠（承認済みの予約と重なる枠）を返す（COND-001）。
  *
@@ -85,7 +92,7 @@ export const toTimelineReservations = (
  * ここで塞いでしまうと「同じ時間帯に複数の団体が申請して事務局が選ぶ」
  * という使い方ができなくなる。
  */
-export const toBlockedSlots = (items: readonly TimelineReservation[]): ReadonlySet<number> => {
+export const toBlockedSlots = (items: readonly BlockedSlotItem[]): ReadonlySet<number> => {
   const blocked = new Set<number>();
 
   for (const item of items) {
@@ -99,6 +106,26 @@ export const toBlockedSlots = (items: readonly TimelineReservation[]): ReadonlyS
   }
 
   return blocked;
+};
+
+/**
+ * 空いている枠を押したときの、仮の枠の初期の長さ（ADR-014 決定 6）。
+ *
+ * 開始から 1 時間を取れれば 1 時間、取れなければ 30 分を返す。
+ * 1 時間取れないのは、30 分後の枠が承認済みの予約で塞がれている（blockedSlots）か、
+ * 1 時間後が閉館時刻（CLOSE_MINUTES、21:00）を超えるとき。
+ *
+ * 開始の枠そのものが押せるか（承認済みと重ならない・過ぎていない）は、呼び出し側が先に確かめる。
+ */
+export const toDefaultRange = (
+  startMinutes: number,
+  blockedSlots: ReadonlySet<number>,
+): SlotRange => {
+  const oneHourEnd = startMinutes + RESERVATION_STEP_MINUTES * 2;
+  const nextSlot = startMinutes + RESERVATION_STEP_MINUTES;
+  const canTakeOneHour = oneHourEnd <= CLOSE_MINUTES && !blockedSlots.has(nextSlot);
+
+  return { startMinutes, endMinutes: canTakeOneHour ? oneHourEnd : nextSlot };
 };
 
 /**
@@ -238,3 +265,27 @@ export const formatSlotRange = (range: SlotRange): string =>
   `${toTokyoTimeKey(range.startMinutes)}〜${toTokyoTimeKey(range.endMinutes)}（${formatDuration(
     range.endMinutes - range.startMinutes,
   )}）`;
+
+/**
+ * 選んだ時間帯が申請可能かを判定する。
+ *
+ * 開始の枠が過ぎている（pastSlots）、または時間帯の 30 分ごとの枠のどれかが
+ * 承認済みの予約と重なる（blockedSlots）場合は false を返す。
+ */
+export const isRangeAvailable = (
+  range: SlotRange,
+  blockedSlots: ReadonlySet<number>,
+  pastSlots: ReadonlySet<number>,
+): boolean => {
+  if (pastSlots.has(range.startMinutes)) return false;
+
+  for (
+    let minutes = range.startMinutes;
+    minutes < range.endMinutes;
+    minutes += RESERVATION_STEP_MINUTES
+  ) {
+    if (blockedSlots.has(minutes)) return false;
+  }
+
+  return true;
+};

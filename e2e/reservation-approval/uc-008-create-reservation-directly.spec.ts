@@ -1,5 +1,6 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
+import { formatMonthDay } from "~/lib/date";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -32,22 +33,19 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     await signInAs(personas.staff.id);
 
     // 空き状況カレンダーを開く
-    const day = toDateKey(nextWeekAt(Weekday.Wednesday, 0));
+    const wednesday = nextWeekAt(Weekday.Wednesday, 0);
+    const day = toDateKey(wednesday);
     await openPage(page, `/availability?facility=${facility.id}&date=${day}`);
 
-    if (isMobile) {
-      // スマホでは日ごとの一覧の「＋」ボタンから直接作成できる
-      const agenda = page.getByRole("listitem").filter({ hasText: "水" });
-      await agenda.getByRole("button", { name: /仮予約を申請/ }).click();
-    } else {
-      // デスクトップでは 10:00 の枠をクリックして吹き出しを開く
-      const slot = page.getByRole("button", { name: /水.*10:00 から仮予約を申請/ });
-      await slot.click();
-    }
+    // PC・スマホとも、来週の水曜の「10:00 から申請」を押す
+    const column = page.getByRole("group", { name: formatMonthDay(wednesday) });
+    await column
+      .getByRole("button", { name: `${formatMonthDay(wednesday)} 10:00 から申請` })
+      .click();
 
-    // 吹き出し内の「承認済みで直接作成」をクリック
-    const popover = page.getByRole("dialog");
-    await popover.getByRole("link", { name: "承認済みで直接作成" }).click();
+    // 欄の「承認済みで直接作成」をクリック
+    const panel = page.getByRole("region", { name: "新しい予約" });
+    await panel.getByRole("link", { name: "承認済みで直接作成" }).click();
 
     // 申請フォームへ遷移し、直接作成スイッチがオンになっている
     await expect(page).toHaveURL(/mode=direct/);
@@ -56,22 +54,15 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     await expect(directSwitch).toBeChecked();
 
     /*
-     * 時刻の欄は、PC ではフォームの右側にあり、スマホでは「施設・日時」のカードから開く
+     * 時間帯が 10:00〜11:00 で入っていることを確かめる。
+     * PC ではフォームの右側にあり、スマホでは「施設・日時」のカードから開く
      * 全画面の選択の中にある。
      */
-    if (isMobile) {
-      await page.getByRole("button", { name: /施設・日時/ }).click();
-      const schedule = page.getByRole("dialog", { name: "施設・日時を選ぶ" });
-      await schedule.getByRole("combobox", { name: "開始時刻" }).click();
-      await page.getByRole("option", { name: "10:00" }).click();
-      await schedule.getByRole("combobox", { name: "終了時刻" }).click();
-      await page.getByRole("option", { name: "12:00" }).click();
-      await schedule.getByRole("button", { name: "決定" }).click();
-    } else {
-      // デスクトップでは開始時刻が 10:00、終了時刻を 12:00 に選ぶ
-      await page.getByRole("combobox", { name: "終了時刻" }).click();
-      await page.getByRole("option", { name: "12:00" }).click();
-    }
+    if (isMobile) await page.getByRole("button", { name: /施設・日時/ }).click();
+    const schedule = isMobile ? page.getByRole("dialog", { name: "施設・日時を選ぶ" }) : page;
+    await expect(schedule.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
+    await expect(schedule.getByRole("combobox", { name: "終了時刻" })).toHaveText("11:00");
+    if (isMobile) await schedule.getByRole("button", { name: "決定" }).click();
 
     await page.getByLabel("使用人数").fill("5");
     await page.getByLabel("備考").fill("事務局の直接作成テスト");

@@ -1,3 +1,6 @@
+import type { SlotRange } from "~/components/reservation/editor/reservation-slots";
+import { toTokyoTimeKey } from "~/lib/date";
+
 /**
  * 予約申請フォーム（SCR-002）が行き来する URL。
  *
@@ -20,5 +23,16 @@ export const toFormPathForFacility = (facilityId: string): string =>
 /** この画面の URL を組み立てる。施設と日付を持ち回るので、リンクは必ずここを通す */
 export const toFormPath = (facilityId: string, dateKey: string, mode?: "direct"): string => {
   const base = `/reservations/new?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
+  return mode === "direct" ? `${base}&mode=direct` : base;
+};
+
+/** 時間帯まで決めてこの画面を開く URL を組み立てる（空き状況カレンダーの仮の枠から使う） */
+export const toFormPathForRange = (
+  facilityId: string,
+  dateKey: string,
+  range: SlotRange,
+  mode?: "direct",
+): string => {
+  const base = `${toFormPath(facilityId, dateKey)}&start=${toTokyoTimeKey(range.startMinutes)}&end=${toTokyoTimeKey(range.endMinutes)}`;
   return mode === "direct" ? `${base}&mode=direct` : base;
 };
