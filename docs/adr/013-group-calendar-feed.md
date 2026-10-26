@@ -119,7 +119,7 @@ AGENTS.md は「所属で判定する」読み取りを素通しから外して�
 - `app/lib/ical.ts`: iCal の文字列を組み立てる汎用の道具。行末は CRLF、テキストの `\`・`;`・`,`・改行を逃がし、75 オクテットで折り返す。日本語は 1 文字 3 バイトなので、UTF-8 の文字の途中で切らない。時刻は UTC（`YYYYMMDDTHHMMSSZ`）で書き、`VTIMEZONE` は持たない。
 - `app/domain/calendar/group-calendar-feed.ts`: 予約から予定への詰め替え（`toGroupCalendarEvents`）と、業務の数字（過去に遡る日数 90・仮予約の接頭辞 `[仮予約] `）の定数。
   - カレンダー: `X-WR-CALNAME`（`<団体名> の予約（i-Club）`）・`X-WR-TIMEZONE:Asia/Tokyo`・`REFRESH-INTERVAL;VALUE=DURATION:PT1H`・`X-PUBLISHED-TTL:PT1H`
-  - 予定: `UID`（`<予約ID>@iclub-reserve`。変えない）・`DTSTAMP` と `LAST-MODIFIED`（予約の `updated_at`）・`DTSTART`・`DTEND`・`SUMMARY`（施設名。仮予約は接頭辞付き）・`LOCATION`（施設名）・`DESCRIPTION`（使用人数・備考・予約詳細のリンク）・`URL`（予約詳細）・`STATUS`（仮予約は `TENTATIVE`、承認済みは `CONFIRMED`）
+  - 予定: `UID`（`<予約ID>@iclub-reserve`。変えない）・`DTSTAMP` と `LAST-MODIFIED`（予約と施設の `updated_at` のうち遅い方。施設名は `SUMMARY` と `LOCATION` に出るので、施設名を変えただけでも進める）・`DTSTART`・`DTEND`・`SUMMARY`（施設名。仮予約は接頭辞付き）・`LOCATION`（施設名）・`DESCRIPTION`（使用人数・備考・予約詳細のリンク）・`URL`（予約詳細）・`STATUS`（仮予約は `TENTATIVE`、承認済みは `CONFIRMED`）
   - 取り消し・却下・キャンセルで終わった予約は、`STATUS:CANCELLED` で載せずに、そもそも載せない。購読したカレンダーは毎回まるごと置き換わるので、載せなければ消える。
 
 ライブラリは足さない（AGENTS.md の「不要な依存を足さない」）。使う機能は上の数個だけで、単体テストで固められる。

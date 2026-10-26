@@ -1,5 +1,8 @@
+import { createId } from "@paralleldrive/cuid2";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
 import { CalendarSyncStatus } from "~/domain/calendar";
+import { groupMemberTable } from "./group";
 
 export const calendarSyncTaskTable = sqliteTable(
   "calendar_sync_task",
@@ -41,3 +44,27 @@ export const calendarSyncTaskTable = sqliteTable(
   // cron が毎分投げるクエリの WHERE 句に対応する複合インデックス
   (table) => [index("calendar_sync_task_due_idx").on(table.status, table.nextAttemptAt)],
 );
+
+/**
+ * 自団体の予約カレンダーの購読トークン管理テーブル（ADR-013 決定 2 / INFO-013）。
+ *
+ * 利用者と団体の所属（group_member）ごとに 1 行だけ保持する。
+ * メンバーが団体を抜けた際、あるいはアカウントが削除された際は
+ * 外部キーの ON DELETE CASCADE により自動で削除され、URL が無効化される。
+ */
+export const groupCalendarFeedTable = sqliteTable("group_calendar_feed", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  membershipId: text("membership_id")
+    .notNull()
+    .unique()
+    .references(() => groupMemberTable.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
