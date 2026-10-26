@@ -1,6 +1,7 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
 import { CalendarErrorCode, type CalendarError } from "~/domain/calendar";
 import { wrapError } from "~/domain/error";
+import { base64UrlEncode } from "~/lib/base64url";
 import { classifyGoogleCalendarError } from "./google-calendar-error";
 
 /** OAuth 2.0 トークンエンドポイント */
@@ -8,18 +9,6 @@ export const GOOGLE_OAUTH2_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 /** Google Calendar のスコープ（予定の読み書き権限） */
 export const GOOGLE_CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-
-/**
- * Base64URL エンコードを行う純粋関数。
- */
-export const base64UrlEncode = (data: Uint8Array | string): string => {
-  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-};
 
 /**
  * PEM 形式の PKCS#8 秘密鍵をバイナリ（DER）に変換する純粋関数。

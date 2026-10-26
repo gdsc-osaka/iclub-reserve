@@ -5,14 +5,14 @@ import { openPage } from "../support/page.js";
 /**
  * UC-018 カレンダー購読URLを確認する（`rdra/contexts/calendar-integration.md`）
  *
- * ログイン済みの利用者が施設ごとのカレンダー購読用 URL を確認できる（REQ-030）。
+ * 事務局スタッフが施設ごとのカレンダー購読用 URL を確認できる（REQ-030 / ADR-013 決定 7）。
  * ADR-007 の方針に従い、確かめるのは次の 3 点:
- * 1. 主な流れ: 団体のメンバーでログインすると、Calendar ID 付きの施設に「Google カレンダーに追加」のリンク（href が cid= を含む）と iCal の URL が出る
- * 2. 権限の境目: ログインしていないと開けない（ログイン画面へ送られる）
+ * 1. 主な流れ: 事務局スタッフでログインすると、Calendar ID 付きの施設に「Google カレンダーに追加」のリンク（href が cid= を含む）と iCal の URL が出る
+ * 2. 権限の境目: 事務局でない利用者は開けず権限エラーになる。また未ログインだとログイン画面へ送られる
  * 3. 代表的な失敗: Calendar ID の無い施設には「まだ用意されていません」と出て、ボタンが無い
  */
 test.describe("UC-018 カレンダー購読URLを確認する", { tag: "@UC-018" }, () => {
-  test("団体のメンバーでログインすると、Calendar ID 付きの施設に「Google カレンダーに追加」のリンクと iCal の URL が出る", async ({
+  test("事務局スタッフでログインすると、Calendar ID 付きの施設に「Google カレンダーに追加」のリンクと iCal の URL が出る", async ({
     page,
     db,
     signInAs,
@@ -25,8 +25,8 @@ test.describe("UC-018 カレンダー購読URLを確認する", { tag: "@UC-018"
       calendarUrl,
     });
 
-    await signInAs(personas.groupMember.id);
-    await openPage(page, "/calendars");
+    await signInAs(personas.staff.id);
+    await openPage(page, "/staff/calendars");
 
     // 施設名が表示されていること
     const facilityHeading = page.getByRole("heading", { name: facility.name });
@@ -51,9 +51,19 @@ test.describe("UC-018 カレンダー購読URLを確認する", { tag: "@UC-018"
     await expect(card.getByRole("button", { name: "コピー" })).toBeVisible();
   });
 
-  test("ログインしていないと開けず、ログイン画面へ送られる", async ({ page }) => {
-    await page.goto("/calendars");
-    await expect(page).toHaveURL("/login?redirectTo=%2Fcalendars");
+  test("事務局でない利用者は開けず権限エラーになり、ログインしていないとログイン画面へ送られる", async ({
+    page,
+    signInAs,
+  }) => {
+    // ログインしていないとき
+    await page.goto("/staff/calendars");
+    await expect(page).toHaveURL("/login?redirectTo=%2Fstaff%2Fcalendars");
+
+    // 事務局でない利用者がアクセスしたとき
+    await signInAs(personas.groupMember.id);
+    const response = await page.goto("/staff/calendars");
+    expect(response?.status()).toBe(403);
+    await expect(page.getByRole("heading", { name: "エラーが発生しました" })).toBeVisible();
   });
 
   test("Calendar ID の無い施設には「まだ用意されていません」と出て、ボタンが無い", async ({
@@ -67,8 +77,8 @@ test.describe("UC-018 カレンダー購読URLを確認する", { tag: "@UC-018"
       calendarUrl: null,
     });
 
-    await signInAs(personas.groupMember.id);
-    await openPage(page, "/calendars");
+    await signInAs(personas.staff.id);
+    await openPage(page, "/staff/calendars");
 
     const facilityHeading = page.getByRole("heading", { name: facility.name });
     await expect(facilityHeading).toBeVisible();

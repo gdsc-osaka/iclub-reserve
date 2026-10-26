@@ -5,6 +5,7 @@ import { GroupStatusBadge } from "~/components/group/group-status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { GroupField } from "~/domain/group";
 import { createGroupAuditLogListQuery } from "~/infra/audit-log/group-audit-log-list-query";
+import { createGroupCalendarFeedRepository } from "~/infra/calendar/group-calendar-feed-repo";
 import { createDb } from "~/infra/db";
 import { createGroupInvitationListQuery } from "~/infra/group/group-invitation-list-query";
 import { createGroupMemberListQuery } from "~/infra/group/group-member-list-query";
@@ -15,7 +16,10 @@ import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { parseHistoryPage } from "~/lib/history-page";
+import { generateRandomToken } from "~/lib/random-token";
 import { groupActionErrors, groupErrorResponse } from "~/routes/_shared/group-error.server";
+import { issueGroupCalendarFeedUseCase } from "~/usecases/calendar/issue-group-calendar-feed";
+import { regenerateGroupCalendarFeedUseCase } from "~/usecases/calendar/regenerate-group-calendar-feed";
 import { cancelInvitationUseCase } from "~/usecases/group/cancel-invitation";
 import { getGroupManagementUseCase } from "~/usecases/group/get-group-management";
 import { inviteMemberUseCase } from "~/usecases/group/invite-member";
@@ -26,6 +30,7 @@ import { updateMemberRoleUseCase } from "~/usecases/group/update-member-role";
 import type { Route } from "./+types/route";
 import type { GroupActionData } from "./action-data";
 import { GroupAuditLogCard } from "./group-audit-log-card";
+import { GroupCalendarFeedCard } from "./group-calendar-feed-card";
 import { GroupInfoCard } from "./group-info-card";
 import { GroupInvitationCard } from "./group-invitation-card";
 import { GroupMemberCard } from "./group-member-card";
@@ -60,6 +65,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     {
       groupRepository: createGroupRepository(db),
       membershipRepository: createMembershipRepository(db),
+      groupCalendarFeedRepository: createGroupCalendarFeedRepository(db),
       groupMemberListQuery: createGroupMemberListQuery(db),
       groupInvitationListQuery: createGroupInvitationListQuery(db),
       groupAuditLogListQuery: createGroupAuditLogListQuery(db),
@@ -83,6 +89,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     now,
     currentUserId: user.id,
     isStaff: user.is_staff,
+    appBaseUrl: resolveAppBaseUrl(request),
   };
 }
 
@@ -91,6 +98,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
  *
  * 団体名の編集、メンバーの役割変更（昇格・降格）、メンバーの削除、
  * およびメンバーの招待送信・招待取り消しなどの更新操作を処理する。
+ * 見る人自身のカレンダー購読 URL の発行・作り直し（UC-039）もここで受ける。
  */
 export async function action({ request, params, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
@@ -285,6 +293,60 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return redirect(".");
   }
 
+  // 6. カレンダー購読 URL の発行
+  if (intent === "issue-calendar-feed") {
+    const result = await issueGroupCalendarFeedUseCase(
+      {
+        groupRepository: createGroupRepository(db),
+        membershipRepository: createMembershipRepository(db),
+        groupCalendarFeedRepository: createGroupCalendarFeedRepository(db),
+        generateToken: generateRandomToken,
+      },
+      {
+        groupId: params.groupId,
+        actorUserId: user.id,
+        isStaff: user.is_staff,
+        now: new Date(),
+      },
+    );
+
+    if (result.isErr()) {
+      return {
+        section: "calendar-feed",
+        ...groupActionErrors(contextOf("issue-calendar-feed"), result.error),
+      } satisfies GroupActionData;
+    }
+
+    return redirect(".");
+  }
+
+  // 7. カレンダー購読 URL の作り直し
+  if (intent === "regenerate-calendar-feed") {
+    const result = await regenerateGroupCalendarFeedUseCase(
+      {
+        groupRepository: createGroupRepository(db),
+        membershipRepository: createMembershipRepository(db),
+        groupCalendarFeedRepository: createGroupCalendarFeedRepository(db),
+        generateToken: generateRandomToken,
+      },
+      {
+        groupId: params.groupId,
+        actorUserId: user.id,
+        isStaff: user.is_staff,
+        now: new Date(),
+      },
+    );
+
+    if (result.isErr()) {
+      return {
+        section: "calendar-feed",
+        ...groupActionErrors(contextOf("regenerate-calendar-feed"), result.error),
+      } satisfies GroupActionData;
+    }
+
+    return redirect(".");
+  }
+
   // この画面が出している操作以外は受け付けない
   return {
     section: "name",
@@ -300,7 +362,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
  * 団体の基本情報、所属メンバー一覧、および承諾待ちの招待（管理者・事務局のみ）を表示する。
  */
 export default function GroupManagementRoute({ loaderData, actionData }: Route.ComponentProps) {
-  const { view, now, currentUserId, isStaff } = loaderData;
+  const { view, now, currentUserId, isStaff, appBaseUrl } = loaderData;
   const nowDate = new Date(now);
 
   return (
@@ -324,6 +386,15 @@ export default function GroupManagementRoute({ loaderData, actionData }: Route.C
         canManage={view.canManage}
         nameForm={actionData?.section === "name" ? actionData : null}
       />
+
+      {/* カレンダー購読カード（所属している人にだけ表示。事務局でも所属していなければ出さない） */}
+      {view.isMember && (
+        <GroupCalendarFeedCard
+          calendarFeed={view.calendarFeed}
+          appBaseUrl={appBaseUrl}
+          error={actionData?.section === "calendar-feed" ? actionData.formError : null}
+        />
+      )}
 
       {/* メンバーカード */}
       <GroupMemberCard

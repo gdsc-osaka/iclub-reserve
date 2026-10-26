@@ -3,6 +3,7 @@
  */
 import type { CalendarClient } from "~/domain/calendar/calendar-client";
 import type { CalendarSyncTasks } from "~/domain/calendar/calendar-sync-task";
+import type { GroupCalendarFeedRepository } from "~/domain/calendar/group-calendar-feed-repository";
 import type { CalendarReconcileQuery } from "~/query/calendar/calendar-reconcile-query";
 import type { CalendarSyncQuery } from "~/query/calendar/calendar-sync-query";
 import { createUnimplementedFake } from "./stub";
@@ -40,4 +41,13 @@ export function fakeCalendarReconcileQuery(
   overrides: Partial<CalendarReconcileQuery> = {},
 ): CalendarReconcileQuery {
   return createUnimplementedFake("CalendarReconcileQuery", overrides);
+}
+
+/**
+ * テスト用の GroupCalendarFeedRepository の偽物を生成する。
+ */
+export function fakeGroupCalendarFeedRepository(
+  overrides: Partial<GroupCalendarFeedRepository> = {},
+): GroupCalendarFeedRepository {
+  return createUnimplementedFake("GroupCalendarFeedRepository", overrides);
 }

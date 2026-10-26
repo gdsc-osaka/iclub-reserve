@@ -21,10 +21,11 @@ export default [
     index("routes/home/route.tsx"),
     route("availability", "routes/availability/route.tsx"),
     /*
-     * カレンダー一覧・購読ページ（SCR-010 / UC-018）。
+     * 施設カレンダー一覧・購読ページ（SCR-010 / UC-018 / ADR-013 決定 7）。
      * 全施設・設備の Google Calendar 追加リンクおよび iCal 形式の購読 URL を一覧表示する。
+     * 事務局スタッフ限定の画面。
      */
-    route("calendars", "routes/calendars/route.tsx"),
+    route("staff/calendars", "routes/calendars/staff/route.tsx"),
     /*
      * 団体一覧（SCR-008）。
      * 一般ユーザー向け（/groups）と事務局向け（/staff/groups）に分ける。
