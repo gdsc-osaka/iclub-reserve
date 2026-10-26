@@ -277,7 +277,21 @@ const weekStart = startOfTokyoWeek(new Date());
 /** 今週の月曜から days 日後の、日本時間 hour 時 */
 const atWeek = (days: number, hour: number) => atTokyoTime(addDays(weekStart, days), hour);
 
-export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] = [
+/** 予約を作成した日時の既定値 */
+const seedReservedAt = new Date();
+
+/**
+ * res_overlap_ai を最初に申請した日時と、時間帯を動かして申請し直した日時（INFO-001.requested_at）。
+ * 同じ時間帯の res_overlap_robotics より先に作ったが、申し込み直したので後ろに並ぶ。
+ */
+const overlapAiCreatedAt = addDays(seedReservedAt, -3);
+const overlapAiRequestedAt = addDays(seedReservedAt, -1);
+
+/** 申請日時を省けるようにした予約。省いたときは作成日時と同じにする */
+type SeedReservation = Omit<typeof schema.reservationTable.$inferInsert, "requestedAt"> &
+  Partial<Pick<typeof schema.reservationTable.$inferInsert, "requestedAt">>;
+
+const reservationSeeds: SeedReservation[] = [
   {
     id: "res_sample_approved",
     groupId: "grp_robotics",
@@ -306,6 +320,10 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
    * 重なった仮予約。COND-001 が重複を禁じているのは承認済みの予約に対してだけなので、
    * 仮予約どうしは同じ時間帯に並ぶことがある。
    * カレンダーが帯を横に分けて描けているかは、この 2 件で確かめられる。
+   *
+   * 事務局の一覧（UC-033）が申請日時の古い順に並ぶことも、この 2 件で確かめられる。
+   * 作ったのは res_overlap_ai が先だが、時間帯を動かして申し込み直したので、
+   * res_overlap_robotics の方が先に並び、res_overlap_ai の詳細には最初の申請日時が添えられる。
    */
   {
     id: "res_overlap_robotics",
@@ -318,6 +336,7 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
     status: ReservationStatus.Provisional,
     statusReason: null,
     createdBy: "usr_student_01",
+    createdAt: addDays(seedReservedAt, -2),
   },
   {
     id: "res_overlap_ai",
@@ -330,6 +349,8 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
     status: ReservationStatus.Provisional,
     statusReason: null,
     createdBy: "usr_student_01",
+    createdAt: overlapAiCreatedAt,
+    requestedAt: overlapAiRequestedAt,
   },
   /*
    * 終了した予約。空き状況カレンダーには出ない（calendarVisibleStatuses）。
@@ -462,6 +483,16 @@ export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
     createdBy: "usr_student_01",
   },
 ];
+
+/**
+ * サンプル予約。申請日時（requested_at）はスキーマに既定値が無いので、ここで埋める。
+ * 施設・日時を変えていない予約は、作成日時と申請日時がそろう。
+ */
+export const seedReservations: (typeof schema.reservationTable.$inferInsert)[] =
+  reservationSeeds.map((row) => {
+    const createdAt = row.createdAt ?? seedReservedAt;
+    return { ...row, createdAt, requestedAt: row.requestedAt ?? createdAt };
+  });
 
 /**
  * 操作履歴のシードデータ（SCR-018 の動作確認用）。
@@ -602,6 +633,21 @@ export const seedAuditLogs: (typeof schema.auditLogTable.$inferInsert)[] = [
     changes: {
       status: { before: ReservationStatus.Provisional, after: ReservationStatus.Approved },
       status_reason: { before: null, after: null },
+    },
+  },
+  {
+    // res_overlap_ai は、午前の時間帯で申請したあと、午後へ動かして申請し直したことにする（INFO-001.requested_at）
+    id: "log_seed_reservation_edit_provisional",
+    occurredAt: overlapAiRequestedAt,
+    actorId: "usr_student_01",
+    actedAsStaff: false,
+    action: AuditLogAction.ReservationEditProvisional,
+    targetType: AuditLogTargetType.Reservation,
+    targetId: "res_overlap_ai",
+    groupId: "grp_ai_hackers",
+    changes: {
+      start_at: { before: atWeek(2, 10).toISOString(), after: atWeek(2, 15).toISOString() },
+      end_at: { before: atWeek(2, 13).toISOString(), after: atWeek(2, 18).toISOString() },
     },
   },
   {

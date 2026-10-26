@@ -98,6 +98,7 @@ export const createProvisionalReservationUseCase = (
       statusReason: null,
       createdBy: args.actorUserId,
       createdAt: now,
+      requestedAt: now,
       updatedAt: now,
     };
 

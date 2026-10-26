@@ -12,6 +12,7 @@ import {
   resolveDirectEditOutcome,
   resolveEditMode,
   resolveEditOutcome,
+  resolveRequestedAtAfterEdit,
   ReservationEditMode,
   ReservationEditOutcome,
   type ReservationContent,
@@ -415,5 +416,68 @@ describe("requiresOverlapCheck（COND-001）", () => {
 
   it("使用人数・備考だけなら確かめない（変えていない時間帯を確かめ直さない）", () => {
     expect(requiresOverlapCheck(new Set(["headCount", "note"] as const))).toBe(false);
+  });
+});
+
+describe("resolveRequestedAtAfterEdit（INFO-001.requested_at）", () => {
+  /** 最初に申請した日時。変更する前の申請日時 */
+  const requestedAt = new Date("2026-09-10T09:00:00+09:00");
+  const reservation = { ...before, requestedAt };
+
+  /** 変更後の内容から、申請日時を決める */
+  const resolve = (after: ReservationContent) =>
+    resolveRequestedAtAfterEdit(reservation, after, changedContentFields(before, after), now);
+
+  it.each([
+    ["施設を変えた", { facilityId: "fac_room_b" }],
+    ["開始を早めた", { startAt: new Date("2026-09-25T09:00:00+09:00") }],
+    ["終了を延ばした", { endAt: new Date("2026-09-25T13:00:00+09:00") }],
+    [
+      "時間帯をずらした",
+      {
+        startAt: new Date("2026-09-25T11:00:00+09:00"),
+        endAt: new Date("2026-09-25T13:00:00+09:00"),
+      },
+    ],
+    [
+      "別の日へ動かした",
+      {
+        startAt: new Date("2026-09-26T10:00:00+09:00"),
+        endAt: new Date("2026-09-26T12:00:00+09:00"),
+      },
+    ],
+    [
+      // 時間帯を縮めていても、施設が違えば別の時間帯を申し込んだことになる
+      "施設を変えて時間帯を縮めた",
+      { facilityId: "fac_room_b", endAt: new Date("2026-09-25T11:00:00+09:00") },
+    ],
+  ] as const)("%s → 変えた日時に置き換える", (_name, changes) => {
+    expect(resolve({ ...before, ...changes })).toEqual(now);
+  });
+
+  it.each([
+    ["開始を遅らせた", { startAt: new Date("2026-09-25T11:00:00+09:00") }],
+    ["終了を早めた", { endAt: new Date("2026-09-25T11:00:00+09:00") }],
+    [
+      "両側から縮めた",
+      {
+        startAt: new Date("2026-09-25T10:30:00+09:00"),
+        endAt: new Date("2026-09-25T11:30:00+09:00"),
+      },
+    ],
+  ] as const)("同じ施設で%s（時間帯を縮めただけ）→ 申請日時を引き継ぐ", (_name, changes) => {
+    /*
+     * 縮めた後の時間帯は、もとの申請の時点で申し込んでいた範囲に収まる。
+     * 重ならないよう時間帯を譲った団体が、順番まで失わないようにする。
+     */
+    expect(resolve({ ...before, ...changes })).toEqual(requestedAt);
+  });
+
+  it("使用人数・備考だけなら、申請日時を引き継ぐ（更新日時と違い、後ろへ回らない）", () => {
+    expect(resolve({ ...before, headCount: 10, note: "機材を持ち込みます" })).toEqual(requestedAt);
+  });
+
+  it("1 項目も変えていなければ、申請日時を引き継ぐ", () => {
+    expect(resolve({ ...before })).toEqual(requestedAt);
   });
 });

@@ -69,6 +69,27 @@ export const overlapCheckFields = {
   note: false,
 } as const satisfies Record<ReservationContentField, boolean>;
 
+/**
+ * 団体が変えると、申請し直したと見なす項目（INFO-001.requested_at）。
+ *
+ * 申請日時は「いまの施設・時間帯を申し込んだ日時」で、事務局が仮予約を先に申し込まれた順に
+ * 並べるのに使う（UC-033）。作成日時のままにすると、先に別の時間帯で申請しておいて
+ * 後から狙った時間帯へ動かすだけで、その時間帯に先に申し込んでいた団体より前に並んでしまう。
+ *
+ * 使用人数・備考は時間帯の取り合いに関わらないので、変えても申し込み直したことにはしない。
+ * 更新日時で代わりにしないのはこのためで、備考を直しただけで後ろへ回ってしまう。
+ *
+ * いまは再承認が要る項目と同じだが、答えている問いが違うので表を分けてある。
+ * 仮予約のまま時間帯を変えたときは、再承認は起きないが申請日時は変わる。
+ */
+export const rerequestFields = {
+  facilityId: true,
+  startAt: true,
+  endAt: true,
+  headCount: false,
+  note: false,
+} as const satisfies Record<ReservationContentField, boolean>;
+
 /** 変更の結果、予約に何が起きるか（COND-005） */
 export const ReservationEditOutcome = {
   /** 1 項目も変わっていない。書き込みも通知もしない */
@@ -302,3 +323,42 @@ export const resolveDirectEditOutcome = (
 /** 変えた項目から、承認済みの予約との重なり（COND-001）を確かめ直すかを決める */
 export const requiresOverlapCheck = (changed: ReadonlySet<ReservationContentField>): boolean =>
   [...changed].some((field) => overlapCheckFields[field]);
+
+/** 申請日時を決めるのに使う、施設と時間帯 */
+type ReservationSlot = Pick<ReservationContent, "facilityId" | "startAt" | "endAt">;
+
+/**
+ * 同じ施設のまま、時間帯を縮めただけか（変更後の時間帯が変更前の時間帯に収まるか）。
+ */
+const isNarrowedWithin = (before: ReservationSlot, after: ReservationSlot): boolean =>
+  after.facilityId === before.facilityId &&
+  after.startAt.getTime() >= before.startAt.getTime() &&
+  after.endAt.getTime() <= before.endAt.getTime();
+
+/**
+ * 団体の変更（UC-005 / UC-017）のあとの申請日時を決める（INFO-001.requested_at）。
+ *
+ * - 施設・日時を変えたら、変えた日時（now）に置き換える。ステータスは見ない。
+ *   仮予約のまま時間帯を変えたときも、申し込み直したことになる
+ * - ただし、同じ施設で時間帯を縮めただけなら今のまま。縮めた後の時間帯は、もとの申請の時点で
+ *   すでに申し込んでいた範囲なので、先に申し込んだように見せかけることにはならない。
+ *   ほかの申請と重ならないよう時間帯を譲った団体が、順番まで失うのを避ける
+ * - 使用人数・備考だけなら今のまま
+ *
+ * 事務局の直接変更（UC-008）では呼ばず、申請日時を引き継ぐ。事務局が動かした時間帯は、
+ * 団体が申し込み直したものではないため。
+ *
+ * @param now 変更した日時。申し込み直したときの申請日時になる
+ */
+export const resolveRequestedAtAfterEdit = (
+  before: ReservationSlot & { readonly requestedAt: Date },
+  after: ReservationSlot,
+  changed: ReadonlySet<ReservationContentField>,
+  now: Date,
+): Date => {
+  const rerequested = [...changed].some((field) => rerequestFields[field]);
+
+  if (!rerequested || isNarrowedWithin(before, after)) return before.requestedAt;
+
+  return now;
+};
