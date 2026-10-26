@@ -181,10 +181,26 @@ jobs:
     if: ${{ !cancelled() }}
     timeout-minutes: 5
     runs-on: ubuntu-latest
+    # この実行のジョブの結果を、GitHub の API で読むため
+    permissions:
+      actions: read
 
     steps:
+      # needs.run_e2e.result だけでは足りない。落ちたジョブのうち 1 つだけをやり直して通ると、
+      # ほかのジョブが落ちたままでも success になることがある。
+      # そこで、この回 (やり直したなら、やり直した回) の E2E のジョブを 1 つずつ確かめる。
+      # やり直さなかったジョブも、前の回の結果のまま、この回のジョブとして並ぶ
       - name: Check E2E results
-        if: ${{ needs.run_e2e.result != 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOBS_URL: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs?per_page=100
+          NEEDS_RESULT: ${{ needs.run_e2e.result }}
         run: |
-          echo "E2E のジョブのどれかが通りませんでした (結果: ${{ needs.run_e2e.result }})"
-          exit 1
+          gh api "$JOBS_URL" --jq '.jobs[] | select(.name | startswith("E2E (")) | "\(.conclusion)\t\(.name)"' > "$RUNNER_TEMP/e2e-jobs.tsv"
+          cat "$RUNNER_TEMP/e2e-jobs.tsv"
+          total=$(wc -l < "$RUNNER_TEMP/e2e-jobs.tsv")
+          passed=$(grep -c '^success' "$RUNNER_TEMP/e2e-jobs.tsv" || true)
+          if [ "$NEEDS_RESULT" != "success" ] || [ "$total" -eq 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "E2E のジョブのどれかが通りませんでした (needs: $NEEDS_RESULT、通ったジョブ: $passed / $total)"
+            exit 1
+          fi
