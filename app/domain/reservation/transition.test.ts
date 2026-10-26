@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MembershipRole } from "../membership";
-import { ReservationErrorCode, ReservationStatus } from ".";
+import { ReservationErrorCode, ReservationField, ReservationStatus } from ".";
 import {
   canPerformTransition,
   canTransition,
@@ -277,24 +277,39 @@ describe("validateTransitionReason (COND-002)", () => {
     });
   });
 
-  describe("取り消し（Withdraw）とキャンセル（Cancel）", () => {
-    it("理由がなくても通る（null に正規化される）", () => {
+  describe("団体の取り消し（Withdraw）", () => {
+    it("理由があれば通る（前後の空白はトリムされる）", () => {
       expect(
-        validateTransitionReason(ReservationTransition.Withdraw, null)._unsafeUnwrap(),
-      ).toBeNull();
-      expect(validateTransitionReason(ReservationTransition.Cancel, "")._unsafeUnwrap()).toBeNull();
-      expect(
-        validateTransitionReason(ReservationTransition.Cancel, "   ")._unsafeUnwrap(),
-      ).toBeNull();
+        validateTransitionReason(ReservationTransition.Withdraw, "  急用のため ")._unsafeUnwrap(),
+      ).toBe("急用のため");
     });
 
-    it("理由があれば保存される", () => {
-      expect(
-        validateTransitionReason(ReservationTransition.Withdraw, "急用のため")._unsafeUnwrap(),
-      ).toBe("急用のため");
+    it.each([null, undefined, "", "   \n\t  "])("理由が %j のときは弾く", (reason) => {
+      const error = validateTransitionReason(
+        ReservationTransition.Withdraw,
+        reason,
+      )._unsafeUnwrapErr();
+      expect(error.code).toBe(ReservationErrorCode.InvalidInput);
+      expect(error.field).toBe(ReservationField.StatusReason);
+      expect(error.userMessage).toBe("取り消し理由を入力してください。");
+    });
+  });
+
+  describe("団体のキャンセル（Cancel）", () => {
+    it("理由があれば通る", () => {
       expect(
         validateTransitionReason(ReservationTransition.Cancel, "予定変更")._unsafeUnwrap(),
       ).toBe("予定変更");
+    });
+
+    it.each([null, undefined, "", "   "])("理由が %j のときは弾く", (reason) => {
+      const error = validateTransitionReason(
+        ReservationTransition.Cancel,
+        reason,
+      )._unsafeUnwrapErr();
+      expect(error.code).toBe(ReservationErrorCode.InvalidInput);
+      expect(error.field).toBe(ReservationField.StatusReason);
+      expect(error.userMessage).toBe("キャンセル理由を入力してください。");
     });
   });
 
