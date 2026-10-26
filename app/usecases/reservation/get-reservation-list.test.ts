@@ -33,7 +33,7 @@ const ownRow: ReservationListRow = {
   headCount: 4,
   note: "定例会議",
   createdByName: "阪大 太郎",
-  createdAt: new Date("2026-09-20T10:00:00+09:00"),
+  requestedAt: new Date("2026-09-20T10:00:00+09:00"),
 };
 
 /** 他団体の予約行 */
@@ -50,7 +50,7 @@ const otherRow: ReservationListRow = {
   headCount: 10,
   note: "AI勉強会",
   createdByName: "他団体 メンバー",
-  createdAt: new Date("2026-09-21T11:00:00+09:00"),
+  requestedAt: new Date("2026-09-21T11:00:00+09:00"),
 };
 
 const defaultCounts: ReservationStatusCounts = {
@@ -217,7 +217,7 @@ describe("getReservationListUseCase", () => {
     expect(spies.findList).not.toHaveBeenCalled();
   });
 
-  it("事務局の仮予約（承認待ち）表示では申請日時の昇順（created_at_asc）でソートされる", async () => {
+  it("事務局の仮予約（承認待ち）表示では申請日時の昇順（requested_at_asc）でソートされる", async () => {
     const { deps, spies } = createDeps();
 
     await getReservationListUseCase(deps, {
@@ -231,7 +231,7 @@ describe("getReservationListUseCase", () => {
 
     expect(spies.findList).toHaveBeenCalledWith(
       expect.objectContaining({
-        sort: "created_at_asc",
+        sort: "requested_at_asc",
       }),
     );
   });

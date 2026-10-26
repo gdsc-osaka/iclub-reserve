@@ -30,6 +30,7 @@ const defaultRow: ReservationDetailRow = {
   statusReason: null,
   createdByName: "山田太郎",
   createdAt: new Date("2026-09-14T09:00:00+09:00"),
+  requestedAt: new Date("2026-09-14T09:00:00+09:00"),
   hasApprovedOverlap: false,
   hasProvisionalOverlap: false,
 };
@@ -162,6 +163,7 @@ describe("getReservationUseCase", () => {
           statusReason: defaultRow.statusReason,
           createdByName: defaultRow.createdByName,
           createdAt: defaultRow.createdAt,
+          requestedAt: defaultRow.requestedAt,
           hasApprovedOverlap: defaultRow.hasApprovedOverlap,
           hasProvisionalOverlap: defaultRow.hasProvisionalOverlap,
         });
@@ -253,6 +255,7 @@ describe("getReservationUseCase", () => {
       expect(keys).not.toContain("statusReason");
       expect(keys).not.toContain("createdByName");
       expect(keys).not.toContain("createdAt");
+      expect(keys).not.toContain("requestedAt");
       expect(keys).not.toContain("hasApprovedOverlap");
       expect(keys).not.toContain("hasProvisionalOverlap");
     });

@@ -27,7 +27,8 @@ export interface ReservationListRow extends ReservationWithNames {
   readonly headCount: number;
   readonly note: string | null;
   readonly createdByName: string | null;
-  readonly createdAt: Date;
+  /** 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）。作成日時ではない */
+  readonly requestedAt: Date;
   /** 同一施設・同一時間帯に承認済みの予約が存在するかどうか（COND-001） */
   readonly hasApprovedOverlap?: boolean;
   /**
@@ -58,7 +59,8 @@ export interface ReservationListItem {
   readonly headCount: number;
   readonly note: string | null;
   readonly createdByName: string | null;
-  readonly createdAt: Date;
+  /** 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）。作成日時ではない */
+  readonly requestedAt: Date;
   /** 同一施設・同一時間帯に承認済みの予約が存在するかどうか（COND-001） */
   readonly hasApprovedOverlap?: boolean;
   /**
@@ -82,8 +84,13 @@ export interface ReservationStatusCounts {
   readonly ended: number;
 }
 
-/** 一覧の並び順の指定。 */
-export type ReservationListSort = "start_at_asc" | "start_at_desc" | "created_at_asc";
+/**
+ * 一覧の並び順の指定。
+ *
+ * `requested_at_asc` は申請日時（INFO-001.requested_at）の古い順。作成日時の順にすると、
+ * 施設・日時を後から変えた予約が、その時間帯に先に申し込んでいた予約より前に並んでしまう。
+ */
+export type ReservationListSort = "start_at_asc" | "start_at_desc" | "requested_at_asc";
 
 /** {@link ReservationListQuery.findList} への入力。 */
 export interface ReservationListQueryArgs {

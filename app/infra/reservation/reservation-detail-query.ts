@@ -35,6 +35,7 @@ export const createReservationDetailQuery = (db: Database): ReservationDetailQue
         note: reservationTable.note,
         createdByName: user.name,
         createdAt: reservationTable.createdAt,
+        requestedAt: reservationTable.requestedAt,
         hasApprovedOverlap: hasOverlappingReservation(db, ReservationStatus.Approved),
         hasProvisionalOverlap: hasOverlappingReservation(db, ReservationStatus.Provisional),
       })
