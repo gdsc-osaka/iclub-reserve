@@ -2,6 +2,7 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
+import type { StoredGroupCalendarFeed } from "~/domain/calendar";
 import type { Group } from "~/domain/group";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";
 import type { StoredMembership } from "~/domain/membership";
@@ -11,6 +12,7 @@ import { QueryErrorCode } from "~/query/error";
 import type { GroupInvitationList } from "~/query/group/group-invitation-list";
 import type { GroupMemberList } from "~/query/group/group-member-list";
 import { fakeGroupAuditLogListQuery } from "~/testing/fakes/audit-log";
+import { fakeGroupCalendarFeedRepository } from "~/testing/fakes/calendar";
 import {
   fakeGroupInvitationListQuery,
   fakeGroupMemberListQuery,
@@ -132,6 +134,18 @@ const createFakeGroupAuditLogListQuery = (
   };
 };
 
+/** D1 を使わないダミーのカレンダー購読リポジトリ */
+const createFakeGroupCalendarFeedRepository = (feeds: readonly StoredGroupCalendarFeed[] = []) => {
+  const findByMembershipId = vi.fn((membershipId: string) => {
+    const found = feeds.find((f) => f.membershipId === membershipId);
+    return okAsync(found ?? null);
+  });
+
+  const repository = fakeGroupCalendarFeedRepository({ findByMembershipId });
+
+  return { repository, findByMembershipId };
+};
+
 describe("getGroupManagementUseCase", () => {
   const baseNow = new Date("2026-09-21T12:00:00.000Z");
 
@@ -146,6 +160,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: memberships.repository,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -183,6 +198,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: memberships.repository,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -228,6 +244,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: memberships.repository,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -246,7 +263,7 @@ describe("getGroupManagementUseCase", () => {
     expect(auditLogListQuery.findByGroupId).not.toHaveBeenCalled();
   });
 
-  it("事務局（isStaff: true）は所属していなくても canManage: true で取得でき、所属を一度も問い合わせない（偽 Repository の呼び出し回数が 0）", async () => {
+  it("事務局（isStaff: true）は所属していなくても canManage: true で取得できる", async () => {
     const groups = createFakeGroupRepository([testGroup]);
     const memberships = createFakeMembershipRepository([]);
     const memberListQuery = createFakeGroupMemberListQuery(testMembers);
@@ -257,6 +274,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: memberships.repository,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -273,8 +291,8 @@ describe("getGroupManagementUseCase", () => {
     expect(result.isOk()).toBe(true);
     const view = result._unsafeUnwrap();
     expect(view.canManage).toBe(true);
-    // 事務局は所属を持たないので membershipRepository を問い合わせてはならない
-    expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
+    // 事務局でも所属は読む（所属していればカレンダー購読のカードを出すため。ADR-013 決定 6）
+    expect(memberships.findByGroupAndUser).toHaveBeenCalledWith(testGroup.id, "usr_staff");
     expect(groups.findById).toHaveBeenCalledTimes(1);
     expect(auditLogListQuery.findByGroupId).toHaveBeenCalledTimes(1);
   });
@@ -290,6 +308,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: memberships.repository,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -322,6 +341,7 @@ describe("getGroupManagementUseCase", () => {
     const deps = {
       groupRepository: groups.repository,
       membershipRepository: memberships.repository,
+      groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
       groupMemberListQuery: memberListQuery.query,
       groupInvitationListQuery: invitationListQuery.query,
       groupAuditLogListQuery: auditLogListQuery.query,
@@ -368,6 +388,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: failingMembershipRepo,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -403,6 +424,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: memberships.repository,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: failingMemberListQuery,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -456,6 +478,7 @@ describe("getGroupManagementUseCase", () => {
       {
         groupRepository: groups.repository,
         membershipRepository: memberships.repository,
+        groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
         groupMemberListQuery: memberListQuery.query,
         groupInvitationListQuery: invitationListQuery.query,
         groupAuditLogListQuery: auditLogListQuery.query,
@@ -491,6 +514,7 @@ describe("getGroupManagementUseCase", () => {
         {
           groupRepository: groups.repository,
           membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
           groupMemberListQuery: memberListQuery.query,
           groupInvitationListQuery: invitationListQuery.query,
           groupAuditLogListQuery: auditLogListQuery.query,
@@ -558,6 +582,7 @@ describe("getGroupManagementUseCase", () => {
         {
           groupRepository: groups.repository,
           membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
           groupMemberListQuery: memberListQuery.query,
           groupInvitationListQuery: invitationListQuery.query,
           groupAuditLogListQuery: auditLogListQuery.query,
@@ -602,6 +627,7 @@ describe("getGroupManagementUseCase", () => {
         {
           groupRepository: groups.repository,
           membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
           groupMemberListQuery: memberListQuery.query,
           groupInvitationListQuery: invitationListQuery.query,
           groupAuditLogListQuery: auditLogListQuery.query,
@@ -644,6 +670,7 @@ describe("getGroupManagementUseCase", () => {
         {
           groupRepository: groups.repository,
           membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
           groupMemberListQuery: memberListQuery.query,
           groupInvitationListQuery: invitationListQuery.query,
           groupAuditLogListQuery: failingAuditLogQuery,
@@ -672,6 +699,7 @@ describe("getGroupManagementUseCase", () => {
         {
           groupRepository: groups.repository,
           membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: createFakeGroupCalendarFeedRepository().repository,
           groupMemberListQuery: memberListQuery.query,
           groupInvitationListQuery: invitationListQuery.query,
           groupAuditLogListQuery: auditLogListQuery.query,
@@ -692,6 +720,153 @@ describe("getGroupManagementUseCase", () => {
       if (view.canManage) {
         expect(view.auditLogs.page).toBe(3);
       }
+    });
+
+    it("見る人が所属していて購読行が存在すれば calendarFeed と isMember: true を返す", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([memberMembership]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery();
+      const feeds = createFakeGroupCalendarFeedRepository([
+        {
+          id: "feed_1",
+          membershipId: memberMembership.id,
+          token: "my_secret_token",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: feeds.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: memberMembership.userId,
+          isStaff: false,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      const view = result._unsafeUnwrap();
+      expect(view.isMember).toBe(true);
+      expect(view.calendarFeed).toEqual({ token: "my_secret_token" });
+      expect(feeds.findByMembershipId).toHaveBeenCalledWith(memberMembership.id);
+    });
+
+    it("見る人が所属していて未発行の場合は calendarFeed: null と isMember: true を返す", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([memberMembership]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery();
+      const feeds = createFakeGroupCalendarFeedRepository([]);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: feeds.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: memberMembership.userId,
+          isStaff: false,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      const view = result._unsafeUnwrap();
+      expect(view.isMember).toBe(true);
+      expect(view.calendarFeed).toBeNull();
+      expect(feeds.findByMembershipId).toHaveBeenCalledWith(memberMembership.id);
+    });
+
+    it("事務局でもその団体に所属していれば isMember: true と自分の calendarFeed を返す", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([memberMembership]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery();
+      const feeds = createFakeGroupCalendarFeedRepository([
+        {
+          id: "feed_1",
+          membershipId: memberMembership.id,
+          token: "staff_member_token",
+          createdAt: baseNow,
+          updatedAt: baseNow,
+        },
+      ]);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: feeds.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: memberMembership.userId,
+          isStaff: true,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      const view = result._unsafeUnwrap();
+      expect(view.canManage).toBe(true);
+      expect(view.isMember).toBe(true);
+      expect(view.calendarFeed).toEqual({ token: "staff_member_token" });
+    });
+
+    it("所属していない事務局の場合は購読行を読みに行かず calendarFeed: null と isMember: false を返す", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery();
+      const feeds = createFakeGroupCalendarFeedRepository([]);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: feeds.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: "usr_staff_outsider",
+          isStaff: true,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      const view = result._unsafeUnwrap();
+      expect(view.isMember).toBe(false);
+      expect(view.calendarFeed).toBeNull();
+      expect(feeds.findByMembershipId).not.toHaveBeenCalled();
     });
   });
 });

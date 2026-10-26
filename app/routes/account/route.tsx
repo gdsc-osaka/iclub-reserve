@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 import { toast } from "sonner";
 
+import { AllowedEmailHint } from "~/components/auth/allowed-email-hint";
 import { OtpCodeForm } from "~/components/auth/otp-code-form";
 import {
   AlertDialog,
@@ -476,7 +477,7 @@ function EmailChangeDialog({
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                {ALLOWED_EMAIL_DOMAINS_LABEL} のアドレスがご利用いただけます。
+                <AllowedEmailHint suffix="がご利用いただけます。" />
               </p>
             </div>
             <DialogFooter>

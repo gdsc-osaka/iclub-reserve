@@ -46,7 +46,7 @@ export default defineConfig({
    * パスキーの仮想の認証器は Chromium でしか使えないので、それを使うテストは
    * Firefox・WebKit・スマホの Safari では飛ばされる（`e2e/support/fixtures.ts` の `webAuthn`）。
    *
-   * CI では、ブラウザごとに別のジョブで並行して動かす（`.github/workflows/ci.yml`）。
+   * CI では、ブラウザごとに、テストのファイルを半分ずつ（`--shard`）別のジョブで並行して動かす（`.github/workflows/ci.yml`）。
    */
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

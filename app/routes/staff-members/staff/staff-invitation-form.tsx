@@ -2,11 +2,11 @@ import { CircleAlert } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Form, useNavigation } from "react-router";
 
+import { AllowedEmailHint } from "~/components/auth/allowed-email-hint";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { ALLOWED_EMAIL_DOMAINS_LABEL } from "~/domain/authn/allowed-email-domain";
 import { INVITATION_EMAIL_MAX_LENGTH } from "~/domain/invitation/invitation-email";
 import type { StaffInviteFormState } from "./action-data";
 
@@ -80,7 +80,7 @@ export function StaffInvitationForm({ state }: Readonly<{ state: StaffInviteForm
               }
             />
             <p id="staff-invite-email-hint" className="text-xs text-muted-foreground">
-              {`${ALLOWED_EMAIL_DOMAINS_LABEL} のメールアドレスにのみ招待を送れます。`}
+              <AllowedEmailHint suffix="にのみ招待を送れます。" />
             </p>
             {state?.emailError && (
               <p id="staff-invite-email-error" className="text-sm text-destructive">
