@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { toMyGroup, type MyGroup } from "~/components/group/my-group";
 import { NoGroupsCard } from "~/components/group/my-group-card";
 import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
+import { newReservationPath, toNewReservationLabel } from "~/components/layout/nav-items";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
@@ -565,10 +566,9 @@ function DashboardHeader({ now, isStaff }: Readonly<{ now: Date; isStaff: boolea
           </Link>
         </Button>
         <Button asChild size="lg">
-          <Link to="/reservations/new">
+          <Link to={newReservationPath}>
             <Plus aria-hidden />
-            {/* 事務局は承認を待たずに作れる（UC-008）ので、文言を変える */}
-            {isStaff ? "予約を作成" : "予約を申請"}
+            {toNewReservationLabel(isStaff)}
           </Link>
         </Button>
       </div>

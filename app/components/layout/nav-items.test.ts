@@ -5,7 +5,10 @@ import {
   formatNavCount,
   isCountedNavPath,
   staffNavItems,
+  toBottomNavItems,
   toNavCount,
+  toNewReservationLabel,
+  toOverflowNavItems,
   type NavCounts,
   type NavItem,
 } from "./nav-items";
@@ -72,5 +75,41 @@ describe("toNavCount", () => {
   it("件数を持たない項目は undefined を返す", () => {
     expect(toNavCount(counts, navItem("availability"))).toBeUndefined();
     expect(toNavCount(counts, navItem("staff-facilities"))).toBeUndefined();
+  });
+});
+
+describe("toNewReservationLabel", () => {
+  it("事務局には「予約を作成」を返す", () => {
+    expect(toNewReservationLabel(true)).toBe("予約を作成");
+  });
+
+  it("一般メンバーには「予約を申請」を返す", () => {
+    expect(toNewReservationLabel(false)).toBe("予約を申請");
+  });
+});
+
+describe("ボトムバーの項目配置", () => {
+  it("一般メンバーのボトムバーは 3 項目で、ダッシュボード・空き状況・予約が並ぶ", () => {
+    expect(toBottomNavItems(false).map((item) => item.id)).toEqual([
+      "dashboard",
+      "availability",
+      "reservations",
+    ]);
+  });
+
+  it("事務局のボトムバーは 3 項目で、ダッシュボード・空き状況・予約の承認が並ぶ", () => {
+    expect(toBottomNavItems(true).map((item) => item.id)).toEqual([
+      "dashboard",
+      "availability",
+      "staff-approvals",
+    ]);
+  });
+
+  it("一般メンバーの「その他」には「所属団体」が含まれる", () => {
+    expect(toOverflowNavItems(false).map((item) => item.id)).toContain("groups");
+  });
+
+  it("事務局の「その他」には「予約」が含まれる", () => {
+    expect(toOverflowNavItems(true).map((item) => item.id)).toContain("reservations");
   });
 });

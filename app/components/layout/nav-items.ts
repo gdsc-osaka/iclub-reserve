@@ -167,14 +167,29 @@ export const staffNavItems: readonly NavItem[] = [
 ];
 
 /**
+ * 予約の申請（事務局は作成）の入口の行き先。サイドバー・ボトムバー・ダッシュボードの見出しのボタンが使う。
+ *
+ * 行き先は空き状況カレンダーの欄を開く URL に変える予定なので、この 1 か所で決める。
+ */
+export const newReservationPath = "/reservations/new";
+
+/**
+ * 予約の申請の入口の文言。
+ *
+ * 事務局は承認を待たずに作れる（UC-008）ので「予約を作成」にする（ADR-014 決定 9）。
+ */
+export const toNewReservationLabel = (isStaff: boolean): string =>
+  isStaff ? "予約を作成" : "予約を申請";
+
+/**
  * ボトムバーに直接並べる項目の数。
  *
- * 5 つ目は「その他」に使うので、ここは 4 まで。
+ * 項目 3 つ・入口・「その他」で 5 つにする。
  * 親指で押せる幅（おおよそ 44px 四方）を確保できるのが、
  * いちばん狭い端末（幅 320px）で 5 つまでのため。
  * これ以上増やすと、隣を押し間違えるようになる。
  */
-export const BOTTOM_NAV_SLOT_COUNT = 4;
+export const BOTTOM_NAV_SLOT_COUNT = 3;
 
 /**
  * 現在地がこの項目かどうかを判定する。
@@ -193,13 +208,14 @@ export const toNavItems = (isStaff: boolean): readonly NavItem[] =>
 /**
  * ボトムバーに直接並べる項目の並び（ID で指定する）。
  *
- * サイドバーの上から 4 つをそのまま使うのではなく、ここで選び直している。
+ * サイドバーの上から順に使うのではなく、ここで選び直している。
  * 事務局の人にとって毎日いちばん使うのは「予約の承認」なので、
  * これを「その他」の中に埋めてしまうと、スマホでの仕事が回らなくなる。
+ * 入口を置くために 3 つに減らしたので、団体の「所属団体」と事務局の「予約」は「その他」に入る。
  */
 const bottomNavIds: Readonly<Record<"member" | "staff", readonly string[]>> = {
-  member: ["dashboard", "availability", "reservations", "groups"],
-  staff: ["dashboard", "availability", "staff-approvals", "reservations"],
+  member: ["dashboard", "availability", "reservations"],
+  staff: ["dashboard", "availability", "staff-approvals"],
 };
 
 /**
