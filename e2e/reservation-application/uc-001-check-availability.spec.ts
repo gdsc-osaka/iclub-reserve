@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
-import { addDays, atTokyoTime, formatFullDate, formatMonthDay } from "~/lib/date";
+import { addDays, atTokyoTime, formatMonthDay } from "~/lib/date";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -138,11 +138,10 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     await expect(page.getByRole("button", { name: new RegExp(otherGroup.name) })).toBeHidden();
   });
 
-  test("空いている時間から申請へ進むと申請フォームが開き、戻る操作で欄が閉じる", async ({
+  test("空いている時間から申請へ進むと欄に時刻が入り、戻る操作で欄が閉じる", async ({
     page,
     db,
     signInAs,
-    isMobile,
   }) => {
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
@@ -159,37 +158,17 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     });
     await slot.click();
 
-    // 欄（名前「新しい予約」）に「10:30〜11:30（1 時間）」が出る
+    // 欄（名前「新しい予約」）に「開始時刻」が 10:30、「終了時刻」が 11:30、施設名が出ている
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
-    await expect(panel.getByText("10:30〜11:30（1 時間）")).toBeVisible();
+    await expect(panel.getByText(facility.name)).toBeVisible();
+    await expect(panel.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:30");
+    await expect(panel.getByRole("combobox", { name: "終了時刻" })).toHaveText("11:30");
 
-    // 欄が開いた状態で戻ると、欄が消え、URL から draft が外れる
+    // 戻る操作で欄が消え、URL から draft が外れる
     await page.goBack();
     await expect(panel).toBeHidden();
     await expect(page).toHaveURL(`/availability?facility=${facility.id}&date=${dateKey}`);
-
-    // 開き直し、「この日時で申請に進む」で申請フォームを開く
-    await slot.click();
-    await expect(panel).toBeVisible();
-    await panel.getByRole("link", { name: "この日時で申請に進む" }).click();
-
-    // 申請フォーム（SCR-002）に、押した枠の施設・日付・開始時刻 10:30・終了時刻 11:30 が入っている
-    await expect(page).toHaveURL(/\/reservations\/new\?/);
-
-    /*
-     * 施設・日付の欄は、パソコンではフォームの左側にあり、スマホでは「施設・日時」のカードから開く
-     * 全画面の選択の中にある。
-     */
-    if (isMobile) await page.getByRole("button", { name: /施設・日時/ }).click();
-    const schedule = isMobile ? page.getByRole("dialog", { name: "施設・日時を選ぶ" }) : page;
-
-    await expect(schedule.getByRole("combobox", { name: "施設・設備" })).toHaveText(facility.name);
-    await expect(
-      schedule.getByRole("button", { name: `日付 ${formatFullDate(wednesday)}` }),
-    ).toBeVisible();
-    await expect(schedule.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:30");
-    await expect(schedule.getByRole("combobox", { name: "終了時刻" })).toHaveText("11:30");
   });
 
   test("申請できない人には申請への導線が出ない", async ({ page, db, signInAs }) => {
