@@ -73,9 +73,9 @@ contexts:
   - id: "BIZ-005"
     name: "calendar-integration"
     display_name: "カレンダー連携"
-    description: "承認済み予約のGoogle Calendarへの自動登録・更新・削除。団体・事務局へのカレンダー購読URL公開を含む。"
+    description: "承認済み予約のGoogle Calendarへの自動登録・更新・削除。事務局への施設ごとのカレンダー購読URLの公開と、団体のメンバーへの自団体の予約のカレンダー（iCal形式の購読URL）の配信を含む。"
     primary_actors: ["ACTOR-001", "ACTOR-002", "ACTOR-003"]
-    goals: ["GOAL-004"]
+    goals: ["GOAL-004", "GOAL-001"]
   - id: "BIZ-006"
     name: "user-authentication"
     display_name: "ユーザー認証・権限"
@@ -121,8 +121,10 @@ graph LR
     BIZ007["BIZ-007: 操作履歴"]
 
     BIZ001 --> BIZ002
+    BIZ001 --> BIZ005
     BIZ002 --> BIZ005
     BIZ003 --> BIZ001
+    BIZ003 --> BIZ005
     BIZ004 --> BIZ001
     BIZ006 --> BIZ001
     BIZ006 --> BIZ002
@@ -138,3 +140,5 @@ graph LR
 ```
 
 点線は、各コンテキストの操作が操作履歴（INFO-008）に記録されることを表す（COND-013）。
+
+BIZ-001・BIZ-003 から BIZ-005 への矢印は、自団体の予約のカレンダー（REQ-050）が、団体の予約（仮予約を含む）と所属をもとに配信されることを表す（COND-029）。

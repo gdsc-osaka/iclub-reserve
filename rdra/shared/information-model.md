@@ -88,6 +88,7 @@ entities:
         "UC-034",
         "UC-037",
         "UC-038",
+        "UC-039",
         "SCR-001",
         "SCR-002",
         "SCR-003",
@@ -282,7 +283,11 @@ entities:
       - target: "INFO-003"
         type: "N:1"
         label: "団体"
-    traces_to: ["UC-011", "UC-012", "UC-022", "UC-035", "SCR-007", "SCR-008", "SCR-018", "SCR-022"]
+      - target: "INFO-013"
+        type: "1:1"
+        label: "予約カレンダーの購読URL"
+    traces_to:
+      ["UC-011", "UC-012", "UC-022", "UC-035", "UC-039", "SCR-007", "SCR-008", "SCR-018", "SCR-022"]
 
   - id: "INFO-006"
     name: "ユーザー"
@@ -635,6 +640,35 @@ entities:
         type: "N:1"
         label: "確認した予約"
     traces_to: ["UC-006", "UC-009", "UC-034", "UC-037", "UC-038", "SCR-022"]
+  - id: "INFO-013"
+    name: "予約カレンダーの購読URL"
+    description: "団体のメンバーが、自分のカレンダーアプリで自団体の予約を読むための購読URL（UC-039）。団体の所属（INFO-005）ごとに1つまで持ち、所属が消えると一緒に消える（COND-029 の (5)）。URLを知っていればログインせずに予約を読めるため、ログインの代わりの鍵として扱う。作り直すとトークンを置き換え、前のURLは使えなくなる。発行・作り直しは操作履歴（INFO-008）に記録しない（COND-029 の (7)）。"
+    attributes:
+      - name: "id"
+        type: "string"
+        required: true
+        description: "購読URLのID（主キー）。ログに出すときはトークンではなくこちらを使う。"
+      - name: "membership_id"
+        type: "string"
+        required: true
+        description: "発行した所属のID（外部キー。一意）。所属が消えると一緒に消える。利用者と団体は所属からたどる。"
+      - name: "token"
+        type: "string"
+        required: true
+        description: "URLに入れる秘密の値。推測できない乱数で、一意。本人が何度でも表示できるよう、ハッシュにせずそのまま持つ（URLで読めるのは同じデータベースにある予約だけで、データベースが漏れたときにトークンから新たに読めるものは無いため）。"
+      - name: "created_at"
+        type: "datetime"
+        required: true
+        description: "最初に発行した日時"
+      - name: "updated_at"
+        type: "datetime"
+        required: true
+        description: "最後にトークンを作り直した日時（作り直していなければ発行日時）"
+    relations:
+      - target: "INFO-005"
+        type: "1:1"
+        label: "発行した所属"
+    traces_to: ["UC-011", "UC-039", "SCR-007"]
 ---
 
 # 情報モデル（横断）
@@ -663,6 +697,7 @@ erDiagram
     INFO_006 ||--o{ INFO_011 : "ログインする"
     INFO_006 ||--o{ INFO_012 : "確認する"
     INFO_001 ||--o{ INFO_012 : "確認される"
+    INFO_005 ||--o| INFO_013 : "購読URLを持つ"
 
     INFO_006["INFO-006: ユーザー"] {
         string id PK
@@ -777,6 +812,13 @@ erDiagram
         string reservation_id PK, FK
         datetime last_read_at
     }
+    INFO_013["INFO-013: 予約カレンダーの購読URL"] {
+        string id PK
+        string membership_id FK
+        string token
+        datetime created_at
+        datetime updated_at
+    }
 ```
 
 INFO-008 の actor_id・group_id・target_id は論理的な参照であり、外部キー制約を張らない。記録の対象や操作者が後から消えても、記録は残す必要があるためである。
@@ -785,26 +827,28 @@ INFO-012 は、出来事（メッセージ・操作履歴）ごとに既読・�
 
 INFO-001 には Google Calendar の予定の ID を持たない。予定の ID は予約の ID から毎回同じ値を導いて使う。同期は予約の今の状態に合わせるため（COND-024）、どの予定が予約に当たるかを予約の ID だけで決められれば足りる。
 
+INFO-013 は、利用者と団体ではなく所属（INFO-005）に結び付ける。団体を抜ける・外されると所属が消えるので、購読URLも一緒に消え、抜け方ごとに購読URLを消す処理を書かずに済む。一度抜けた人が入り直すと所属が新しくなるため、前のURLは生き返らない（COND-029 の (5)）。
+
 INFO-001.unlock_arrangement は、建物が施錠される日時かどうかではなく、事務局が判断した結果を持つ（COND-027）。施錠の規則（土日・祝日・夜間など）を表す情報は持たない。解錠の方法（カードキーの貸し出し・時間帯を指定した解錠の設定など）とカードキーの貸し出しの記録も持たず、方法はメッセージ（INFO-004）で伝える。未定を値なしで表すのは、仮予約の間は事務局がまだ判断していないことを、判断した結果（不要など）と区別するためである。
 
 ## 予約の開示範囲（COND-008）
 
-INFO-001 の属性は、見る人によって次の3段階で開示する。
+INFO-001 の属性は、見る人によって次の3段階で開示する。自団体の購読URL（INFO-013）は自団体のメンバーの段階に含めるが、ログインせずに読めるため、載せる項目をさらに絞る（COND-029 の (3)）。
 
-| 属性                  | 自団体・事務局 | 他団体（ログイン済み） | 一般（Google Calendar） |
-| --------------------- | :------------: | :--------------------: | :---------------------: |
-| facility_id（施設名） |       ○        |           ○            |            ○            |
-| start_at / end_at     |       ○        |           ○            |            ○            |
-| group_id（団体名）    |       ○        |           ○            |            ×            |
-| status                |       ○        |           ○            |            ×            |
-| headcount             |       ○        |           ×            |            ×            |
-| note                  |       ○        |           ×            |            ×            |
-| status_reason         |       ○        |           ×            |            ×            |
-| unlock_arrangement    |       ○        |           ×            |            ×            |
-| created_by            |       ○        |           ×            |            ×            |
-| INFO-004 メッセージ   |       ○        |           ×            |            ×            |
+| 属性                  | 自団体・事務局 | 自団体の購読URL | 他団体（ログイン済み） | 一般（Google Calendar） |
+| --------------------- | :------------: | :-------------: | :--------------------: | :---------------------: |
+| facility_id（施設名） |       ○        |        ○        |           ○            |            ○            |
+| start_at / end_at     |       ○        |        ○        |           ○            |            ○            |
+| group_id（団体名）    |       ○        |        ○        |           ○            |            ×            |
+| status                |       ○        |        ○        |           ○            |            ×            |
+| headcount             |       ○        |        ○        |           ×            |            ×            |
+| note                  |       ○        |        ○        |           ×            |            ×            |
+| status_reason         |       ○        |        ×        |           ×            |            ×            |
+| unlock_arrangement    |       ○        |        ×        |           ×            |            ×            |
+| created_by            |       ○        |        ×        |           ×            |            ×            |
+| INFO-004 メッセージ   |       ○        |        ×        |           ×            |            ×            |
 
-Google Calendar に載せるのは承認済みの予約のみ。他団体のログイン済みユーザーには、仮予約もステータス付きで表示する。
+Google Calendar に載せるのは承認済みの予約のみ。自団体の購読URLに載せるのは仮予約と承認済みの予約のみ（団体名はカレンダーの名前に入れる）。他団体のログイン済みユーザーには、仮予約もステータス付きで表示する。
 
 メッセージの送信者は氏名で表示する。ただし自団体のメンバーには、INFO-004.sent_as_staff が true のメッセージの送信者を「事務局」とだけ表示する（操作履歴の COND-012 と同じ考え方）。
 
