@@ -1,42 +1,18 @@
 import type { ReactNode } from "react";
-
-import { formatMonthDay, formatTimeRange, toTokyoTimeKey } from "~/lib/date";
-import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
-
-import { ReservationActionButtons } from "./reservation-action-buttons";
-import type { ReservationDraft } from "./availability-week";
-import { ReservationStatusBadge } from "./reservation-status-badge";
-import { Button } from "../ui/button";
-import { Badge } from "../ui/badge";
 import { Link } from "react-router";
 
-/**
- * 空き状況カレンダー（SCR-001）で、押したものの中身を出す吹き出しの中身。
- *
- * 以前はカレンダーの上に差し込んでいたが、押すたびに表が上下に動いて
- * 狙っていた枠が逃げてしまうため、吹き出し（Popover）の中へ移した。
- * 吹き出しは画面に重ねて出るので、カレンダーの位置も高さも変わらない。
- *
- * デスクトップの帯・空き枠と、スマホの一覧の「＋」から同じものを開くので、
- * 中身はここに置いて両方から使う。
+import { formatMonthDay, formatTimeRange } from "~/lib/date";
+import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
+
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { ReservationActionButtons } from "./reservation-action-buttons";
+import { ReservationStatusBadge } from "./reservation-status-badge";
+
+/*
+ * 空き状況カレンダー（SCR-001）の欄に出す、予約の内容。
+ * 欄の仮の枠も、同じ「項目名 + 値」の並び（CardItem）で出す。
  */
-
-/**
- * 予約申請フォーム（SCR-002）の URL を組み立てる。
- *
- * 押した場所で分かっていることだけをクエリに載せる。
- * 日付や時刻が決まっていないのに埋めてしまうと、
- * フォームを開いた人が「自分が選んだ値なのか」を確かめ直すことになる。
- */
-const toApplicationPath = (draft: ReservationDraft, mode?: "direct"): string => {
-  const params = new URLSearchParams({ facility: draft.facility.id });
-
-  if (draft.day !== null) params.set("date", draft.day.dateKey);
-  if (draft.startHour !== null) params.set("start", toTokyoTimeKey(draft.startHour * 60));
-  if (mode === "direct") params.set("mode", "direct");
-
-  return `/reservations/new?${params.toString()}`;
-};
 
 /**
  * 押した予約の内容。
@@ -119,65 +95,12 @@ export function AvailabilityReservationCard({
   );
 }
 
-/**
- * 選んだ枠を確かめる欄。
- *
- * 押した場所によって、申請フォームへ持っていける情報が変わる。
- * 何が決まっていて何がまだ決まっていないかを先に見せておかないと、
- * フォームを開いてから「日付が入っていない」と戸惑うことになる。
- */
-export function AvailabilityDraftCard({
-  draft,
-  canCreateDirectly = false,
-}: Readonly<{
-  draft: ReservationDraft;
-  canCreateDirectly?: boolean;
-}>) {
-  return (
-    <div className="flex flex-col gap-2">
-      <dl className="flex flex-col gap-1 text-sm">
-        <CardItem label="施設・設備">{draft.facility.name}</CardItem>
-        <CardItem label="日付">
-          {draft.day === null ? <Undecided /> : formatMonthDay(draft.day.date)}
-        </CardItem>
-        <CardItem label="開始時刻">
-          {draft.startHour === null ? <Undecided /> : `${draft.startHour}:00`}
-        </CardItem>
-      </dl>
-
-      {/*
-       * `asChild` で中身の `Link` に見た目だけを着せている。
-       * `disabled` や `type` を渡さないこと。どちらも `<a>` には効かず、
-       * 押せないように見えて実際には押せる、という食い違いになる。
-       */}
-      <Button asChild size="sm" className="w-full">
-        <Link to={toApplicationPath(draft)}>仮予約を申請</Link>
-      </Button>
-
-      {canCreateDirectly && (
-        <Button asChild variant="secondary" size="sm" className="w-full">
-          <Link to={toApplicationPath(draft, "direct")}>承認済みで直接作成</Link>
-        </Button>
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        ここで選んだ内容は申請フォームに引き継がれます。まだ決まっていない項目はフォームで選べます。
-      </p>
-    </div>
-  );
-}
-
 /** 「項目名 + 値」を 1 組だけ表示する */
-function CardItem({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
+export function CardItem({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
     <div className="flex min-w-0 items-baseline gap-1.5">
       <dt className="w-18 shrink-0 text-xs text-muted-foreground">{label}</dt>
       <dd className="min-w-0 font-medium break-words">{children}</dd>
     </div>
   );
-}
-
-/** まだ決まっていない項目。申請フォームで選ぶことになる */
-function Undecided() {
-  return <span className="font-normal text-muted-foreground">フォームで選ぶ</span>;
 }

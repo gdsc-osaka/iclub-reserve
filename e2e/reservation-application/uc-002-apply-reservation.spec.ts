@@ -112,4 +112,37 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     // 予約は増えていない
     expect(await findReservationsOfFacility(db, facility.id)).toHaveLength(1);
   });
+
+  test("ナビの入口から申請フォームを開ける。事務局には「予約の作成」として出る", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const member = await createUser(db);
+    await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
+    await signInAs(member.id);
+
+    // ダッシュボードには見出しにも同じ名前のボタンがあるので、ほかの画面の入口から開く。
+    // PC はサイドバー、スマホはボトムバーの入口だけが見えている
+    await openPage(page, "/reservations");
+    await page
+      .getByRole("link", { name: "予約を申請", exact: true })
+      .filter({ visible: true })
+      .click();
+
+    await expect(page).toHaveURL(/\/reservations\/new$/);
+    await expect(page.getByRole("heading", { level: 1, name: "予約の申請" })).toBeVisible();
+
+    const staff = await createUser(db, { is_staff: true });
+    await signInAs(staff.id);
+
+    await openPage(page, "/reservations");
+    await page
+      .getByRole("link", { name: "予約を作成", exact: true })
+      .filter({ visible: true })
+      .click();
+
+    await expect(page).toHaveURL(/\/reservations\/new$/);
+    await expect(page.getByRole("heading", { level: 1, name: "予約の作成" })).toBeVisible();
+  });
 });

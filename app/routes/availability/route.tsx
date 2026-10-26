@@ -1,8 +1,14 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert } from "lucide-react";
-import { isRouteErrorResponse, Link, redirect } from "react-router";
+import { useEffect, useMemo } from "react";
+import {
+  isRouteErrorResponse,
+  Link,
+  redirect,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 
-import { DAYS_IN_WEEK } from "~/components/reservation/availability-week";
+import { buildDays } from "~/components/reservation/availability-week";
 import { NoEnabledGroupReason } from "~/components/reservation/no-enabled-group-reason";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -11,7 +17,7 @@ import { createDb } from "~/infra/db";
 import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facility-availability-calendar-query";
 import { createD1HolidayQuery } from "~/infra/holiday/d1-holiday-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
-import { addDays, parseTokyoDateKey, startOfTokyoWeek } from "~/lib/date";
+import { addDays, parseTokyoDateKey, toTokyoDateKey } from "~/lib/date";
 import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
@@ -19,8 +25,13 @@ import { changeReservationStatus } from "~/routes/_shared/reservation-transition
 import { getAvailabilityCalendarUseCase } from "~/usecases/facility/get-availability-calendar";
 
 import type { Route } from "./+types/route";
+import { AvailabilityPanel } from "./availability-panel";
 import { CalendarCard } from "./calendar-card";
+import { CALENDAR_WINDOW_DAYS, toCalendarWindowStart } from "./calendar-window";
 import { FacilityTabs } from "./facility-tabs";
+import { differsOnlyInSelection } from "./paths";
+import { useCalendarScroll } from "./use-calendar-scroll";
+import { toRevealTarget, useCalendarSelection } from "./use-calendar-selection";
 
 export function meta() {
   return [{ title: "空き状況 | iclub-reserve" }];
@@ -29,9 +40,11 @@ export function meta() {
 /**
  * 空き状況カレンダー（SCR-001）に出すデータを取る。
  *
- * 表示する施設と週は URL のクエリで受け取る。画面の状態を URL に置くことで、
- * 「この施設のこの週」をそのまま人に送れるようにしている。
+ * 施設と基準の日は URL のクエリで受け取る。画面の状態を URL に置くことで、
+ * 「この施設のこの日」をそのまま人に送れるようにしている。
  * クエリは利用者が自由に書き換えられるので、値はすべて確かめてから使う。
+ *
+ * 読むのは、基準の日の週の前の週から 4 週間（ADR-014 決定 4）。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
@@ -46,9 +59,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
    */
   const now = new Date();
 
-  // 日付の指定が無い・壊れているときは今週を出す。エラーにはしない
+  // 日付の指定が無い・壊れているときは今日を基準の日にする。エラーにはしない
   const anchorDate = parseTokyoDateKey(url.searchParams.get("date")) ?? now;
-  const weekStart = startOfTokyoWeek(anchorDate);
+  const windowStart = toCalendarWindowStart(anchorDate);
 
   const db = createDb(env.DB);
 
@@ -62,9 +75,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       actorUserId: user.id,
       isStaff: user.is_staff,
       facilityId: url.searchParams.get("facility"),
-      from: weekStart,
-      // 週の終わりは「次の週の日曜 0 時」。この時刻は含まない
-      to: addDays(weekStart, DAYS_IN_WEEK),
+      from: windowStart,
+      // 期間の終わり（to はその時刻を含まない）
+      to: addDays(windowStart, CALENDAR_WINDOW_DAYS),
+      now,
     },
   );
 
@@ -73,7 +87,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw queryErrorResponse({ where: "availability.loader", userId: user.id }, result.error);
   }
 
-  return { calendar: result.value, weekStart, now };
+  return { calendar: result.value, windowStart, anchorKey: toTokyoDateKey(anchorDate), now };
 }
 
 /**
@@ -124,7 +138,29 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 /**
- * 施設・設備ごとの予約状況を週単位で見る画面（SCR-001 / UC-001）。
+ * 欄を開く・閉じる・選び直すだけでは、loader を走らせない（ADR-014 決定 8）。
+ *
+ * 開いているもの（`reservation`・`draft`）は画面の中だけで決まり、読むデータは変わらない。
+ * 走らせると、押すたびに 4 週間ぶんを読み直して、欄が開くのが遅れる。
+ * 送信の後と、同じ URL での読み直し（`revalidate()`）は、今までどおり走らせる。
+ */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  const isSelectionOnly =
+    formMethod === undefined &&
+    currentUrl.pathname === nextUrl.pathname &&
+    currentUrl.search !== nextUrl.search &&
+    differsOnlyInSelection(currentUrl.searchParams, nextUrl.searchParams);
+
+  return isSelectionOnly ? false : defaultShouldRevalidate;
+}
+
+/**
+ * 施設・設備ごとの予約状況を見る画面（SCR-001 / UC-001）。
  *
  * 他団体の予約も含めて出す。自団体の予約だけでは、その施設が
  * 空いているかどうかが分からないため。ただし他団体の予約は
@@ -134,14 +170,41 @@ export async function action({ request, context }: Route.ActionArgs) {
  * 申請が重なっていることに気づけないまま同じ時間帯を申請してしまう。
  */
 export default function Availability({ loaderData, actionData }: Route.ComponentProps) {
-  const { calendar, weekStart, now } = loaderData;
-  const { facility, facilities, reservations, canApplyReservation, canCreateDirectly } = calendar;
+  const { calendar, windowStart, anchorKey, now } = loaderData;
+  const { facility, facilities, reservations, canApplyReservation } = calendar;
+
+  const days = useMemo(
+    () => buildDays(windowStart, CALENDAR_WINDOW_DAYS, now, calendar.holidayDateKeys),
+    [windowStart, now, calendar.holidayDateKeys],
+  );
+
+  const scroll = useCalendarScroll({ days, anchorKey, todayKey: toTokyoDateKey(now) });
+  const { selection, openDraft, openReservation, close } = useCalendarSelection({
+    facilityId: facility.id,
+    anchorKey,
+    reservations,
+    days,
+    canApply: canApplyReservation,
+  });
+
+  /*
+   * 開いたものが変わったら、その日と時刻をカレンダーの見える範囲に入れる。
+   * 位置が変わったときだけ送る。描画のたびに送ると、欄を開いたままカレンダーを動かせなくなる。
+   */
+  const revealTarget = toRevealTarget(selection, reservations);
+  const revealKey =
+    revealTarget === null
+      ? null
+      : `${revealTarget.dateKey}T${revealTarget.range.startMinutes}-${revealTarget.range.endMinutes}`;
+  useEffect(() => {
+    if (revealTarget !== null) scroll.reveal(revealTarget.dateKey, revealTarget.range);
+  }, [revealKey]);
 
   return (
     /*
      * この画面だけは、ページ全体ではなくカレンダーの中身をスクロールさせる。
-     * 週の切り替えや凡例が上へ流れてしまうと、
-     * 下の方の日付を見ているときに「いつの週を見ているのか」が分からなくなる。
+     * 見出しや凡例が上へ流れてしまうと、
+     * 下の方の日付を見ているときに「いつの日を見ているのか」が分からなくなる。
      *
      * そのため高さを画面ぴったりに固定し（--app-content-height）、
      * あふれる部分は中の `overflow` に任せる。
@@ -157,17 +220,35 @@ export default function Availability({ loaderData, actionData }: Route.Component
 
       {!canApplyReservation && <CannotApplyNotice />}
 
-      <FacilityTabs facilities={facilities} current={facility} weekStart={weekStart} />
+      <FacilityTabs facilities={facilities} current={facility} anchorKey={anchorKey} />
 
-      <CalendarCard
-        facility={facility}
-        reservations={reservations}
-        weekStart={weekStart}
-        now={now}
-        canApply={canApplyReservation}
-        canCreateDirectly={canCreateDirectly}
-        holidayDateKeys={calendar.holidayDateKeys}
-      />
+      {/* カレンダーと欄を並べる。スマホは縦（欄が下）、PC は横（欄が右）（ADR-014 決定 7） */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
+        <CalendarCard
+          facility={facility}
+          reservations={reservations}
+          days={days}
+          anchorKey={anchorKey}
+          now={now}
+          canApply={canApplyReservation}
+          scroll={scroll}
+          selection={selection}
+          onOpenDraft={openDraft}
+          onOpenReservation={openReservation}
+        />
+
+        {selection !== null && (
+          <AvailabilityPanel
+            selection={selection}
+            facility={facility}
+            days={days}
+            reservations={reservations}
+            now={now}
+            canCreateDirectly={calendar.canCreateDirectly}
+            onClose={close}
+          />
+        )}
+      </div>
     </main>
   );
 }

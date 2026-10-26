@@ -11,15 +11,16 @@ import { toCalendarPath } from "./paths";
  * 選ぶたびにサーバーへ取り直すので、プルダウンではなくリンクにしている。
  * リンクなら JavaScript が動いていなくても切り替えられ、
  * 「この施設のこの週」をそのまま人に送れる。
+ * 基準の日を持ち回り、開いているもの（reservation / draft）は外す。
  */
 export function FacilityTabs({
   facilities,
   current,
-  weekStart,
+  anchorKey,
 }: Readonly<{
   facilities: readonly AvailabilityFacility[];
   current: AvailabilityFacility;
-  weekStart: Date;
+  anchorKey: string;
 }>) {
   return (
     <nav
@@ -33,7 +34,7 @@ export function FacilityTabs({
           return (
             <li key={item.id}>
               <Link
-                to={toCalendarPath(item.id, weekStart)}
+                to={toCalendarPath(item.id, anchorKey)}
                 aria-current={isCurrent ? "page" : undefined}
                 className={cn(
                   "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm transition-colors",

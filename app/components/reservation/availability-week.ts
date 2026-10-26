@@ -1,18 +1,14 @@
 import { FACILITY_CLOSE_HOUR, FACILITY_OPEN_HOUR } from "~/domain/facility";
-import { RESERVATION_STEP_MINUTES, ReservationStatus } from "~/domain/reservation";
+import { ReservationStatus } from "~/domain/reservation";
 import {
   addDays,
-  atTokyoMinutes,
   atTokyoTime,
   isSameTokyoDay,
   startOfTokyoDay,
   tokyoDayOfWeek,
   toTokyoDateKey,
 } from "~/lib/date";
-import type {
-  AvailabilityFacility,
-  AvailabilityReservation,
-} from "~/query/facility/facility-availability-calendar";
+import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 
 /** 1 週間に並べる日数。週の始まりは日曜（`startOfTokyoWeek`）。 */
 export const DAYS_IN_WEEK = 7;
@@ -75,7 +71,7 @@ export interface AvailabilityDay {
 }
 
 /**
- * 週の日曜から 7 日分を作る。
+ * 指定した開始日から count 日分の日の一覧を作る。
  *
  * `today` を引数で受け取っているのは、「今日」をサーバーとブラウザで
  * 同じ値にするため。ここで `new Date()` を呼ぶと、サーバーで描いた内容と
@@ -83,15 +79,16 @@ export interface AvailabilityDay {
  *
  * `holidayDateKeys` に含まれる日付は祝日（`isHoliday = true`）としてマークする。
  */
-export const buildWeekDays = (
-  weekStart: Date,
+export const buildDays = (
+  start: Date,
+  count: number,
   today: Date,
   holidayDateKeys: readonly string[],
 ): readonly AvailabilityDay[] => {
   const holidaySet = new Set(holidayDateKeys);
 
-  return Array.from({ length: DAYS_IN_WEEK }, (_, index) => {
-    const date = addDays(startOfTokyoDay(weekStart), index);
+  return Array.from({ length: count }, (_, index) => {
+    const date = addDays(startOfTokyoDay(start), index);
     const dateKey = toTokyoDateKey(date);
 
     /*
@@ -211,63 +208,6 @@ export const toDayBlocks = <R extends TimedReservation>(
     }));
 };
 
-/**
- * 承認済みの予約で埋まっている「時」を返す。
- *
- * ここに入る時間帯からは申請を始められないようにする。
- * 重複を禁じているのは承認済みの予約に対してだけなので（COND-001）、
- * 仮予約どうしは重なってよい。仮予約まで塞ぐと、
- * 同じ時間帯に別の団体が申請して事務局に選んでもらう、という使い方ができなくなる。
- *
- * 1 時間の枠に少しでもかかっていれば埋まっている扱いにする。
- * この画面が押させるのは 1 時間単位の枠なので、
- * 「10:30 まで埋まっている 10 時の枠」を押せるようにしても、
- * 申請できる時間帯を選び直せる場所がまだ無い。
- */
-export const toOccupiedHours = (blocks: readonly AvailabilityBlock[]): ReadonlySet<number> => {
-  const occupied = new Set<number>();
-
-  for (const block of blocks) {
-    if (block.reservation.status !== ReservationStatus.Approved) continue;
-
-    for (const hour of slotHours) {
-      const slotStart = hour * 60;
-
-      if (block.startMinutes < slotStart + 60 && block.endMinutes > slotStart) {
-        occupied.add(hour);
-      }
-    }
-  }
-
-  return occupied;
-};
-
-/**
- * その枠の開始時刻が過ぎているか。
- *
- * 過ぎた時刻からは申請できない。送信すればドメイン（`validateReservationPeriod`）が
- * 過去日時として弾くが、押せるまま残しておくと、申請フォームまで進んで初めて
- * 選べないと分かることになる。
- *
- * 見方は申請フォーム（SCR-002）の `toPastSlots` とそろえて、
- * 「始まりが過ぎていれば過去」とする。10:15 の時点で 10 時の枠はもう過去になる。
- */
-export const isPastHour = (day: AvailabilityDay, hour: number, now: Date): boolean =>
-  atTokyoTime(day.date, hour) < now;
-
-/**
- * その日に申請できる枠がもう残っていないか。
- *
- * 一覧（`AvailabilityWeekAgenda`）の「＋」は日付だけを渡して時刻はフォームで
- * 選ばせるので、その日の最後の枠が過ぎていれば渡す先が無い。
- *
- * 最後の枠はフォームの刻み（`RESERVATION_STEP_MINUTES`）で決まるので、
- * 閉館時刻そのものではなく、そこから 1 枠戻した時刻で見る。
- * この画面の枠は 1 時間単位だが、フォームでは 30 分単位で選べる。
- */
-export const isPastDay = (day: AvailabilityDay, now: Date): boolean =>
-  atTokyoMinutes(day.date, CLOSE_MINUTES - RESERVATION_STEP_MINUTES) < now;
-
 /** 位置（分）を時間軸の中の百分率にする。`top` と `height` の両方に使う */
 export const toAxisPercent = (minutes: number): number => (minutes / AXIS_MINUTES) * 100;
 
@@ -278,7 +218,7 @@ export const toAxisPercent = (minutes: number): number => (minutes / AXIS_MINUTE
  * 以前は同じ色の濃淡（20% と 10%）で分けていたが、離れた列どうしでは
  * 見比べられず、色の見え方によっては差がほとんど消えてしまう。
  *
- * 代わりに自団体の帯は、色以外の印を重ねて目立たせている（`availability-week-grid.tsx`）。
+ * 代わりに自団体の帯は、色以外の印を重ねて目立たせている（`availability-calendar.tsx`）。
  *
  * - 左端の線を太くする
  * - 枠線を濃くする
@@ -390,20 +330,3 @@ export const blockContent = (durationMinutes: number, columnCount: number): Bloc
     nameLines: Math.min(MAX_NAME_LINES, Math.max(1, lines - usedLines)),
   };
 };
-
-/**
- * 予約申請フォーム（SCR-002）へ持っていく初期値。
- *
- * 押した場所が知っていることだけを入れる。
- * 施設だけを選んでいる状態で日時まで埋めてしまうと、
- * フォームを開いた人が「いつの予約だったか」を確かめ直すことになる。
- *
- * - 空き枠を押した: 施設 + 日付 + 時刻
- * - 日付の「＋」を押した: 施設 + 日付
- * - 施設名の横の「＋」を押した: 施設のみ
- */
-export interface ReservationDraft {
-  readonly facility: AvailabilityFacility;
-  readonly day: AvailabilityDay | null;
-  readonly startHour: number | null;
-}

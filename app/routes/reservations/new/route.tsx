@@ -44,7 +44,7 @@ import { CreatedPanel } from "./created-panel";
 import { toCalendarPath } from "./paths";
 
 export function meta() {
-  return [{ title: "仮予約の申請 | iclub-reserve" }];
+  return [{ title: "予約の申請 | iclub-reserve" }];
 }
 
 /**
@@ -131,6 +131,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       facilityId: pickFacilityId(form.facilities, url.searchParams.get("facility")),
       dateKey: toTokyoDateKey(day),
       startMinutes: parseTokyoTimeKey(url.searchParams.get("start")),
+      endMinutes: parseTokyoTimeKey(url.searchParams.get("end")),
       mode,
     },
   };
@@ -225,7 +226,7 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
 
   if (form.created !== null) {
     return (
-      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey}>
+      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey} isStaff={isStaff}>
         <CreatedPanel
           created={form.created}
           facilityId={initial.facilityId}
@@ -237,7 +238,7 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
 
   if (form.groups.length === 0 || form.facilities.length === 0) {
     return (
-      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey}>
+      <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey} isStaff={isStaff}>
         <CannotApplyCard
           hasGroup={form.groups.length > 0}
           hasFacility={form.facilities.length > 0}
@@ -248,7 +249,7 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
   }
 
   return (
-    <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey}>
+    <PageShell facilityId={initial.facilityId} dateKey={initial.dateKey} isStaff={isStaff}>
       <ReservationEditorForm
         purpose={{
           kind: "create",
@@ -270,8 +271,14 @@ export default function NewReservation({ loaderData, actionData }: Route.Compone
 function PageShell({
   facilityId,
   dateKey,
+  isStaff,
   children,
-}: Readonly<{ facilityId: string; dateKey: string; children: ReactNode }>) {
+}: Readonly<{
+  facilityId: string;
+  dateKey: string;
+  isStaff: boolean;
+  children: ReactNode;
+}>) {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-col gap-1">
@@ -282,10 +289,12 @@ function PageShell({
           ← 空き状況カレンダーへ戻る
         </Link>
 
-        <h1 className="text-xl font-semibold">仮予約の申請</h1>
+        <h1 className="text-xl font-semibold">{isStaff ? "予約の作成" : "予約の申請"}</h1>
 
         <p className="text-sm text-muted-foreground">
-          申請すると仮予約として登録されます。施設・設備を利用できるのは、事務局が承認してからです。
+          {isStaff
+            ? "団体として仮予約を申請するほか、承認済みの予約を直接作成できます。"
+            : "申請すると仮予約として登録されます。施設・設備を利用できるのは、事務局が承認してからです。"}
         </p>
       </div>
 
