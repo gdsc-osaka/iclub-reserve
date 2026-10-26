@@ -1,5 +1,5 @@
 version: "1.0"
-generated_at: "2026-10-15T09:00:00Z"
+generated_at: "2026-10-26T09:00:00Z"
 
 elements:
   # ゴール
@@ -340,6 +340,12 @@ elements:
     defined_in: "rdra/contexts/reservation-application.md"
     traces_to: ["GOAL-002", "GOAL-005"]
 
+  - id: "REQ-050"
+    type: requirement
+    name: "自団体の予約のカレンダー購読"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["GOAL-001"]
+
   # ビジネスユースケース
   - id: "BUC-001"
     type: business_usecase
@@ -532,6 +538,12 @@ elements:
     name: "施設の解錠の手配"
     defined_in: "rdra/contexts/reservation-approval.md"
     traces_to: ["REQ-047"]
+
+  - id: "BUC-033"
+    type: business_usecase
+    name: "自団体の予約のカレンダー購読"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["REQ-050"]
 
   # ユースケース
   - id: "UC-001"
@@ -762,17 +774,23 @@ elements:
     defined_in: "rdra/contexts/reservation-approval.md"
     traces_to: ["BUC-032"]
 
+  - id: "UC-039"
+    type: usecase
+    name: "自団体の予約カレンダーを購読する"
+    defined_in: "rdra/contexts/calendar-integration.md"
+    traces_to: ["BUC-033"]
+
 coverage:
   total_goals: 7
   goals_with_requirements: 7
-  total_requirements: 49
-  requirements_with_bucs: 49
-  total_bucs: 32
-  bucs_with_ucs: 31
-  total_ucs: 38
+  total_requirements: 50
+  requirements_with_bucs: 50
+  total_bucs: 33
+  bucs_with_ucs: 32
+  total_ucs: 39
   orphaned_elements: []
   notes:
-    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=31）"
+    - "BUC-017（Google Calendar自動反映）はシステム内部処理のためUCを持たない（bucs_with_ucs=32）"
     - "操作履歴への記録（REQ-036）は独立したUCを持たない。記録対象のUC（VAR-002）が業務データと同じ db.batch で書き込む（COND-013）"
     - "SCR-011（アカウント登録フォーム）は廃止。認証コード方式では登録とログインの処理が同一のため、SCR-012（ログイン・新規登録画面）に統合した。詳細は change-log.md を参照"
     - "UC-036（ログアウトする）は画面を持たない。ログイン後の全画面に共通するアカウントメニューから行い、アカウントメニューは画面として定義していないため"
