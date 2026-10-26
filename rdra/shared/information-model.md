@@ -230,7 +230,7 @@ entities:
       - name: "sent_as_staff"
         type: "boolean"
         required: true
-        description: "事務局の横断権限（COND-009）によって初めて許された送信であれば true。送信者がその予約の団体に所属していない事務局である場合にあたる。送信時に固定し、後から所属や事務局権限が変わっても表示は変わらない。団体側の表示で送信者を「事務局」とするかの判定に使う（COND-008）。考え方は INFO-008.acted_as_staff と同じ。"
+        description: "事務局の画面から送ったメッセージであれば true（COND-030）。事務局の画面では団体での所属を使わないため、事務局の横断権限（COND-009）によって初めて許された送信にあたる。その団体に所属する事務局でも、利用者の画面から送れば false（団体側としての送信）になる。送信時に固定し、後から所属や事務局権限が変わっても表示は変わらない。団体側の表示で送信者を「事務局」とするかの判定に使う（COND-008）。考え方は INFO-008.acted_as_staff と同じ。"
       - name: "body"
         type: "string"
         required: true
@@ -316,7 +316,7 @@ entities:
       - name: "is_staff"
         type: "boolean"
         required: true
-        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。true にするのは事務局招待の承諾（UC-027）、false に戻すのは事務局による剥奪（UC-028）である。最初の1人だけは DB またはシードで設定する。事務局が0人になる変更はできない（COND-014）。"
+        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。その権限を使えるのは事務局の画面で操作するときだけで、利用者の画面では団体での役割だけで操作する（COND-030）。true にするのは事務局招待の承諾（UC-027）、false に戻すのは事務局による剥奪（UC-028）である。最初の1人だけは DB またはシードで設定する。事務局が0人になる変更はできない（COND-014）。"
       - name: "terms_version"
         type: "string"
         required: false
@@ -448,7 +448,7 @@ entities:
       - name: "acted_as_staff"
         type: "boolean"
         required: true
-        description: "事務局の横断権限（COND-009）によって初めて許された操作であれば true。記録時に固定する。団体側の表示で操作者を「事務局」とするかの判定に使う（COND-012）。"
+        description: "事務局の画面から行った操作であれば true（COND-030）。事務局の画面では団体での役割を使わないため、事務局の横断権限（COND-009）によって初めて許された操作にあたる。施設/設備・事務局権限への操作は常に true になる（COND-012）。記録時に固定する。団体側の表示で操作者を「事務局」とするかの判定に使う（COND-012）。"
       - name: "action"
         type: "enum"
         required: true
