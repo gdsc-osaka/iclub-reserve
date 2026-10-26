@@ -55,10 +55,14 @@ const PUBLIC_PATHS: ReadonlySet<string> = new Set([
  * Better Auth の API は「ログインするための API」なので、ログイン必須にはできない。
  * 個々のエンドポイントの保護は Better Auth 側が行う。
  *
+ * 自団体の予約カレンダーの配信（/calendar-feeds/）は、カレンダーアプリが Cookie を持たずに読みに来るため、
+ * ログインを求めない。URL の中の秘密のトークンが鍵になる（ADR-013 決定 4）。
+ *
  * ここに挙げた接頭辞の下は**まだ存在しないパスも含めて**ログイン不要になる。
+ * `/calendar-feeds/` の下には配信のルートしか置かないこと。
  * 1 本だけ通したいパスは `PUBLIC_PATHS` に書くこと。
  */
-const PUBLIC_PATH_PREFIXES: readonly string[] = ["/api/auth/"];
+const PUBLIC_PATH_PREFIXES: readonly string[] = ["/api/auth/", "/calendar-feeds/"];
 
 /** ログインしていなくても開ける画面かどうかを判定する。 */
 export const isPublicPath = (pathname: string): boolean =>

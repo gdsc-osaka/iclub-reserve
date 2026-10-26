@@ -9,7 +9,8 @@
     "app/db/schema/**/*",
     "app/domain/**/*",
     "app/components/brand/iclub-bolt.ts",
-    "app/lib/date.ts"
+    "app/lib/date.ts",
+    "app/lib/ical.ts"
   ],
   "compilerOptions": {
     "composite": true,

@@ -109,6 +109,11 @@ export const seedGroupInvitation = (
       .values({ role: MembershipRole.Member, createdAt: EPOCH, ...row }),
   );
 
+/** 既定では作成日時・更新日時が EPOCH のカレンダー購読 */
+export const seedGroupCalendarFeed = (
+  row: Seed<typeof schema.groupCalendarFeedTable.$inferInsert, "createdAt" | "updatedAt">,
+) => toStatement(builder.insert(schema.groupCalendarFeedTable).values({ ...timestamps, ...row }));
+
 export const seedReservationMessage = (row: typeof schema.reservationMessageTable.$inferInsert) =>
   toStatement(builder.insert(schema.reservationMessageTable).values(row));
 

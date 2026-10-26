@@ -101,6 +101,9 @@ export default [
   // 施設写真の配信ルート（ADR-005: ログイン必須・プライベートキャッシュ）
   route("facility-photos/:photoName", "routes/facility-photos/$photoName/route.ts"),
 
+  // 自団体の予約カレンダー配信ルート（ADR-013: 秘密のトークンによる配信・ログイン不要）
+  route("calendar-feeds/:fileName", "routes/calendar-feeds/$fileName/route.ts"),
+
   // 開発専用ルート（ローカルでの outbox 手動送信確認用 / ADR-002 実装ガイド 5）
   route("dev/flush-mail", "routes/dev/flush-mail/route.ts"),
 
