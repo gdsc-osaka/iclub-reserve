@@ -1,38 +1,40 @@
-import type { SlotRange } from "~/components/reservation/editor/reservation-slots";
-import { toTokyoTimeKey } from "~/lib/date";
+import { parseTokyoDateKey } from "~/lib/date";
+import {
+  parseDraftParam,
+  toCalendarPath as toAvailabilityCalendarPath,
+} from "~/routes/availability/paths";
 
 /**
- * 予約申請フォーム（SCR-002）が行き来する URL。
- *
- * 施設と日付はクエリで持ち回る。組み立て方が散らばると、
- * どちらか片方だけ付け忘れたリンクが混ざるので、必ずここを通す。
- */
-
-/** 空き状況カレンダー（SCR-001）の URL を組み立てる */
-export const toCalendarPath = (facilityId: string, dateKey: string): string =>
-  `/availability?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
-
-/**
- * 施設だけを選んだ状態でこの画面を開く URL。日付は画面の既定（今日）になる。
+ * 施設だけを選んだ状態で予約申請（カレンダーへの転送）を開く URL。日付は画面の既定（今日）になる。
  *
  * 却下された予約から「別の日時で申請」するときのように、日付を決めずに入るときに使う。
  */
 export const toFormPathForFacility = (facilityId: string): string =>
   `/reservations/new?facility=${encodeURIComponent(facilityId)}`;
 
-/** この画面の URL を組み立てる。施設と日付を持ち回るので、リンクは必ずここを通す */
-export const toFormPath = (facilityId: string, dateKey: string, mode?: "direct"): string => {
-  const base = `/reservations/new?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
-  return mode === "direct" ? `${base}&mode=direct` : base;
-};
-
-/** 時間帯まで決めてこの画面を開く URL を組み立てる（空き状況カレンダーの仮の枠から使う） */
-export const toFormPathForRange = (
-  facilityId: string,
-  dateKey: string,
-  range: SlotRange,
-  mode?: "direct",
+/**
+ * 予約申請フォーム（/reservations/new）のクエリパラメータから、空き状況カレンダーへの URL を組み立てる。
+ *
+ * 施設・日付・時刻を読み取り、仮の枠（draft）を開くカレンダーの URL を返す（ADR-014 決定 10）。
+ * mode や created は無視する。
+ */
+export const toCalendarPathFromFormQuery = (
+  searchParams: URLSearchParams,
+  todayKey: string,
 ): string => {
-  const base = `${toFormPath(facilityId, dateKey)}&start=${toTokyoTimeKey(range.startMinutes)}&end=${toTokyoTimeKey(range.endMinutes)}`;
-  return mode === "direct" ? `${base}&mode=direct` : base;
+  const facilityParam = searchParams.get("facility")?.trim();
+  const facilityId = facilityParam ? facilityParam : null;
+
+  const dateParam = searchParams.get("date")?.trim();
+  const dateKey = dateParam && parseTokyoDateKey(dateParam) !== null ? dateParam : todayKey;
+
+  // 時刻の確かめ方（30 分の枠にある・開始が終了より前）は、カレンダーの `draft` と同じにする
+  const start = searchParams.get("start")?.trim();
+  const end = searchParams.get("end")?.trim();
+  const timed = start && end ? parseDraftParam(`${dateKey}T${start}-${end}`) : null;
+
+  return toAvailabilityCalendarPath(facilityId, dateKey, {
+    kind: "draft",
+    draft: { dateKey, range: timed?.range ?? null },
+  });
 };

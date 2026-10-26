@@ -96,6 +96,11 @@ describe("toRevealTarget", () => {
     expect(toRevealTarget({ kind: "draft", draft }, [])).toEqual(draft);
   });
 
+  it("時刻を持たない仮の枠でも日付を返す（range は null）", () => {
+    const draft = { dateKey: "2026-11-04", range: null };
+    expect(toRevealTarget({ kind: "draft", draft }, [])).toEqual(draft);
+  });
+
   it("予約は、その日と時間帯", () => {
     const item = reservation("2026-11-04T10:00:00+09:00", "2026-11-04T12:00:00+09:00");
     expect(toRevealTarget(opened, [item])).toEqual({

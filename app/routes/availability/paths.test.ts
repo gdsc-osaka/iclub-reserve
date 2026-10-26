@@ -19,9 +19,30 @@ describe("availability paths", () => {
       };
       expect(toDraftParam(draft)).toBe("2026-11-04T10:00-11:00");
     });
+
+    it("range が null の仮の枠は日付だけ（YYYY-MM-DD）の文字列にする", () => {
+      const draft: CalendarDraft = {
+        dateKey: "2026-11-04",
+        range: null,
+      };
+      expect(toDraftParam(draft)).toBe("2026-11-04");
+    });
   });
 
   describe("parseDraftParam", () => {
+    it("日付だけの draft パラメータをパースする（range は null）", () => {
+      const result = parseDraftParam("2026-11-04");
+      expect(result).toEqual({
+        dateKey: "2026-11-04",
+        range: null,
+      });
+    });
+
+    it("日付だけの場合でも壊れた日付は null を返す", () => {
+      expect(parseDraftParam("2026-02-30")).toBeNull();
+      expect(parseDraftParam("2026-99-99")).toBeNull();
+    });
+
     it("正常な形式の draft パラメータをパースする", () => {
       const result = parseDraftParam("2026-11-04T10:00-11:00");
       expect(result).toEqual({
@@ -113,6 +134,10 @@ describe("availability paths", () => {
       expect(toCalendarPath("fac_1", "2026-11-04")).toBe(
         "/availability?facility=fac_1&date=2026-11-04",
       );
+    });
+
+    it("facilityId が null のときは facility を付けない", () => {
+      expect(toCalendarPath(null, "2026-11-04")).toBe("/availability?date=2026-11-04");
     });
 
     it("予約を開くときは、ID を encodeURIComponent して reservation に付ける", () => {

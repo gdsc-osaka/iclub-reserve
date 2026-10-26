@@ -1,14 +1,17 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   isRouteErrorResponse,
   Link,
   redirect,
+  useLocation,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
+import { toast } from "sonner";
 
 import { buildDays } from "~/components/reservation/availability-week";
+import type { ReservationFormMode } from "~/components/reservation/editor/form-values";
 import { NoEnabledGroupReason } from "~/components/reservation/no-enabled-group-reason";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -18,18 +21,25 @@ import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facili
 import { createD1HolidayQuery } from "~/infra/holiday/d1-holiday-query";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { addDays, parseTokyoDateKey, toTokyoDateKey } from "~/lib/date";
+import { createApplicantGroupQuery } from "~/query/reservation/applicant-groups";
 import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
+import type { ActionErrors } from "~/routes/_shared/error-response.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 import { getAvailabilityCalendarUseCase } from "~/usecases/facility/get-availability-calendar";
 
 import type { Route } from "./+types/route";
+import {
+  CREATE_RESERVATION_INTENT,
+  type CreateReservationActionError,
+} from "./availability-draft-form";
 import { AvailabilityPanel } from "./availability-panel";
 import { CalendarCard } from "./calendar-card";
 import { CALENDAR_WINDOW_DAYS, toCalendarWindowStart } from "./calendar-window";
+import { createReservationAction } from "./create-reservation.server";
 import { FacilityTabs } from "./facility-tabs";
-import { differsOnlyInSelection } from "./paths";
+import { differsOnlyInSelection, toDraftParam } from "./paths";
 import { useCalendarScroll } from "./use-calendar-scroll";
 import { toRevealTarget, useCalendarSelection } from "./use-calendar-selection";
 
@@ -70,6 +80,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       facilityAvailabilityCalendarQuery: createFacilityAvailabilityCalendarQuery(db),
       userGroupListQuery: createUserGroupListQuery(db),
       holidayQuery: createD1HolidayQuery(db),
+      applicantGroupQuery: createApplicantGroupQuery(db),
     },
     {
       actorUserId: user.id,
@@ -91,12 +102,24 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 /**
- * 空き状況カレンダーからの事務局状態変更アクション（承認・却下・事務局キャンセル）。
+ * 空き状況カレンダーからの操作。欄からの予約の作成（申請・直接作成）と、
+ * 事務局の状態変更（承認・却下・事務局キャンセル）を受け付ける。
+ *
+ * 戻り値の型を書いているのは、画面の側で 2 つの失敗を `intent` で見分けられるようにするため。
+ * 書かないと、どちらも `formError` を持つので、TypeScript が `formError` だけの形にまとめてしまう。
  */
-export async function action({ request, context }: Route.ActionArgs) {
+export async function action({
+  request,
+  context,
+}: Route.ActionArgs): Promise<CreateReservationActionError | ActionErrors<never> | Response> {
   const user = requireRequestUser(context);
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  if (intent === CREATE_RESERVATION_INTENT) {
+    return createReservationAction({ request, formData, user });
+  }
+
   const reservationId = formData.get("reservationId");
   const reason = formData.get("reason");
 
@@ -178,6 +201,9 @@ export default function Availability({ loaderData, actionData }: Route.Component
     [windowStart, now, calendar.holidayDateKeys],
   );
 
+  /** スマホで欄を画面いっぱいに広げているか（ADR-014 決定 13） */
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const scroll = useCalendarScroll({ days, anchorKey, todayKey: toTokyoDateKey(now) });
   const { selection, openDraft, openReservation, close } = useCalendarSelection({
     facilityId: facility.id,
@@ -188,14 +214,55 @@ export default function Availability({ loaderData, actionData }: Route.Component
   });
 
   /*
+   * 欄が閉じたら、広げていない状態に戻す（戻る操作で閉じたときも）。
+   * effect で戻すと、閉じた直後の 1 回はカレンダーを隠したまま描いてしまうので、描画の中で戻す。
+   */
+  if (selection === null && isExpanded) setIsExpanded(false);
+
+  /*
+   * 予約を作る操作の失敗（`intent` 付きで返る）は欄の中に出すので、画面の上の「操作に失敗しました」は
+   * 事務局の操作（承認・却下・キャンセル）の失敗のときだけ出す。
+   */
+  const createError = actionData !== undefined && "intent" in actionData ? actionData : null;
+  const staffError =
+    actionData !== undefined && !("intent" in actionData) ? actionData.formError : null;
+
+  /*
+   * 予約を作れたら、トーストで知らせる（ADR-014 決定 10）。
+   *
+   * 成功すると action が作った予約を開く URL へ転送し、申請の欄は消えてしまうので、ここで見る。
+   * 欄から送ったときに作り方（申請か直接作成か）を覚えておき、次のどちらかで答え合わせをする。
+   * - 転送が終わって URL が変わった（`location.key`）: 作った予約を開いていれば知らせる
+   * - 失敗が返ってきた（`createError`）: 知らせずに忘れる。欄の中に誤りが出る
+   *
+   * `useNavigation()` の読み込み中（loading）を見て決めることはしない。React Router は状態の更新を
+   * トランジションで描くので、読み込みが速いと loading を描かずに idle へ進み、見逃すことがある。
+   */
+  const location = useLocation();
+  const submittedModeRef = useRef<ReservationFormMode | null>(null);
+  useEffect(() => {
+    const mode = submittedModeRef.current;
+    if (mode === null) return;
+    submittedModeRef.current = null;
+    if (selection?.kind !== "reservation") return;
+
+    if (mode === "direct") {
+      toast.success("承認済みの予約を作成しました", { description: "メールは送信されません。" });
+    } else {
+      toast.success("仮予約を申請しました", {
+        description:
+          "事務局が承認するまでは、まだ利用できません。承認・却下の結果はメールでお知らせします。",
+      });
+    }
+  }, [location.key, createError]);
+
+  /*
    * 開いたものが変わったら、その日と時刻をカレンダーの見える範囲に入れる。
    * 位置が変わったときだけ送る。描画のたびに送ると、欄を開いたままカレンダーを動かせなくなる。
+   * 位置（日と時間帯）は仮の枠と同じ形なので、比べるためのキーは仮の枠の URL の値で作る。
    */
   const revealTarget = toRevealTarget(selection, reservations);
-  const revealKey =
-    revealTarget === null
-      ? null
-      : `${revealTarget.dateKey}T${revealTarget.range.startMinutes}-${revealTarget.range.endMinutes}`;
+  const revealKey = revealTarget === null ? null : toDraftParam(revealTarget);
   useEffect(() => {
     if (revealTarget !== null) scroll.reveal(revealTarget.dateKey, revealTarget.range);
   }, [revealKey]);
@@ -210,17 +277,22 @@ export default function Availability({ loaderData, actionData }: Route.Component
      * あふれる部分は中の `overflow` に任せる。
      */
     <main className="mx-auto flex h-(--app-content-height) w-full max-w-6xl flex-col gap-4 overflow-hidden p-4 md:p-6">
-      {actionData?.formError && (
+      {staffError && (
         <Alert variant="destructive" className="shrink-0">
           <CircleAlert aria-hidden className="size-4" />
           <AlertTitle>操作に失敗しました</AlertTitle>
-          <AlertDescription>{actionData.formError}</AlertDescription>
+          <AlertDescription>{staffError}</AlertDescription>
         </Alert>
       )}
 
       {!canApplyReservation && <CannotApplyNotice />}
 
-      <FacilityTabs facilities={facilities} current={facility} anchorKey={anchorKey} />
+      <FacilityTabs
+        facilities={facilities}
+        current={facility}
+        anchorKey={anchorKey}
+        selection={selection}
+      />
 
       {/* カレンダーと欄を並べる。スマホは縦（欄が下）、PC は横（欄が右）（ADR-014 決定 7） */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
@@ -235,17 +307,27 @@ export default function Availability({ loaderData, actionData }: Route.Component
           selection={selection}
           onOpenDraft={openDraft}
           onOpenReservation={openReservation}
+          className={isExpanded ? "max-md:hidden" : undefined}
         />
 
         {selection !== null && (
           <AvailabilityPanel
             selection={selection}
             facility={facility}
+            anchorKey={anchorKey}
             days={days}
             reservations={reservations}
             now={now}
             canCreateDirectly={calendar.canCreateDirectly}
+            applicantGroups={calendar.applicantGroups}
+            onDraftChange={openDraft}
             onClose={close}
+            createError={createError}
+            onSubmitCreate={(mode) => {
+              submittedModeRef.current = mode;
+            }}
+            isExpanded={isExpanded}
+            onExpandedChange={setIsExpanded}
           />
         )}
       </div>

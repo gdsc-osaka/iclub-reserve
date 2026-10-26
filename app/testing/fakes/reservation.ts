@@ -4,6 +4,7 @@
 import type { ReservationRepository } from "~/domain/reservation";
 import type { ReservationMessageRepository } from "~/domain/reservation/message";
 import type { ReservationReadRepository } from "~/domain/reservation/read";
+import type { ApplicantGroupQuery } from "~/query/reservation/applicant-groups";
 import type { GroupUnreadUpdatesQuery } from "~/query/reservation/group-unread-updates";
 import type { ReservationDetailQuery } from "~/query/reservation/reservation-detail";
 import type { ReservationFormQuery } from "~/query/reservation/reservation-form";
@@ -92,4 +93,13 @@ export function fakeGroupUnreadUpdatesQuery(
   overrides: Partial<GroupUnreadUpdatesQuery> = {},
 ): GroupUnreadUpdatesQuery {
   return createUnimplementedFake("GroupUnreadUpdatesQuery", overrides);
+}
+
+/**
+ * テスト用の ApplicantGroupQuery の偽物を生成する。
+ */
+export function fakeApplicantGroupQuery(
+  overrides: Partial<ApplicantGroupQuery> = {},
+): ApplicantGroupQuery {
+  return createUnimplementedFake("ApplicantGroupQuery", overrides);
 }

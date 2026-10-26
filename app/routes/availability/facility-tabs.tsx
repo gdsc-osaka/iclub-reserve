@@ -3,7 +3,7 @@ import { Link } from "react-router";
 
 import type { AvailabilityFacility } from "~/query/facility/facility-availability-calendar";
 
-import { toCalendarPath } from "./paths";
+import { toCalendarPath, type CalendarSelection } from "./paths";
 
 /**
  * 施設・設備の切り替え。
@@ -11,17 +11,23 @@ import { toCalendarPath } from "./paths";
  * 選ぶたびにサーバーへ取り直すので、プルダウンではなくリンクにしている。
  * リンクなら JavaScript が動いていなくても切り替えられ、
  * 「この施設のこの週」をそのまま人に送れる。
- * 基準の日を持ち回り、開いているもの（reservation / draft）は外す。
+ * 基準の日を持ち回り、仮の枠を開いているときはその仮の枠を引き継ぐ（ADR-014 決定 14）。
+ * 「同じ時間に別の部屋は空いているか」を、入力し直さずに見比べられるようにするため。
+ * 予約を開いているときは外す（予約はその施設のものなので、別の施設のカレンダーには出せない）。
  */
 export function FacilityTabs({
   facilities,
   current,
   anchorKey,
+  selection,
 }: Readonly<{
   facilities: readonly AvailabilityFacility[];
   current: AvailabilityFacility;
   anchorKey: string;
+  selection: CalendarSelection | null;
 }>) {
+  const draftSelection = selection?.kind === "draft" ? selection : undefined;
+
   return (
     <nav
       aria-label="施設・設備の切り替え"
@@ -34,7 +40,7 @@ export function FacilityTabs({
           return (
             <li key={item.id}>
               <Link
-                to={toCalendarPath(item.id, anchorKey)}
+                to={toCalendarPath(item.id, anchorKey, draftSelection)}
                 aria-current={isCurrent ? "page" : undefined}
                 className={cn(
                   "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm transition-colors",

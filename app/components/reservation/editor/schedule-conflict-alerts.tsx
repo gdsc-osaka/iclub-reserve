@@ -3,7 +3,22 @@ import { CircleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { formatTimeRange } from "~/lib/date";
 
-import type { ScheduleDraft } from "./use-schedule-draft";
+/**
+ * 案内に要る、重なっている予約。
+ *
+ * 承認済みは時間帯と団体名を出し、仮予約は有無だけを見る。
+ * 申請フォームのタイムラインの枠でも、空き状況カレンダーの帯でも渡せるよう、読む項目だけにしている。
+ */
+export interface ScheduleConflicts {
+  readonly approvedConflicts: readonly {
+    readonly reservation: {
+      readonly startAt: Date;
+      readonly endAt: Date;
+      readonly groupName: string;
+    };
+  }[];
+  readonly provisionalConflicts: readonly unknown[];
+}
 
 /**
  * 選んだ時間帯が、ほかの予約と重なっているときの案内。
@@ -13,10 +28,8 @@ import type { ScheduleDraft } from "./use-schedule-draft";
  *
  * 申請のボタンが押せない理由をボタンの近くで伝えるために、入力欄の側に置く。
  */
-export function ScheduleConflictAlerts({
-  draft,
-}: Readonly<{ draft: Pick<ScheduleDraft, "approvedConflicts" | "provisionalConflicts"> }>) {
-  const { approvedConflicts, provisionalConflicts } = draft;
+export function ScheduleConflictAlerts({ conflicts }: Readonly<{ conflicts: ScheduleConflicts }>) {
+  const { approvedConflicts, provisionalConflicts } = conflicts;
 
   if (approvedConflicts.length > 0) {
     return (

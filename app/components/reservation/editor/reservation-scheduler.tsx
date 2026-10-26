@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { useLocation, useNavigate } from "react-router";
 
 import { Label } from "~/components/ui/label";
 import {
@@ -9,10 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { FACILITY_CLOSE_HOUR, FACILITY_OPEN_HOUR } from "~/domain/facility";
 import type { ReservationFormFacility } from "~/query/reservation/reservation-form";
 
 import { DateNavigation } from "./date-navigation";
+import { OperatingHoursNotice } from "./operating-hours-notice";
 import { selectSlot } from "./reservation-slots";
 import { ReservationTimeline, ReservationTimelineLegend } from "./reservation-timeline";
 import type { ScheduleDraft } from "./use-schedule-draft";
@@ -64,7 +65,33 @@ export function ScheduleControls({
   facilityErrorId,
   periodErrorId,
 }: Readonly<ScheduleProps>) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const facilitySelectId = useId();
+
+  /**
+   * その日の URL へ移る。
+   *
+   * 選んだ日は状態に持たず、URL の `?date=` を書き換えることで伝える。
+   * タイムラインに描けるのはローダーが読んだ日の予約だけなので、
+   * 日付を変えることと読み直すことを切り離せない。
+   * パスは組み立てず、いまの URL のクエリだけを書き換える（置いた画面のまま読み直す）。
+   *
+   * 施設も一緒に載せ直すのは、再読み込みしたときに選んでいた施設へ戻すため。
+   * 施設の切り替えそのものは URL に載せていない（載せると切り替えのたびに読み直しが起きる）。
+   * 開始時刻の初期値（`start`）は、別の日へ移ったら意味を失うので消す。
+   *
+   * 履歴に積まないのは、1 日ずつ動かすたびに「戻る」が
+   * その回数ぶん必要になってしまうため。
+   */
+  const moveTo = (nextDateKey: string) => {
+    const params = new URLSearchParams(location.search);
+    params.set("facility", draft.facility.id);
+    params.set("date", nextDateKey);
+    params.delete("start");
+
+    void navigate({ search: `?${params.toString()}` }, { replace: true, preventScrollReset: true });
+  };
 
   return (
     /*
@@ -120,9 +147,9 @@ export function ScheduleControls({
           day={draft.day}
           dateKey={dateKey}
           todayKey={todayKey}
-          facilityId={draft.facility.id}
           disabled={disabled}
           errorId={periodErrorId}
+          onSelectDate={moveTo}
         />
       </div>
     </div>
@@ -155,10 +182,7 @@ export function ScheduleTimeline({
       <ReservationTimelineLegend />
 
       {/* 利用できる時間帯と、日をまたげないことは画面に書いておく（SCR-002） */}
-      <p className="text-xs text-muted-foreground">
-        利用できるのは {FACILITY_OPEN_HOUR}:00〜{FACILITY_CLOSE_HOUR}:00
-        です。日をまたぐ予約はできません。
-      </p>
+      <OperatingHoursNotice />
     </div>
   );
 }

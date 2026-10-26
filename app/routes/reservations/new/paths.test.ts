@@ -1,61 +1,51 @@
 import { describe, expect, it } from "vitest";
 
-import { toCalendarPath, toFormPath, toFormPathForFacility, toFormPathForRange } from "./paths";
+import { toCalendarPathFromFormQuery, toFormPathForFacility } from "./paths";
 
 describe("paths", () => {
-  describe("toCalendarPath", () => {
-    it("施設 ID と日付から空き状況カレンダーのパスを組み立てる", () => {
-      expect(toCalendarPath("fac_1", "2026-11-04")).toBe(
-        "/availability?facility=fac_1&date=2026-11-04",
-      );
-    });
-
-    it("施設 ID に特殊文字が含まれる場合はエンコードする", () => {
-      expect(toCalendarPath("fac/special id", "2026-11-04")).toBe(
-        "/availability?facility=fac%2Fspecial%20id&date=2026-11-04",
-      );
-    });
-  });
-
   describe("toFormPathForFacility", () => {
     it("施設 ID だけを指定した申請フォームのパスを組み立てる", () => {
       expect(toFormPathForFacility("fac_1")).toBe("/reservations/new?facility=fac_1");
     });
   });
 
-  describe("toFormPath", () => {
-    it("施設 ID と日付から申請フォームのパスを組み立てる", () => {
-      expect(toFormPath("fac_1", "2026-11-04")).toBe(
-        "/reservations/new?facility=fac_1&date=2026-11-04",
+  describe("toCalendarPathFromFormQuery", () => {
+    const todayKey = "2026-10-26";
+
+    it("クエリパラメータが何も無いときは、施設なし・今日・日付だけの仮の枠になる", () => {
+      const params = new URLSearchParams();
+      expect(toCalendarPathFromFormQuery(params, todayKey)).toBe(
+        "/availability?date=2026-10-26&draft=2026-10-26",
       );
     });
 
-    it("mode が direct の場合は &mode=direct を付与する", () => {
-      expect(toFormPath("fac_1", "2026-11-04", "direct")).toBe(
-        "/reservations/new?facility=fac_1&date=2026-11-04&mode=direct",
+    it("施設・日付・開始・終了がすべて揃っているときはそのまま反映される", () => {
+      const params = new URLSearchParams(
+        "facility=fac_1&date=2026-11-04&start=10:00&end=11:00&mode=direct&created=res_123",
       );
-    });
-  });
-
-  describe("toFormPathForRange", () => {
-    it("時間帯まで指定した申請フォームのパスを組み立てる", () => {
-      const range = { startMinutes: 10 * 60, endMinutes: 11 * 60 };
-      expect(toFormPathForRange("fac_1", "2026-11-04", range)).toBe(
-        "/reservations/new?facility=fac_1&date=2026-11-04&start=10:00&end=11:00",
+      expect(toCalendarPathFromFormQuery(params, todayKey)).toBe(
+        "/availability?facility=fac_1&date=2026-11-04&draft=2026-11-04T10:00-11:00",
       );
     });
 
-    it("mode が direct の場合は &mode=direct を付与する", () => {
-      const range = { startMinutes: 13 * 60 + 30, endMinutes: 15 * 60 };
-      expect(toFormPathForRange("fac_1", "2026-11-04", range, "direct")).toBe(
-        "/reservations/new?facility=fac_1&date=2026-11-04&start=13:30&end=15:00&mode=direct",
+    it("開始だけ、または時刻が壊れているときは時刻なし（日付だけの仮の枠）になる", () => {
+      const paramsStartOnly = new URLSearchParams("facility=fac_1&date=2026-11-04&start=10:00");
+      expect(toCalendarPathFromFormQuery(paramsStartOnly, todayKey)).toBe(
+        "/availability?facility=fac_1&date=2026-11-04&draft=2026-11-04",
+      );
+
+      const paramsInvalidTime = new URLSearchParams(
+        "facility=fac_1&date=2026-11-04&start=10:15&end=11:00",
+      );
+      expect(toCalendarPathFromFormQuery(paramsInvalidTime, todayKey)).toBe(
+        "/availability?facility=fac_1&date=2026-11-04&draft=2026-11-04",
       );
     });
 
-    it("施設 ID のみを encodeURIComponent する", () => {
-      const range = { startMinutes: 9 * 60, endMinutes: 10 * 60 };
-      expect(toFormPathForRange("fac/room a", "2026-11-04", range)).toBe(
-        "/reservations/new?facility=fac%2Froom%20a&date=2026-11-04&start=09:00&end=10:00",
+    it("日付が壊れているときは今日になる", () => {
+      const paramsInvalidDate = new URLSearchParams("facility=fac_1&date=not-a-date");
+      expect(toCalendarPathFromFormQuery(paramsInvalidDate, todayKey)).toBe(
+        "/availability?facility=fac_1&date=2026-10-26&draft=2026-10-26",
       );
     });
   });

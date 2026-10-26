@@ -129,7 +129,6 @@ const createDeps = (
   const reservationFormQuery = fakeReservationFormQuery({
     find: (_args: ReservationFormArgs) =>
       okAsync({
-        groups: [{ id: "grp_robotics", name: "ロボティクス開発プロジェクト" }],
         facilities: [meetingRoomA, meetingRoomB],
         reservations: overrides.reservations ?? [targetRow, otherRow],
       }),
