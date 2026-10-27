@@ -10,6 +10,7 @@ import {
 import { isRouteErrorResponse, Link } from "react-router";
 
 import { InfoItem } from "~/components/info-item";
+import { isStaffAreaForbidden, StaffAreaForbidden } from "~/components/layout/staff-area-forbidden";
 import { ReservationMessageSection } from "~/components/reservation/message/reservation-message-section";
 import { ReservationActionButtons } from "~/components/reservation/reservation-action-buttons";
 import {
@@ -181,11 +182,16 @@ export function ReservationDetailPage({
  *
  * 404（存在しない、または権限がない予約）およびその他のエラーを日本語で案内する。
  * 戻り先は、開いていた画面の予約一覧にする（ADR-016 決定 15）。
+ * 事務局でない人が事務局の画面を開いたとき（403）は、事務局専用の案内を出す（ADR-016 決定 11）。
  */
 export function ReservationDetailErrorBoundary({
   error,
   area,
 }: Readonly<{ error: unknown; area: AppArea }>) {
+  if (isStaffAreaForbidden(error, area)) {
+    return <StaffAreaForbidden />;
+  }
+
   const isNotFound = isRouteErrorResponse(error) && error.status === 404;
   const listPath = toReservationListPath({}, toReservationListScope(area));
 

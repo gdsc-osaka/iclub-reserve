@@ -46,14 +46,19 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
 
     await signInAs(user.id);
 
-    const res1 = await page.goto("/staff/availability");
-    expect(res1?.status()).toBe(403);
-
-    const res2 = await page.goto(`/staff/reservations/${reservation.id}`);
-    expect(res2?.status()).toBe(403);
-
-    const res3 = await page.goto(`/staff/groups/${group.id}`);
-    expect(res3?.status()).toBe(403);
+    // どれも 403 で、事務局専用の案内と利用者の画面のダッシュボードへの戻り道が出る
+    for (const path of [
+      "/staff/availability",
+      "/staff/reservations/new",
+      `/staff/reservations/${reservation.id}`,
+      `/staff/reservations/${reservation.id}/edit`,
+      `/staff/groups/${group.id}`,
+    ]) {
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(403);
+      await expect(page.getByText("事務局専用のページです")).toBeVisible();
+      await expect(page.getByRole("link", { name: "ホームへ戻る" })).toHaveAttribute("href", "/");
+    }
   });
 
   test("団体に所属する事務局が自分の団体の承認済みの予約の日時を変えると、利用者の画面からは仮予約に戻り、事務局の画面からは承認済みのまま残る", async ({

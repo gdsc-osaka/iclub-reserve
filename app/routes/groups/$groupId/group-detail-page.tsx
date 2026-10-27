@@ -1,6 +1,7 @@
 import { isRouteErrorResponse, Link } from "react-router";
 
 import { GroupStatusBadge } from "~/components/group/group-status-badge";
+import { isStaffAreaForbidden, StaffAreaForbidden } from "~/components/layout/staff-area-forbidden";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { type AppArea, toAreaDashboardPath } from "~/lib/app-area";
 
@@ -94,11 +95,16 @@ export function GroupDetailPage({
  * ローダーが投げた 404 / 500 をここで受け取り、利用者向けの日本語の案内に置き換える。
  * COND-011（存在の秘匿）に基づき、404 時は所属有無を問わず存在しない場合と同じ文言で案内する。
  * 戻り先は、開いていた画面のダッシュボードにする（ADR-016 決定 15）。
+ * 事務局でない人が事務局の画面を開いたとき（403）は、事務局専用の案内を出す（ADR-016 決定 11）。
  */
 export function GroupDetailErrorBoundary({
   error,
   area,
 }: Readonly<{ error: unknown; area: AppArea }>) {
+  if (isStaffAreaForbidden(error, area)) {
+    return <StaffAreaForbidden />;
+  }
+
   const isNotFound = isRouteErrorResponse(error) && error.status === 404;
 
   return (

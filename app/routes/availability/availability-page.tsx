@@ -9,6 +9,7 @@ import {
 } from "react-router";
 import { toast } from "sonner";
 
+import { isStaffAreaForbidden, StaffAreaForbidden } from "~/components/layout/staff-area-forbidden";
 import { buildDays } from "~/components/reservation/availability-week";
 import { NoEnabledGroupReason } from "~/components/reservation/no-enabled-group-reason";
 import { ReservationEditError } from "~/components/reservation/reservation-edit-error";
@@ -286,6 +287,7 @@ function CannotApplyNotice() {
  * ローダーが投げた 404 / 500 をここで受け取り、利用者向けの日本語の案内に置き換える。
  * 変更する予約を読めなかったときは、変更できない理由に応じた見出しと戻り道を出す（ADR-014 決定 16）。
  * 戻り先は、開いていた画面の空き状況とダッシュボードにする（ADR-016 決定 15）。
+ * 事務局でない人が事務局の画面を開いたとき（403）は、欄の中身によらず事務局専用の案内を出す（ADR-016 決定 11）。
  */
 export function AvailabilityErrorBoundary({
   error,
@@ -293,6 +295,10 @@ export function AvailabilityErrorBoundary({
 }: Readonly<{ error: unknown; area: AppArea }>) {
   const [searchParams] = useSearchParams();
   const selection = parseCalendarSelection(searchParams);
+
+  if (isStaffAreaForbidden(error, area)) {
+    return <StaffAreaForbidden />;
+  }
 
   if (selection?.kind === "edit") {
     return (
