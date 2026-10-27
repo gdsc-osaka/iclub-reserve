@@ -228,10 +228,25 @@ export function ReservationEditorForm({
       purpose.canCreateDirectly === true &&
       (submitted?.mode ?? initial.mode) === "direct",
   );
-  /** 選んだ解錠の手配（COND-027）。直接作成と、承認済みの予約の施設・日時の直接変更で選ぶ */
-  const [unlockArrangement, setUnlockArrangement] = useState<UnlockArrangement | null>(
-    submitted?.unlockArrangement ?? null,
+  /*
+   * 解錠の手配（COND-027）は、そのときの施設・日時について選ぶもの。
+   * 選んだあとで施設・日時を変えたら、選んだ値は使わずに未選択へ戻し、最後の施設・日時について
+   * 選び直させる（直接変更で、保存済みの値を引き継がないのと同じ理由）。
+   * そのために、選んだ値と、選んだときの施設・日時をまとめて持つ。
+   */
+  const scheduleKey = toScheduleKey(draft);
+  const submittedUnlockArrangement = submitted?.unlockArrangement ?? null;
+  const [unlockArrangementChoice, setUnlockArrangementChoice] = useState<{
+    readonly value: UnlockArrangement;
+    readonly scheduleKey: string;
+  } | null>(
+    submittedUnlockArrangement === null ? null : { value: submittedUnlockArrangement, scheduleKey },
   );
+  /** 選んだ解錠の手配。直接作成と、承認済みの予約の施設・日時の直接変更で選ぶ。まだ選んでいなければ null */
+  const unlockArrangement =
+    unlockArrangementChoice?.scheduleKey === scheduleKey ? unlockArrangementChoice.value : null;
+  const selectUnlockArrangement = (value: UnlockArrangement) =>
+    setUnlockArrangementChoice({ value, scheduleKey });
   /** スマホの全画面の選択を開いているか */
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   /** 確認ダイアログを開いているか */
@@ -438,7 +453,7 @@ export function ReservationEditorForm({
               <UnlockArrangementField
                 idPrefix="direct-edit"
                 value={unlockArrangement}
-                onValueChange={setUnlockArrangement}
+                onValueChange={selectUnlockArrangement}
                 error={fieldErrors.unlockArrangement}
               />
             </div>
@@ -469,7 +484,7 @@ export function ReservationEditorForm({
                   <UnlockArrangementField
                     idPrefix="direct-create"
                     value={unlockArrangement}
-                    onValueChange={setUnlockArrangement}
+                    onValueChange={selectUnlockArrangement}
                     error={fieldErrors.unlockArrangement}
                   />
                 )}
@@ -801,6 +816,18 @@ const toEditPreview = (
 
   return { changed, outcome };
 };
+
+/**
+ * 施設・日・時間帯を 1 つの文字列にまとめる。
+ * 解錠の手配を選んだあとで、施設・日時が変わったかを見分けるのに使う。
+ */
+const toScheduleKey = (draft: ScheduleDraft): string =>
+  [
+    draft.facility.id,
+    draft.day.getTime(),
+    draft.range?.startMinutes ?? "",
+    draft.range?.endMinutes ?? "",
+  ].join("|");
 
 /**
  * 最初に選んでおく時間帯を決める。

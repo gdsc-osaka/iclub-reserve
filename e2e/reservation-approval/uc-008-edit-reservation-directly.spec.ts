@@ -54,21 +54,26 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     await expect(page.getByText("再承認は不要です", { exact: true })).toBeVisible();
     await expect(page.getByText("再承認が必要です")).not.toBeVisible();
 
+    /** 時間帯を選ぶ。スマホでは全画面の選択を開いて選ぶ */
+    const selectTimeRange = async (start: string, end: string) => {
+      if (isMobile) {
+        await page.getByRole("button", { name: /施設・日時/ }).click();
+        const schedule = page.getByRole("dialog", { name: "施設・日時を選ぶ" });
+        await schedule.getByRole("combobox", { name: "開始時刻" }).click();
+        await page.getByRole("option", { name: start }).click();
+        await schedule.getByRole("combobox", { name: "終了時刻" }).click();
+        await page.getByRole("option", { name: end }).click();
+        await schedule.getByRole("button", { name: "決定" }).click();
+      } else {
+        await page.getByRole("combobox", { name: "開始時刻" }).click();
+        await page.getByRole("option", { name: start }).click();
+        await page.getByRole("combobox", { name: "終了時刻" }).click();
+        await page.getByRole("option", { name: end }).click();
+      }
+    };
+
     // 時間帯を 14:00〜16:00 に変更
-    if (isMobile) {
-      await page.getByRole("button", { name: /施設・日時/ }).click();
-      const schedule = page.getByRole("dialog", { name: "施設・日時を選ぶ" });
-      await schedule.getByRole("combobox", { name: "開始時刻" }).click();
-      await page.getByRole("option", { name: "14:00" }).click();
-      await schedule.getByRole("combobox", { name: "終了時刻" }).click();
-      await page.getByRole("option", { name: "16:00" }).click();
-      await schedule.getByRole("button", { name: "決定" }).click();
-    } else {
-      await page.getByRole("combobox", { name: "開始時刻" }).click();
-      await page.getByRole("option", { name: "14:00" }).click();
-      await page.getByRole("combobox", { name: "終了時刻" }).click();
-      await page.getByRole("option", { name: "16:00" }).click();
-    }
+    await selectTimeRange("14:00", "16:00");
 
     // 人数と備考を変更
     await page.getByLabel("使用人数").fill("6");
@@ -78,6 +83,13 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     await expect(
       page.getByText("承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。"),
     ).toBeVisible();
+    await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
+    await page.getByLabel("手配済み").click();
+    await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeEnabled();
+
+    // 選んだあとで時間帯をまた変えると、最後の日時について選び直すよう未選択に戻る
+    await selectTimeRange("14:00", "15:00");
+    await expect(page.getByLabel("手配済み")).not.toBeChecked();
     await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
     await page.getByLabel("手配済み").click();
 
