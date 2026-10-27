@@ -65,8 +65,8 @@ export default [
     route("reservations/new", "routes/reservations/new/route.tsx"),
     route("reservations/:reservationId", "routes/reservations/$reservationId/route.tsx"),
     /*
-     * 予約の内容の変更（UC-005 / UC-017）。
-     * 予約詳細（SCR-005）および一覧（SCR-003）から遷移する。
+     * 予約の内容の変更（UC-005 / UC-017 / ADR-014 決定 15）。
+     * 画面は持たず、変更できるかを確かめてから空き状況カレンダーの変更の欄へ転送する。
      */
     route("reservations/:reservationId/edit", "routes/reservations/$reservationId/edit/route.tsx"),
     /*

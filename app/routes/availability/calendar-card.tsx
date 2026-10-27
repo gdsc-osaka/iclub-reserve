@@ -27,7 +27,7 @@ export function CalendarCard({
   days,
   anchorKey,
   now,
-  canApply,
+  canPickSlot,
   scroll,
   selection,
   onOpenDraft,
@@ -41,8 +41,8 @@ export function CalendarCard({
   anchorKey: string;
   /** ローダーが読んだ現在時刻。今日の列に「いま」の線を引くのに使う */
   now: Date;
-  /** 空いている枠を押して申請へ進めるかどうか（COND-006） */
-  canApply: boolean;
+  /** 空いている枠を押して申請または変更へ進めるかどうか（COND-006 / ADR-014 決定 15） */
+  canPickSlot: boolean;
   scroll: CalendarScroll;
   /** 欄で開いているもの */
   selection: CalendarSelection | null;
@@ -83,7 +83,7 @@ export function CalendarCard({
             anchorKey={anchorKey}
             reservations={reservations}
             now={now}
-            canApply={canApply}
+            canPickSlot={canPickSlot}
             selection={selection}
             onOpenDraft={onOpenDraft}
             onOpenReservation={onOpenReservation}

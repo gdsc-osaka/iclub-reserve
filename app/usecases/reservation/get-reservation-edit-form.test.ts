@@ -4,34 +4,12 @@ import { describe, expect, it } from "vite-plus/test";
 import { GroupErrorCode, GroupStatus, type Group } from "~/domain/group";
 import { MembershipRole, type StoredMembership } from "~/domain/membership";
 import { ReservationErrorCode, ReservationStatus, type Reservation } from "~/domain/reservation";
-import type {
-  ReservationFormArgs,
-  ReservationFormFacility,
-  ReservationFormReservationRow,
-} from "~/query/reservation/reservation-form";
-import type { UserGroupList } from "~/query/user/user-group-list";
 import {
   fakeGroupRepository,
   fakeMembershipRepository,
-  fakeReservationFormQuery,
   fakeReservationRepository,
-  fakeUserGroupListQuery,
 } from "~/testing/fakes";
 import { getReservationEditFormUseCase } from "./get-reservation-edit-form";
-
-const meetingRoomA: ReservationFormFacility = {
-  id: "fac_meeting_a",
-  name: "ミーティングルーム A",
-  description: null,
-  photoUrl: null,
-};
-
-const meetingRoomB: ReservationFormFacility = {
-  id: "fac_meeting_b",
-  name: "ミーティングルーム B",
-  description: null,
-  photoUrl: null,
-};
 
 const defaultReservation: Reservation = {
   id: "rsv_edit_target",
@@ -50,26 +28,6 @@ const defaultReservation: Reservation = {
   updatedAt: new Date("2026-09-14T09:00:00+09:00"),
 };
 
-const targetRow: ReservationFormReservationRow = {
-  id: "rsv_edit_target",
-  facilityId: "fac_meeting_a",
-  groupId: "grp_robotics",
-  groupName: "ロボティクス開発プロジェクト",
-  startAt: new Date("2026-09-16T10:00:00+09:00"),
-  endAt: new Date("2026-09-16T12:00:00+09:00"),
-  status: ReservationStatus.Provisional,
-};
-
-const otherRow: ReservationFormReservationRow = {
-  id: "rsv_other",
-  facilityId: "fac_meeting_a",
-  groupId: "grp_ai_hackers",
-  groupName: "AI ハッカソンチーム",
-  startAt: new Date("2026-09-16T13:00:00+09:00"),
-  endAt: new Date("2026-09-16T15:00:00+09:00"),
-  status: ReservationStatus.Approved,
-};
-
 const groupInfo: Group = {
   id: "grp_robotics",
   name: "ロボティクス開発プロジェクト",
@@ -85,16 +43,6 @@ const memberMembership: StoredMembership = {
   role: MembershipRole.Member,
 };
 
-const myGroups: UserGroupList = [
-  {
-    id: "grp_robotics",
-    name: "ロボティクス開発プロジェクト",
-    status: GroupStatus.Enabled,
-    role: MembershipRole.Member,
-    memberCount: 4,
-  },
-];
-
 /** 予約開始前（2026-09-16 09:00） */
 const nowBefore = new Date("2026-09-16T09:00:00+09:00");
 /** 予約開始後（2026-09-16 10:30） */
@@ -105,8 +53,6 @@ const createDeps = (
     reservation?: Reservation | null;
     membership?: StoredMembership | null;
     group?: Group | null;
-    reservations?: readonly ReservationFormReservationRow[];
-    groups?: UserGroupList;
   } = {},
 ) => {
   const reservationRepository = fakeReservationRepository({
@@ -128,36 +74,21 @@ const createDeps = (
         : okAsync(overrides.group ?? groupInfo),
   });
 
-  const reservationFormQuery = fakeReservationFormQuery({
-    find: (_args: ReservationFormArgs) =>
-      okAsync({
-        facilities: [meetingRoomA, meetingRoomB],
-        reservations: overrides.reservations ?? [targetRow, otherRow],
-      }),
-  });
-
-  const userGroupListQuery = fakeUserGroupListQuery({
-    findByUserId: () => okAsync(overrides.groups ?? myGroups),
-  });
-
   return {
     reservationRepository,
     membershipRepository,
     groupRepository,
-    reservationFormQuery,
-    userGroupListQuery,
   };
 };
 
 describe("getReservationEditFormUseCase", () => {
-  it("(a) 自団体のメンバーは開ける。変更中の予約が日の予約から除かれ、他団体の予約はマスクされる", async () => {
+  it("(a) 自団体のメンバーは開ける", async () => {
     const deps = createDeps();
 
     const result = await getReservationEditFormUseCase(deps, {
       reservationId: "rsv_edit_target",
       actorUserId: "usr_student_01",
       isStaff: false,
-      dateKey: "2026-09-16",
       now: nowBefore,
     });
 
@@ -176,18 +107,6 @@ describe("getReservationEditFormUseCase", () => {
       status: ReservationStatus.Provisional,
     });
     expect(data.isDirect).toBe(false);
-
-    // 施設の選択肢
-    expect(data.facilities).toHaveLength(2);
-
-    // 表示する日の予約一覧: 変更中の予約そのものは除外されている
-    const reservationIds = data.reservations.map((r) => r.id);
-    expect(reservationIds).not.toContain("rsv_edit_target");
-    expect(reservationIds).toContain("rsv_other");
-
-    // 他団体の予約は isOwnGroup: false にマスクされている
-    const other = data.reservations.find((r) => r.id === "rsv_other");
-    expect(other?.isOwnGroup).toBe(false);
   });
 
   it("(b) 予約が無い → NotFound", async () => {
@@ -197,7 +116,6 @@ describe("getReservationEditFormUseCase", () => {
       reservationId: "rsv_missing",
       actorUserId: "usr_student_01",
       isStaff: false,
-      dateKey: "2026-09-16",
       now: nowBefore,
     });
 
@@ -206,13 +124,12 @@ describe("getReservationEditFormUseCase", () => {
   });
 
   it("(c) 他団体の人 → Forbidden", async () => {
-    const deps = createDeps({ membership: null, groups: [] });
+    const deps = createDeps({ membership: null });
 
     const result = await getReservationEditFormUseCase(deps, {
       reservationId: "rsv_edit_target",
       actorUserId: "usr_other_01",
       isStaff: false,
-      dateKey: "2026-09-16",
       now: nowBefore,
     });
 
@@ -235,7 +152,6 @@ describe("getReservationEditFormUseCase", () => {
         reservationId: "rsv_edit_target",
         actorUserId: "usr_student_01",
         isStaff: false,
-        dateKey: "2026-09-16",
         now: nowBefore,
       });
 
@@ -251,7 +167,6 @@ describe("getReservationEditFormUseCase", () => {
       reservationId: "rsv_edit_target",
       actorUserId: "usr_student_01",
       isStaff: false,
-      dateKey: "2026-09-16",
       now: nowAfter,
     });
 
@@ -266,7 +181,6 @@ describe("getReservationEditFormUseCase", () => {
       reservationId: "rsv_edit_target",
       actorUserId: "usr_staff_01",
       isStaff: true,
-      dateKey: "2026-09-16",
       now: nowBefore,
     });
     expect(nonMemberResult.isOk()).toBe(true);
@@ -285,7 +199,6 @@ describe("getReservationEditFormUseCase", () => {
       reservationId: "rsv_edit_target",
       actorUserId: "usr_staff_01",
       isStaff: true,
-      dateKey: "2026-09-16",
       now: nowBefore,
     });
     expect(memberResult.isOk()).toBe(true);

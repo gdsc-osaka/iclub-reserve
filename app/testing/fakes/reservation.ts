@@ -7,7 +7,6 @@ import type { ReservationReadRepository } from "~/domain/reservation/read";
 import type { ApplicantGroupQuery } from "~/query/reservation/applicant-groups";
 import type { GroupUnreadUpdatesQuery } from "~/query/reservation/group-unread-updates";
 import type { ReservationDetailQuery } from "~/query/reservation/reservation-detail";
-import type { ReservationFormQuery } from "~/query/reservation/reservation-form";
 import type { ReservationListQuery } from "~/query/reservation/reservation-list";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import type { ReservationMessageListQuery } from "~/query/reservation/reservation-message-list";
@@ -48,15 +47,6 @@ export function fakeReservationDetailQuery(
   overrides: Partial<ReservationDetailQuery> = {},
 ): ReservationDetailQuery {
   return createUnimplementedFake("ReservationDetailQuery", overrides);
-}
-
-/**
- * テスト用の ReservationFormQuery の偽物を生成する。
- */
-export function fakeReservationFormQuery(
-  overrides: Partial<ReservationFormQuery> = {},
-): ReservationFormQuery {
-  return createUnimplementedFake("ReservationFormQuery", overrides);
 }
 
 /**

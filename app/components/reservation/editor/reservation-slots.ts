@@ -1,12 +1,10 @@
 import { CLOSE_MINUTES, OPEN_MINUTES } from "~/components/reservation/availability-week";
 import { RESERVATION_STEP_MINUTES, ReservationStatus } from "~/domain/reservation";
-import { atTokyoMinutes, startOfTokyoDay, toTokyoTimeKey } from "~/lib/date";
-import type { ReservationFormReservation } from "~/query/reservation/reservation-form";
+import { atTokyoMinutes, toTokyoTimeKey } from "~/lib/date";
 
 /**
- * 予約の日時を選ぶタイムラインで使う計算。
+ * 予約の日時を選ぶ計算。
  *
- * 仮予約の申請（SCR-002）で使っており、予約の編集（UC-017 / UC-005）でも同じものを使う想定。
  * 画面の都合しか持たない計算なので、React から切り離して純粋な関数にしてある。
  * 空き状況カレンダー（SCR-001）が 1 時間単位で枠を並べるのに対し、
  * こちらは 30 分単位（`RESERVATION_STEP_MINUTES`）で並べる。
@@ -33,50 +31,6 @@ export interface SlotRange {
   readonly startMinutes: number;
   readonly endMinutes: number;
 }
-
-/** タイムラインに描く予約 1 件。位置はその日の 0 時から何分かで表す。 */
-export interface TimelineReservation {
-  readonly reservation: ReservationFormReservation;
-  /** 表示範囲に収めた開始位置（分）。9:00 より前から続く予約は 9:00 に切り詰める */
-  readonly startMinutes: number;
-  /** 表示範囲に収めた終了位置（分） */
-  readonly endMinutes: number;
-}
-
-/** ある日時が、基準の日の 0 時から何分後かを返す（日をまたぐと 1440 を超える） */
-const minutesFromDayStart = (date: Date, dayStart: Date): number =>
-  (date.getTime() - dayStart.getTime()) / (60 * 1000);
-
-/**
- * 1 日・1 施設分の予約を、時間軸に収まる形で取り出す。
- *
- * 予約は日をまたぐことも、利用可能時間の外にはみ出すこともありうるので、
- * 表示できる範囲へ切り詰める。切り詰めるのは帯の位置だけで、
- * 画面に出す時刻は予約そのものの値を使うこと。
- * 切り詰めた時刻を出すと、9 時前から続いている予約が 9 時開始に見えてしまう。
- */
-export const toTimelineReservations = (
-  reservations: readonly ReservationFormReservation[],
-  facilityId: string,
-  day: Date,
-): readonly TimelineReservation[] => {
-  const dayStart = startOfTokyoDay(day);
-  const dayOpen = atTokyoMinutes(day, OPEN_MINUTES);
-  const dayClose = atTokyoMinutes(day, CLOSE_MINUTES);
-
-  return reservations
-    .filter(
-      (reservation) =>
-        reservation.facilityId === facilityId &&
-        reservation.startAt < dayClose &&
-        reservation.endAt > dayOpen,
-    )
-    .map((reservation) => ({
-      reservation,
-      startMinutes: Math.max(OPEN_MINUTES, minutesFromDayStart(reservation.startAt, dayStart)),
-      endMinutes: Math.min(CLOSE_MINUTES, minutesFromDayStart(reservation.endAt, dayStart)),
-    }));
-};
 
 /** `toBlockedSlots` が読む項目だけの形。申請フォームの帯と空き状況カレンダーの帯の両方を渡せる */
 export interface BlockedSlotItem {
@@ -197,58 +151,13 @@ export const toConflicts = <T extends ConflictItem>(
 };
 
 /**
- * タイムラインの枠を押したときに、新しく選ばれる時間帯を返す。
- *
- * - まだ何も選んでいない → 押した枠だけ（30 分）
- * - 選んでいる開始時刻より後ろを押した → そこまで伸ばす
- * - 選んでいる開始時刻と同じか前を押した → その枠から選び直す
- *
- * 「1 回目で開始、2 回目で終了」と段階を持たせていないのは、
- * 段階を画面に出さないと、いま何を選んでいるのかが利用者に分からないため。
- * この決め方なら、押した場所と結果が常に 1 対 1 で対応する。
- *
- * 伸ばす途中に承認済みの予約があるときは、手前で止めずに、
- * 押した枠から選び直す（COND-001）。手前で止めると、押した枠より前に
- * 承認済みの予約がある限り何度押しても選択が動かず、
- * 押しても反応しない画面に見えてしまう。
- */
-export const selectSlot = (
-  current: SlotRange | null,
-  slotStartMinutes: number,
-  blockedSlots: ReadonlySet<number>,
-): SlotRange => {
-  const single = {
-    startMinutes: slotStartMinutes,
-    endMinutes: slotStartMinutes + RESERVATION_STEP_MINUTES,
-  };
-
-  if (current === null || slotStartMinutes <= current.startMinutes) return single;
-
-  for (
-    let minutes = current.startMinutes + RESERVATION_STEP_MINUTES;
-    minutes <= slotStartMinutes;
-    minutes += RESERVATION_STEP_MINUTES
-  ) {
-    if (blockedSlots.has(minutes)) return single;
-  }
-
-  return {
-    startMinutes: current.startMinutes,
-    endMinutes: slotStartMinutes + RESERVATION_STEP_MINUTES,
-  };
-};
-
-/**
  * タイムラインをなぞって選んだときの、いまの時間帯を返す。
  *
  * `anchorSlot` は押し始めた枠、`slotStartMinutes` はいま指している枠。
  * 上へなぞっても下へなぞっても選べるように、どちらが前かはここで決める。
  *
  * なぞった先に選べない枠（承認済みの予約と重なる枠・過ぎた枠）があるときは、
- * その**手前で止める**。{@link selectSlot} が押した枠から選び直すのとは逆の扱いにしている。
- * あちらは離れた枠を 1 回押す操作なので、途中に予約があると
- * 何度押しても選択が動かない画面に見えてしまうが、
- * なぞる操作では指の動きに合わせて帯が伸び続けるので、
+ * その**手前で止める**。なぞる操作では指の動きに合わせて帯が伸び続けるので、
  * 止まった位置がそのまま「ここまでしか取れない」と読める。
  */
 export const dragRange = (

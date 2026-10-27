@@ -5,12 +5,15 @@ import { toDayBlocks, type AvailabilityDay } from "~/components/reservation/avai
 import type { SlotRange } from "~/components/reservation/editor/reservation-slots";
 import { startOfTokyoDay, toTokyoDateKey } from "~/lib/date";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
+import type { ReservationEditTarget } from "~/usecases/reservation/get-reservation-edit-form";
 
 import {
   parseCalendarSelection,
   toCalendarPath,
+  toReservationDraft,
   type CalendarDraft,
   type CalendarSelection,
+  type ParsedCalendarSelection,
 } from "./paths";
 
 /**
@@ -19,22 +22,48 @@ import {
  * - 予約がデータに無い（却下された・別の施設の予約・ID を書き換えた）
  * - 仮の枠の日が、読み込んだ 4 週間の中に無い
  * - 申請できない人の仮の枠（COND-006）
+ * - 変更前の予約が無い・ID が違う・変更後の仮の枠の日が 4 週間の中に無い（ADR-014 決定 15）
  */
 export const toOpenSelection = (
-  selection: CalendarSelection | null,
+  requested: ParsedCalendarSelection | null,
   reservations: readonly AvailabilityReservation[],
   days: readonly AvailabilityDay[],
   canApply: boolean,
+  editReservation: ReservationEditTarget | null = null,
 ): CalendarSelection | null => {
-  if (selection === null) return null;
+  if (requested === null) return null;
 
-  if (selection.kind === "reservation") {
-    return reservations.some((item) => item.id === selection.reservationId) ? selection : null;
+  if (requested.kind === "reservation") {
+    return reservations.some((item) => item.id === requested.reservationId) ? requested : null;
+  }
+
+  if (requested.kind === "edit") {
+    if (editReservation === null || editReservation.id !== requested.reservationId) {
+      return null;
+    }
+    const draft = requested.draft ?? toReservationDraft(editReservation);
+    if (!days.some((day) => day.dateKey === draft.dateKey)) return null;
+    return { kind: "edit", reservationId: requested.reservationId, draft };
   }
 
   if (!canApply) return null;
-  return days.some((day) => day.dateKey === selection.draft.dateKey) ? selection : null;
+  return days.some((day) => day.dateKey === requested.draft.dateKey) ? requested : null;
 };
+
+/**
+ * 変更の欄を開いているとき、変更する予約そのものを予約一覧から除く（ADR-014 決定 15）。
+ *
+ * 除かないと自分自身と重なってしまい、承認済みの予約の時間を少しずらすだけでも
+ * 「承認済みの予約と重なっています」になってしまうため。
+ * 変更を開いていないとき（`editingReservationId` が null）は、そのまま返す。
+ */
+export const excludeEditingReservation = <T extends { readonly id: string }>(
+  reservations: readonly T[],
+  editingReservationId: string | null,
+): readonly T[] =>
+  editingReservationId === null
+    ? reservations
+    : reservations.filter((reservation) => reservation.id !== editingReservationId);
 
 /**
  * 開いているものの日と時間帯。カレンダーの見える範囲に入れるのに使う。
@@ -46,7 +75,7 @@ export const toRevealTarget = (
   reservations: readonly AvailabilityReservation[],
 ): { readonly dateKey: string; readonly range: SlotRange | null } | null => {
   if (selection === null) return null;
-  if (selection.kind === "draft") return selection.draft;
+  if (selection.kind === "draft" || selection.kind === "edit") return selection.draft;
 
   const reservation = reservations.find((item) => item.id === selection.reservationId);
   if (reservation === undefined) return null;
@@ -73,9 +102,9 @@ const isOpenedInCalendar = (state: unknown): boolean =>
   state.calendarSelection === true;
 
 /**
- * 空き状況カレンダーで開いているもの（予約・仮の枠）を URL から読み、開く・閉じる操作を返す（ADR-014 決定 8）。
+ * 空き状況カレンダーで開いているもの（予約・仮の枠・変更）を URL から読み、開く・閉じる操作を返す（ADR-014 決定 8・15）。
  *
- * 開いているものを URL（`?reservation=`・`?draft=`）に置くので、そのまま人に送れ、
+ * 開いているものを URL（`?reservation=`・`?draft=`・`?edit=`）に置くので、そのまま人に送れ、
  * 読み込み直しても同じものが開く。戻る操作で閉じられる。
  */
 export function useCalendarSelection({
@@ -84,6 +113,7 @@ export function useCalendarSelection({
   reservations,
   days,
   canApply,
+  editReservation = null,
 }: Readonly<{
   facilityId: string;
   /** 基準の日（URL の `date`）。開く・閉じるときもそのまま持ち回る */
@@ -91,6 +121,8 @@ export function useCalendarSelection({
   reservations: readonly AvailabilityReservation[];
   days: readonly AvailabilityDay[];
   canApply: boolean;
+  /** ローダーが読んだ変更前の予約（変更を開いているときのみ） */
+  editReservation?: ReservationEditTarget | null;
 }>) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -98,8 +130,8 @@ export function useCalendarSelection({
 
   const requested = useMemo(() => parseCalendarSelection(searchParams), [searchParams]);
   const selection = useMemo(
-    () => toOpenSelection(requested, reservations, days, canApply),
-    [requested, reservations, days, canApply],
+    () => toOpenSelection(requested, reservations, days, canApply, editReservation),
+    [requested, reservations, days, canApply, editReservation],
   );
 
   /** 開いているものを外した URL へ移る。履歴には積まない */
@@ -112,19 +144,24 @@ export function useCalendarSelection({
   };
 
   // 開いていたものがデータから消えた（却下されたなど）・開けない URL のときは、URL からも外す
-  const hasSelectionParam = searchParams.has("reservation") || searchParams.has("draft");
+  const hasSelectionParam =
+    searchParams.has("reservation") || searchParams.has("draft") || searchParams.has("edit");
   useEffect(() => {
     if (hasSelectionParam && selection === null) replaceWithoutSelection();
   }, [hasSelectionParam, selection]);
 
   /**
-   * 予約か仮の枠を開く。
+   * 予約か仮の枠か変更を開く。
    *
    * 閉じた状態から開くときだけ履歴に積む。開いたまま選び直すたびに積むと、
    * 戻る操作で閉じるまでの回数が増えてしまう。
    */
-  const open = (next: CalendarSelection, nextAnchorKey = anchorKey) => {
-    const path = toCalendarPath(facilityId, nextAnchorKey, next);
+  const open = (
+    next: CalendarSelection,
+    nextAnchorKey = anchorKey,
+    nextFacilityId = facilityId,
+  ) => {
+    const path = toCalendarPath(nextFacilityId, nextAnchorKey, next);
     if (selection === null) {
       void navigate(path, { preventScrollReset: true, state: openedInCalendarState });
     } else {
@@ -132,19 +169,49 @@ export function useCalendarSelection({
     }
   };
 
+  /**
+   * その日を開くときの基準の日（date）。読み込んだ 4 週間（days）の中なら今の基準の日のまま、
+   * 外ならその日を基準の日にして読み直す（ADR-014 決定 11）。
+   */
+  const anchorKeyFor = (dateKey: string): string =>
+    days.some((day) => day.dateKey === dateKey) ? anchorKey : dateKey;
+
   return {
     selection,
     /**
-     * 仮の枠を開く。
-     *
-     * 仮の枠の日が読み込んだ 4 週間（days）に無ければ、その日を基準の日（date）にして開く（ADR-014 決定 11）。
-     * 中にあれば、今の基準の日のまま。
+     * 仮の枠を開く。変更を開いているなら、変更のまま変更後の仮の枠だけを替える。
      */
     openDraft: (draft: CalendarDraft) => {
-      const inWindow = days.some((day) => day.dateKey === draft.dateKey);
-      open({ kind: "draft", draft }, inWindow ? anchorKey : draft.dateKey);
+      const next: CalendarSelection =
+        selection?.kind === "edit"
+          ? { kind: "edit", reservationId: selection.reservationId, draft }
+          : { kind: "draft", draft };
+      open(next, anchorKeyFor(draft.dateKey));
     },
     openReservation: (reservationId: string) => open({ kind: "reservation", reservationId }),
+    /**
+     * 予約の欄を、その予約の変更に替える（ADR-014 決定 15）。変更後の仮の枠は、今の日時から始める。
+     *
+     * 予約は読み込んだ 4 週間の中にあるので、基準の日は今のまま。
+     */
+    openEdit: (reservationId: string) => {
+      const target = reservations.find((item) => item.id === reservationId);
+      if (target === undefined) return;
+      open({ kind: "edit", reservationId, draft: toReservationDraft(target) });
+    },
+    /**
+     * 変更をやめて、変更前の予約の内容の欄へ戻る（ADR-014 決定 15）。
+     *
+     * 施設を切り替えていても、変更前の予約の施設へ戻す。予約はその施設のカレンダーにしか出ないため。
+     */
+    cancelEdit: () => {
+      if (editReservation === null) return;
+      open(
+        { kind: "reservation", reservationId: editReservation.id },
+        anchorKeyFor(toTokyoDateKey(editReservation.startAt)),
+        editReservation.facilityId,
+      );
+    },
     /** 閉じる。カレンダーの中で開いたなら、戻る操作と同じく開く前の画面へ戻る */
     close: () => {
       if (isOpenedInCalendar(location.state)) void navigate(-1);
@@ -152,3 +219,6 @@ export function useCalendarSelection({
     },
   };
 }
+
+/** 欄で開いているものを開く・替える・閉じる操作（`useCalendarSelection` の戻り値から、開いているものを除いたもの） */
+export type CalendarSelectionOps = Omit<ReturnType<typeof useCalendarSelection>, "selection">;

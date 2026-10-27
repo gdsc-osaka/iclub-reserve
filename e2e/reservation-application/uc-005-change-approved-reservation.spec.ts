@@ -40,12 +40,14 @@ test.describe("UC-005 承認済み予約の内容を変更する", { tag: "@UC-0
     await openPage(page, `/reservations/${reservation.id}`);
     await page.getByRole("link", { name: "変更" }).click();
 
-    await expect(page).toHaveURL(`/reservations/${reservation.id}/edit`);
+    await expect(page).toHaveURL(new RegExp(`edit=${reservation.id}`));
+    const panel = page.getByRole("region", { name: "予約の変更" });
+    await expect(panel).toBeVisible();
 
     // 使用人数だけを変更する
-    await page.getByLabel("使用人数").fill("5");
+    await panel.getByLabel("使用人数").fill("5");
 
-    await page.getByRole("button", { name: "変更内容を確認する" }).click();
+    await panel.getByRole("button", { name: "変更内容を確認する" }).click();
     const confirm = page.getByRole("alertdialog", { name: "この内容で変更しますか？" });
     await expect(confirm.getByText("5 名")).toBeVisible();
     await expect(confirm.getByText("変更前: 3 名")).toBeVisible();
@@ -54,18 +56,21 @@ test.describe("UC-005 承認済み予約の内容を変更する", { tag: "@UC-0
 
     await confirm.getByRole("button", { name: "この内容で変更する" }).click();
 
-    // 詳細画面に遷移し、完了案内と承認済みのままの内容が表示される
-    await expect(page).toHaveURL(`/reservations/${reservation.id}?edited=changed`);
-    await expect(page.getByText("予約を変更しました。")).toBeVisible();
-    await expect(page.getByText("承認済み", { exact: true })).toBeVisible();
-    await expect(page.getByText("5名")).toBeVisible();
+    // トーストが出現し、URL と欄が変更後の承認済み予約を表示する
+    await expect(page.getByText("予約を変更しました")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`reservation=${reservation.id}`));
+    await expect(page).not.toHaveURL(/edit=/);
+
+    const detailPanel = page.getByRole("region", { name: "予約の内容" });
+    await expect(detailPanel).toBeVisible();
+    await expect(detailPanel.getByText("承認済み", { exact: true })).toBeVisible();
+    await expect(detailPanel.getByText("5 名")).toBeVisible();
   });
 
   test("時間帯を変えると、確認ダイアログに再承認の警告が出て、変更後は仮予約になる", async ({
     page,
     db,
     signInAs,
-    isMobile,
   }) => {
     const member = await createUser(db);
     const group = await createGroup(db, {
@@ -83,21 +88,20 @@ test.describe("UC-005 承認済み予約の内容を変更する", { tag: "@UC-0
     await signInAs(member.id);
 
     await openPage(page, `/reservations/${reservation.id}/edit`);
+    await expect(page).toHaveURL(new RegExp(`edit=${reservation.id}`));
+    const panel = page.getByRole("region", { name: "予約の変更" });
+    await expect(panel).toBeVisible();
 
     // 時間帯を 13:00〜15:00 に変更
-    if (isMobile) await page.getByRole("button", { name: /施設・日時/ }).click();
-    const schedule = isMobile ? page.getByRole("dialog", { name: "施設・日時を選ぶ" }) : page;
-
-    await schedule.getByRole("combobox", { name: "開始時刻" }).click();
+    await panel.getByRole("combobox", { name: "開始時刻" }).click();
     await page.getByRole("option", { name: "13:00" }).click();
-    await schedule.getByRole("combobox", { name: "終了時刻" }).click();
+    await panel.getByRole("combobox", { name: "終了時刻" }).click();
     await page.getByRole("option", { name: "15:00" }).click();
-    if (isMobile) await schedule.getByRole("button", { name: "決定" }).click();
 
     // フォーム上に再承認が必要な警告が出ている
-    await expect(page.getByText("再承認が必要です")).toBeVisible();
+    await expect(panel.getByText("再承認が必要です")).toBeVisible();
 
-    await page.getByRole("button", { name: "変更内容を確認する" }).click();
+    await panel.getByRole("button", { name: "変更内容を確認する" }).click();
     const confirm = page.getByRole("alertdialog", { name: "この内容で変更しますか？" });
     await expect(confirm.getByText("再承認が必要です")).toBeVisible();
     await expect(confirm.getByText("仮予約", { exact: true })).toBeVisible();
@@ -106,9 +110,13 @@ test.describe("UC-005 承認済み予約の内容を変更する", { tag: "@UC-0
     await confirm.getByRole("button", { name: "この内容で変更する" }).click();
 
     // 変更後は仮予約に戻る
-    await expect(page).toHaveURL(`/reservations/${reservation.id}?edited=changed`);
-    await expect(page.getByText("予約を変更しました。")).toBeVisible();
-    await expect(page.getByText("仮予約", { exact: true })).toBeVisible();
+    await expect(page.getByText("予約を変更しました")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`reservation=${reservation.id}`));
+    await expect(page).not.toHaveURL(/edit=/);
+
+    const detailPanel = page.getByRole("region", { name: "予約の内容" });
+    await expect(detailPanel).toBeVisible();
+    await expect(detailPanel.getByText("仮予約", { exact: true })).toBeVisible();
   });
 
   test("開始日時を過ぎた予約には、一覧・詳細とも「変更」が出ない", async ({
