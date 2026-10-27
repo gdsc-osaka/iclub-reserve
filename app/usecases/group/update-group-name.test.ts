@@ -144,13 +144,43 @@ describe("updateGroupNameUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    // acted_as_staff 判定のため所属を 1 回引く（COND-012）
-    expect(memberships.findByGroupAndUser).toHaveBeenCalledTimes(1);
+    // COND-030 (1): 事務局は所属を引かない
+    expect(memberships.findByGroupAndUser).toHaveBeenCalledTimes(0);
     expect(groups.updateName).toHaveBeenCalledTimes(1);
     expect(groups.updateName.mock.calls[0]?.[0]?.name).toBe("事務局による変更名");
     const auditLog = groups.updateName.mock.calls[0]?.[1];
     expect(auditLog?.actedAsStaff).toBe(true);
   });
+
+  /*
+   * COND-030 の (2): 団体の管理者を兼ねる事務局が同じ操作をしても、
+   * どちらの画面から行ったかで acted_as_staff が変わる。
+   */
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
+    "団体の管理者を兼ねる事務局が変更すると、isStaff: %s（事務局の画面からか）のとき actedAsStaff が %s になる",
+    async (isStaff, actedAsStaff) => {
+      const groups = createFakeGroupRepository();
+      const staffAdmin: StoredMembership = { ...adminMembership, userId: "usr_staff_admin" };
+      const memberships = createFakeMembershipRepository([staffAdmin]);
+
+      const result = await updateGroupNameUseCase(
+        { groupRepository: groups.repository, membershipRepository: memberships.repository },
+        {
+          groupId: testGroup.id,
+          actorUserId: staffAdmin.userId,
+          isStaff,
+          name: "兼任の事務局による変更名",
+          now: baseNow,
+        },
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(groups.updateName.mock.calls[0]?.[1]?.actedAsStaff).toBe(actedAsStaff);
+    },
+  );
 
   // 2b. 名前が変わっていない場合は書き込まず成功する（COND-013）
   it("名前が変わっていない場合は updateName を呼ばずに成功する", async () => {

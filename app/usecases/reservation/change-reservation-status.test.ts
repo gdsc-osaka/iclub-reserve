@@ -556,10 +556,29 @@ describe("changeReservationStatusUseCase", () => {
     });
 
     /*
-     * 事務局の行には取り消し・キャンセルが無いので、事務局であることを理由に
-     * 所属を省いてはいけない。省くと、自団体の予約を取り消せなくなる。
+     * COND-030 (1): 事務局の画面では取り消し・キャンセルはできず（事務局キャンセルを使う）、
+     * 所属も引かない。団体として取り消すには利用者の画面（isStaff: false）から行う。
      */
-    it("事務局であっても、取り消しのときは所属を引いてメンバーとしての権限を併せ持つ", async () => {
+    it("事務局であっても団体の予約を取り消すには利用者の画面から行い、所属を引く", async () => {
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        membership: { ...memberMembership, userId: "usr_staff_01" },
+      });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: false,
+        transition: ReservationTransition.Withdraw,
+        appBaseUrl: "https://reserve.example.com",
+        reason: "都合がつかなくなったため",
+      });
+
+      expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
+      expect(result.isOk()).toBe(true);
+    });
+
+    it("事務局の画面から取り消そうとしても所属は引かれず権限エラーになる", async () => {
       const { deps, spies } = createMockDeps({
         reservation: baseProvisionalReservation,
         membership: { ...memberMembership, userId: "usr_staff_01" },
@@ -574,8 +593,9 @@ describe("changeReservationStatusUseCase", () => {
         reason: "都合がつかなくなったため",
       });
 
-      expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
-      expect(result.isOk()).toBe(true);
+      expect(spies.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
     });
 
     it("所属の確認に失敗したら DatabaseError を返す", async () => {

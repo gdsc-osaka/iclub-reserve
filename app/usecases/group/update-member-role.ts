@@ -9,7 +9,7 @@ import { toMembershipRoleChanges } from "~/domain/membership/audit-log";
 import {
   ensureActorCan,
   groupNotFound,
-  resolveGroupActorWithMembership,
+  resolveGroupActor,
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import { ensureNotLastAdmin } from "./_shared/last-admin";
@@ -23,7 +23,7 @@ export interface UpdateMemberRoleDeps {
 export interface UpdateMemberRoleArgs {
   readonly groupId: string;
   readonly actorUserId: string;
-  /** 事務局スタッフかどうか（COND-009）。団体に所属していなくても操作できる */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** 役割を変える相手のユーザー ID */
   readonly targetUserId: string;
@@ -39,7 +39,7 @@ export interface UpdateMemberRoleArgs {
  * 入力の検証（役割・対象）を認可より先に置いている。検証の結果は特定の団体に依存しないので、
  * 先に返しても団体の有無は漏れず、無効なリクエストで D1 を往復せずに済む。
  * 認可そのものの判断（事務局を通す・存在を秘匿する・足りない権限を伝える）は
- * resolveGroupActorWithMembership と ensureActorCan が持つ（COND-009 / COND-011）。
+ * resolveGroupActor と ensureActorCan が持つ（COND-009 / COND-011 / COND-030）。
  *
  * 【同時実行の限界について】
  * Cloudflare D1 では複数クエリにまたがる厳密なトランザクションを張れないため、
@@ -62,7 +62,7 @@ export const updateMemberRoleUseCase = (
     const targetUserId = args.targetUserId.trim();
     if (targetUserId === "") return errAsync(memberNotSpecified());
 
-    const actor = yield* resolveGroupActorWithMembership(deps, {
+    const actor = yield* resolveGroupActor(deps, {
       groupId,
       actorUserId: args.actorUserId,
       isStaff: args.isStaff,

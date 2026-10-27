@@ -246,8 +246,8 @@ describe("updateMemberRoleUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    // COND-012: 操作者の所属確認（1回）+ 対象メンバーの所属確認（1回）の計 2 回
-    expect(fake.findByGroupAndUser).toHaveBeenCalledTimes(2);
+    // COND-030 (1): 事務局は所属を引かないため、対象メンバーの所属確認（1回）のみ
+    expect(fake.findByGroupAndUser).toHaveBeenCalledTimes(1);
     expect(fake.updateRole).toHaveBeenCalledTimes(1);
     const auditLog = fake.updateRole.mock.calls[0]?.[1];
     expect(auditLog?.actedAsStaff).toBe(true);

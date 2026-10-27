@@ -7,7 +7,6 @@ import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { directEditMailEvent } from "~/domain/mail/reservation-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import {
-  ReservationAction,
   type ReservationError,
   type ReservationRepository,
   type ReservationStatus,
@@ -50,7 +49,7 @@ export interface EditReservationDirectlyDeps {
 export interface EditReservationDirectlyArgs {
   readonly reservationId: string;
   readonly actorUserId: string;
-  /** 操作する人が事務局かどうか（COND-009） */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   readonly now: Date;
   /** 承認済みの予約で施設・日時を変えたとき、解錠の手配を選び直す（COND-027） */
@@ -91,14 +90,9 @@ export const editReservationDirectlyUseCase = (
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
     /*
-     * 事務局の行に EditDirect が入っているため、事務局なら所属を引かずに済む。
+     * 事務局の画面からの操作なので、所属を読まずに組み立てる（COND-030 の (1)）。
      */
-    const actor = yield* resolveReservationActor(
-      deps,
-      reservation.groupId,
-      args,
-      ReservationAction.EditDirect,
-    );
+    const actor = yield* resolveReservationActor(deps, reservation.groupId, args);
 
     // 1. 誰が・いまの状態・開始前か（COND-009 / STATE-001）
     yield* canDirectEditReservation(reservation, actor, now);

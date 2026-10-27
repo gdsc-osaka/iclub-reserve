@@ -242,7 +242,7 @@ describe("createProvisionalReservationUseCase", () => {
     });
   });
 
-  it("その団体の管理者でもある事務局が申請した場合、actedAsStaff は false になる", async () => {
+  it("その団体の管理者でもある事務局が利用者の画面から申請した場合、actedAsStaff は false になる", async () => {
     const { deps, create } = createDeps({
       membership: {
         id: "gm_test",
@@ -252,6 +252,32 @@ describe("createProvisionalReservationUseCase", () => {
       },
     });
 
+    // COND-030 (1): 利用者の画面（isStaff: false）からの操作は所属の役割で申請される
+    const result = await createProvisionalReservationUseCase(deps, {
+      ...args,
+      actorUserId: "usr_staff_admin",
+      isStaff: false,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(create.mock.calls[0]?.[2]).toMatchObject({
+      actorId: "usr_staff_admin",
+      actedAsStaff: false,
+      action: AuditLogAction.ReservationApply,
+    });
+  });
+
+  it("その団体の管理者でもある事務局が事務局の画面から申請した場合、所属に関わらず actedAsStaff は true になる", async () => {
+    const { deps, create } = createDeps({
+      membership: {
+        id: "gm_test",
+        groupId: "grp_robotics",
+        userId: "usr_staff_admin",
+        role: MembershipRole.Admin,
+      },
+    });
+
+    // COND-030 (1): 事務局の画面（isStaff: true）からの操作は所属を読まず事務局として申請される
     const result = await createProvisionalReservationUseCase(deps, {
       ...args,
       actorUserId: "usr_staff_admin",
@@ -261,7 +287,7 @@ describe("createProvisionalReservationUseCase", () => {
     expect(result.isOk()).toBe(true);
     expect(create.mock.calls[0]?.[2]).toMatchObject({
       actorId: "usr_staff_admin",
-      actedAsStaff: false,
+      actedAsStaff: true,
       action: AuditLogAction.ReservationApply,
     });
   });

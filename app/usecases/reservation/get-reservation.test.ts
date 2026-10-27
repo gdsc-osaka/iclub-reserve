@@ -191,9 +191,10 @@ describe("getReservationUseCase", () => {
       ]);
     });
 
-    it("所属している事務局には、仮予約なら取り消し・承認・却下のすべてが入る", async () => {
+    it("事務局の画面では、所属に関わらず事務局のアクション（仮予約なら承認・却下）が入る", async () => {
       const { deps } = createDeps({ membership });
 
+      // COND-030 (1): 事務局の画面（isStaff: true）では所属を引かないため、取り消し（withdraw）は入らない
       const result = await getReservationUseCase(deps, {
         reservationId: "rsv_01",
         actorUserId: "usr_staff_01",
@@ -205,10 +206,26 @@ describe("getReservationUseCase", () => {
       expect(result.isOk()).toBe(true);
       const data = result._unsafeUnwrap();
       expect(data.transitions).toEqual([
-        ReservationTransition.Withdraw,
         ReservationTransition.Approve,
         ReservationTransition.Reject,
       ]);
+    });
+
+    it("所属している事務局が利用者の画面から開いた場合、メンバーとして取り消しが入る", async () => {
+      const { deps } = createDeps({ membership });
+
+      // COND-030 (1): 利用者の画面（isStaff: false）から開いた場合は団体メンバーとしての権限になる
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_01",
+        isStaff: false,
+        now: defaultNow,
+        auditLogPage: 1,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const data = result._unsafeUnwrap();
+      expect(data.transitions).toEqual([ReservationTransition.Withdraw]);
     });
 
     it("他団体のユーザーには概要だけを返し、transitions は空", async () => {
@@ -307,9 +324,10 @@ describe("getReservationUseCase", () => {
   });
 
   describe("所属の引き方", () => {
-    it("事務局でも所属を引く（findByGroupAndUser が呼ばれる）", async () => {
+    it("事務局の画面では所属を引かない（findByGroupAndUser が呼ばれない）", async () => {
       const { deps, spies } = createDeps({ membership: null });
 
+      // COND-030 (1): 事務局の画面（isStaff: true）では所属を読まない
       await getReservationUseCase(deps, {
         reservationId: "rsv_01",
         actorUserId: "usr_staff_01",
@@ -318,7 +336,7 @@ describe("getReservationUseCase", () => {
         auditLogPage: 1,
       });
 
-      expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
+      expect(spies.findByGroupAndUser).not.toHaveBeenCalled();
     });
 
     it("予約が属する団体での所属を引く（row.groupId を渡している）", async () => {

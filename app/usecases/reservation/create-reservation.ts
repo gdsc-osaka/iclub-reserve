@@ -23,10 +23,7 @@ import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
 import { ensureGroupIsEnabled } from "./_shared/group-enabled";
 import { toRecipientsError } from "./_shared/mail-recipients";
-import {
-  ensureActorCan,
-  resolveReservationActorWithMembership,
-} from "./_shared/reservation-authorization";
+import { ensureActorCan, resolveReservationActor } from "./_shared/reservation-authorization";
 
 export interface CreateProvisionalReservationDeps {
   readonly reservationRepository: ReservationRepository;
@@ -43,7 +40,7 @@ export interface CreateProvisionalReservationDeps {
 
 export interface CreateProvisionalReservationArgs {
   readonly actorUserId: string;
-  /** 申請する人が事務局かどうか（COND-009） */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** 「過去の日時か」を判定する基準になる現在時刻 */
   readonly now: Date;
@@ -78,9 +75,8 @@ export interface CreateProvisionalReservationReturns {
  * 通知先の取得（EVT-001）は確認がすべて通ったあとに引き、予約の作成と不可分に
  * outbox へ積む（ADR-002 決定 3）。
  *
- * 権限の確認では、事務局は所属を引かずに通る。権限表の事務局の行に仮予約の申請が
- * 入っているので（COND-009）、団体での役割を足しても結果が変わらないため。
- * この省略は resolveReservationActor が表から導いている。
+ * 権限の確認では、事務局の画面では所属を読まず、利用者の画面では事務局であっても
+ * 所属を読んで判定する（COND-030 の (1)）。
  *
  * 各ステップを動かしてよいかは、それぞれの関数のコメントに書いてある。
  */
@@ -104,11 +100,7 @@ export const createProvisionalReservationUseCase = (
     };
 
     yield* validateReservationDraft(args.reservation, now);
-    const actor = yield* resolveReservationActorWithMembership(
-      deps,
-      args.reservation.groupId,
-      args,
-    );
+    const actor = yield* resolveReservationActor(deps, args.reservation.groupId, args);
     yield* ensureActorCan(
       actor,
       ReservationAction.CreateProvisional,

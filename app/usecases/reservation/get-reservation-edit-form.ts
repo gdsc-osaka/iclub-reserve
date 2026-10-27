@@ -3,7 +3,6 @@ import { okAsync, type ResultAsync, safeTry } from "neverthrow";
 import type { GroupRepository } from "~/domain/group";
 import type { MembershipRepository } from "~/domain/membership";
 import {
-  ReservationAction,
   ReservationErrorCode,
   type ReservationError,
   type ReservationRepository,
@@ -28,6 +27,7 @@ export interface GetReservationEditFormDeps {
 export interface GetReservationEditFormArgs {
   readonly reservationId: string;
   readonly actorUserId: string;
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   readonly now: Date;
 }
@@ -72,15 +72,10 @@ export const getReservationEditFormUseCase = (
     const isDirect = mode === ReservationEditMode.Direct;
 
     /*
-     * 2. 事務局なら直接変更（EditDirect）、団体なら通常の変更（Edit）で認可を解決する。
-     * 事務局は所属を引かずに済む。
+     * 2. 認可を解決する（COND-030 の (1)）。
+     * 事務局の画面なら所属を読まず、利用者の画面なら所属を読む。
      */
-    const actor = yield* resolveReservationActor(
-      deps,
-      reservation.groupId,
-      args,
-      isDirect ? ReservationAction.EditDirect : ReservationAction.Edit,
-    );
+    const actor = yield* resolveReservationActor(deps, reservation.groupId, args);
 
     // 3. 誰が・いまの状態・開始前か（action と同じ判定）。ここで弾かれた予約は画面を開かせない
     yield* canChangeReservationContent(reservation, actor, args.now);

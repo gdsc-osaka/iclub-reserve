@@ -13,6 +13,7 @@ import {
   type Actor,
   type MembershipError,
   type MembershipRepository,
+  type StoredMembership,
 } from "~/domain/membership";
 import type { QueryError } from "~/query/error";
 
@@ -72,50 +73,37 @@ export interface GroupAccessRequest {
   /** trim 済みの団体 ID */
   readonly groupId: string;
   readonly actorUserId: string;
-  /** 事務局スタッフかどうか（COND-009）。団体に所属していなくても操作できる */
+  /** 事務局の画面からの操作か（COND-030 の (1)）。ルートは requireAreaUser の actsAsStaff を渡す */
   readonly isStaff: boolean;
 }
 
-/**
- * 団体での操作する人を、事務局であっても必ず所属を引いて組み立てる。
- *
- * `resolveGroupActor` は「事務局なら全団体を管理できるため所属を引かない」最適化を行うが、
- * 操作履歴の書き込み（COND-012 / COND-013）では「その操作が団体内のロールでは許されず、
- * 事務局の横断権限によって初めて許されたか」（acted_as_staff）を判定するため、
- * 事務局であっても必ず所属を確認する必要がある。
- * 所属を省くと、その団体の管理者でもある事務局員の操作まで誤って `acted_as_staff: true` になってしまう。
- */
-export const resolveGroupActorWithMembership = (
-  deps: GroupAuthorizationDeps,
-  request: GroupAccessRequest,
-): ResultAsync<Actor, GroupError> =>
-  deps.membershipRepository
-    .findByGroupAndUser(request.groupId, request.actorUserId)
-    .mapErr(toGroupDatabaseError)
-    .map((membership): Actor => ({ isStaff: request.isStaff, membership }));
+/** 所属を読んで組み立てた操作する人。所属の行の ID（カレンダー購読を読むのに使う）まで持つ */
+export interface GroupActor extends Actor {
+  readonly membership: StoredMembership | null;
+}
 
 /**
- * 操作する人を組み立てる。
+ * 操作する人を組み立てる（COND-030 の (1)・ADR-016 決定 12）。
  *
- * 事務局のときは所属を引かない。事務局は所属に関わらず全団体を管理でき（COND-009）、
- * 団体での役割を足しても許される操作が増えないので、D1 への往復を 1 回省ける。
+ * 事務局の画面では団体での役割を使わないため所属を読まず、
+ * 利用者の画面では事務局であっても所属を読んで団体での役割だけで操作する。
  *
- * この省略が成り立つのは、groupPermissions の事務局の行が他の役割の行を
- * すべて含んでいる間だけである。前提が崩れたら気づけるよう、
+ * 事務局の画面では事務局の行だけで判定するので、groupPermissions の事務局の行が
+ * 管理者の行をすべて含んでいる必要がある（COND-009）。前提が崩れたら気づけるよう、
  * group-authorization.test.ts でその包含を検証している。
  */
 export const resolveGroupActor = (
   deps: GroupAuthorizationDeps,
   request: GroupAccessRequest,
-): ResultAsync<Actor, GroupError> => {
+): ResultAsync<GroupActor, GroupError> => {
   if (request.isStaff) {
-    return okAsync<Actor, GroupError>({ isStaff: true, membership: null });
+    return okAsync<GroupActor, GroupError>({ isStaff: true, membership: null });
   }
 
   return deps.membershipRepository
     .findByGroupAndUser(request.groupId, request.actorUserId)
     .mapErr(toGroupDatabaseError)
-    .map((membership): Actor => ({ isStaff: false, membership }));
+    .map((membership): GroupActor => ({ isStaff: false, membership }));
 };
 
 /**
@@ -151,13 +139,13 @@ export const ensureActorCan = (
   );
 
 /**
- * 所属を引いて、その操作が許されているかを確かめる。
+ * 操作する人を組み立てて、その操作が許されているかを確かめる。
  *
  * 団体を操作するユースケースの認可は、この 1 本を通すこと。
  * 同じ判定を各ユースケースに書き写すと、存在秘匿の扱いが少しずつ食い違っていく。
  *
- * ただし操作履歴に acted_as_staff を書くユースケースは、判定に使った操作する人（Actor）が
- * あとで要るので、`resolveGroupActorWithMembership` → `ensureActorCan` と分けて呼ぶ。
+ * 判定に使った操作する人（Actor）が操作履歴の記録などで後から要る場合は、
+ * `resolveGroupActor` → `ensureActorCan` と分けて呼ぶ。
  * 判定そのものは同じ `ensureActorCan` を通るので、存在秘匿の扱いは食い違わない。
  */
 export const ensureGroupPermission = (

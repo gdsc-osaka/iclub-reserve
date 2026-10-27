@@ -291,8 +291,8 @@ describe("getGroupManagementUseCase", () => {
     expect(result.isOk()).toBe(true);
     const view = result._unsafeUnwrap();
     expect(view.canManage).toBe(true);
-    // 事務局でも所属は読む（所属していればカレンダー購読のカードを出すため。ADR-013 決定 6）
-    expect(memberships.findByGroupAndUser).toHaveBeenCalledWith(testGroup.id, "usr_staff");
+    // COND-030 (1)・ADR-016 決定 18: 事務局の画面では所属を読まない
+    expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
     expect(groups.findById).toHaveBeenCalledTimes(1);
     expect(auditLogListQuery.findByGroupId).toHaveBeenCalledTimes(1);
   });
@@ -796,7 +796,7 @@ describe("getGroupManagementUseCase", () => {
       expect(feeds.findByMembershipId).toHaveBeenCalledWith(memberMembership.id);
     });
 
-    it("事務局でもその団体に所属していれば isMember: true と自分の calendarFeed を返す", async () => {
+    it("事務局の画面ではその団体に所属していても所属を読まないため isMember: false と calendarFeed: null を返す（ADR-016 決定 18）", async () => {
       const groups = createFakeGroupRepository([testGroup]);
       const memberships = createFakeMembershipRepository([memberMembership]);
       const memberListQuery = createFakeGroupMemberListQuery(testMembers);
@@ -832,6 +832,47 @@ describe("getGroupManagementUseCase", () => {
 
       const view = result._unsafeUnwrap();
       expect(view.canManage).toBe(true);
+      expect(view.isMember).toBe(false);
+      expect(view.calendarFeed).toBeNull();
+      expect(memberships.findByGroupAndUser).not.toHaveBeenCalled();
+      expect(feeds.findByMembershipId).not.toHaveBeenCalled();
+    });
+
+    it("所属している事務局が利用者の画面から開いた場合は isMember: true と自分の calendarFeed を返す", async () => {
+      const groups = createFakeGroupRepository([testGroup]);
+      const memberships = createFakeMembershipRepository([memberMembership]);
+      const memberListQuery = createFakeGroupMemberListQuery(testMembers);
+      const invitationListQuery = createFakeGroupInvitationListQuery(testInvitations);
+      const auditLogListQuery = createFakeGroupAuditLogListQuery();
+      const feeds = createFakeGroupCalendarFeedRepository([
+        {
+          id: "feed_1",
+          membershipId: memberMembership.id,
+          token: "staff_member_token",
+          createdAt: baseNow,
+          updatedAt: baseNow,
+        },
+      ]);
+
+      const result = await getGroupManagementUseCase(
+        {
+          groupRepository: groups.repository,
+          membershipRepository: memberships.repository,
+          groupCalendarFeedRepository: feeds.repository,
+          groupMemberListQuery: memberListQuery.query,
+          groupInvitationListQuery: invitationListQuery.query,
+          groupAuditLogListQuery: auditLogListQuery.query,
+        },
+        {
+          groupId: testGroup.id,
+          actorUserId: memberMembership.userId,
+          isStaff: false,
+          now: baseNow,
+          auditLogPage: 1,
+        },
+      );
+
+      const view = result._unsafeUnwrap();
       expect(view.isMember).toBe(true);
       expect(view.calendarFeed).toEqual({ token: "staff_member_token" });
     });

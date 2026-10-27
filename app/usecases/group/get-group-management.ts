@@ -5,16 +5,12 @@ import { toAuditLogEntryView } from "~/domain/audit-log";
 import type { GroupCalendarFeedRepository } from "~/domain/calendar";
 import type { Group, GroupError, GroupRepository } from "~/domain/group";
 import { GroupAction, groupPermissions } from "~/domain/group";
-import type {
-  Actor,
-  MembershipRepository,
-  MembershipRole,
-  StoredMembership,
-} from "~/domain/membership";
+import type { MembershipRepository, MembershipRole, StoredMembership } from "~/domain/membership";
 import { canAct } from "~/domain/membership";
 import {
   ensureGroupIsVisible,
   groupNotFound,
+  resolveGroupActor,
   toGroupDatabaseError,
 } from "./_shared/group-authorization";
 import type { GroupAuditLogListQuery } from "~/query/audit-log/group-audit-log-list";
@@ -36,7 +32,7 @@ export interface GetGroupManagementDeps {
 export interface GetGroupManagementArgs {
   readonly groupId: string;
   readonly actorUserId: string;
-  /** 事務局スタッフかどうか（COND-009）。団体に所属していなくても管理できる */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** 招待の期限切れを判定する基準時刻 */
   readonly now: Date;
@@ -108,9 +104,9 @@ const findOwnCalendarFeed = (
  *
  * 【処理の流れと設計上の配慮】
  * 1. groupId が空文字または空白のみの場合、DB 問い合わせを行わず即座に NOT_FOUND を返す。
- * 2. 認可判定（所属の読み取りと ensureGroupIsVisible）:
- *    事務局は所属が無くても通る（COND-009）が、所属は事務局でも読む。
- *    自分が所属している団体では、事務局にもカレンダー購読のカードを出すため（ADR-013 決定 6）。
+ * 2. 認可判定（resolveGroupActor と ensureGroupIsVisible）:
+ *    事務局の画面では所属を読まず、カレンダー購読のカードも出さない（COND-030 の (1)・ADR-016 決定 18）。
+ *    利用者の画面では事務局であっても所属を読み、所属していればカレンダー購読のカードを出す（ADR-013 決定 6）。
  *    一般利用者は、閲覧権限（GroupAction.View）が無ければ団体本体を取りに行かずに存在を秘匿する（COND-011）。
  *    先に団体を取りに行くと、存在する団体のときだけ DB クエリが 1 回増え、
  *    応答時間の差から団体の存在を推測できてしまう。
@@ -143,62 +139,62 @@ export const getGroupManagementUseCase = (
     return errAsync(groupNotFound());
   }
 
-  // 2. 認可判定（事務局も所属を読む。所属していればカレンダー購読のカードを出すため）
-  return deps.membershipRepository
-    .findByGroupAndUser(groupId, args.actorUserId)
-    .mapErr(toGroupDatabaseError)
-    .andThen((membership) => {
-      const actor: Actor = { isStaff: args.isStaff, membership };
-      return ensureGroupIsVisible(actor).andThen(() => {
-        /*
-         * 管理できる人（管理者と事務局）にだけ、承諾待ちの招待・メンバーのメールアドレス・操作履歴を渡す。
-         * 一般メンバーには招待や操作履歴を取りに行かず、メールアドレスは実データごと落とす。
-         * 型を絞るだけでは、通信の中身を見れば読めてしまう。
-         */
-        const canManage = canAct(groupPermissions, actor, GroupAction.Update);
-        const isMember = membership !== null;
+  // 2. 認可判定（事務局の画面では所属を読まない。ADR-016 決定 12・18）
+  return resolveGroupActor(deps, {
+    groupId,
+    actorUserId: args.actorUserId,
+    isStaff: args.isStaff,
+  }).andThen((actor) =>
+    ensureGroupIsVisible(actor).andThen(() => {
+      /*
+       * 管理できる人（管理者と事務局）にだけ、承諾待ちの招待・メンバーのメールアドレス・操作履歴を渡す。
+       * 一般メンバーには招待や操作履歴を取りに行かず、メールアドレスは実データごと落とす。
+       * 型を絞るだけでは、通信の中身を見れば読めてしまう。
+       */
+      const canManage = canAct(groupPermissions, actor, GroupAction.Update);
+      const isMember = actor.membership !== null;
 
-        if (canManage) {
-          return ResultAsync.combine([
-            deps.groupRepository.findById(groupId),
-            deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-            deps.groupInvitationListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-            deps.groupAuditLogListQuery
-              .findByGroupId(groupId, args.auditLogPage)
-              .mapErr(toGroupDatabaseError),
-            findOwnCalendarFeed(deps, membership),
-          ]).map(([group, members, invitations, auditLogs, calendarFeed]): GroupManagementView => ({
-            canManage: true,
-            group,
-            members,
-            invitations: invitations.filter((inv) => inv.expiresAt.getTime() > args.now.getTime()),
-            auditLogs: {
-              items: auditLogs.items.map((item) => toAuditLogEntryView(item, actor)),
-              hasNextPage: auditLogs.hasNextPage,
-              page: args.auditLogPage,
-              userNames: auditLogs.userNames,
-            },
-            isMember,
-            calendarFeed,
-          }));
-        }
-
+      if (canManage) {
         return ResultAsync.combine([
           deps.groupRepository.findById(groupId),
           deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
-          findOwnCalendarFeed(deps, membership),
-        ]).map(([group, rawMembers, calendarFeed]): GroupManagementView => ({
-          canManage: false,
+          deps.groupInvitationListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
+          deps.groupAuditLogListQuery
+            .findByGroupId(groupId, args.auditLogPage)
+            .mapErr(toGroupDatabaseError),
+          findOwnCalendarFeed(deps, actor.membership),
+        ]).map(([group, members, invitations, auditLogs, calendarFeed]): GroupManagementView => ({
+          canManage: true,
           group,
-          members: rawMembers.map((m) => ({
-            memberId: m.memberId,
-            userId: m.userId,
-            name: m.name,
-            role: m.role,
-          })),
+          members,
+          invitations: invitations.filter((inv) => inv.expiresAt.getTime() > args.now.getTime()),
+          auditLogs: {
+            items: auditLogs.items.map((item) => toAuditLogEntryView(item, actor)),
+            hasNextPage: auditLogs.hasNextPage,
+            page: args.auditLogPage,
+            userNames: auditLogs.userNames,
+          },
           isMember,
           calendarFeed,
         }));
-      });
-    });
+      }
+
+      return ResultAsync.combine([
+        deps.groupRepository.findById(groupId),
+        deps.groupMemberListQuery.findByGroupId(groupId).mapErr(toGroupDatabaseError),
+        findOwnCalendarFeed(deps, actor.membership),
+      ]).map(([group, rawMembers, calendarFeed]): GroupManagementView => ({
+        canManage: false,
+        group,
+        members: rawMembers.map((m) => ({
+          memberId: m.memberId,
+          userId: m.userId,
+          name: m.name,
+          role: m.role,
+        })),
+        isMember,
+        calendarFeed,
+      }));
+    }),
+  );
 };

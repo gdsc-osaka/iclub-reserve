@@ -2,11 +2,7 @@ import { errAsync, okAsync, safeTry, ResultAsync } from "neverthrow";
 
 import { toAuditLogEntryView } from "~/domain/audit-log";
 import type { Actor, MembershipRepository } from "~/domain/membership";
-import {
-  ReservationAction,
-  ReservationErrorCode,
-  type ReservationError,
-} from "~/domain/reservation";
+import { ReservationErrorCode, type ReservationError } from "~/domain/reservation";
 import { canChangeReservationContent } from "~/domain/reservation/edit";
 import { toMessageSenderLabel } from "~/domain/reservation/message";
 import { allowedTransitions, type ReservationTransition } from "~/domain/reservation/transition";
@@ -42,7 +38,7 @@ export interface GetReservationArgs {
   readonly reservationId: string;
   /** 予約を見ようとしているユーザーの ID */
   readonly actorUserId: string;
-  /** そのユーザーが事務局スタッフかどうか（COND-009） */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** 「開始日時を過ぎたか」の基準。変更できるか（canEdit）の判定に使う */
   readonly now: Date;
@@ -169,17 +165,9 @@ export const getReservationUseCase = (
     }
 
     /*
-     * 渡す操作は、詳細の閲覧（ViewDetail）ではなく取り消し（Withdraw）にする。
-     * 画面は取り消し・キャンセルのボタンを出すかどうかも判定するので、事務局でも
-     * その団体での所属が要る。事務局の役割には取り消しが無いため、これで所属が引かれる。
-     * ViewDetail を渡すと事務局では所属が省かれ、自分の団体の予約なのに取り消しのボタンが出ない。
+     * 事務局の画面では所属を読まず、利用者の画面では事務局であっても所属を読んで組み立てる（COND-030 の (1)）。
      */
-    const actor = yield* resolveReservationActor(
-      deps,
-      row.groupId,
-      args,
-      ReservationAction.Withdraw,
-    );
+    const actor = yield* resolveReservationActor(deps, row.groupId, args);
 
     yield* ensureCanViewReservation(actor);
 

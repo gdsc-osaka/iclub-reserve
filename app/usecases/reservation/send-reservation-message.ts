@@ -24,7 +24,7 @@ import { toRecipientsError } from "./_shared/mail-recipients";
 import {
   ensureActorCan,
   ensureCanViewReservation,
-  resolveReservationActorWithMembership,
+  resolveReservationActor,
 } from "./_shared/reservation-authorization";
 
 export interface SendReservationMessageDeps {
@@ -41,6 +41,7 @@ export interface SendReservationMessageArgs {
   readonly actorUserId: string;
   /** 通知メールに載せる送信者の氏名。事務局としての送信では使わない */
   readonly actorName: string;
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** 画面から届いた未検証の本文 */
   readonly body: string;
@@ -67,9 +68,8 @@ export interface SendReservationMessageReturns {
  * 3. 送信権限と入力検証の順序：
  *    権限の確認を本文の検証より先に行う。権限の無い相手に入力エラーを返さず、
  *    「この予約にはメッセージを送れません。」と答えてアクセスを遮断するため。
- * 4. 事務局所属の確認：
- *    事務局員がその団体のメンバーである場合は団体側としての送信（sent_as_staff = false）となるため、
- *    事務局であっても必ず団体メンバーシップを取得する。
+ * 4. 操作する人の立場（COND-030 の (1)・(2)）：
+ *    事務局の画面からの送信なら所属を読まず sent_as_staff: true、利用者の画面からの送信なら所属を読んで sent_as_staff: false となる。
  */
 export const sendReservationMessageUseCase = (
   deps: SendReservationMessageDeps,
@@ -79,8 +79,8 @@ export const sendReservationMessageUseCase = (
     // 1. 予約を読む（存在しなければ NotFound をそのまま返す）
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
-    // 2. 操作する人を組み立てる（事務局でも所属を必ず引く）
-    const actor = yield* resolveReservationActorWithMembership(deps, reservation.groupId, {
+    // 2. 操作する人を組み立てる（画面に応じた Actor を組み立てる）
+    const actor = yield* resolveReservationActor(deps, reservation.groupId, {
       actorUserId: args.actorUserId,
       isStaff: args.isStaff,
     });
