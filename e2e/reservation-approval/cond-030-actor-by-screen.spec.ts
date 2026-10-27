@@ -7,9 +7,10 @@ import {
   createGroup,
   createReservation,
   createUser,
+  uniqueSuffix,
 } from "../support/factories.js";
 import { expect, test } from "../support/fixtures.js";
-import { findReservationsOfFacility } from "../support/lookups.js";
+import { findReservationMessages, findReservationsOfFacility } from "../support/lookups.js";
 import { findQueuedMails } from "../support/mail.js";
 import { openPage } from "../support/page.js";
 
@@ -19,7 +20,7 @@ import { openPage } from "../support/page.js";
  *
  * 確かめること:
  * - COND-030 (1) / ADR-016 決定 11・12: 立場は開いている画面で決まり、事務局でない人は事務局の画面を開けない。
- * - COND-030 (2) / ADR-016 決定 12〜14: 同じ人が同じ予約を操作しても、開いている画面で予約の作成・変更結果が変わる。
+ * - COND-030 (2) / ADR-016 決定 12〜14: 同じ人が同じ予約を操作しても、開いている画面で記録・予約の作成・変更結果が変わる。
  * - COND-030 (4) / ADR-016 決定 16: 切り替えで、開いている画面の同じものへ移る。
  * - COND-030 (5) / ADR-016 決定 17: 通知メールのリンクは受け取る立場の画面になる。
  *
@@ -59,6 +60,58 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
       await expect(page.getByText("事務局専用のページです")).toBeVisible();
       await expect(page.getByRole("link", { name: "ホームへ戻る" })).toHaveAttribute("href", "/");
     }
+  });
+
+  test("団体に所属する事務局がメッセージを送ると、利用者の画面からは団体側として、事務局の画面からは事務局として届く", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const staff = await createUser(db, { is_staff: true });
+    const group = await createGroup(db, {
+      members: [{ userId: staff.id, role: MembershipRole.Admin }],
+    });
+    const facility = await createFacility(db);
+    const reservation = await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: staff.id,
+      startAt: nextWeekAt(Weekday.Thursday, 13),
+      endAt: nextWeekAt(Weekday.Thursday, 15),
+    });
+
+    await signInAs(staff.id);
+
+    // 1. 利用者の画面（/reservations/<ID>）のメッセージ欄から 1 通送る
+    await openPage(page, `/reservations/${reservation.id}`);
+    const bodyUser = `利用者画面からのメッセージ ${uniqueSuffix()}`;
+    await page.getByLabel("メッセージを書く").fill(bodyUser);
+    await page.getByRole("button", { name: "メッセージを送信" }).click();
+    await expect(page.getByText("メッセージを送信しました。")).toBeVisible();
+
+    const messagesAfterFirst = await findReservationMessages(db, reservation.id);
+    const msg1 = messagesAfterFirst.find((m) => m.body === bodyUser);
+    expect(msg1).toBeDefined();
+    expect(msg1?.sentAsStaff).toBe(false);
+
+    // 2. 事務局の画面（/staff/reservations/<ID>）のメッセージ欄からもう 1 通送る
+    await openPage(page, `/staff/reservations/${reservation.id}`);
+    const bodyStaff = `事務局画面からのメッセージ ${uniqueSuffix()}`;
+    await page.getByLabel("メッセージを書く").fill(bodyStaff);
+    await page.getByRole("button", { name: "メッセージを送信" }).click();
+    await expect(page.getByText("メッセージを送信しました。")).toBeVisible();
+
+    const messagesAfterSecond = await findReservationMessages(db, reservation.id);
+    const msg2 = messagesAfterSecond.find((m) => m.body === bodyStaff);
+    expect(msg2).toBeDefined();
+    expect(msg2?.sentAsStaff).toBe(true);
+
+    // 3. 利用者の画面（/reservations/<ID>）では、2 通目の送信者が「事務局」と表示され氏名は出ない
+    await openPage(page, `/reservations/${reservation.id}`);
+    const messageList = page.getByRole("list", { name: "メッセージの一覧" });
+    const staffMsgItem = messageList.getByRole("listitem").filter({ hasText: bodyStaff });
+    await expect(staffMsgItem.getByText("事務局", { exact: true })).toBeVisible();
+    await expect(staffMsgItem.getByText(staff.name)).toHaveCount(0);
   });
 
   test("団体に所属する事務局が自分の団体の承認済みの予約の日時を変えると、利用者の画面からは仮予約に戻り、事務局の画面からは承認済みのまま残る", async ({
