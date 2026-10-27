@@ -19,7 +19,6 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     page,
     db,
     signInAs,
-    isMobile,
   }) => {
     // 前提: 管理者がいる他団体の承認済み予約が 1 件ある
     const applicant = await createUser(db);
@@ -48,53 +47,45 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     const row = page.getByRole("listitem").filter({ hasText: facility.name });
     await row.getByRole("link", { name: /の予約を変更$/ }).click();
 
-    await expect(page).toHaveURL(`/reservations/${reservation.id}/edit`);
+    await expect(page).toHaveURL(new RegExp(`edit=${reservation.id}`));
+    const panel = page.getByRole("region", { name: "予約の変更" });
+    await expect(panel).toBeVisible();
 
     // 直接変更のため「再承認は不要です」が表示され、「再承認が必要です」は表示されない
-    await expect(page.getByText("再承認は不要です", { exact: true })).toBeVisible();
-    await expect(page.getByText("再承認が必要です")).not.toBeVisible();
+    await expect(panel.getByText("再承認は不要です", { exact: true })).toBeVisible();
+    await expect(panel.getByText("再承認が必要です")).not.toBeVisible();
 
-    /** 時間帯を選ぶ。スマホでは全画面の選択を開いて選ぶ */
+    /** 時間帯を選ぶ */
     const selectTimeRange = async (start: string, end: string) => {
-      if (isMobile) {
-        await page.getByRole("button", { name: /施設・日時/ }).click();
-        const schedule = page.getByRole("dialog", { name: "施設・日時を選ぶ" });
-        await schedule.getByRole("combobox", { name: "開始時刻" }).click();
-        await page.getByRole("option", { name: start }).click();
-        await schedule.getByRole("combobox", { name: "終了時刻" }).click();
-        await page.getByRole("option", { name: end }).click();
-        await schedule.getByRole("button", { name: "決定" }).click();
-      } else {
-        await page.getByRole("combobox", { name: "開始時刻" }).click();
-        await page.getByRole("option", { name: start }).click();
-        await page.getByRole("combobox", { name: "終了時刻" }).click();
-        await page.getByRole("option", { name: end }).click();
-      }
+      await panel.getByRole("combobox", { name: "開始時刻" }).click();
+      await page.getByRole("option", { name: start }).click();
+      await panel.getByRole("combobox", { name: "終了時刻" }).click();
+      await page.getByRole("option", { name: end }).click();
     };
 
     // 時間帯を 14:00〜16:00 に変更
     await selectTimeRange("14:00", "16:00");
 
     // 人数と備考を変更
-    await page.getByLabel("使用人数").fill("6");
-    await page.getByLabel("備考").fill("事務局による直接変更の備考");
+    await panel.getByLabel("使用人数").fill("6");
+    await panel.getByLabel("備考").fill("事務局による直接変更の備考");
 
     // 日時を変更したため解錠の手配を選び直す欄が出現し、選ぶまで進めない
     await expect(
-      page.getByText("承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。"),
+      panel.getByText("承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。"),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
-    await page.getByLabel("手配済み").click();
-    await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeEnabled();
+    await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
+    await panel.getByLabel("手配済み").click();
+    await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeEnabled();
 
     // 選んだあとで時間帯をまた変えると、最後の日時について選び直すよう未選択に戻る
     await selectTimeRange("14:00", "15:00");
-    await expect(page.getByLabel("手配済み")).not.toBeChecked();
-    await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
-    await page.getByLabel("手配済み").click();
+    await expect(panel.getByLabel("手配済み")).not.toBeChecked();
+    await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
+    await panel.getByLabel("手配済み").click();
 
     // 確認ダイアログを開く
-    await page.getByRole("button", { name: "変更内容を確認する" }).click();
+    await panel.getByRole("button", { name: "変更内容を確認する" }).click();
     const confirm = page.getByRole("alertdialog", { name: "この内容で変更しますか？" });
     await expect(confirm).toBeVisible();
     await expect(confirm.getByText("手配済み", { exact: true })).toBeVisible();
@@ -107,13 +98,18 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
 
     await confirm.getByRole("button", { name: "この内容で変更する" }).click();
 
-    // 詳細画面に遷移し、完了案内と変更後の内容が表示され、ステータスは承認済みのまま
-    await expect(page).toHaveURL(`/reservations/${reservation.id}?edited=changed`);
-    await expect(page.getByText("予約を変更しました。")).toBeVisible();
-    await expect(page.getByText("承認済み", { exact: true })).toBeVisible();
-    await expect(page.getByText("6名")).toBeVisible();
-    // 操作履歴欄にも「備考: 変更前の備考 → …」と出るので、値だけの要素に絞る
-    await expect(page.getByText("事務局による直接変更の備考", { exact: true })).toBeVisible();
+    // トーストが出現し、URL と欄が変更後の承認済み予約を表示する
+    await expect(page.getByText("予約を変更しました")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`reservation=${reservation.id}`));
+    await expect(page).not.toHaveURL(/edit=/);
+
+    const detailPanel = page.getByRole("region", { name: "予約の内容" });
+    await expect(detailPanel).toBeVisible();
+    await expect(detailPanel.getByText("承認済み", { exact: true })).toBeVisible();
+    await expect(detailPanel.getByText("6 名")).toBeVisible();
+    await expect(
+      detailPanel.getByText("事務局による直接変更の備考", { exact: true }),
+    ).toBeVisible();
 
     // 申請者（管理者）へ EVT-017 が積まれている
     const applicantMails = await findQueuedMails(db, applicant.email);
@@ -177,7 +173,6 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     page,
     db,
     signInAs,
-    isMobile,
   }) => {
     // 前提: 同じ施設で 10:00〜12:00 の予約 A と 14:00〜16:00 の承認済み予約 B がある
     const userA = await createUser(db);
@@ -211,21 +206,20 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
 
     // 予約 A の変更画面を開く
     await openPage(page, `/reservations/${reservationA.id}/edit`);
+    await expect(page).toHaveURL(new RegExp(`edit=${reservationA.id}`));
+    const panel = page.getByRole("region", { name: "予約の変更" });
+    await expect(panel).toBeVisible();
 
     // 重なる時間帯（13:00〜15:00）に変更（14:00〜16:00 の承認済み予約と重複）
-    if (isMobile) await page.getByRole("button", { name: /施設・日時/ }).click();
-    const schedule = isMobile ? page.getByRole("dialog", { name: "施設・日時を選ぶ" }) : page;
-
-    await schedule.getByRole("combobox", { name: "開始時刻" }).click();
+    await panel.getByRole("combobox", { name: "開始時刻" }).click();
     await page.getByRole("option", { name: "13:00" }).click();
-    await schedule.getByRole("combobox", { name: "終了時刻" }).click();
+    await panel.getByRole("combobox", { name: "終了時刻" }).click();
     await page.getByRole("option", { name: "15:00" }).click();
 
     // 埋まっている理由がその場に出る
-    await expect(schedule.getByText("この時間帯はすでに埋まっています")).toBeVisible();
-    if (isMobile) await schedule.getByRole("button", { name: "決定" }).click();
+    await expect(panel.getByText("この時間帯はすでに埋まっています")).toBeVisible();
 
     // 重複により「変更内容を確認する」ボタンが無効化されている
-    await expect(page.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
+    await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
   });
 });
