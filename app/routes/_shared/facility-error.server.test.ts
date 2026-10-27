@@ -152,12 +152,12 @@ describe("facilityActionErrors", () => {
     const result = facilityActionErrors(
       context,
       errorOf(FacilityErrorCode.InvalidTransition, {
-        userMessage: "施設の状態が変わっています。",
+        userMessage: "施設・設備の状態が変わっています。",
       }),
     );
 
     expect(result).toEqual({
-      formError: "施設の状態が変わっています。",
+      formError: "施設・設備の状態が変わっています。",
     });
   });
 

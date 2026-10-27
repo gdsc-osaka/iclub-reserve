@@ -212,11 +212,6 @@ function DraftContent({
           </AlertDescription>
         </Alert>
       )}
-
-      {/* 案内はボタンの後に置く。スマホでは欄が低いので、先に置くとボタンが欄の外に押し出される */}
-      <p className="text-xs text-muted-foreground">
-        団体・使用人数・備考は、申請フォームで入力します。時間帯もフォームで変えられます。
-      </p>
     </div>
   );
 }

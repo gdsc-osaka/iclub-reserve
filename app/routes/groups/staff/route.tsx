@@ -35,7 +35,7 @@ import {
 } from "./query-params";
 
 export function meta() {
-  return [{ title: "団体の管理 | iclub-reserve" }];
+  return [{ title: "団体の管理 | i-Club 予約システム" }];
 }
 
 /**
@@ -72,7 +72,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const formData = await request.formData();
 
   if (formData.get("intent") !== "change-status") {
-    return { formError: "不正な操作です。" };
+    return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };
   }
 
   /*
@@ -206,9 +206,6 @@ export default function StaffGroupsRoute({ loaderData, actionData }: Route.Compo
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-bold tracking-tight">団体の管理</h1>
-        <p className="text-sm text-muted-foreground">
-          団体の確認と、有効化・無効化の切り替えを行います。
-        </p>
       </div>
 
       {/* JavaScript が無効だと通知が出ないので、同じ内容を一覧の上に出す */}
@@ -227,7 +224,7 @@ export default function StaffGroupsRoute({ loaderData, actionData }: Route.Compo
       )}
 
       {/* 状態絞り込みピルタブ（/staff/reservations の絞り込みにそろえる） */}
-      <nav aria-label="ステータスの絞り込み" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+      <nav aria-label="状態の絞り込み" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
         <ul className="flex w-max gap-1.5">
           {tabs.map((tab) => {
             const isCurrent = params.status === tab.key;
@@ -265,7 +262,7 @@ export default function StaffGroupsRoute({ loaderData, actionData }: Route.Compo
       {/* 団体一覧（スマホ幅 320px〜 でも横スクロールしないカード形式） */}
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          該当する団体はありません。
+          該当する団体はありません
         </div>
       ) : (
         <ul className="flex flex-col gap-3">
@@ -308,7 +305,13 @@ function StaffGroupRow({ item }: Readonly<{ item: GroupSearchItem }>) {
       <div className="flex shrink-0 items-center gap-2 pt-2 sm:pt-0">
         {/* 出す操作は、ユースケースが許す遷移と同じ表から取る（書き写すと食い違う） */}
         {allowedGroupStatusTransitions[item.status].map((status) => (
-          <GroupStatusDialog key={status} groupId={item.id} groupName={item.name} status={status} />
+          <GroupStatusDialog
+            key={status}
+            groupId={item.id}
+            groupName={item.name}
+            currentStatus={item.status}
+            status={status}
+          />
         ))}
       </div>
     </div>
@@ -326,13 +329,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <Card className="[--card-spacing:--spacing(6)]">
         <CardHeader>
           <CardTitle className="text-xl">
-            {isForbidden ? "事務局スタッフ専用ページです" : "団体一覧を表示できません"}
+            {isForbidden ? "事務局専用のページです" : "団体一覧を表示できません"}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 text-sm">
           <p className="text-muted-foreground">
             {isForbidden
-              ? "この画面は事務局アカウントでのみご利用いただけます。"
+              ? "このページは、事務局のみご利用いただけます。"
               : "時間をおいて、もう一度お試しください。"}
           </p>
           <Link to="/" className="text-primary underline underline-offset-4">

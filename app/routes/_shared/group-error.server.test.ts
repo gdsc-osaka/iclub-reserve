@@ -151,11 +151,11 @@ describe("groupActionErrors", () => {
     const errors = groupActionErrors(
       context,
       errorOf(GroupErrorCode.Forbidden, {
-        userMessage: "メンバーを削除できるのは管理者と事務局だけです。",
+        userMessage: "メンバーの削除は、管理者と事務局のみ行えます。",
       }),
     );
 
-    expect(errors).toEqual({ formError: "メンバーを削除できるのは管理者と事務局だけです。" });
+    expect(errors).toEqual({ formError: "メンバーの削除は、管理者と事務局のみ行えます。" });
   });
 
   it("userMessage が無いときは、表の文言を出す", () => {

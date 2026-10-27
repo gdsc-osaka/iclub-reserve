@@ -119,10 +119,10 @@ function Legend({ className }: Readonly<{ className?: string }>) {
       </li>
       <li className="flex items-center gap-1.5">
         <span aria-hidden className="h-3 w-1 rounded-sm bg-primary" />
-        左端の線が太いものが自団体の予約
+        左端の線が太いものが所属団体の予約
       </li>
       <li className="ml-auto hidden md:block">
-        {`予約を押すと内容が、空いている時間を押すとその時刻からの仮の枠が出ます（${FACILITY_OPEN_HOUR}:00〜${FACILITY_CLOSE_HOUR}:00）`}
+        {`受付は ${FACILITY_OPEN_HOUR}:00〜${FACILITY_CLOSE_HOUR}:00 です。空いている時間を押すと申請できます。`}
       </li>
     </ul>
   );

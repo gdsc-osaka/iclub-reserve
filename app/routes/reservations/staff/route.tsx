@@ -16,7 +16,7 @@ import { getReservationListUseCase } from "~/usecases/reservation/get-reservatio
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "予約の承認 | iclub-reserve" }];
+  return [{ title: "予約の承認 | i-Club 予約システム" }];
 }
 
 /**
@@ -89,7 +89,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const transition = parseReservationTransition(intent);
 
   if (transition === null || !isStaffTransition(transition)) {
-    return { formError: "不正な操作です。" };
+    return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };
   }
 
   const db = createDb(env.DB);
@@ -153,13 +153,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <Card className="[--card-spacing:--spacing(6)]">
         <CardHeader>
           <CardTitle className="text-xl">
-            {isForbidden ? "事務局スタッフ専用ページです" : "予約一覧を表示できません"}
+            {isForbidden ? "事務局専用のページです" : "予約一覧を表示できません"}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 text-sm">
           <p className="text-muted-foreground">
             {isForbidden
-              ? "この画面は事務局アカウントでのみご利用いただけます。一般の予約一覧は「予約」メニューからご確認ください。"
+              ? "このページは、事務局のみご利用いただけます。ご自分の予約は「予約」メニューからご確認ください。"
               : "時間をおいて、もう一度お試しください。"}
           </p>
           <Link to="/" className="text-primary underline underline-offset-4">

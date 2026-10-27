@@ -209,7 +209,7 @@ export const useLoginForm = ({
         kind: "error",
         text: toAuthErrorMessage(
           error,
-          "認証コードを送信できませんでした。時間をおいてもう一度お試しください。",
+          "認証コードを送信できませんでした。時間をおいて、もう一度お試しください。",
         ),
       });
       return;

@@ -23,7 +23,7 @@ import { StaffInvitationCard } from "./staff-invitation-card";
 import { StaffMemberCard } from "./staff-member-card";
 
 export function meta() {
-  return [{ title: "事務局の管理 | iclub-reserve" }];
+  return [{ title: "事務局の管理 | i-Club 予約システム" }];
 }
 
 /**
@@ -57,7 +57,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 /**
  * 事務局管理画面（SCR-019）のアクション。
  *
- * 事務局招待の送信、招待取り消し、事務局権限の剥奪を処理する。
+ * 事務局招待の送信、招待取り消し、事務局権限の解除を処理する。
  */
 export async function action({ request, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
@@ -131,7 +131,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return redirect(".");
   }
 
-  // 3. 事務局権限の剥奪
+  // 3. 事務局権限の解除
   if (intent === "revoke-staff") {
     const rawUserId = formData.get("user_id");
     const targetUserId = typeof rawUserId === "string" ? rawUserId : "";
@@ -156,7 +156,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
 
     /*
-     * 自分自身を剥奪した場合:
+     * 自分自身を解除した場合:
      * この画面を含む事務局画面を開けなくなるため、ホーム画面（"/"）へ戻す。
      */
     if (result.value.revokedSelf) {
@@ -181,9 +181,6 @@ export default function StaffMembersRoute({ loaderData, actionData }: Route.Comp
       {/* 画面ヘッダー */}
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">事務局の管理</h1>
-        <p className="text-sm text-muted-foreground">
-          事務局スタッフの一覧確認、招待の送信・取り消し、および権限の剥奪を行えます。
-        </p>
       </div>
 
       {/* カード 2 枚のグリッドレイアウト */}
@@ -212,12 +209,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     return (
       <div className="flex flex-col items-center justify-center p-8 min-h-[50vh] text-center">
         <CircleAlert className="size-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold">事務局スタッフ専用ページです</h1>
+        <h1 className="text-2xl font-bold">事務局専用のページです</h1>
         <p className="text-muted-foreground mt-2 max-w-md">
-          このページの閲覧には事務局スタッフの権限が必要です。アカウントをご確認ください。
+          このページは、事務局のみご利用いただけます。
         </p>
         <Button asChild className="mt-6">
-          <Link to="/">ホームに戻る</Link>
+          <Link to="/">ホームへ戻る</Link>
         </Button>
       </div>
     );
@@ -228,10 +225,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <CircleAlert className="size-12 text-destructive mb-4" />
       <h1 className="text-2xl font-bold">エラーが発生しました</h1>
       <p className="text-muted-foreground mt-2 max-w-md">
-        事務局情報の読み込みに失敗しました。時間をおいてもう一度お試しください。
+        事務局の情報を読み込めませんでした。時間をおいて、もう一度お試しください。
       </p>
       <Button onClick={() => window.location.reload()} className="mt-6">
-        再読み込み
+        読み込み直す
       </Button>
     </div>
   );

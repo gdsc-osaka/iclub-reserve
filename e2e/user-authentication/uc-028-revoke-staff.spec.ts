@@ -5,12 +5,12 @@ import { expect, test } from "../support/fixtures.js";
 import { openPage } from "../support/page.js";
 
 /**
- * UC-028 事務局権限を剥奪する（`rdra/contexts/user-authentication.md`）
+ * UC-028 事務局権限を解除する（`rdra/contexts/user-authentication.md`）
  *
  * 操作するのは、事務局管理画面（SCR-019、`/staff/staff-members`）。
  */
-test.describe("UC-028 事務局権限を剥奪する", { tag: "@UC-028" }, () => {
-  test("事務局が他の事務局の権限を剥奪すると一覧から消え、DB の権限も更新される", async ({
+test.describe("UC-028 事務局権限を解除する", { tag: "@UC-028" }, () => {
+  test("事務局が他の事務局の権限を解除すると一覧から消え、DB の権限も更新される", async ({
     page,
     db,
     signInAs,
@@ -20,10 +20,10 @@ test.describe("UC-028 事務局権限を剥奪する", { tag: "@UC-028" }, () =>
     await signInAs(staffA.id);
 
     await openPage(page, "/staff/staff-members");
-    await page.getByRole("button", { name: `${staffB.name} の事務局権限を剥奪` }).click();
+    await page.getByRole("button", { name: `${staffB.name} さんの事務局権限を解除` }).click();
 
-    const dialog = page.getByRole("alertdialog", { name: "事務局権限を剥奪しますか？" });
-    await dialog.getByRole("button", { name: "剥奪する" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "事務局権限を解除しますか？" });
+    await dialog.getByRole("button", { name: "解除する" }).click();
 
     // ダイアログが閉じ、一覧から非表示になる
     await expect(dialog).toBeHidden();
@@ -34,7 +34,7 @@ test.describe("UC-028 事務局権限を剥奪する", { tag: "@UC-028" }, () =>
     expect(savedB?.is_staff).toBe(false);
   });
 
-  test("自分自身の剥奪を行うとホームへリダイレクトされ、メニューから消え、管理画面が 403 になる", async ({
+  test("自分自身の解除を行うとホームへリダイレクトされ、メニューから消え、管理画面が 403 になる", async ({
     page,
     db,
     signInAs,
@@ -45,10 +45,10 @@ test.describe("UC-028 事務局権限を剥奪する", { tag: "@UC-028" }, () =>
     await signInAs(staffA.id);
 
     await openPage(page, "/staff/staff-members");
-    await page.getByRole("button", { name: `${staffA.name} の事務局権限を剥奪` }).click();
+    await page.getByRole("button", { name: `${staffA.name} さんの事務局権限を解除` }).click();
 
-    const dialog = page.getByRole("alertdialog", { name: "自分の事務局権限を剥奪しますか？" });
-    await dialog.getByRole("button", { name: "剥奪する" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "自分の事務局権限を解除しますか？" });
+    await dialog.getByRole("button", { name: "解除する" }).click();
 
     // ホーム画面へリダイレクトされる
     await expect(page).toHaveURL("/");
@@ -58,10 +58,10 @@ test.describe("UC-028 事務局権限を剥奪する", { tag: "@UC-028" }, () =>
 
     // 事務局管理画面を再度開くと 403 画面になる
     await openPage(page, "/staff/staff-members");
-    await expect(page.getByRole("heading", { name: "事務局スタッフ専用ページです" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "事務局専用のページです" })).toBeVisible();
   });
 
-  test("画面を開いた後に相手が事務局でなくなっていると、剥奪できず読み込み直しを促される", async ({
+  test("画面を開いた後に相手が事務局でなくなっていると、解除できず読み込み直しを促される", async ({
     page,
     db,
     signInAs,
@@ -71,15 +71,15 @@ test.describe("UC-028 事務局権限を剥奪する", { tag: "@UC-028" }, () =>
     await signInAs(staffA.id);
 
     await openPage(page, "/staff/staff-members");
-    await page.getByRole("button", { name: `${targetStaff.name} の事務局権限を剥奪` }).click();
+    await page.getByRole("button", { name: `${targetStaff.name} さんの事務局権限を解除` }).click();
 
-    const dialog = page.getByRole("alertdialog", { name: "事務局権限を剥奪しますか？" });
+    const dialog = page.getByRole("alertdialog", { name: "事務局権限を解除しますか？" });
     await expect(dialog).toBeVisible();
 
-    // ほかの事務局が先に剥奪したことにする
+    // ほかの事務局が先に解除したことにする
     await db.update(user).set({ is_staff: false }).where(eq(user.id, targetStaff.id));
 
-    await dialog.getByRole("button", { name: "剥奪する" }).click();
+    await dialog.getByRole("button", { name: "解除する" }).click();
 
     await expect(
       page.getByText("対象の方はすでに事務局ではありません。画面を読み込み直してください。"),

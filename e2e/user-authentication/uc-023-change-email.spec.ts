@@ -37,7 +37,7 @@ test.describe("UC-023 メールアドレスを変更する", { tag: "@UC-023" },
 
     // 1. 新しいアドレスを入れる
     await dialog.getByLabel("新しいメールアドレス").fill(newEmail);
-    await dialog.getByRole("button", { name: "次へ（認証コード送信）" }).click();
+    await dialog.getByRole("button", { name: "認証コードを送る" }).click();
 
     // 2. 今のアドレスに届いた認証コードを入れる
     await expect(dialog.getByText("現在のアドレスでの確認 (2/3)")).toBeVisible();
@@ -78,7 +78,7 @@ test.describe("UC-023 メールアドレスを変更する", { tag: "@UC-023" },
     const dialog = page.getByRole("dialog");
 
     await dialog.getByLabel("新しいメールアドレス").fill(`e2e-${uniqueSuffix()}@example.com`);
-    await dialog.getByRole("button", { name: "次へ（認証コード送信）" }).click();
+    await dialog.getByRole("button", { name: "認証コードを送る" }).click();
 
     // 使えるアドレスの案内が出て、次の段階へは進まない（COND-004）
     await expect(

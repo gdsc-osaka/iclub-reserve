@@ -39,7 +39,7 @@ test.describe("UC-007 承認済み予約をキャンセルする（事務局）"
 
     // 事務局の予約一覧は既定で仮予約だけを出すので、承認済みに絞り込む
     await openPage(page, "/staff/reservations");
-    const statusFilter = page.getByRole("navigation", { name: "ステータスの絞り込み" });
+    const statusFilter = page.getByRole("navigation", { name: "状態の絞り込み" });
     await statusFilter.getByRole("link", { name: /承認済み/ }).click();
 
     const row = page.getByRole("listitem").filter({ hasText: facility.name });

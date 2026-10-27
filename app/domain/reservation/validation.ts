@@ -125,7 +125,7 @@ export const validateReservationDraft = (
         code: ReservationErrorCode.InvalidInput,
         field: ReservationField.HeadCount,
         message: `使用人数が ${RESERVATION_MIN_HEAD_COUNT} 以上の整数ではない。`,
-        userMessage: `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 以上の整数で入力してください。`,
+        userMessage: `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 名以上で入力してください。`,
       } satisfies ReservationError);
     }
 

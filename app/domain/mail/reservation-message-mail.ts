@@ -103,7 +103,7 @@ const buildMessageMailBody = (args: CreateReservationMessageMailDraftsArgs): str
 /**
  * 予約メッセージ通知の MailDraft 配列を生成する純粋関数。
  *
- * - 件名: 「【i-Club予約システム】予約にメッセージが届きました」
+ * - 件名: 「【i-Club 予約システム】予約にメッセージが届きました」
  * - 本文: text のみ（html は作らない。利用者の入力をそのまま載せるため）。
  * - 送信者表示: sentAsStaff が true なら「事務局」と表示し senderName は出さない（COND-008）。
  *   false なら senderName を表示する。
@@ -123,7 +123,7 @@ export const createReservationMessageMailDrafts = (
         address: recipient.address,
         ...(recipient.name ? { name: recipient.name } : {}),
       },
-      subject: "【i-Club予約システム】予約にメッセージが届きました",
+      subject: "【i-Club 予約システム】予約にメッセージが届きました",
       text,
     };
   });

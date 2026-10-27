@@ -320,7 +320,7 @@ entities:
       - name: "is_staff"
         type: "boolean"
         required: true
-        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。その権限を使えるのは事務局の画面で操作するときだけで、利用者の画面では団体での役割だけで操作する（COND-030）。true にするのは事務局招待の承諾（UC-027）、false に戻すのは事務局による剥奪（UC-028）である。最初の1人だけは DB またはシードで設定する。事務局が0人になる変更はできない（COND-014）。"
+        description: "事務局フラグ。trueの場合は所属に関わらず全団体・全予約への権限を持つ（COND-009）。その権限を使えるのは事務局の画面で操作するときだけで、利用者の画面では団体での役割だけで操作する（COND-030）。true にするのは事務局招待の承諾（UC-027）、false に戻すのは事務局による解除（UC-028）である。最初の1人だけは DB またはシードで設定する。事務局が0人になる変更はできない（COND-014）。"
       - name: "terms_version"
         type: "string"
         required: false
@@ -464,7 +464,7 @@ entities:
       - name: "target_id"
         type: "string"
         required: true
-        description: "記録対象のID。事務局権限の記録では、招待・招待の取り消し・辞退は事務局招待のID、承諾・剥奪は対象ユーザーのIDとする（承諾の changes には事務局招待のIDを含める）。これにより、あるユーザーへの付与と剥奪を同じ target_id でたどれる。"
+        description: "記録対象のID。事務局権限の記録では、招待・招待の取り消し・辞退は事務局招待のID、承諾・解除は対象ユーザーのIDとする（承諾の changes には事務局招待のIDを含める）。これにより、あるユーザーへの付与と解除を同じ target_id でたどれる。"
       - name: "group_id"
         type: "string"
         required: false

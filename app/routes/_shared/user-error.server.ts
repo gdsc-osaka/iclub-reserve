@@ -36,9 +36,9 @@ export const userErrorView: Record<UserErrorCode, ErrorView> = {
     status: 409,
     message: "利用中の端末はログアウトできません。通常のログアウトをご利用ください。",
   },
-  [UserErrorCode.TermsNotAgreed]: { message: "利用規約に同意してください。" },
+  [UserErrorCode.TermsNotAgreed]: { message: "施設使用規約に同意してください。" },
   [UserErrorCode.TermsOutdated]: {
-    message: "利用規約が改定されました。画面を読み込み直して、改定後の規約をご確認ください。",
+    message: "施設使用規約が改定されました。画面を読み込み直して、改定後の規約をご確認ください。",
   },
 };
 

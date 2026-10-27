@@ -102,7 +102,7 @@ test.describe("UC-032 自団体の予約一覧を確認する", { tag: "@UC-032"
 
     // 状態: 承認済みだけにする
     await page
-      .getByRole("navigation", { name: "ステータスの絞り込み" })
+      .getByRole("navigation", { name: "状態の絞り込み" })
       .getByRole("link", { name: /承認済み/ })
       .click();
     await expect(rowOf(page, provisionalFacility.name)).toBeHidden();

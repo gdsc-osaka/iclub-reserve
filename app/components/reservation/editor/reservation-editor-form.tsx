@@ -382,7 +382,7 @@ export function ReservationEditorForm({
                     承認済みとして直接作成する
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    仮予約を経ずに最初から承認済みとして登録します（事務局専用）。
+                    仮予約を経ずに、最初から承認済みとして登録します。
                   </p>
                 </div>
                 <Switch id="direct-mode-switch" checked={isDirect} onCheckedChange={setIsDirect} />
@@ -534,7 +534,7 @@ export function ReservationEditorForm({
               : "変更すると、申請者・団体の管理者・事務局にお知らせのメールが届きます。"
             : isDirect
               ? "仮予約を経ずに最初から承認済みとして作成されます。メールは送信されません。"
-              : "申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
+              : "申請すると、あなたと団体の管理者、事務局にお知らせのメールが届きます。"
         }
         submitLabel={
           purpose.kind === "edit"
@@ -652,7 +652,7 @@ function DirectEditAlert() {
       <CircleAlert aria-hidden className="text-blue-600 dark:text-blue-400" />
       <AlertTitle>再承認は不要です</AlertTitle>
       <AlertDescription>
-        事務局による直接変更のため、施設や日時を変更しても再承認は不要です（ステータスは変わりません）。
+        事務局による直接変更のため、施設や日時を変更しても再承認は不要です（状態は変わりません）。
       </AlertDescription>
     </Alert>
   );

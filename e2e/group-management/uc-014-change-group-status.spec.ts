@@ -31,19 +31,19 @@ test.describe("UC-014 団体を有効化・無効化する", { tag: "@UC-014" },
 
     await openPage(page, "/staff/groups");
     const row = groupRow(page, group.name);
-    await row.getByRole("button", { name: "有効化" }).click();
-    const dialog = page.getByRole("alertdialog", { name: `${group.name} を有効にしますか？` });
-    await dialog.getByRole("button", { name: "有効化する" }).click();
+    await row.getByRole("button", { name: "承認" }).click();
+    const dialog = page.getByRole("alertdialog", { name: `${group.name} を承認しますか？` });
+    await dialog.getByRole("button", { name: "承認する" }).click();
 
-    await expect(page.getByText(`${group.name} を「活動中」にしました。`)).toBeVisible();
+    await expect(page.getByText(`${group.name} を「有効」にしました。`)).toBeVisible();
     await expect(row).toBeHidden();
 
-    // 「活動中」に絞り込むと、活動中として並んでいる
+    // 「有効」に絞り込むと、有効として並んでいる
     await page
-      .getByRole("navigation", { name: "ステータスの絞り込み" })
-      .getByRole("link", { name: /活動中/ })
+      .getByRole("navigation", { name: "状態の絞り込み" })
+      .getByRole("link", { name: /有効/ })
       .click();
-    await expect(row.getByText("活動中", { exact: true })).toBeVisible();
+    await expect(row.getByText("有効", { exact: true })).toBeVisible();
   });
 
   test("事務局が有効な団体を無効にできる", async ({ page, db, signInAs }) => {
@@ -54,21 +54,21 @@ test.describe("UC-014 団体を有効化・無効化する", { tag: "@UC-014" },
     await signInAs(personas.staff.id);
 
     await openPage(page, "/staff/groups");
-    const statusFilter = page.getByRole("navigation", { name: "ステータスの絞り込み" });
-    await statusFilter.getByRole("link", { name: /活動中/ }).click();
+    const statusFilter = page.getByRole("navigation", { name: "状態の絞り込み" });
+    await statusFilter.getByRole("link", { name: /有効/ }).click();
     const row = groupRow(page, group.name);
     await row.getByRole("button", { name: "無効化" }).click();
     const dialog = page.getByRole("alertdialog", { name: `${group.name} を無効にしますか？` });
     await dialog.getByRole("button", { name: "無効化する" }).click();
 
-    await expect(page.getByText(`${group.name} を「停止中」にしました。`)).toBeVisible();
+    await expect(page.getByText(`${group.name} を「無効」にしました。`)).toBeVisible();
     await expect(row).toBeHidden();
 
-    await statusFilter.getByRole("link", { name: /停止中/ }).click();
-    await expect(row.getByText("停止中", { exact: true })).toBeVisible();
+    await statusFilter.getByRole("link", { name: /無効/ }).click();
+    await expect(row.getByText("無効", { exact: true })).toBeVisible();
   });
 
-  test("事務局のダッシュボード（SCR-022）に有効化を待っている団体が出て、団体の画面を開ける", async ({
+  test("事務局のダッシュボード（SCR-022）に承認待ちの団体が出て、団体の画面を開ける", async ({
     page,
     db,
     signInAs,
@@ -86,7 +86,7 @@ test.describe("UC-014 団体を有効化・無効化する", { tag: "@UC-014" },
     await signInAs(personas.staff.id);
 
     await openPage(page, "/");
-    const section = page.getByRole("region", { name: "有効化を待っている団体" });
+    const section = page.getByRole("region", { name: "承認待ちの団体" });
     await section.getByRole("link", { name: new RegExp(group.name) }).click();
 
     await expect(page).toHaveURL(new RegExp(`/groups/${group.id}$`));

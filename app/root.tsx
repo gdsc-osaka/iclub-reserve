@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { useEffect } from "react";
 import {
   isRouteErrorResponse,
@@ -25,7 +26,7 @@ import "./app.css";
 export const middleware: Route.MiddlewareFunction[] = [requireAuthentication];
 
 /**
- * すべての画面で使う共通データ（今ログインしている人）を渡す。
+ * すべての画面で使う共通データ（今ログインしている人・事務局の窓口のアドレス）を渡す。
  *
  * 併せて、上のミドルウェアを必ず実行させる役割も持つ。
  * React Router は「ローダーが 1 つもない画面」への画面内リンク遷移では
@@ -33,7 +34,7 @@ export const middleware: Route.MiddlewareFunction[] = [requireAuthentication];
  * その遷移だけログインの確認をすり抜けてしまう。
  */
 export function loader({ context }: Route.LoaderArgs) {
-  return { user: getRequestUser(context) };
+  return { user: getRequestUser(context), staffContactEmail: env.STAFF_CONTACT_EMAIL };
 }
 
 export const links: Route.LinksFunction = () => [

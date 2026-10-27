@@ -212,7 +212,7 @@ describe("changeGroupStatusUseCase（UC-014: 団体の有効化・無効化）",
       expect(result.isErr()).toBe(true);
       const error = result._unsafeUnwrapErr();
       expect(error.code).toBe(GroupErrorCode.Forbidden);
-      expect(error.userMessage).toBe("団体の有効化・無効化は事務局だけが行えます。");
+      expect(error.userMessage).toBe("団体の承認・有効化・無効化は、事務局のみ行えます。");
       expect(groupRepository.findById).not.toHaveBeenCalled();
     });
 

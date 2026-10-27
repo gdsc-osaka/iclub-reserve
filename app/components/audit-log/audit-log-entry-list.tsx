@@ -35,7 +35,7 @@ export function AuditLogEntryList({
   return (
     <>
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">まだ操作履歴はありません。</p>
+        <p className="text-sm text-muted-foreground">まだ操作履歴はありません</p>
       ) : (
         <ol aria-label="操作履歴" className="flex flex-col gap-3">
           {items.map((item) => {

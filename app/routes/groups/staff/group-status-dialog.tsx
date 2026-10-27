@@ -38,7 +38,7 @@ const dialogConfigs: Record<GroupStatusChangeTarget, GroupStatusDialogConfig> = 
     triggerLabel: "有効化",
     triggerVariant: "default",
     title: (groupName) => `${groupName} を有効にしますか？`,
-    description: "有効にすると、この団体のメンバーが予約を申請できるようになります。",
+    description: "有効にすると、この団体のメンバーが再び予約を申請できるようになります。",
     actionLabel: "有効化する",
     actionVariant: "default",
   },
@@ -54,6 +54,21 @@ const dialogConfigs: Record<GroupStatusChangeTarget, GroupStatusDialogConfig> = 
 };
 
 /**
+ * 承認待ちの団体を有効にするときの文言。
+ *
+ * 利用者には、登録した団体は「事務局の承認」を待つと案内している。
+ * 同じ操作を事務局の側だけ「有効化」と呼ぶと、話が通じなくなるため、ここだけ「承認」と呼ぶ。
+ */
+const approveDialogConfig: GroupStatusDialogConfig = {
+  triggerLabel: "承認",
+  triggerVariant: "default",
+  title: (groupName) => `${groupName} を承認しますか？`,
+  description: "承認すると、この団体のメンバーが予約を申請できるようになります。",
+  actionLabel: "承認する",
+  actionVariant: "default",
+};
+
+/**
  * 団体の有効化・無効化のボタンと、確認のダイアログ（UC-014）。
  *
  * `<Form method="post">` による通常のフォーム送信で構成し、JavaScript が無効でも動作する。
@@ -61,12 +76,23 @@ const dialogConfigs: Record<GroupStatusChangeTarget, GroupStatusDialogConfig> = 
 export function GroupStatusDialog({
   groupId,
   groupName,
+  currentStatus,
   status,
-}: Readonly<{ groupId: string; groupName: string; status: GroupStatusChangeTarget }>) {
+}: Readonly<{
+  groupId: string;
+  groupName: string;
+  /** いまの状態。承認待ちから有効にするときだけ、文言を「承認」にする */
+  currentStatus: GroupStatus;
+  /** 変更先の状態 */
+  status: GroupStatusChangeTarget;
+}>) {
   const [open, setOpen] = useState(false);
   const navigation = useNavigation();
 
-  const config = dialogConfigs[status];
+  const config =
+    currentStatus === GroupStatus.Pending && status === GroupStatus.Enabled
+      ? approveDialogConfig
+      : dialogConfigs[status];
 
   // この団体のこの操作が送信中か。同じ画面に他の団体のボタンが並ぶので、
   // 団体 ID と変更先まで見て、押したボタンだけを「処理中」にする
@@ -117,7 +143,7 @@ export function GroupStatusDialog({
 
             <AlertDialogFooter>
               <AlertDialogCancel type="button" disabled={isSubmitting}>
-                キャンセル
+                やめる
               </AlertDialogCancel>
               <Button type="submit" variant={config.actionVariant} disabled={isSubmitting}>
                 {isSubmitting ? "処理中…" : config.actionLabel}

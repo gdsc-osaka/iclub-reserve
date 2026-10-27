@@ -44,7 +44,7 @@ describe("ensureActorCan", () => {
     const error = result._unsafeUnwrapErr();
 
     expect(error.code).toBe(GroupErrorCode.Forbidden);
-    expect(error.userMessage).toBe("メンバーを招待できるのは管理者と事務局だけです。");
+    expect(error.userMessage).toBe("メンバーの招待は、管理者と事務局のみ行えます。");
   });
 
   it.each(["管理者", "事務局"] as const)("%s はメンバーを招待できる", async (name) => {

@@ -19,7 +19,7 @@ import { createGroupUseCase } from "~/usecases/group/create-group";
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "団体を登録 | iclub-reserve" }];
+  return [{ title: "団体を登録 | i-Club 予約システム" }];
 }
 
 /**
@@ -106,7 +106,7 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl font-bold tracking-tight">団体を登録</CardTitle>
-          <CardDescription>作成した人が、その団体の最初の管理者になります。</CardDescription>
+          <CardDescription>登録した人が、その団体の最初の管理者になります。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* 送信前に出す案内（承認待ちに関する事前案内） */}
@@ -114,7 +114,7 @@ export default function CreateGroupRoute({ actionData }: Route.ComponentProps) {
             <Clock aria-hidden className="size-4 text-amber-600 dark:text-amber-400" />
             <AlertTitle>登録後は事務局の承認を待ちます</AlertTitle>
             <AlertDescription>
-              登録した団体は承認待ちの状態になります。事務局が承認するまで、この団体では予約を申請できません。
+              事務局の承認後、この団体で予約を申請できるようになります。
             </AlertDescription>
           </Alert>
 

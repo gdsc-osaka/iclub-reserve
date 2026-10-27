@@ -80,7 +80,7 @@ export default [
     route("staff/audit-log", "routes/audit-log/staff/route.tsx"),
     /*
      * 事務局管理（SCR-019）。
-     * 事務局スタッフ限定の画面。事務局の一覧、招待、招待取り消し、剥奪を扱う。
+     * 事務局スタッフ限定の画面。事務局の一覧、招待、招待取り消し、解除を扱う。
      */
     route("staff/staff-members", "routes/staff-members/staff/route.tsx"),
   ]),

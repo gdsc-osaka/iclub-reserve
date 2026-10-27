@@ -19,7 +19,7 @@ import { openPage } from "../support/page.js";
 
 /** 初回設定の同意の段階で、規約に同意して次へ進む */
 async function acceptTerms(page: Page): Promise<void> {
-  await expect(page.getByText("利用規約への同意", { exact: true })).toBeVisible();
+  await expect(page.getByText("施設使用規約への同意", { exact: true })).toBeVisible();
 
   // 印を付けるまでは進めない
   const submit = page.getByRole("button", { name: "同意して次へ" });
@@ -52,7 +52,7 @@ test.describe("UC-019 アカウントを登録する", { tag: "@UC-019" }, () =>
     await acceptTerms(page);
 
     // 続けて氏名を聞かれる
-    await page.getByLabel("お名前").fill(name);
+    await page.getByLabel("氏名（本名）").fill(name);
     await page.getByRole("button", { name: "登録して次へ" }).click();
 
     // ダッシュボードに入れ、アカウントには入れた氏名と、同意した規約の版が残っている

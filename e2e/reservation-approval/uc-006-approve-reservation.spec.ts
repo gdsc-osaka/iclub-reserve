@@ -52,7 +52,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     await expect(panel).toBeVisible();
 
     // 欄内に予約詳細リンクがあることを確認
-    const detailLink = panel.getByRole("link", { name: "予約詳細を見る" });
+    const detailLink = panel.getByRole("link", { name: "予約の詳細を見る" });
     await expect(detailLink).toBeVisible();
     await expect(detailLink).toHaveAttribute("href", `/reservations/${reservation.id}`);
 
@@ -101,7 +101,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
 
     // 「承認済み」に絞り込むと、承認済みとして並んでいる
     await page
-      .getByRole("navigation", { name: "ステータスの絞り込み" })
+      .getByRole("navigation", { name: "状態の絞り込み" })
       .getByRole("link", { name: /承認済み/ })
       .click();
     await expect(row.getByText("承認済み", { exact: true })).toBeVisible();
@@ -139,7 +139,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
 
     // 「キャンセル・却下」に絞り込むと、却下済みとして並んでいる
     await page
-      .getByRole("navigation", { name: "ステータスの絞り込み" })
+      .getByRole("navigation", { name: "状態の絞り込み" })
       .getByRole("link", { name: /キャンセル・却下/ })
       .click();
     await expect(row.getByText("却下済み", { exact: true })).toBeVisible();

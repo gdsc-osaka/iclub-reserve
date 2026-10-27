@@ -44,7 +44,7 @@ import { CreatedPanel } from "./created-panel";
 import { toCalendarPath } from "./paths";
 
 export function meta() {
-  return [{ title: "予約の申請 | iclub-reserve" }];
+  return [{ title: "予約の申請 | i-Club 予約システム" }];
 }
 
 /**
@@ -286,7 +286,7 @@ function PageShell({
           to={toCalendarPath(facilityId, dateKey)}
           className="w-fit text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
-          ← 空き状況カレンダーへ戻る
+          ← 空き状況へ戻る
         </Link>
 
         <h1 className="text-xl font-semibold">{isStaff ? "予約の作成" : "予約の申請"}</h1>
@@ -294,7 +294,7 @@ function PageShell({
         <p className="text-sm text-muted-foreground">
           {isStaff
             ? "団体として仮予約を申請するほか、承認済みの予約を直接作成できます。"
-            : "申請すると仮予約として登録されます。施設・設備を利用できるのは、事務局が承認してからです。"}
+            : "申請すると仮予約として登録され、事務局の承認後にご利用いただけます。"}
         </p>
       </div>
 
@@ -320,7 +320,7 @@ function CannotApplyCard({
       <AlertDescription>
         {!hasGroup &&
           (isStaff ? (
-            "申請元にできる有効な団体がまだ 1 つもありません。団体を有効にしてから申請してください。"
+            "予約を作成できる有効な団体がまだありません。先に団体を承認するか、有効にしてください。"
           ) : (
             <NoEnabledGroupReason />
           ))}
@@ -352,7 +352,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           <p className="text-muted-foreground">時間をおいて、もう一度お試しください。</p>
 
           <Link to="/availability" className="text-primary underline underline-offset-4">
-            空き状況カレンダーへ戻る
+            空き状況へ戻る
           </Link>
         </CardContent>
       </Card>

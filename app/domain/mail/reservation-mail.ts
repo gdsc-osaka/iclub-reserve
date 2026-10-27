@@ -101,55 +101,55 @@ interface EventMailCopy {
 
 const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
   [ReservationMailEvent.Applied]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約が申請されました",
+    subject: "【i-Club 予約システム】施設・設備の利用予約が申請されました",
     opening: "施設・設備の利用予約が申請されました。",
     allowsReason: false,
   },
   [ReservationMailEvent.Withdrawn]: {
-    subject: "【i-Club予約システム】施設・設備の仮予約が取り消されました",
+    subject: "【i-Club 予約システム】施設・設備の仮予約が取り消されました",
     opening: "申請されていた仮予約が取り消されました。",
     allowsReason: true,
   },
   [ReservationMailEvent.Cancelled]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
+    subject: "【i-Club 予約システム】施設・設備の利用予約がキャンセルされました",
     opening: "承認済みの利用予約がキャンセルされました。",
     allowsReason: true,
   },
   [ReservationMailEvent.Approved]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約が承認されました",
+    subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
     opening: "申請されていた利用予約が承認されました。",
     allowsReason: false,
   },
   [ReservationMailEvent.Rejected]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約が却下されました",
+    subject: "【i-Club 予約システム】施設・設備の利用予約が却下されました",
     opening: "申請されていた利用予約が却下されました。",
     allowsReason: true,
   },
   [ReservationMailEvent.CancelledByStaff]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
+    subject: "【i-Club 予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
     opening: "承認済みの利用予約が事務局によりキャンセルされました。",
     allowsReason: true,
   },
   [ReservationMailEvent.ApprovedEdited]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約の内容が変更されました",
+    subject: "【i-Club 予約システム】施設・設備の利用予約の内容が変更されました",
     opening:
       "承認済みの利用予約の内容（使用人数・備考）が変更されました。承認済みのまま変わりません。",
     allowsReason: false,
   },
   [ReservationMailEvent.ReapprovalRequested]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
+    subject: "【i-Club 予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
     opening:
       "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。事務局が改めて承認するまで、施設・設備は利用できません。",
     allowsReason: false,
   },
   [ReservationMailEvent.ProvisionalEdited]: {
-    subject: "【i-Club予約システム】施設・設備の仮予約の内容が変更されました",
+    subject: "【i-Club 予約システム】施設・設備の仮予約の内容が変更されました",
     opening: "申請されていた仮予約の内容が変更されました。",
     allowsReason: false,
   },
   [ReservationMailEvent.EditedByStaff]: {
-    subject: "【i-Club予約システム】施設・設備の利用予約が事務局により変更されました",
-    opening: "利用予約の内容が事務局により変更されました。予約のステータスは変わりません。",
+    subject: "【i-Club 予約システム】施設・設備の利用予約が事務局により変更されました",
+    opening: "利用予約の内容が事務局により変更されました。予約の状態は変わりません。",
     allowsReason: false,
   },
 };

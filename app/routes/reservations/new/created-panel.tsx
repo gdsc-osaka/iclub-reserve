@@ -36,8 +36,8 @@ export function CreatedPanel({
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           {isDirectCreated
-            ? "仮予約を経ずに最初から承認済みとして作成されました。メールは送信されません。予約の内容は、予約の詳細からも確認できます。"
-            : "事務局が承認するまでは、まだ利用できません。承認・却下の結果はメールでお知らせします。申請の内容と状態は、予約の詳細からも確認できます。"}
+            ? "仮予約を経ずに、承認済みとして作成しました。メールは送信されません。"
+            : "事務局の承認後、ご利用いただけます。承認・却下の結果はメールでお知らせします。"}
         </p>
       </CardHeader>
 
@@ -71,7 +71,7 @@ export function CreatedPanel({
           </Button>
 
           <Button asChild variant="outline">
-            <Link to={toCalendarPath(facilityId, dateKey)}>空き状況カレンダーへ戻る</Link>
+            <Link to={toCalendarPath(facilityId, dateKey)}>空き状況へ戻る</Link>
           </Button>
         </div>
       </CardContent>

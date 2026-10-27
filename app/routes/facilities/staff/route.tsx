@@ -18,7 +18,7 @@ import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "施設の管理 | iclub-reserve" }];
+  return [{ title: "施設・設備の管理 | i-Club 予約システム" }];
 }
 
 /**
@@ -60,13 +60,13 @@ export default function StaffFacilitiesPage({ loaderData }: Route.ComponentProps
         <div>
           <h1 className="text-2xl font-bold tracking-tight">施設・設備の管理</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            事務局スタッフ向けに施設・設備の登録と編集を行います。有効・無効の切り替えは各施設・設備の編集画面で行います。
+            有効・無効の切り替えは、各施設・設備の編集画面で行えます。
           </p>
         </div>
         <Button asChild className="shrink-0">
           <Link to="/staff/facilities/new">
             <Plus className="size-4 mr-1.5" />
-            施設を登録
+            施設・設備を登録
           </Link>
         </Button>
       </div>
@@ -77,13 +77,10 @@ export default function StaffFacilitiesPage({ loaderData }: Route.ComponentProps
           <div className="flex flex-col items-center justify-center gap-3">
             <Wrench className="size-10 text-muted-foreground" />
             <CardTitle className="text-lg">登録された施設・設備はありません</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              「施設を登録」ボタンから施設や設備を新規追加してください。
-            </p>
             <Button asChild className="mt-2">
               <Link to="/staff/facilities/new">
                 <Plus className="size-4 mr-1.5" />
-                施設を登録
+                施設・設備を登録
               </Link>
             </Button>
           </div>
@@ -151,12 +148,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     return (
       <div className="flex flex-col items-center justify-center p-8 min-h-[50vh] text-center">
         <CircleAlert className="size-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold">事務局スタッフ専用ページです</h1>
+        <h1 className="text-2xl font-bold">事務局専用のページです</h1>
         <p className="text-muted-foreground mt-2 max-w-md">
-          このページの閲覧には事務局スタッフの権限が必要です。アカウントをご確認ください。
+          このページは、事務局のみご利用いただけます。
         </p>
         <Button asChild className="mt-6">
-          <Link to="/">ホームに戻る</Link>
+          <Link to="/">ホームへ戻る</Link>
         </Button>
       </div>
     );
@@ -167,10 +164,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <CircleAlert className="size-12 text-destructive mb-4" />
       <h1 className="text-2xl font-bold">エラーが発生しました</h1>
       <p className="text-muted-foreground mt-2 max-w-md">
-        施設情報の読み込みに失敗しました。時間をおいてもう一度お試しください。
+        施設・設備の情報を読み込めませんでした。時間をおいて、もう一度お試しください。
       </p>
       <Button onClick={() => window.location.reload()} className="mt-6">
-        再読み込み
+        読み込み直す
       </Button>
     </div>
   );

@@ -93,7 +93,7 @@ test.describe("UC-033 全団体の予約一覧を確認する（事務局）", {
     const response = await page.goto("/staff/reservations");
 
     expect(response?.status()).toBe(403);
-    await expect(page.getByText("事務局スタッフ専用ページです")).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "ステータスの絞り込み" })).toBeHidden();
+    await expect(page.getByText("事務局専用のページです")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "状態の絞り込み" })).toBeHidden();
   });
 });

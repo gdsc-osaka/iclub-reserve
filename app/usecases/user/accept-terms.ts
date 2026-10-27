@@ -29,7 +29,7 @@ const validateTermsAgreement = (
     return err({
       code: UserErrorCode.TermsNotAgreed,
       message: "利用規約への同意の印が付いていない。",
-      userMessage: "利用規約をご確認のうえ、「同意する」に印を付けてください。",
+      userMessage: "施設使用規約をご確認のうえ、「同意します」に印を付けてください。",
     });
   }
 
@@ -37,7 +37,8 @@ const validateTermsAgreement = (
     return err({
       code: UserErrorCode.TermsOutdated,
       message: `今の版（${TERMS_OF_SERVICE.version}）ではない規約に同意しようとした。`,
-      userMessage: "利用規約が改定されました。画面を読み込み直して、改定後の規約をご確認ください。",
+      userMessage:
+        "施設使用規約が改定されました。画面を読み込み直して、改定後の規約をご確認ください。",
     });
   }
 

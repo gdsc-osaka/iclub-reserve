@@ -157,7 +157,7 @@ describe("parseReservation", () => {
   });
 
   it("使用人数が空・下限未満・整数でないときはエラーにする", () => {
-    const message = `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 以上の整数で入力してください。`;
+    const message = `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 名以上で入力してください。`;
 
     expect(parseReservation(values({ headCount: "" }), now).fieldErrors.headCount).toBe(message);
     expect(parseReservation(values({ headCount: "0" }), now).fieldErrors.headCount).toBe(message);
@@ -216,7 +216,7 @@ describe("parseReservationContent", () => {
 
   it("人数や備考が不正ならエラーにする", () => {
     expect(parseReservationContent(values({ headCount: "0" }), now).fieldErrors.headCount).toBe(
-      `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 以上の整数で入力してください。`,
+      `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 名以上で入力してください。`,
     );
 
     const note = "あ".repeat(RESERVATION_NOTE_MAX_LENGTH + 1);
@@ -284,11 +284,11 @@ describe("申請のエラーを出す欄", () => {
       formErrorsOf(
         error(ReservationErrorCode.InvalidInput, {
           field: ReservationField.HeadCount,
-          userMessage: "使用人数は 1 以上の整数で入力してください。",
+          userMessage: "使用人数は 1 名以上で入力してください。",
         }),
       ),
     ).toEqual({
-      fieldErrors: { headCount: "使用人数は 1 以上の整数で入力してください。" },
+      fieldErrors: { headCount: "使用人数は 1 名以上で入力してください。" },
       formError: null,
     });
 

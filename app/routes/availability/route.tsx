@@ -34,7 +34,7 @@ import { useCalendarScroll } from "./use-calendar-scroll";
 import { toRevealTarget, useCalendarSelection } from "./use-calendar-selection";
 
 export function meta() {
-  return [{ title: "空き状況 | iclub-reserve" }];
+  return [{ title: "空き状況 | i-Club 予約システム" }];
 }
 
 /**
@@ -111,7 +111,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const transition = parseReservationTransition(intent);
 
   if (transition === null || !isStaffTransition(transition)) {
-    return { formError: "不正な操作です。" };
+    return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };
   }
 
   const db = createDb(env.DB);

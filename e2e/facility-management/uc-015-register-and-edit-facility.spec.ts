@@ -22,7 +22,7 @@ test.describe("UC-015 施設・設備を登録・編集する", { tag: "@UC-015"
     await signInAs(personas.staff.id);
 
     await openPage(page, "/staff/facilities");
-    await page.getByRole("link", { name: "施設を登録" }).click();
+    await page.getByRole("link", { name: "施設・設備を登録" }).click();
     await page.getByLabel("施設・設備名").fill(name);
     await page.getByLabel("説明（任意）").fill("E2E テストで登録した施設です。");
     await page.getByLabel("写真（任意）").setInputFiles(tinyPng);
@@ -51,7 +51,7 @@ test.describe("UC-015 施設・設備を登録・編集する", { tag: "@UC-015"
     await page.getByLabel("写真（任意）").setInputFiles(tinyPng);
     await page.getByRole("button", { name: "保存する" }).click();
 
-    await expect(page.getByText("施設情報を保存しました。")).toBeVisible();
+    await expect(page.getByText("施設・設備の情報を保存しました。")).toBeVisible();
     await expect(page.getByRole("heading", { level: 1, name: `${newName} の編集` })).toBeVisible();
     await expect(page.getByRole("img", { name: newName })).not.toHaveJSProperty("naturalWidth", 0);
 
@@ -69,7 +69,7 @@ test.describe("UC-015 施設・設備を登録・編集する", { tag: "@UC-015"
     const response = await page.goto("/staff/facilities");
 
     expect(response?.status()).toBe(403);
-    await expect(page.getByRole("heading", { name: "事務局スタッフ専用ページです" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "施設を登録" })).toBeHidden();
+    await expect(page.getByRole("heading", { name: "事務局専用のページです" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "施設・設備を登録" })).toBeHidden();
   });
 });

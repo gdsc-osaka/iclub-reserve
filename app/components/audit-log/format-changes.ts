@@ -11,7 +11,7 @@ import { formatDateTime } from "~/lib/date";
  * 表に定義されていないキーはキー名をそのままフォールバックして表示する。
  */
 export const FIELD_LABELS: Readonly<Record<string, string>> = {
-  facility_id: "施設/設備",
+  facility_id: "施設・設備",
   start_at: "開始日時",
   end_at: "終了日時",
   head_count: "使用人数",

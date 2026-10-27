@@ -99,7 +99,7 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
 
     await openPage(page, "/staff/audit-log");
 
-    await expect(page.getByText("事務局スタッフ専用ページです")).toBeVisible();
+    await expect(page.getByText("事務局専用のページです")).toBeVisible();
   });
 
   test("条件に合う記録が無いときは、その旨の案内が出る", async ({ page, db, signInAs }) => {
@@ -109,7 +109,7 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
 
     await openPage(page, `/staff/audit-log?group=${group.id}`);
 
-    await expect(page.getByText("条件に合う操作履歴はありません。")).toBeVisible();
+    await expect(page.getByText("条件に合う操作履歴はありません")).toBeVisible();
   });
 
   test("事務局が団体管理画面を開くと事務局権限の操作者が個人名で見え、操作履歴画面へ遷移できる", async ({
@@ -185,7 +185,7 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
     await expect(record).toContainText("事務局権限");
   });
 
-  test("団体の管理者がメンバーの役割を変えると、事務局の操作履歴画面に管理者の氏名でロールの変更が出る", async ({
+  test("団体の管理者がメンバーの役割を変えると、事務局の操作履歴画面に管理者の氏名で役割の変更が出る", async ({
     page,
     db,
     signInAs,
@@ -216,11 +216,11 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
     await signInAs(staff.id);
     await openPage(page, `/staff/audit-log?group=${group.id}`);
 
-    // 管理者の氏名で「ロールの変更」が記録されている
-    const record = recordOf(page, "ロールの変更");
+    // 管理者の氏名で「役割の変更」が記録されている
+    const record = recordOf(page, "役割の変更");
     await expect(record).toBeVisible();
     await expect(record).toContainText(admin.name);
-    await expect(record).toContainText("役割: メンバー → 管理者");
+    await expect(record).toContainText("役割: 一般メンバー → 管理者");
     // acted_as_staff ではないので「事務局権限」バッジは付かない
     await expect(record).not.toContainText("事務局権限");
   });

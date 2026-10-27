@@ -9,7 +9,7 @@ import { openPage } from "../support/page.js";
  * ADR-007 の方針に従い、確かめるのは次の 3 点:
  * 1. 主な流れ: 事務局スタッフでログインすると、Calendar ID 付きの施設に「Google カレンダーに追加」のリンク（href が cid= を含む）と iCal の URL が出る
  * 2. 権限の境目: 事務局でない利用者は開けず権限エラーになる。また未ログインだとログイン画面へ送られる
- * 3. 代表的な失敗: Calendar ID の無い施設には「まだ用意されていません」と出て、ボタンが無い
+ * 3. 代表的な失敗: Calendar ID の無い施設には「Google カレンダーが連携されていません」と出て、ボタンが無い
  */
 test.describe("UC-018 カレンダー購読URLを確認する", { tag: "@UC-018" }, () => {
   test("事務局スタッフでログインすると、Calendar ID 付きの施設に「Google カレンダーに追加」のリンクと iCal の URL が出る", async ({
@@ -66,7 +66,7 @@ test.describe("UC-018 カレンダー購読URLを確認する", { tag: "@UC-018"
     await expect(page.getByRole("heading", { name: "エラーが発生しました" })).toBeVisible();
   });
 
-  test("Calendar ID の無い施設には「まだ用意されていません」と出て、ボタンが無い", async ({
+  test("Calendar ID の無い施設には「Google カレンダーが連携されていません」と出て、ボタンが無い", async ({
     page,
     db,
     signInAs,
@@ -84,7 +84,7 @@ test.describe("UC-018 カレンダー購読URLを確認する", { tag: "@UC-018"
     await expect(facilityHeading).toBeVisible();
 
     const card = page.locator('[data-slot="card"]', { has: facilityHeading });
-    await expect(card.getByText("カレンダーはまだ用意されていません")).toBeVisible();
+    await expect(card.getByText(/Google カレンダーが連携されていません/)).toBeVisible();
     await expect(card.getByRole("link", { name: "Google カレンダーに追加" })).toBeHidden();
     await expect(card.getByRole("button", { name: "コピー" })).toBeHidden();
   });

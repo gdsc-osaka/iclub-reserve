@@ -50,7 +50,7 @@ export function InvitationResponseCard({
         <CardContent className="space-y-6">
           {formError && (
             <Alert variant="destructive">
-              <AlertTitle>エラー</AlertTitle>
+              <AlertTitle>操作できませんでした</AlertTitle>
               <AlertDescription>{formError}</AlertDescription>
             </Alert>
           )}

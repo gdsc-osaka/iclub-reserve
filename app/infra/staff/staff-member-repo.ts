@@ -61,7 +61,7 @@ export const createStaffMemberRepository = (db: Database): StaffMemberRepository
 
     return ResultAsync.fromPromise(
       db.batch([auditLogStatement, updateStatement]),
-      databaseError("剥奪"),
+      databaseError("解除"),
     ).map((results) => {
       const rows = results[1] as { id: string }[];
       return rows.length;

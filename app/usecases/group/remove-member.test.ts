@@ -236,7 +236,7 @@ describe("removeMemberUseCase", () => {
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.Forbidden);
-    expect(error.userMessage).toBe("メンバーを削除できるのは管理者と事務局だけです。");
+    expect(error.userMessage).toBe("メンバーの削除は、管理者と事務局のみ行えます。");
     expect(fake.remove).not.toHaveBeenCalled();
   });
 

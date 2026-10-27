@@ -110,11 +110,11 @@ export type GroupManageAction = Exclude<GroupAction, typeof GroupAction.View>;
  * 「団体が見つからない」に揃えて存在を秘匿する（COND-011）。
  */
 export const groupForbiddenMessages: Record<GroupManageAction, string> = {
-  [GroupAction.Update]: "団体情報を編集できるのは管理者と事務局だけです。",
-  [GroupAction.InviteMember]: "メンバーを招待できるのは管理者と事務局だけです。",
-  [GroupAction.UpdateMemberRole]: "メンバーの役割を変更できるのは管理者と事務局だけです。",
-  [GroupAction.RemoveMember]: "メンバーを削除できるのは管理者と事務局だけです。",
-  [GroupAction.ChangeStatus]: "団体の有効化・無効化は事務局だけが行えます。",
+  [GroupAction.Update]: "団体情報の編集は、管理者と事務局のみ行えます。",
+  [GroupAction.InviteMember]: "メンバーの招待は、管理者と事務局のみ行えます。",
+  [GroupAction.UpdateMemberRole]: "メンバーの役割の変更は、管理者と事務局のみ行えます。",
+  [GroupAction.RemoveMember]: "メンバーの削除は、管理者と事務局のみ行えます。",
+  [GroupAction.ChangeStatus]: "団体の承認・有効化・無効化は、事務局のみ行えます。",
 };
 
 /**

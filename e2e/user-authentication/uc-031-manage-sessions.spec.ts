@@ -35,10 +35,10 @@ test.describe("UC-031 ログイン中の端末を管理する", { tag: "@UC-031"
     await logoutButton.click();
 
     const dialog = page.getByRole("alertdialog", { name: "端末からログアウトしますか？" });
-    await expect(dialog.getByText("「Android の Chrome」をログアウトします。")).toBeVisible();
+    await expect(dialog.getByText("「Android の Chrome」からログアウトします。")).toBeVisible();
     await dialog.getByRole("button", { name: "ログアウトする" }).click();
 
-    await expect(page.getByText("端末をログアウトしました。")).toBeVisible();
+    await expect(page.getByText("端末からログアウトしました。")).toBeVisible();
     await expect(card.getByText("Android の Chrome", { exact: true })).toBeHidden();
     await expect(card.getByText("この端末", { exact: true })).toBeVisible();
 
@@ -59,10 +59,12 @@ test.describe("UC-031 ログイン中の端末を管理する", { tag: "@UC-031"
     const dialog = page.getByRole("alertdialog", {
       name: "他のすべての端末からログアウトしますか？",
     });
-    await expect(dialog.getByText(/（2 台）/)).toBeVisible();
+    await expect(dialog.getByText(/この端末以外の 2 台/)).toBeVisible();
     await dialog.getByRole("button", { name: "ログアウトする" }).click();
 
-    await expect(page.getByText("この端末以外をすべてログアウトしました。")).toBeVisible();
+    await expect(
+      page.getByText("この端末以外のすべての端末からログアウトしました。"),
+    ).toBeVisible();
     await expect(card.getByText("Android の Chrome", { exact: true })).toBeHidden();
     await expect(card.getByText("iPad の Safari", { exact: true })).toBeHidden();
     await expect(card.getByText("この端末", { exact: true })).toBeVisible();

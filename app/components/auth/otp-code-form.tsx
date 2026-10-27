@@ -51,8 +51,8 @@ export function OtpCodeForm({
       }}
     >
       <p className="text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{email}</span> 宛に{OTP_LENGTH}
-        桁の認証コードを送信しました。メールを確認して入力してください。
+        <span className="font-medium text-foreground">{email}</span> 宛に {OTP_LENGTH}{" "}
+        桁の認証コードをお送りしました。
       </p>
 
       <div className="space-y-2">

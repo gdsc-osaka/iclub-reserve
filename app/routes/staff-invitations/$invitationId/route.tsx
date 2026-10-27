@@ -23,7 +23,7 @@ import { rejectStaffInvitationUseCase } from "~/usecases/staff/reject-staff-invi
 import type { Route } from "./+types/route";
 
 export function meta(): Route.MetaDescriptors {
-  return [{ title: "事務局への招待 | iclub-reserve" }];
+  return [{ title: "事務局への招待 | i-Club 予約システム" }];
 }
 
 /**
@@ -133,7 +133,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return redirect("/");
   }
 
-  return { formError: "不正な操作です。" } satisfies InvitationActionData;
+  return {
+    formError: "この操作は受け付けられませんでした。画面を読み込み直してください。",
+  } satisfies InvitationActionData;
 }
 
 /**
@@ -148,7 +150,7 @@ export default function AcceptStaffInvitationRoute({
   return (
     <InvitationResponseCard
       title="事務局への招待"
-      description="事務局への招待が届いています。内容を確認し、承諾または辞退を選択してください。"
+      description="事務局への招待が届いています。"
       formError={actionData?.formError}
       acceptLabel="承諾して事務局になる"
       rejectDescription="この招待は使えなくなり、あとから承諾することはできません。事務局になる場合は、事務局に招待し直してもらってください。"
@@ -163,11 +165,11 @@ export default function AcceptStaffInvitationRoute({
           <li>団体の有効化・無効化</li>
           <li>施設・設備の管理</li>
           <li>操作履歴の閲覧</li>
-          <li>事務局の招待・剥奪</li>
+          <li>事務局の招待・解除</li>
         </ul>
       </InvitationDetail>
 
-      <InvitationDetail label="承諾の有効期限">
+      <InvitationDetail label="承諾の期限">
         <p className="mt-1 text-sm text-foreground">
           {formatDateTime(new Date(invitation.expiresAt))}
         </p>

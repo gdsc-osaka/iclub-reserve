@@ -57,7 +57,7 @@ describe("createReservationMessageRepository を D1 で実行する", () => {
       {
         idempotencyKey: "reservation-message:msg_test_01:staff@osaka-u.ac.jp",
         to: { address: "staff@osaka-u.ac.jp", name: "事務局" },
-        subject: "【i-Club予約システム】予約にメッセージが届きました",
+        subject: "【i-Club 予約システム】予約にメッセージが届きました",
         text: "メッセージ本文テスト",
       },
     ];
@@ -108,7 +108,7 @@ describe("createReservationMessageRepository を D1 で実行する", () => {
     expect(outboxRow!.idempotency_key).toBe("reservation-message:msg_test_01:staff@osaka-u.ac.jp");
     expect(outboxRow!.to_address).toBe("staff@osaka-u.ac.jp");
     expect(outboxRow!.to_name).toBe("事務局");
-    expect(outboxRow!.subject).toBe("【i-Club予約システム】予約にメッセージが届きました");
+    expect(outboxRow!.subject).toBe("【i-Club 予約システム】予約にメッセージが届きました");
     expect(outboxRow!.body_text).toBe("メッセージ本文テスト");
     expect(outboxRow!.status).toBe("pending");
 

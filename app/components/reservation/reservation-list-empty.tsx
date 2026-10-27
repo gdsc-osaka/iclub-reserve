@@ -38,7 +38,7 @@ export function ReservationListEmpty({
           </div>
           <CardTitle className="text-lg">まだどの団体にも所属していません</CardTitle>
           <CardDescription className="max-w-md">
-            予約を申請するには、団体に参加するか新しい団体を作成して事務局の承認を受ける必要があります。
+            予約を申請するには、団体に参加するか団体を登録して、事務局の承認を受ける必要があります。
             空き状況の確認は所属がなくてもご利用いただけます。
           </CardDescription>
         </CardHeader>
@@ -46,7 +46,7 @@ export function ReservationListEmpty({
           <Button asChild>
             <Link to="/availability" className="inline-flex items-center gap-2">
               <CalendarDays className="size-4" />
-              空き状況カレンダーを見る
+              空き状況を見る
             </Link>
           </Button>
         </CardContent>
@@ -60,9 +60,6 @@ export function ReservationListEmpty({
       <Card className="border-dashed py-10 text-center">
         <CardContent className="flex flex-col items-center gap-2 py-4">
           <p className="text-base font-medium text-foreground">承認を待っている申請はありません</p>
-          <p className="text-sm text-muted-foreground">
-            現在、事務局による確認が必要な仮予約はすべて処理されています。
-          </p>
         </CardContent>
       </Card>
     );
@@ -87,9 +84,6 @@ export function ReservationListEmpty({
           <FilterX className="size-6 text-muted-foreground" />
         </div>
         <CardTitle className="text-lg">条件に合う予約がありません</CardTitle>
-        <CardDescription>
-          絞り込み条件を変更するか、条件をリセットして再度ご確認ください。
-        </CardDescription>
       </CardHeader>
       <CardContent className="pt-2">
         <Button asChild variant="outline">

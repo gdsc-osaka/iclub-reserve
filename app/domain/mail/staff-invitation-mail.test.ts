@@ -27,7 +27,7 @@ describe("createStaffInvitationMailDraft", () => {
 
   it("件名が事務局への招待通知になっている", () => {
     const draft = createStaffInvitationMailDraft(baseArgs);
-    expect(draft.subject).toBe("【i-Club予約システム】事務局への招待が届いています");
+    expect(draft.subject).toBe("【i-Club 予約システム】事務局への招待が届いています");
   });
 
   it("本文に承諾リンク（<appBaseUrl>/staff-invitations/<id>）が入る", () => {

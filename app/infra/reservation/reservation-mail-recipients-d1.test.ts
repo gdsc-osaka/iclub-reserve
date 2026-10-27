@@ -7,7 +7,7 @@
  * という条件を、実際の DB で押さえる。
  *
  * この条件が無かった時期は、申請者を予約の created_by から引くだけだったので、
- * 団体から外された元メンバーや、事務局権限を剥奪された人にも、
+ * 団体から外された元メンバーや、事務局権限を解除された人にも、
  * 理由（status_reason）を載せた却下・キャンセルの通知が届いていた。
  */
 import { beforeEach, describe, expect, it } from "vitest";
@@ -127,12 +127,12 @@ describe("findByReservationId を D1 で実行する（申請者を宛先に入�
     expect(result._unsafeUnwrap()).toEqual({ groupMembers: [ADMIN], staff: [STAFF] });
   });
 
-  it("他団体の予約を代わりに申請した後で事務局権限を剥奪された人（UC-028）は、宛先に入らない", async () => {
+  it("他団体の予約を代わりに申請した後で事務局権限を解除された人（UC-028）は、宛先に入らない", async () => {
     const query = createReservationMailRecipientsQuery(testDb.db);
     // 事務局として、所属していないロボット部の予約を申請した
     await insertUser(APPLICANT, { isStaff: true });
     await insertReservation();
-    // その後で事務局権限を剥奪された
+    // その後で事務局権限を解除された
     await testDb.seed([`UPDATE "user" SET is_staff = 0 WHERE id = ?`, APPLICANT.userId]);
 
     const result = await query.findByReservationId("res_target");

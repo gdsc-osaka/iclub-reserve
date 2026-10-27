@@ -104,7 +104,7 @@ export function ReservationListRow({
           <span className="text-sm text-muted-foreground">({weekday})</span>
           {isToday && (
             <Badge variant="secondary" className="px-1.5 py-0 text-xs font-normal">
-              本日
+              今日
             </Badge>
           )}
         </div>

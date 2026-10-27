@@ -120,7 +120,7 @@ describe("createReservationMessageMailDrafts", () => {
     expect(drafts).toHaveLength(1);
     const draft = drafts[0]!;
 
-    expect(draft.subject).toBe("【i-Club予約システム】予約にメッセージが届きました");
+    expect(draft.subject).toBe("【i-Club 予約システム】予約にメッセージが届きました");
     expect(draft.to).toEqual({
       address: userStaff1.address,
       name: userStaff1.name,

@@ -26,7 +26,7 @@ describe("createInvitationMailDraft", () => {
   it("件名に団体名が入る", () => {
     const draft = createInvitationMailDraft(baseArgs);
     expect(draft.subject).toBe(
-      "【i-Club予約システム】「ロボット工学研究会」への招待が届いています",
+      "【i-Club 予約システム】「ロボット工学研究会」への招待が届いています",
     );
   });
 
@@ -40,7 +40,7 @@ describe("createInvitationMailDraft", () => {
       ...baseArgs,
       role: MembershipRole.Member,
     });
-    expect(memberDraft.text).toContain("役割: メンバー");
+    expect(memberDraft.text).toContain("役割: 一般メンバー");
 
     const adminDraft = createInvitationMailDraft({
       ...baseArgs,

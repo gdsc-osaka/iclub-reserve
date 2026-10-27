@@ -27,7 +27,7 @@ test.describe("UC-035 所属団体を確認する", { tag: "@UC-035" }, () => {
     await openPage(page, "/groups");
     const enabledCard = page.getByRole("link", { name: new RegExp(enabledGroup.name) });
     const pendingCard = page.getByRole("link", { name: new RegExp(pendingGroup.name) });
-    await expect(enabledCard.getByText("活動中", { exact: true })).toBeVisible();
+    await expect(enabledCard.getByText("有効", { exact: true })).toBeVisible();
     await expect(pendingCard.getByText("承認待ち", { exact: true })).toBeVisible();
     // 管理者を務めている団体には、そのことが出る
     await expect(pendingCard.getByText("管理者", { exact: true })).toBeVisible();

@@ -93,7 +93,7 @@ describe("revokeStaffUseCase", () => {
     }
   });
 
-  it("自分自身の剥奪は他に事務局がいれば成功し、revokedSelf が true になる", async () => {
+  it("自分自身の解除は他に事務局がいれば成功し、revokedSelf が true になる", async () => {
     const { deps, revoke } = setupDeps({ staffCount: 2, revokedCount: 1 });
     const result = await revokeStaffUseCase(deps, {
       ...baseArgs,
@@ -107,7 +107,7 @@ describe("revokeStaffUseCase", () => {
     expect(revoke).toHaveBeenCalledWith(baseArgs.actorUserId, now, expect.anything());
   });
 
-  it("他人を剥奪した場合は revokedSelf が false になり、操作履歴が渡される", async () => {
+  it("他人を解除した場合は revokedSelf が false になり、操作履歴が渡される", async () => {
     const { deps, revoke } = setupDeps({
       staffCount: 3,
       revokedCount: 1,

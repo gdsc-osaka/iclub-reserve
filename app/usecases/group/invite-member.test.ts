@@ -336,7 +336,7 @@ describe("inviteMemberUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
       expect(result.error.code).toBe(GroupErrorCode.Forbidden);
-      expect(result.error.userMessage).toBe("メンバーを招待できるのは管理者と事務局だけです。");
+      expect(result.error.userMessage).toBe("メンバーの招待は、管理者と事務局のみ行えます。");
     }
     expect(fakeInvitation.create).not.toHaveBeenCalled();
   });

@@ -52,7 +52,7 @@ describe("format-changes", () => {
       const text = formatSingleChangeText("status", "pending", "enabled", {
         targetType: AuditLogTargetType.Group,
       });
-      expect(text).toBe("状態: 承認待ち → 活動中");
+      expect(text).toBe("状態: 承認待ち → 有効");
     });
 
     it("招待の status を invitationStatusLabel で整形する", () => {
@@ -96,7 +96,7 @@ describe("format-changes", () => {
       const text = formatSingleChangeText("role", "member", "admin", {
         targetType: AuditLogTargetType.Membership,
       });
-      expect(text).toBe("役割: メンバー → 管理者");
+      expect(text).toBe("役割: 一般メンバー → 管理者");
     });
 
     it("有効/無効（is_active）を整形する", () => {
@@ -130,7 +130,7 @@ describe("format-changes", () => {
         "fac_1",
         defaultOptions,
       );
-      expect(facilityText).toBe("施設/設備: （不明） → ミーティングルームA");
+      expect(facilityText).toBe("施設・設備: （不明） → ミーティングルームA");
     });
   });
 

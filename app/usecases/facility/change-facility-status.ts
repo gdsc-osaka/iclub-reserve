@@ -88,7 +88,7 @@ export const changeFacilityStatusUseCase = (
       return errAsync({
         code: FacilityErrorCode.InvalidTransition,
         message: `施設 ${facilityId} の状態はすでに ${facility.isActive ? "有効" : "無効"} である。`,
-        userMessage: "施設の状態が変わっています。画面を読み込み直してください。",
+        userMessage: "施設・設備の状態が変わっています。画面を読み込み直してください。",
       });
     }
 

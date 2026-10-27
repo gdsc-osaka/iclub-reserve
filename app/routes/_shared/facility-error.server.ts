@@ -31,7 +31,7 @@ export const facilityErrorView: Record<FacilityErrorCode, ErrorView> = {
    */
   [FacilityErrorCode.InvalidTransition]: {
     status: 409,
-    message: "施設の状態が変わっています。画面を読み込み直してください。",
+    message: "施設・設備の状態が変わっています。画面を読み込み直してください。",
   },
   /*
    * 編集の保存中に、別の人が同じ施設の写真を先に変えた。
@@ -39,7 +39,7 @@ export const facilityErrorView: Record<FacilityErrorCode, ErrorView> = {
    */
   [FacilityErrorCode.Conflict]: {
     status: 409,
-    message: "ほかの人が同時にこの施設を更新しました。画面を読み込み直してください。",
+    message: "ほかの人が同時にこの施設・設備を更新しました。画面を読み込み直してください。",
   },
   /*
    * 将来の予約が残っているため無効化できない（COND-003）。
@@ -53,7 +53,7 @@ export const facilityErrorView: Record<FacilityErrorCode, ErrorView> = {
     message: "写真を保存できませんでした。時間をおいて、もう一度お試しください。",
   },
   [FacilityErrorCode.DatabaseError]: {
-    message: "処理を完了できませんでした。時間をおいて、もう一度お試しください。",
+    message: "操作できませんでした。時間をおいて、もう一度お試しください。",
   },
   [FacilityErrorCode.CalendarNotWritable]: {
     message: "Google カレンダーへの書き込み権限がありません。",

@@ -45,7 +45,7 @@ test.describe("UC-030 パスキーを管理する", { tag: "@UC-030" }, () => {
     await dialog.getByRole("button", { name: "削除する" }).click();
 
     await expect(page.getByText("パスキーを削除しました。")).toBeVisible();
-    await expect(card.getByText("登録されているパスキーはありません。")).toBeVisible();
+    await expect(card.getByText("登録されているパスキーはありません")).toBeVisible();
 
     const rows = await db.select().from(passkey).where(eq(passkey.id, registered.id));
     expect(rows).toHaveLength(0);

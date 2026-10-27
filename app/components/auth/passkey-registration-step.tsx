@@ -127,8 +127,7 @@ export function PasskeyRegistrationStep({ onDone }: Readonly<PasskeyRegistration
       )}
 
       <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-        <li>メールを確認しにいく手間がなくなります</li>
-        <li>パスキーはこの端末の中に保存され、他の人は使えません</li>
+        <li>パスキーはあなたの端末やパスワード管理アプリに保存され、他の人は使えません</li>
         <li>登録したあとも、メールの認証コードでログインできます</li>
       </ul>
 

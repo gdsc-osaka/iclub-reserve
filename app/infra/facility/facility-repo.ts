@@ -223,7 +223,7 @@ export const createFacilityRepository = (db: Database): FacilityRepository => {
         return err({
           code: FacilityErrorCode.InvalidTransition,
           message: `施設 ${id} の状態更新（${from} -> ${to}）に失敗した。`,
-          userMessage: "施設の状態が変わっています。画面を読み込み直してください。",
+          userMessage: "施設・設備の状態が変わっています。画面を読み込み直してください。",
         });
       }
       return ok(toFacility(row));

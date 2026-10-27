@@ -7,6 +7,7 @@ import { toMyGroup, type MyGroup } from "~/components/group/my-group";
 import { NoGroupsCard } from "~/components/group/my-group-card";
 import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
 import { newReservationPath, toNewReservationLabel } from "~/components/layout/nav-items";
+import { StaffContact } from "~/components/layout/staff-contact";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
@@ -54,7 +55,7 @@ import { StaffUnreadMessagesSection } from "./staff-unread-messages-section";
 import { UpcomingSection } from "./upcoming-section";
 
 export function meta() {
-  return [{ title: "ダッシュボード | iclub-reserve" }];
+  return [{ title: "ダッシュボード | i-Club 予約システム" }];
 }
 
 /**
@@ -376,7 +377,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     return { ok: true } as const;
   }
 
-  return { formError: "不正な操作です。" };
+  return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };
 }
 
 type HomeLoaderData = Route.ComponentProps["loaderData"];
@@ -524,7 +525,7 @@ function StaffDashboard({ data, now }: Readonly<{ data: StaffLoaderData; now: Da
       {showOwnGroup && (
         <section aria-labelledby="own-group-title" className="flex flex-col gap-6 border-t pt-6">
           <h2 id="own-group-title" className="text-lg font-bold tracking-tight">
-            自分の団体
+            所属団体
           </h2>
 
           <InboxSection
@@ -583,8 +584,11 @@ function GroupsUnavailableAlert() {
       <CircleAlert aria-hidden />
       <AlertTitle>所属している団体を読み込めませんでした</AlertTitle>
       <AlertDescription>
-        時間をおいて、画面を再読み込みしてください。
-        繰り返し表示される場合は事務局にご連絡ください。
+        <p>
+          時間をおいて、画面を読み込み直してください。繰り返し表示される場合は、
+          <StaffContact />
+          にお問い合わせください。
+        </p>
       </AlertDescription>
     </Alert>
   );

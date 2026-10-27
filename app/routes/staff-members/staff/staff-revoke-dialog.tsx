@@ -21,10 +21,10 @@ interface StaffRevokeDialogProps {
 }
 
 /**
- * 事務局権限剥奪の確認ダイアログ。
+ * 事務局権限解除の確認ダイアログ。
  *
- * 事務局権限の剥奪は強い影響を持つため、確認ダイアログを挟む。
- * 本人への通知は送られないこと、および自分自身を剥奪する場合は
+ * 事務局権限の解除は強い影響を持つため、確認ダイアログを挟む。
+ * 本人への通知は送られないこと、および自分自身を解除する場合は
  * 事務局画面を開けなくなることを案内する。
  */
 export function StaffRevokeDialog({
@@ -65,13 +65,16 @@ export function StaffRevokeDialog({
 
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {isCurrentUser ? "自分の事務局権限を剥奪しますか？" : "事務局権限を剥奪しますか？"}
+                {isCurrentUser ? "自分の事務局権限を解除しますか？" : "事務局権限を解除しますか？"}
               </AlertDialogTitle>
               <AlertDialogDescription className="space-y-2 text-left">
-                <span>{targetName} の事務局権限を剥奪します。本人への通知は送られません。</span>
+                <span>
+                  {isCurrentUser ? "あなた" : `${targetName} さん`}
+                  の事務局権限を解除します。本人への通知は送られません。
+                </span>
                 {isCurrentUser && (
                   <span className="block text-destructive font-medium">
-                    剥奪後は、この画面を含む事務局の画面を開けなくなります。
+                    解除後は、この画面を含む事務局の画面を開けなくなります。
                   </span>
                 )}
               </AlertDialogDescription>
@@ -82,7 +85,7 @@ export function StaffRevokeDialog({
                 やめる
               </AlertDialogCancel>
               <Button type="submit" variant="destructive" disabled={isSubmitting}>
-                {isSubmitting ? "処理中…" : "剥奪する"}
+                {isSubmitting ? "処理中…" : "解除する"}
               </Button>
             </AlertDialogFooter>
           </Form>
@@ -95,7 +98,7 @@ export function StaffRevokeDialog({
           <input type="hidden" name="intent" value="revoke-staff" />
           <input type="hidden" name="user_id" value={targetUserId} />
           <Button type="submit" variant="destructive" size="sm" className="text-xs">
-            剥奪する
+            解除する
           </Button>
         </Form>
       </noscript>

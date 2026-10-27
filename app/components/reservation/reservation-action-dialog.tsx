@@ -207,8 +207,16 @@ export function ReservationActionDialog({
                   onChange={(e) => setReason(e.target.value)}
                   placeholder={config.reasonPlaceholder}
                   required
+                  aria-describedby={`reason-note-${item.id}-${transition}`}
                   className="text-sm"
                 />
+                {/* 理由の欄を出す操作（取り消し・キャンセル・却下）は、どれも予約を終わらせる */}
+                <p
+                  id={`reason-note-${item.id}-${transition}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  入力した理由は、予約の詳細とお知らせのメールに載ります。この操作は元に戻せません。
+                </p>
               </div>
             )}
 

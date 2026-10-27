@@ -45,7 +45,7 @@ export const createEmailChangedMailDraft = (args: EmailChangedMailArgs): MailDra
       args.userName === ""
         ? { address: args.previousEmail }
         : { address: args.previousEmail, name: args.userName },
-    subject: "【i-Club予約システム】メールアドレス変更完了のお知らせ",
+    subject: "【i-Club 予約システム】メールアドレス変更完了のお知らせ",
     text: lines.join("\n"),
   };
 };

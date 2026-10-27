@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { toMyGroup } from "~/components/group/my-group";
 import { MyGroupCard, NoGroupsCard } from "~/components/group/my-group-card";
 import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
+import { StaffContact } from "~/components/layout/staff-contact";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { createDb } from "~/infra/db";
@@ -15,7 +16,7 @@ import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "所属団体 | iclub-reserve" }];
+  return [{ title: "所属団体 | i-Club 予約システム" }];
 }
 
 /**
@@ -85,7 +86,9 @@ export function ErrorBoundary() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4 text-sm">
           <p className="text-muted-foreground">
-            時間をおいて、もう一度お試しください。繰り返し表示される場合は事務局へお問い合わせください。
+            時間をおいて、もう一度お試しください。繰り返し表示される場合は、
+            <StaffContact />
+            にお問い合わせください。
           </p>
           <Link to="/" className="text-primary underline underline-offset-4">
             ホームへ戻る

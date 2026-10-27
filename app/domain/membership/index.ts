@@ -23,7 +23,7 @@ export type MembershipRole = (typeof MembershipRole)[keyof typeof MembershipRole
  */
 export const membershipRoleLabel: Record<MembershipRole, string> = {
   [MembershipRole.Admin]: "管理者",
-  [MembershipRole.Member]: "メンバー",
+  [MembershipRole.Member]: "一般メンバー",
 };
 
 /**

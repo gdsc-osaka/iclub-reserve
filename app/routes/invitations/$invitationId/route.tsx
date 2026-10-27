@@ -25,7 +25,7 @@ import { rejectInvitationUseCase } from "~/usecases/group/reject-invitation";
 import type { Route } from "./+types/route";
 
 export function meta(): Route.MetaDescriptors {
-  return [{ title: "団体への招待 | iclub-reserve" }];
+  return [{ title: "団体への招待 | i-Club 予約システム" }];
 }
 
 /**
@@ -135,7 +135,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return redirect("/");
   }
 
-  return { formError: "不正な操作です。" } satisfies InvitationActionData;
+  return {
+    formError: "この操作は受け付けられませんでした。画面を読み込み直してください。",
+  } satisfies InvitationActionData;
 }
 
 /**
@@ -147,7 +149,7 @@ export default function AcceptInvitationRoute({ loaderData, actionData }: Route.
   return (
     <InvitationResponseCard
       title="団体への招待"
-      description="以下の団体からメンバーとしての招待が届いています。内容を確認し、承諾または辞退を選択してください。"
+      description="団体への招待が届いています。"
       formError={actionData?.formError}
       acceptLabel="承諾して参加する"
       rejectDescription="この招待は使えなくなり、あとから承諾することはできません。参加する場合は、団体の管理者に招待し直してもらってください。"
@@ -156,13 +158,13 @@ export default function AcceptInvitationRoute({ loaderData, actionData }: Route.
         <p className="mt-1 text-lg font-semibold text-foreground">{invitation.groupName}</p>
       </InvitationDetail>
 
-      <InvitationDetail label="割り当てられる役割">
+      <InvitationDetail label="役割">
         <div className="mt-1">
           <MembershipRoleBadge role={invitation.role} />
         </div>
       </InvitationDetail>
 
-      <InvitationDetail label="承諾の有効期限">
+      <InvitationDetail label="承諾の期限">
         <p className="mt-1 text-sm text-foreground">
           {formatDateTime(new Date(invitation.expiresAt))}
         </p>

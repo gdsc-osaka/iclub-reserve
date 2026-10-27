@@ -41,7 +41,7 @@ import { getReservationEditFormUseCase } from "~/usecases/reservation/get-reserv
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "予約の変更 | iclub-reserve" }];
+  return [{ title: "予約の変更 | i-Club 予約システム" }];
 }
 
 /**
@@ -246,18 +246,21 @@ function PageShell({
  *
  * ローダーが投げた応答には、エラーの表が決めた文言（`data.message`）が入っている。
  * 変更できない理由（権限が無い・終了した・状態が変わった）はそれで伝わるので、ここで書き分けない。
+ * 見出しだけは、変更できない理由があるとき（403・409）と、一時的な失敗とで分ける。
+ * 一時的な失敗に「変更できません」と出すと、本文の「時間をおいてお試しください」と食い違う。
  */
 export function ErrorBoundary({ error, params }: Route.ErrorBoundaryProps) {
   const isResponse = isRouteErrorResponse(error);
   const isNotFound = isResponse && error.status === 404;
+  const isNotEditable = isResponse && (error.status === 403 || error.status === 409);
   const reservationId = params.reservationId;
 
   const errorMessage =
     isResponse && typeof error.data === "object" && error.data !== null && "message" in error.data
       ? String(error.data.message)
       : isNotFound
-        ? "予約が存在しないか、表示できません。"
-        : "この予約は変更できません。時間をおいて、もう一度お試しください。";
+        ? "予約が見つからないか、表示する権限がありません。"
+        : "時間をおいて、もう一度お試しください。";
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10">
@@ -265,7 +268,11 @@ export function ErrorBoundary({ error, params }: Route.ErrorBoundaryProps) {
         <CardHeader>
           <CardTitle className="text-xl">
             <h1 className="text-xl font-bold">
-              {isNotFound ? "予約が見つかりません" : "この予約は変更できません"}
+              {isNotFound
+                ? "予約が見つかりません"
+                : isNotEditable
+                  ? "この予約は変更できません"
+                  : "変更の画面を表示できません"}
             </h1>
           </CardTitle>
         </CardHeader>

@@ -56,7 +56,7 @@ import type { Route } from "./+types/route";
 import { ReservationAuditLogCard } from "./reservation-audit-log-card";
 
 export function meta() {
-  return [{ title: "予約の詳細 | iclub-reserve" }];
+  return [{ title: "予約の詳細 | i-Club 予約システム" }];
 }
 
 /**
@@ -247,7 +247,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const reason = formData.get("reason");
   const transition = parseReservationTransition(intent);
   if (transition === null) {
-    return { formError: "不正な操作です。" };
+    return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };
   }
 
   /*
@@ -301,7 +301,7 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
       )}
       {edited === "unchanged" && (
         <Alert className="border-border bg-muted/50">
-          <AlertDescription>変更された項目が無かったため、保存していません。</AlertDescription>
+          <AlertDescription>変更された項目がなかったため、そのままにしました。</AlertDescription>
         </Alert>
       )}
 
@@ -443,7 +443,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         <CardContent className="flex flex-col gap-4 text-sm">
           <p className="text-muted-foreground">
             {isNotFound
-              ? "予約が存在しないか、表示できません。"
+              ? "予約が見つからないか、表示する権限がありません。"
               : "時間をおいて、もう一度お試しください。"}
           </p>
           <Link to="/reservations" className="text-primary underline underline-offset-4">

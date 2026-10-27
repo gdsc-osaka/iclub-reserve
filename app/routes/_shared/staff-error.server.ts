@@ -47,14 +47,14 @@ export const staffErrorView: Record<StaffErrorCode, ErrorView> = {
     message: "対象の事務局メンバーが見つかりませんでした。画面を読み込み直してください。",
   },
   [StaffErrorCode.LastStaffRequired]: {
-    message: "事務局が 0 人になるため、剥奪できません。先に別の人を事務局に招待してください。",
+    message: "事務局が 0 人になるため、解除できません。先に別の人を事務局に招待してください。",
   },
   [StaffErrorCode.Conflict]: {
     message:
       "ほかの事務局の操作と重なったため、処理できませんでした。画面を読み込み直してください。",
   },
   [StaffErrorCode.DatabaseError]: {
-    message: "処理を完了できませんでした。時間をおいて、もう一度お試しください。",
+    message: "操作できませんでした。時間をおいて、もう一度お試しください。",
   },
 };
 
