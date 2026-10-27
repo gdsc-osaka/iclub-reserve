@@ -38,18 +38,34 @@ Issue #246 を受けて決める。
 
 - Vite+ のグローバルのコマンド（`vp`）は入れなくてよい。入れた人は `vp check`・`vp test` なども直接使える。
 
-### 3. 型の情報を使うリントは、まだ有効にしない
+### 3. 型の情報を使うリントと型の検査も `vp lint` で行う
 
-- `vp migrate` は `lint.options.typeAware`・`lint.options.typeCheck` を有効にするが、外した。
-  有効にすると、今のコードで 101 件のエラーが出るため
-  （`unbound-method` 79 件・`no-floating-promises` 10 件・`no-misused-spread` 6 件・`no-base-to-string` 6 件）。
-- 型の検査も `tsc -b` のまま。`typeCheck` で `vp lint` に型を見させるには、CI の Lint でも先に `react-router typegen` を動かす必要がある。
-- リントの規則は移行の前と同じ（`correctness` をエラーにする）。増えたのは決定 1 の `prefer-vite-plus-imports` だけ。
+- `lint.options.typeAware`（型の情報を使うリント）と `lint.options.typeCheck`（型の検査）を有効にする。Vite+ の勧めどおり。
+  最初の移行（#247）では、出たエラーを直す変更が混ざらないよう外しておき、続く変更で有効にした。
+- 規則は `correctness` をエラーにしたまま。型の情報を使う規則のうち `correctness` に入るものが加わった。
+  有効にして出た 101 件は、次のように直した。
+
+  | 規則                   | 件数 | 直し方                                                                                                                                                                                       |
+  | ---------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `unbound-method`       | 79   | すべてテストの `expect(fake.method)`・`vi.mocked(fake.method)`。偽物（`vi.fn`）は `this` を使わないので、テストのファイルでだけ規則を切る（`lint.overrides`）                                |
+  | `no-floating-promises` | 10   | `fetcher.submit`・`revalidator.revalidate` に `void` を付ける（`void navigate(...)` と同じ書き方）                                                                                           |
+  | `no-misused-spread`    | 6    | 文字数はコードポイントで数える決まり（COND-023 など）なので、`[...s]` を同じ結果になる `Array.from(s)` に書き換える                                                                          |
+  | `no-base-to-string`    | 6    | フォームの値は `typeof` で文字列か確かめる。`last_error` に残す原因は、オブジェクトなら JSON にする（`app/infra/format-last-error.ts`。それまでは `[object Object]` になり中身が消えていた） |
+
+- `unbound-method` を切るのはテストだけ。アプリのコードでは今までどおり止める。
+  ESLint ならテスト向けの規則（`jest/unbound-method`）で `expect` に渡すだけの場合を見分けられるが、oxlint には無い。
+- リントは React Router と wrangler が生成した型（`.react-router/types`・`worker-configuration.d.ts`）を読む。
+  無いと「`./+types/route` が見つからない」で止まるので、`postinstall` で `wrangler types` に加えて `react-router typegen` も動かす。
+  ルートを足したときは `pnpm run dev` の間に作り直されるが、そうでなければ `pnpm typecheck` で作り直す。
+  `worker-configuration.d.ts` は `pnpm run dev` の間も作り直されないので、`wrangler.jsonc` を変えたときも `pnpm typecheck` で作り直す。
+  - pnpm は、入れるものが変わっていないと install を飛ばし、`postinstall` も動かさない。CI はまっさらな状態から入れるので動く。
+- `pnpm typecheck`（`tsc -b`）と CI の Type Check は残す。ブランチのルールで必須にしているチェックで、
+  `tsconfig` の参照のとおりに確かめるため。型のエラーは Lint と Type Check の両方で出る。
 
 ### 4. コミットの前に、コミットするファイルを整える
 
 - `vp migrate` の既定どおり、`pnpm install` のときに `prepare`（`vp config`）が Git のフックを入れ、
-  コミットの前に `vp staged` を動かす。中身は `vp check --fix`（フォーマットと、リントで直せるところの修正）で、
+  コミットの前に `vp staged` を動かす。中身は `vp check --fix`（フォーマット・リントで直せるところの修正・型の検査）で、
   コミットするファイルだけが対象（`vite.config.ts` の `staged`、`.vite-hooks/pre-commit`）。
 - CI でフォーマットだけが落ちることを減らすため。
 - 1 回だけ止めるときは `VP_GIT_HOOKS=0 git commit`、その手元でずっと止めるときは `pnpm exec vp hooks disable`。
@@ -79,17 +95,19 @@ Issue #246 を受けて決める。
 
 ## 採らなかった案
 
-- **型の情報を使うリントをこの変更で有効にし、101 件を直す**: ツールの入れ替えとコードの書き換えが 1 つの PR に混ざり、レビューしにくい。別に行う。
+- **型の情報を使うリントを、最初の移行で有効にする**: ツールの入れ替えとコードの書き換えが 1 つの PR に混ざり、レビューしにくい。別の変更にした（決定 3）。
+- **テストの偽物を書き換えて `unbound-method` を通す**: 偽物を窓口の型で受けず `vi.fn` の型のまま持てば通るが、9 ファイル・79 か所を書き換えても、防げる誤りが無い。
+- **`typeAware` だけを有効にし、`typeCheck` は有効にしない**: 生成した型が無くても止まらずに済むが、型の分からないところで規則が黙って効かなくなり、手元と CI で結果がずれる。
 - **CI を `pnpm/setup` のままにする**: 動くが、Node.js の版を CI に（`runtime: node@24`）、`.node-version` とは別に書くことになる。
 - **pnpm 11 のまま、版だけを書く**: 12 で install・リント・型の検査・単体テスト・ビルド・E2E が通ったので、Vite+ が既定で選ぶ 12 にそろえた。
 
 ## 影響
 
 - `node_modules` から `vitest`・`oxlint`・`oxfmt`・`tsx` のコマンドが無くなる。手で動かすときは `pnpm exec vp test`・`pnpm exec vp lint`・`pnpm exec vpx <ファイル>` を使う。
+- 型のエラーが残っていると、コミットの前の確認（決定 4）と CI の Lint でも止まる。コミットの前の確認は 1 ファイルで約 7 秒から約 8 秒になった。
 
 ## 残っていること
 
-- 型の情報を使うリント（決定 3）を有効にする。
 - Workers Builds の `PNPM_VERSION` を、ダッシュボードで 12 に変える（決定 5）。
 
 ## 関連

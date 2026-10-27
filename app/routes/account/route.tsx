@@ -232,7 +232,7 @@ function ProfileNameCard({ currentName }: Readonly<{ currentName: string }>) {
 
     toast.success("氏名を更新しました。");
     setIsEditing(false);
-    revalidator.revalidate();
+    void revalidator.revalidate();
   };
 
   return (
@@ -420,7 +420,7 @@ function EmailChangeDialog({
 
     toast.success("メールアドレスを変更しました。");
     handleOpenChange(false);
-    revalidator.revalidate();
+    void revalidator.revalidate();
   };
 
   /*
@@ -628,7 +628,7 @@ function PasskeyCard({
 
     toast.success("パスキー名を変更しました。");
     setRenamingId(null);
-    revalidator.revalidate();
+    void revalidator.revalidate();
   };
 
   const handleDeletePasskey = async (pk: AccountPasskeyItem) => {
@@ -663,7 +663,7 @@ function PasskeyCard({
     }
 
     toast.success("パスキーを削除しました。");
-    revalidator.revalidate();
+    void revalidator.revalidate();
   };
 
   const handleAddPasskey = async () => {
@@ -683,7 +683,7 @@ function PasskeyCard({
     }
 
     toast.success("パスキーを登録しました。");
-    revalidator.revalidate();
+    void revalidator.revalidate();
   };
 
   const handleReLogin = async () => {
@@ -908,7 +908,7 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
                   description={`「${sess.deviceName}」からログアウトします。その端末で再び使うには、ログインし直す必要があります。`}
                   disabled={isRevoking}
                   onConfirm={() => {
-                    fetcher.submit(
+                    void fetcher.submit(
                       { intent: "revoke-session", sessionId: sess.id },
                       { method: "post" },
                     );
@@ -927,7 +927,7 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
               description={`この端末以外の ${otherSessions.length} 台からログアウトします。`}
               disabled={isRevoking}
               onConfirm={() => {
-                fetcher.submit({ intent: "revoke-other-sessions" }, { method: "post" });
+                void fetcher.submit({ intent: "revoke-other-sessions" }, { method: "post" });
               }}
             />
           </div>

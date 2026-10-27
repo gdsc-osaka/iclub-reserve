@@ -13,7 +13,7 @@
     "deploy:preview-branch": "pnpm run build:preview && wrangler preview --env preview",
     "preview": "pnpm run build && vp preview",
     "cf-typegen": "wrangler types",
-    "postinstall": "wrangler types",
+    "postinstall": "wrangler types && react-router typegen",
     "format": "vp fmt --check .",
     "format:fix": "vp fmt .",
     "lint": "vp lint",

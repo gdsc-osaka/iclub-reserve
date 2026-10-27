@@ -8,8 +8,8 @@ import {
   type MailOutbox,
   type MailOutboxEntry,
 } from "~/domain/mail/mail-outbox";
-import type { MailSendError } from "~/domain/mail/mail-sender";
 import type { Database } from "../db";
+import { formatLastError } from "../format-last-error";
 
 /** 送信中のまま放置されたとみなすまでの時間。Worker が途中で落ちた行を救う（ADR-002 決定 4） */
 export const STUCK_AFTER_MS = 5 * 60 * 1000;
@@ -18,11 +18,6 @@ const toMailOutboxError = wrapError(
   MailOutboxErrorCode.DatabaseError,
   "outbox 操作に失敗しました。",
 );
-
-const formatMailSendError = (error: MailSendError): string => {
-  const cause = error.cause ? String(error.cause) : "";
-  return cause ? `${error.code}: ${cause}` : error.code;
-};
 
 const toMailOutboxEntry = (row: typeof mailOutboxTable.$inferSelect): MailOutboxEntry => ({
   id: row.id,
@@ -127,7 +122,7 @@ export const createD1MailOutbox = (db: Database): MailOutbox => ({
         .set({
           status: MailOutboxStatus.Pending,
           nextAttemptAt: args.nextAttemptAt,
-          lastError: formatMailSendError(args.error),
+          lastError: formatLastError(args.error),
           updatedAt: new Date(),
         })
         .where(eq(mailOutboxTable.id, args.id)),
@@ -140,7 +135,7 @@ export const createD1MailOutbox = (db: Database): MailOutbox => ({
         .update(mailOutboxTable)
         .set({
           status: MailOutboxStatus.Dead,
-          lastError: formatMailSendError(args.error),
+          lastError: formatLastError(args.error),
           updatedAt: new Date(),
         })
         .where(eq(mailOutboxTable.id, args.id)),

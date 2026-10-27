@@ -252,6 +252,15 @@ const loadStaffToday = ({ db, user, now }: LoadContext) =>
  * どれも画面の一部の行だけを変えるので、`useFetcher` から送られてくる。
  * 成功したら `{ ok: true }` を返し、React Router が loader を読み直して行を消す。
  */
+/**
+ * フォームの値を文字列で読む。無いときと、ファイルが送られてきたときは空文字にする。
+ * 空文字の ID は、ユースケースが見つからない予約・招待として扱う。
+ */
+const readFormText = (formData: FormData, name: string): string => {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : "";
+};
+
 export async function action({ request, context }: Route.ActionArgs) {
   const user = requireRequestUser(context);
   const formData = await request.formData();
@@ -266,7 +275,7 @@ export async function action({ request, context }: Route.ActionArgs) {
    */
   const transition = parseReservationTransition(intent);
   if (transition !== null && isStaffTransition(transition)) {
-    const reservationId = String(formData.get("reservationId") ?? "");
+    const reservationId = readFormText(formData, "reservationId");
     const reason = formData.get("reason");
 
     const result = await changeReservationStatus(db, request, user, {
@@ -295,7 +304,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         membershipRepository: createMembershipRepository(db),
       },
       {
-        reservationId: String(formData.get("reservationId") ?? ""),
+        reservationId: readFormText(formData, "reservationId"),
         actorUserId: user.id,
         isStaff: user.is_staff,
         now,
@@ -341,7 +350,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const result = await acceptInvitationUseCase(
       { invitationRepository: createInvitationRepository(db) },
       {
-        invitationId: String(formData.get("invitationId") ?? ""),
+        invitationId: readFormText(formData, "invitationId"),
         actorUserId: user.id,
         actorEmail: user.email,
         now,
@@ -362,7 +371,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     const result = await rejectInvitationUseCase(
       { invitationRepository: createInvitationRepository(db) },
       {
-        invitationId: String(formData.get("invitationId") ?? ""),
+        invitationId: readFormText(formData, "invitationId"),
         actorUserId: user.id,
         actorEmail: user.email,
         now,

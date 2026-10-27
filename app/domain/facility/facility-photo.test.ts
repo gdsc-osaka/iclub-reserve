@@ -10,7 +10,7 @@ import {
 import { FacilityErrorCode, FacilityField } from "./index";
 
 /** 文字列を ASCII のバイト列にする */
-const ascii = (text: string): number[] => [...text].map((c) => c.charCodeAt(0));
+const ascii = (text: string): number[] => Array.from(text, (c) => c.charCodeAt(0));
 
 /** 各形式の先頭 12 バイト */
 const JPEG_HEAD = new Uint8Array([

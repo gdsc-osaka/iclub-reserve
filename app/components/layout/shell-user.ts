@@ -17,7 +17,7 @@ export interface ShellUser {
  * アバターに出す 1 文字。
  *
  * 絵文字や一部の漢字は 1 文字が 2 つ分の長さで数えられるため、
- * `charAt(0)` ではなく配列に開いてから先頭を取る。
+ * `charAt(0)` ではなく Unicode のコードポイントに分けてから先頭を取る。
  * そうしないと文字が半分に割れて、豆腐（□）になってしまう。
  */
-export const toAvatarInitial = (name: string): string => [...name.trim()].at(0) ?? "?";
+export const toAvatarInitial = (name: string): string => Array.from(name.trim()).at(0) ?? "?";

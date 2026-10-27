@@ -207,7 +207,7 @@ function InvitationRow({
   const roleLabel = membershipRoleLabel[invitation.role];
 
   const submit = (intent: HomeIntent) => {
-    fetcher.submit({ intent, invitationId: invitation.id }, { method: "post" });
+    void fetcher.submit({ intent, invitationId: invitation.id }, { method: "post" });
   };
 
   return (
@@ -308,7 +308,7 @@ export function InboxSection({
     for (const item of reservations) {
       formData.append("reservationId", item.reservationId);
     }
-    markAllFetcher.submit(formData, { method: "post" });
+    void markAllFetcher.submit(formData, { method: "post" });
   };
 
   return (

@@ -49,7 +49,7 @@ const validateNameInput = (
   }
 
   // Unicode コードポイント数で数える（サロゲートペアも 1 文字として扱う）
-  const codePointLength = [...trimmed].length;
+  const codePointLength = Array.from(trimmed).length;
   if (codePointLength > USER_NAME_MAX_LENGTH) {
     return err({
       message: `${messages.entityLabel}が ${USER_NAME_MAX_LENGTH} 文字を超えている。`,
