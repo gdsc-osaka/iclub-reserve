@@ -91,7 +91,7 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
     await recordOf(page, facility.name)
       .getByRole("link", { name: new RegExp(facility.name) })
       .click();
-    await expect(page).toHaveURL(new RegExp(`/reservations/${reservation.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/staff/reservations/${reservation.id}$`));
   });
 
   test("事務局でない人が開くと、事務局専用の案内が出る", async ({ page, signInAs }) => {
@@ -133,7 +133,7 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
     });
 
     await signInAs(staff.id);
-    await openPage(page, `/groups/${group.id}`);
+    await openPage(page, `/staff/groups/${group.id}`);
 
     // 操作者が個人名で見え、事務局権限バッジが付いている
     const record = recordOf(page, "団体情報の編集");
@@ -177,7 +177,7 @@ test.describe("UC-024 操作履歴を閲覧する（事務局）", { tag: "@UC-0
 
     // 団体に所属しない事務局 staffViewer としてサインイン
     await signInAs(staffViewer.id);
-    await openPage(page, `/reservations/${reservation.id}`);
+    await openPage(page, `/staff/reservations/${reservation.id}`);
 
     // 操作者が個人名で見え、事務局権限バッジが付いている
     const record = recordOf(page, "承認");

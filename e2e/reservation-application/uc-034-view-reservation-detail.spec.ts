@@ -82,7 +82,7 @@ test.describe("UC-034 予約の詳細を確認する", { tag: "@UC-034" }, () =>
     // 事務局の人はどの団体にも入っていない
     await signInAs(personas.staff.id);
 
-    await openPage(page, `/reservations/${reservation.id}`);
+    await openPage(page, `/staff/reservations/${reservation.id}`);
 
     const content = reservationContent(page);
     await expect(content.getByText("7名", { exact: true })).toBeVisible();

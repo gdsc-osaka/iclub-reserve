@@ -42,7 +42,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     await signInAs(personas.staff.id);
 
     const dateKey = toDateKey(reservation.startAt);
-    await openPage(page, `/availability?facility=${facility.id}&date=${dateKey}`);
+    await openPage(page, `/staff/availability?facility=${facility.id}&date=${dateKey}`);
 
     // 予約の帯をクリックして欄を開く
     const reservationBlock = page.getByRole("button", { name: /詳細を見る/ });
@@ -54,7 +54,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     // 欄内に予約詳細リンクがあることを確認
     const detailLink = panel.getByRole("link", { name: "予約の詳細を見る" });
     await expect(detailLink).toBeVisible();
-    await expect(detailLink).toHaveAttribute("href", `/reservations/${reservation.id}`);
+    await expect(detailLink).toHaveAttribute("href", `/staff/reservations/${reservation.id}`);
 
     // 欄内の承認ボタンをクリック
     await panel.getByRole("button", { name: "承認" }).click();
@@ -73,7 +73,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     await expect(page.getByRole("button", { name: /承認済み の詳細を見る/ })).toBeVisible();
     await expect(panel.getByText("承認済み", { exact: true })).toBeVisible();
     await expect(page).toHaveURL(
-      `/availability?facility=${facility.id}&date=${dateKey}&reservation=${reservation.id}`,
+      `/staff/availability?facility=${facility.id}&date=${dateKey}&reservation=${reservation.id}`,
     );
 
     const [saved] = await db

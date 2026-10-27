@@ -180,7 +180,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     ).toBeVisible();
     await expect(memberPanel.getByRole("button", { name: "内容を確認する" })).toBeDisabled();
 
-    // 事務局では「予約を作成」で同じ欄が開き、直接作成の切り替えが出る
+    // 事務局では「予約を作成」で事務局の画面の同じ欄が開き、直接作成で選ぶ解錠の手配が出る（ADR-016 決定 13）
     const staff = await createUser(db, { is_staff: true });
     await signInAs(staff.id);
 
@@ -191,7 +191,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
       .click();
 
     await expect(page).toHaveURL(
-      new RegExp(`/availability\\?.*date=${todayKey}.*draft=${todayKey}`),
+      new RegExp(`/staff/availability\\?.*date=${todayKey}.*draft=${todayKey}`),
     );
     const staffPanel = page.getByRole("region", { name: "新しい予約" });
     await expect(staffPanel).toBeVisible();
@@ -200,9 +200,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
         "カレンダーの空いている時間を押すか、開始時刻と終了時刻を選んでください。",
       ),
     ).toBeVisible();
-    await expect(
-      staffPanel.getByRole("switch", { name: "承認済みとして直接作成する" }),
-    ).toBeVisible();
+    await expect(staffPanel.getByLabel("要手配")).toBeVisible();
   });
 
   test("丸で伸び縮みでき、PC ではなぞって選べる", async ({ page, db, signInAs, isMobile }) => {

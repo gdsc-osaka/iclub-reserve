@@ -205,7 +205,7 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     await signInAs(personas.staff.id);
 
     // 予約 A の変更画面を開く
-    await openPage(page, `/reservations/${reservationA.id}/edit`);
+    await openPage(page, `/staff/reservations/${reservationA.id}/edit`);
     await expect(page).toHaveURL(new RegExp(`edit=${reservationA.id}`));
     const panel = page.getByRole("region", { name: "予約の変更" });
     await expect(panel).toBeVisible();

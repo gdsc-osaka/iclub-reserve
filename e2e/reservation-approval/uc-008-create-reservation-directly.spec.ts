@@ -29,7 +29,7 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
 
     const wednesday = nextWeekAt(Weekday.Wednesday, 0);
     const day = toDateKey(wednesday);
-    await openPage(page, `/availability?facility=${facility.id}&date=${day}`);
+    await openPage(page, `/staff/availability?facility=${facility.id}&date=${day}`);
 
     // 来週の水曜の「10:00 から申請」を押す
     const column = page.getByRole("group", { name: formatMonthDay(wednesday) });
@@ -43,9 +43,6 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     // 欄の「申請元の団体」で、このテストで作った団体を選ぶ
     await panel.getByRole("combobox", { name: "申請元の団体" }).click();
     await page.getByRole("option", { name: group.name }).click();
-
-    // 「承認済みとして直接作成する」をオン
-    await panel.getByRole("switch", { name: "承認済みとして直接作成する" }).click();
 
     // 使用人数 5・備考
     await panel.getByLabel("使用人数").fill("5");
@@ -139,7 +136,7 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     const day = toDateKey(wednesday);
     await openPage(
       page,
-      `/availability?facility=${facility.id}&date=${day}&draft=${day}T10:00-11:00`,
+      `/staff/availability?facility=${facility.id}&date=${day}&draft=${day}T10:00-11:00`,
     );
 
     // 「この時間帯はすでに埋まっています」が出て、「内容を確認する」が押せない

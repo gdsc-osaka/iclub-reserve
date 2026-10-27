@@ -175,7 +175,7 @@ test.describe("UC-039 自団体の予約のカレンダーを購読する", { ta
     });
 
     await signInAs(personas.staff.id);
-    await openPage(page, `/groups/${group.id}`);
+    await openPage(page, `/staff/groups/${group.id}`);
 
     // 団体情報カードなどは表示されるが、カレンダー購読カードは表示されない
     await expect(page.getByRole("heading", { name: group.name })).toBeVisible();
