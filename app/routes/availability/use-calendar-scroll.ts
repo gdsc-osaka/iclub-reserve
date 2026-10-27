@@ -45,6 +45,34 @@ const measure = (container: HTMLElement) => {
 };
 
 /**
+ * 時間帯を縦に見せるための、箱の `scrollTop`。もう見えていれば今の `scrollTop` のまま。
+ *
+ * 時間帯が日付の見出し（sticky）の下から箱の下端までに収まっていなければ、
+ * 上端が見出しのすぐ下に来るようにする。日の列が見つからなければ null。
+ */
+const toRevealScrollTop = (
+  container: HTMLElement,
+  dateKey: string,
+  range: SlotRange,
+): number | null => {
+  const column = container.querySelector(`[data-date-key="${dateKey}"]`);
+  const heading = column?.querySelector("[data-slot='day-heading']")?.getBoundingClientRect();
+  const body = column?.querySelector("[data-slot='day-body']")?.getBoundingClientRect();
+  if (heading === undefined || body === undefined) return null;
+
+  // 時刻の位置は、本体の高さに対する割合で決まっている（帯や仮の枠と同じ計算）
+  const toY = (at: number) => body.top + (body.height * toAxisPercent(at - OPEN_MINUTES)) / 100;
+  const y = toY(range.startMinutes);
+  const shownTop = heading.bottom;
+  const shownBottom = container.getBoundingClientRect().top + container.clientHeight;
+  // 時間帯がまるごと（箱より長ければ箱の高さぶん）見えていれば送らない。上端だけで見ると、下端で切れたまま残る
+  const height = Math.min(toY(range.endMinutes) - y, shownBottom - shownTop);
+  const isShown = y >= shownTop && y + height <= shownBottom;
+
+  return isShown ? container.scrollTop : container.scrollTop + (y - shownTop);
+};
+
+/**
  * カレンダーの横の位置を扱う（ADR-014 決定 3〜5）。
  *
  * 止まる位置は CSS の scroll-snap が決めるので、ここでは行き先を決めて `scrollTo` するだけにする。
@@ -247,11 +275,10 @@ export function useCalendarScroll({
    * その日と時刻を、見える範囲に入れる。欄で開いたもの（予約の帯・仮の枠）を見せるのに使う。
    *
    * 横は、もう見えていれば動かさない（{@link toRevealIndex}）。
-   * 縦は、時間帯が日付の見出し（sticky）の下から箱の下端までに収まっていなければ、
-   * 上端が見出しのすぐ下に来るように送る。
+   * 縦は {@link toRevealScrollTop} で決める。時間帯が null（時刻を選んでいない仮の枠）なら縦は動かさない。
    * 欄が開くと箱の幅と高さが変わるので、1 フレーム待ってから測る（幅の合わせ直しが先に済む）。
    */
-  const reveal = (dateKey: string, range: SlotRange) => {
+  const reveal = (dateKey: string, range: SlotRange | null) => {
     requestAnimationFrame(() => {
       const container = containerRef.current;
       const index = findDayIndex(days, dateKey);
@@ -261,27 +288,12 @@ export function useCalendarScroll({
 
       const from = targetIndexRef.current ?? firstIndex;
       const to = toRevealIndex(days, index, from, visibleCount);
+      const top =
+        range === null ? container.scrollTop : toRevealScrollTop(container, dateKey, range);
+      if (top === null) return;
 
-      const column = container.querySelector(`[data-date-key="${dateKey}"]`);
-      const heading = column?.querySelector("[data-slot='day-heading']")?.getBoundingClientRect();
-      const body = column?.querySelector("[data-slot='day-body']")?.getBoundingClientRect();
-      if (heading === undefined || body === undefined) return;
-
-      // 時刻の位置は、本体の高さに対する割合で決まっている（帯や仮の枠と同じ計算）
-      const toY = (at: number) => body.top + (body.height * toAxisPercent(at - OPEN_MINUTES)) / 100;
-      const y = toY(range.startMinutes);
-      const shownTop = heading.bottom;
-      const shownBottom = container.getBoundingClientRect().top + container.clientHeight;
-      // 時間帯がまるごと（箱より長ければ箱の高さぶん）見えていれば送らない。上端だけで見ると、下端で切れたまま残る
-      const height = Math.min(toY(range.endMinutes) - y, shownBottom - shownTop);
-      const isShown = y >= shownTop && y + height <= shownBottom;
-
-      if (to === from && isShown) return;
-      container.scrollTo({
-        left: to * columnWidth,
-        top: isShown ? container.scrollTop : container.scrollTop + (y - shownTop),
-        behavior: "smooth",
-      });
+      if (to === from && top === container.scrollTop) return;
+      container.scrollTo({ left: to * columnWidth, top, behavior: "smooth" });
       targetIndexRef.current = to;
     });
   };

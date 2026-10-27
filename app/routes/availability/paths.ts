@@ -12,10 +12,10 @@ import { parseTokyoDateKey, parseTokyoTimeKey, toTokyoTimeKey } from "~/lib/date
  * どちらか片方だけ付け忘れたリンクが混ざるので、必ずここを通す。
  */
 
-/** 仮の枠。日付とその日の時間帯 */
+/** 仮の枠。日付とその日の時間帯（時刻が未選択なら null） */
 export interface CalendarDraft {
   readonly dateKey: string;
-  readonly range: SlotRange;
+  readonly range: SlotRange | null;
 }
 
 /** 欄で開いているもの */
@@ -23,17 +23,19 @@ export type CalendarSelection =
   | { readonly kind: "reservation"; readonly reservationId: string }
   | { readonly kind: "draft"; readonly draft: CalendarDraft };
 
-/** 仮の枠を URL パラメータ用の文字列にする（例: 2026-11-04T10:00-11:00） */
+/** 仮の枠を URL パラメータ用の文字列にする（例: 2026-11-04T10:00-11:00、または 2026-11-04） */
 export const toDraftParam = (draft: CalendarDraft): string =>
-  `${draft.dateKey}T${toTokyoTimeKey(draft.range.startMinutes)}-${toTokyoTimeKey(draft.range.endMinutes)}`;
+  draft.range === null
+    ? draft.dateKey
+    : `${draft.dateKey}T${toTokyoTimeKey(draft.range.startMinutes)}-${toTokyoTimeKey(draft.range.endMinutes)}`;
 
-const draftPattern = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})-(\d{2}:\d{2})$/;
+const draftPattern = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2})-(\d{2}:\d{2}))?$/;
 
 /**
  * URL の `draft` から仮の枠を読み取る。
  *
  * URL は利用者が書き換えられるので、形が違う・日付として読めない・開始や終了が 30 分の枠に無い・
- * 開始が終了以後、のどれかなら null を返す。
+ * 開始が終了以後、のどれかなら null を返す。日付のみ（YYYY-MM-DD）なら range: null として返す。
  */
 export const parseDraftParam = (value: string | null): CalendarDraft | null => {
   if (value === null) return null;
@@ -42,6 +44,9 @@ export const parseDraftParam = (value: string | null): CalendarDraft | null => {
 
   const [, dateKey, startStr, endStr] = match;
   if (parseTokyoDateKey(dateKey) === null) return null;
+
+  // 時刻は、開始と終了が両方あるか両方無いか（正規表現で 1 組にしている）。無ければ時刻を選んでいない仮の枠
+  if (startStr === undefined || endStr === undefined) return { dateKey, range: null };
 
   const startMinutes = parseTokyoTimeKey(startStr);
   const endMinutes = parseTokyoTimeKey(endStr);
@@ -77,15 +82,17 @@ export const parseCalendarSelection = (searchParams: URLSearchParams): CalendarS
 /**
  * この画面の URL を組み立てる。施設と基準の日を両方持ち回るので、リンクは必ずここを通す。
  *
+ * `facilityId` が null のときは `facility=` を付けない（一覧の先頭の施設を出す）。
  * `selection` を渡すと、欄で開くもの（`reservation` か `draft`）を後ろに付ける。
  * 仮の枠の値は数字・`-`・`T`・`:` だけなので、アドレス欄で読めるよう encodeURIComponent しない。
  */
 export const toCalendarPath = (
-  facilityId: string,
+  facilityId: string | null,
   dateKey: string,
   selection?: CalendarSelection,
 ): string => {
-  const base = `/availability?facility=${encodeURIComponent(facilityId)}&date=${dateKey}`;
+  const facility = facilityId === null ? "" : `facility=${encodeURIComponent(facilityId)}&`;
+  const base = `/availability?${facility}date=${dateKey}`;
   if (selection === undefined) return base;
   return selection.kind === "reservation"
     ? `${base}&reservation=${encodeURIComponent(selection.reservationId)}`

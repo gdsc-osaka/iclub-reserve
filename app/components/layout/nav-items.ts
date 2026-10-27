@@ -169,7 +169,7 @@ export const staffNavItems: readonly NavItem[] = [
 /**
  * 予約の申請（事務局は作成）の入口の行き先。サイドバー・ボトムバー・ダッシュボードの見出しのボタンが使う。
  *
- * 行き先は空き状況カレンダーの欄を開く URL に変える予定なので、この 1 か所で決める。
+ * /reservations/new から空き状況カレンダーへ転送し、時刻を選んでいない欄を開く（ADR-014 決定 10・11）。
  */
 export const newReservationPath = "/reservations/new";
 

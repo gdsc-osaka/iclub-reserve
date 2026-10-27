@@ -7,9 +7,12 @@ import { ReservationStatus } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
 import type { AvailabilityReservationRow } from "~/query/facility/facility-availability-calendar";
 import type { HolidayQuery } from "~/query/holiday";
+import type { ApplicantGroupQuery } from "~/query/reservation/applicant-groups";
+import type { ReservationFormGroup } from "~/query/reservation/reservation-form";
 import type { UserGroupList } from "~/query/user/user-group-list";
 import { fakeFacilityAvailabilityCalendarQuery } from "~/testing/fakes/facility";
 import { fakeHolidayQuery } from "~/testing/fakes/holiday";
+import { fakeApplicantGroupQuery } from "~/testing/fakes/reservation";
 import { fakeUserGroupListQuery } from "~/testing/fakes/user";
 import { getAvailabilityCalendarUseCase } from "./get-availability-calendar";
 
@@ -67,6 +70,7 @@ const createDeps = (
   groups: UserGroupList,
   overrides?: {
     readonly holidayQuery?: HolidayQuery;
+    readonly applicantGroupQuery?: ApplicantGroupQuery;
   },
 ) => {
   const userGroupListQuery = fakeUserGroupListQuery({
@@ -88,7 +92,18 @@ const createDeps = (
       findHolidaysBetween: () => okAsync([]),
     });
 
-  return { userGroupListQuery, facilityAvailabilityCalendarQuery, holidayQuery };
+  const applicantGroupQuery =
+    overrides?.applicantGroupQuery ??
+    fakeApplicantGroupQuery({
+      find: () => okAsync([]),
+    });
+
+  return {
+    userGroupListQuery,
+    facilityAvailabilityCalendarQuery,
+    holidayQuery,
+    applicantGroupQuery,
+  };
 };
 
 const args = {
@@ -216,6 +231,7 @@ describe("getAvailabilityCalendarUseCase", () => {
           }),
       }),
       holidayQuery: fakeHolidayQuery({ findHolidaysBetween: () => okAsync([]) }),
+      applicantGroupQuery: fakeApplicantGroupQuery({ find: () => okAsync([]) }),
     };
 
     const result = await getAvailabilityCalendarUseCase(deps, {
@@ -308,6 +324,49 @@ describe("getAvailabilityCalendarUseCase", () => {
       });
       const own = result._unsafeUnwrap().reservations.find((r) => r.id === "res_own");
       expect(own?.canEdit).toBe(false);
+    });
+  });
+
+  describe("applicantGroups", () => {
+    const dummyGroups: readonly ReservationFormGroup[] = [
+      { id: "grp_robotics", name: "ロボティクス開発プロジェクト" },
+    ];
+
+    it("一般ユーザーは自分の ID で applicantGroupQuery を呼び、読んだ団体が applicantGroups に入る", async () => {
+      let passedMemberUserId: string | null | undefined;
+      const applicantGroupQuery = fakeApplicantGroupQuery({
+        find: ({ memberUserId }) => {
+          passedMemberUserId = memberUserId;
+          return okAsync(dummyGroups);
+        },
+      });
+
+      const result = await getAvailabilityCalendarUseCase(
+        createDeps(enabledMembership, { applicantGroupQuery }),
+        { ...args, actorUserId: "usr_student_01", isStaff: false },
+      );
+
+      expect(passedMemberUserId).toBe("usr_student_01");
+      expect(result._unsafeUnwrap().applicantGroups).toEqual(dummyGroups);
+    });
+
+    it("事務局は memberUserId: null で applicantGroupQuery を呼び、読んだ団体が applicantGroups に入る", async () => {
+      let passedMemberUserId: string | null | undefined;
+      const applicantGroupQuery = fakeApplicantGroupQuery({
+        find: ({ memberUserId }) => {
+          passedMemberUserId = memberUserId;
+          return okAsync(dummyGroups);
+        },
+      });
+
+      const result = await getAvailabilityCalendarUseCase(createDeps([], { applicantGroupQuery }), {
+        ...args,
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+      });
+
+      expect(passedMemberUserId).toBeNull();
+      expect(result._unsafeUnwrap().applicantGroups).toEqual(dummyGroups);
     });
   });
 });

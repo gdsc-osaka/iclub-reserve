@@ -44,7 +44,7 @@ export const toOpenSelection = (
 export const toRevealTarget = (
   selection: CalendarSelection | null,
   reservations: readonly AvailabilityReservation[],
-): { readonly dateKey: string; readonly range: SlotRange } | null => {
+): { readonly dateKey: string; readonly range: SlotRange | null } | null => {
   if (selection === null) return null;
   if (selection.kind === "draft") return selection.draft;
 
@@ -123,8 +123,8 @@ export function useCalendarSelection({
    * 閉じた状態から開くときだけ履歴に積む。開いたまま選び直すたびに積むと、
    * 戻る操作で閉じるまでの回数が増えてしまう。
    */
-  const open = (next: CalendarSelection) => {
-    const path = toCalendarPath(facilityId, anchorKey, next);
+  const open = (next: CalendarSelection, nextAnchorKey = anchorKey) => {
+    const path = toCalendarPath(facilityId, nextAnchorKey, next);
     if (selection === null) {
       void navigate(path, { preventScrollReset: true, state: openedInCalendarState });
     } else {
@@ -134,7 +134,16 @@ export function useCalendarSelection({
 
   return {
     selection,
-    openDraft: (draft: CalendarDraft) => open({ kind: "draft", draft }),
+    /**
+     * 仮の枠を開く。
+     *
+     * 仮の枠の日が読み込んだ 4 週間（days）に無ければ、その日を基準の日（date）にして開く（ADR-014 決定 11）。
+     * 中にあれば、今の基準の日のまま。
+     */
+    openDraft: (draft: CalendarDraft) => {
+      const inWindow = days.some((day) => day.dateKey === draft.dateKey);
+      open({ kind: "draft", draft }, inWindow ? anchorKey : draft.dateKey);
+    },
     openReservation: (reservationId: string) => open({ kind: "reservation", reservationId }),
     /** 閉じる。カレンダーの中で開いたなら、戻る操作と同じく開く前の画面へ戻る */
     close: () => {

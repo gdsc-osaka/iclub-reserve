@@ -2,6 +2,7 @@ import type { ResultAsync } from "neverthrow";
 
 import type { ReservationStatus } from "~/domain/reservation";
 import type { ReservationTransition } from "~/domain/reservation/transition";
+import type { ReservationFormGroup } from "~/query/reservation/reservation-form";
 import type { QueryError } from "../error";
 
 /** カレンダーで切り替えられる施設・設備 1 件分。 */
@@ -96,6 +97,12 @@ export interface AvailabilityCalendar {
   readonly facilities: readonly AvailabilityFacility[];
   readonly facility: AvailabilityFacility;
   readonly reservations: readonly AvailabilityReservation[];
+  /**
+   * 申請元として選べる有効な団体の一覧。
+   *
+   * 事務局には有効な全団体、一般ユーザーには所属している有効な団体が入る（COND-006 / COND-009）。
+   */
+  readonly applicantGroups: readonly ReservationFormGroup[];
   /**
    * 見ている人が、いま予約を申請できる状態かどうか（COND-006）。
    *

@@ -1,60 +1,17 @@
 import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
 import { ResultAsync } from "neverthrow";
 
-import { facilityTable, groupMemberTable, groupTable, reservationTable } from "~/db/schema";
+import { facilityTable, groupTable, reservationTable } from "~/db/schema";
 import { wrapError } from "~/domain/error";
-import { GroupStatus } from "~/domain/group";
 import { calendarVisibleStatuses } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
 import type {
   ReservationFormData,
   ReservationFormFacility,
-  ReservationFormGroup,
   ReservationFormQuery,
   ReservationFormReservationRow,
 } from "~/query/reservation/reservation-form";
 import type { Database } from "../db";
-
-/**
- * 申請元として選べる団体を取る。
- *
- * 有効（enabled）な団体だけを返す（COND-006）。承認待ち・無効の団体は、
- * 所属していても申請できないので選択肢に出さない。
- *
- * `memberUserId` が null のときは所属で絞らない。事務局が所属に関わらず
- * 任意の団体として申請できるようにするため（COND-009）。
- *
- * 戻り値の型を明示して結合の有無を吸収しているのは、Drizzle のクエリビルダーが
- * from 句ごとに別の型になるため。呼び出し側はどちらでも同じ配列として扱える。
- */
-const selectGroups = async (
-  db: Database,
-  memberUserId: string | null,
-): Promise<ReservationFormGroup[]> => {
-  const columns = { id: groupTable.id, name: groupTable.name };
-  /*
-   * 同名の団体があっても並びが入れ替わらないよう、主キーを第 2 キーにする。
-   * 団体名には一意制約がなく、名前だけで並べると同名どうしの順序を SQL が保証しない。
-   */
-  const order = [asc(groupTable.name), asc(groupTable.id)] as const;
-
-  if (memberUserId === null) {
-    return db
-      .select(columns)
-      .from(groupTable)
-      .where(eq(groupTable.status, GroupStatus.Enabled))
-      .orderBy(...order);
-  }
-
-  return db
-    .select(columns)
-    .from(groupMemberTable)
-    .innerJoin(groupTable, eq(groupMemberTable.groupId, groupTable.id))
-    .where(
-      and(eq(groupMemberTable.userId, memberUserId), eq(groupTable.status, GroupStatus.Enabled)),
-    )
-    .orderBy(...order);
-};
 
 /**
  * 申請先として選べる施設・設備を取る。
@@ -121,16 +78,12 @@ const selectReservations = (
 /**
  * Cloudflare D1 (Drizzle) を使った ReservationFormQuery の実装。
  *
- * 3 つの問い合わせに依存関係が無いので `combine` で同時に投げる。
- * 順に待つと D1 との往復が 3 回分そのまま表示の待ち時間になる。
+ * 2 つの問い合わせに依存関係が無いので `combine` で同時に投げる。
+ * 順に待つと D1 との往復が 2 回分そのまま表示の待ち時間になる。
  */
 export const createReservationFormQuery = (db: Database): ReservationFormQuery => ({
   find: (args) =>
     ResultAsync.combine([
-      ResultAsync.fromPromise(
-        selectGroups(db, args.memberUserId),
-        wrapError(QueryErrorCode.DatabaseError, "申請できる団体の取得に失敗しました。"),
-      ),
       ResultAsync.fromPromise(
         selectFacilities(db),
         wrapError(QueryErrorCode.DatabaseError, "施設・設備の一覧の取得に失敗しました。"),
@@ -139,8 +92,7 @@ export const createReservationFormQuery = (db: Database): ReservationFormQuery =
         selectReservations(db, args.from, args.to),
         wrapError(QueryErrorCode.DatabaseError, "予約の取得に失敗しました。"),
       ),
-    ]).map(([groups, facilities, reservations]): ReservationFormData => ({
-      groups,
+    ]).map(([facilities, reservations]): ReservationFormData => ({
       facilities,
       reservations,
     })),

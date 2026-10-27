@@ -145,19 +145,56 @@ export const toPastSlots = (day: Date, now: Date): ReadonlySet<number> => {
   return past;
 };
 
+/** `findOverlapping` が受け取れる、開始と終了を持つ要素 */
+export interface SpanItem {
+  readonly startMinutes: number;
+  readonly endMinutes: number;
+}
+
 /**
  * 選んだ時間帯と重なる予約を返す。
  *
  * 承認済みが混ざっていれば申請できず（COND-001）、仮予約だけなら申請できる。
  * どちらなのかは呼び出し側がステータスを見て決める。
  */
-export const findOverlapping = (
-  items: readonly TimelineReservation[],
+export const findOverlapping = <T extends SpanItem>(
+  items: readonly T[],
   range: SlotRange,
-): readonly TimelineReservation[] =>
+): readonly T[] =>
   items.filter(
     (item) => item.startMinutes < range.endMinutes && item.endMinutes > range.startMinutes,
   );
+
+/** `toConflicts` が受け取れる、予約ステータスを持つ要素 */
+export interface ConflictItem extends SpanItem {
+  readonly reservation: {
+    readonly status: ReservationStatus;
+  };
+}
+
+/** 時間帯と重なる予約を、承認済みと仮予約に分けたもの */
+export interface Conflicts<T extends ConflictItem> {
+  readonly approvedConflicts: readonly T[];
+  readonly provisionalConflicts: readonly T[];
+}
+
+/**
+ * 時間帯と重なる予約を、承認済み（approvedConflicts）と仮予約（provisionalConflicts）に分けて返す。
+ */
+export const toConflicts = <T extends ConflictItem>(
+  items: readonly T[],
+  range: SlotRange,
+): Conflicts<T> => {
+  const overlapping = findOverlapping(items, range);
+  return {
+    approvedConflicts: overlapping.filter(
+      (item) => item.reservation.status === ReservationStatus.Approved,
+    ),
+    provisionalConflicts: overlapping.filter(
+      (item) => item.reservation.status === ReservationStatus.Provisional,
+    ),
+  };
+};
 
 /**
  * タイムラインの枠を押したときに、新しく選ばれる時間帯を返す。
@@ -288,4 +325,93 @@ export const isRangeAvailable = (
   }
 
   return true;
+};
+
+/**
+ * 時間の軸の上からの位置（0〜1 の割合）にある 30 分の枠の開始（分）。
+ *
+ * 範囲の外は端の枠（9:00 または 20:30）に丸める。
+ */
+export const slotAtRatio = (ratio: number): number => {
+  const index = Math.min(
+    startSlotMinutes.length - 1,
+    Math.max(0, Math.floor(ratio * startSlotMinutes.length)),
+  );
+  return startSlotMinutes[index] ?? OPEN_MINUTES;
+};
+
+/**
+ * 時間の軸の上からの位置（0〜1 の割合）にいちばん近い 30 分の区切り（9:00〜21:00 の分）。
+ *
+ * 範囲の外は 9:00・21:00 に丸める。
+ */
+export const boundaryAtRatio = (ratio: number): number => {
+  const clampedRatio = Math.max(0, Math.min(1, ratio));
+  const totalSlots = (CLOSE_MINUTES - OPEN_MINUTES) / RESERVATION_STEP_MINUTES;
+  const steps = Math.round(clampedRatio * totalSlots);
+  return OPEN_MINUTES + steps * RESERVATION_STEP_MINUTES;
+};
+
+/** 時間帯の端。仮の枠の丸のどちらを動かすか */
+export type RangeEdge = "start" | "end";
+
+/**
+ * 仮の枠の丸を動かしたときの時間帯（ADR-014 決定 12）。
+ *
+ * - 動かすのは `edge` の側だけ。もう一方の端は変えない。
+ * - 30 分より短くはしない（開始は「終了の 30 分前」より後へ、終了は「開始の 30 分後」より前へ動かさない）。
+ * - 伸ばすときは、選べない枠の手前で止める（開始を上へ伸ばすなら、上へ 1 枠ずつ見て、選べない枠に当たったら止める。終了を下へ伸ばすときも同じ）。縮めるときは止めない。
+ * - 9:00 より前・21:00 より後へは動かさない。
+ */
+export const resizeRange = (
+  range: SlotRange,
+  edge: RangeEdge,
+  boundaryMinutes: number,
+  unselectableSlots: ReadonlySet<number>,
+): SlotRange => {
+  const clampedBoundary = Math.max(OPEN_MINUTES, Math.min(CLOSE_MINUTES, boundaryMinutes));
+
+  if (edge === "end") {
+    // 終了は「開始の 30 分後」より前へ動かさない（30 分より短くしない）
+    const minEnd = range.startMinutes + RESERVATION_STEP_MINUTES;
+    const targetEnd = Math.max(minEnd, clampedBoundary);
+
+    if (targetEnd <= range.endMinutes) {
+      // 縮めるときは止めない
+      return { startMinutes: range.startMinutes, endMinutes: targetEnd };
+    }
+
+    // 伸ばすときは、選べない枠の手前で止める
+    let reached = range.endMinutes;
+    for (let slot = range.endMinutes; slot < targetEnd; slot += RESERVATION_STEP_MINUTES) {
+      if (unselectableSlots.has(slot)) {
+        break;
+      }
+      reached = slot + RESERVATION_STEP_MINUTES;
+    }
+    return { startMinutes: range.startMinutes, endMinutes: reached };
+  }
+
+  // 開始は「終了の 30 分前」より後へ動かさない（30 分より短くしない）
+  const maxStart = range.endMinutes - RESERVATION_STEP_MINUTES;
+  const targetStart = Math.min(maxStart, clampedBoundary);
+
+  if (targetStart >= range.startMinutes) {
+    // 縮めるときは止めない
+    return { startMinutes: targetStart, endMinutes: range.endMinutes };
+  }
+
+  // 伸ばすときは、選べない枠の手前で止める
+  let reached = range.startMinutes;
+  for (
+    let slot = range.startMinutes - RESERVATION_STEP_MINUTES;
+    slot >= targetStart;
+    slot -= RESERVATION_STEP_MINUTES
+  ) {
+    if (unselectableSlots.has(slot)) {
+      break;
+    }
+    reached = slot;
+  }
+  return { startMinutes: reached, endMinutes: range.endMinutes };
 };
