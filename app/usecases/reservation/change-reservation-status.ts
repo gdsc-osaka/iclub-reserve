@@ -51,7 +51,7 @@ export interface ChangeReservationStatusArgs {
   readonly reservationId: string;
   /** 操作を実行するユーザーの ID */
   readonly actorUserId: string;
-  /** 操作ユーザーが事務局スタッフかどうか（COND-009） */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** 実行する状態遷移操作 */
   readonly transition: ReservationTransition;
@@ -120,19 +120,11 @@ export const changeReservationStatusUseCase = (
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
     /*
-     * 操作する人を組み立てる。
+     * 操作する人を組み立てる（COND-030 の (1)）。
      *
-     * 事務局だけの操作は、canTransition が isStaff しか見ないので所属を引きに行かない。
-     * 引いても判定は変わらず、D1 への往復が 1 回増えるだけになる。
-     *
-     * 取り消し・キャンセルは団体での役割で判定するので、事務局であっても所属を引く。
-     * 事務局の人が自分の所属する団体の予約を取り消すときは、メンバーとしての
-     * 役割が和集合で効くため、省くと取り消せなくなる。
+     * 事務局の画面からの操作なら所属を読まず、利用者の画面からなら所属を読む。
      */
-    const actor: ReservationActor =
-      authority === "staff"
-        ? staffActor
-        : yield* resolveReservationActor(deps, reservation.groupId, args, authority);
+    const actor: ReservationActor = yield* resolveReservationActor(deps, reservation.groupId, args);
 
     // 誰が・いまの状態から動かせるか（COND-009 / STATE-001）
     yield* canTransition(reservation, args.transition, actor);

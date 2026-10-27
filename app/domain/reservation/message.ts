@@ -56,8 +56,9 @@ export interface ReservationMessage {
  *
  * INFO-004.sent_as_staff の定義どおり、
  * 事務局の横断権限（COND-009）によって初めて許された送信であれば true。
- * 送信者が事務局で、かつその予約の団体に所属していないときだけ true となる。
- * 団体に所属している事務局員が送った場合は false（団体側としての送信）となる。
+ * Actor は開いている画面から組み立てるので（COND-030 の (1)）、事務局の画面から送ったとき
+ * （`{ isStaff: true, membership: null }`）に true、利用者の画面から送ったときは、事務局であっても
+ * false（団体側としての送信）となる（COND-030 の (2)）。
  */
 export const isSentAsStaff = (actor: Actor): boolean => actor.isStaff && actor.membership === null;
 

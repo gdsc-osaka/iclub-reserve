@@ -211,8 +211,8 @@ describe("removeMemberUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    // COND-012: 操作者の所属確認（1回）+ 削除対象メンバーの存在確認（1回）の計 2 回
-    expect(fake.findByGroupAndUser).toHaveBeenCalledTimes(2);
+    // COND-030 (1): 事務局は所属を引かないため、削除対象メンバーの存在確認（1回）のみ
+    expect(fake.findByGroupAndUser).toHaveBeenCalledTimes(1);
     expect(fake.remove).toHaveBeenCalledTimes(1);
     const auditLog = fake.remove.mock.calls[0]?.[2];
     expect(auditLog?.actedAsStaff).toBe(true);

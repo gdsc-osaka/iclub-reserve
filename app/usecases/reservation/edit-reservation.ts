@@ -7,7 +7,6 @@ import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { editMailEvent } from "~/domain/mail/reservation-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import {
-  ReservationAction,
   type ReservationError,
   type ReservationRepository,
   type ReservationStatus,
@@ -53,7 +52,7 @@ export interface EditReservationArgs {
   readonly reservationId: string;
   /** 操作する人のユーザー ID */
   readonly actorUserId: string;
-  /** 操作する人が事務局かどうか（COND-009） */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** 「開始日時を過ぎたか」「過去の日時か」を判定する基準で、更新日時にもなる */
   readonly now: Date;
@@ -104,8 +103,8 @@ export interface EditReservationResult {
  * 変わっていないこと」と、施設・日時を変えるときは「変更後の時間帯に承認済みの予約が無いこと」を
  * UPDATE 文の条件に持ち込む。変更通知は、その UPDATE と不可分に outbox へ積む（ADR-002 決定 3）。
  *
- * 事務局による直接変更（UC-008）はこのユースケースでは扱わない。事務局の変更は、
- * 自団体の予約であっても常に直接変更のユースケース（editReservationDirectlyUseCase）で扱う。
+ * 事務局による直接変更（UC-008）は、事務局の画面から
+ * editReservationDirectlyUseCase で行う（COND-030 の (1)・(2)）。
  */
 export const editReservationUseCase = (
   deps: EditReservationDeps,
@@ -116,15 +115,9 @@ export const editReservationUseCase = (
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
     /*
-     * 事務局の役割には変更（Edit）が無いので、事務局であっても所属を引く。
-     * 自分が所属する団体の予約なら、メンバーとしての役割で変えられる。
+     * 利用者の画面からの操作なので、事務局であっても所属を読んで団体での役割で変える（COND-030 の (1)）。
      */
-    const actor = yield* resolveReservationActor(
-      deps,
-      reservation.groupId,
-      args,
-      ReservationAction.Edit,
-    );
+    const actor = yield* resolveReservationActor(deps, reservation.groupId, args);
 
     // 誰が・いまの状態・開始前か（COND-009 / STATE-001）
     yield* canEditReservation(reservation, actor, now);

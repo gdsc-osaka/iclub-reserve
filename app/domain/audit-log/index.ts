@@ -325,6 +325,8 @@ export const toIdentityChanges = (
  * 事務局の横断権限による操作かどうかを判定する（COND-012）。
  *
  * 「その操作が団体内のロールでは許されず、事務局の横断権限によって初めて許された場合に true」。
+ * Actor は開いている画面から組み立てるので（COND-030 の (1)）、事務局の画面からの操作
+ * （`{ isStaff: true, membership: null }`）は true、利用者の画面からの操作は false になる（COND-030 の (2)）。
  */
 export const isActedAsStaff = <A extends string>(
   table: PermissionTable<ActorRole, A>,

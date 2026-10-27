@@ -17,61 +17,35 @@ export interface ReservationAuthorizationDeps {
 /** 誰が操作しようとしているか */
 export interface ReservationAccessRequest {
   readonly actorUserId: string;
-  /** 事務局スタッフかどうか（COND-009）。団体に所属していなくても操作できる */
+  /** 事務局の画面からの操作か（COND-030 の (1)）。ルートは requireAreaUser の actsAsStaff を渡す */
   readonly isStaff: boolean;
 }
 
-/** 所属を引かずに組み立てた、事務局としてだけの操作者 */
-const staffOnly: Actor = { isStaff: true, membership: null };
-
 /**
- * 予約が属する団体での操作する人を、事務局であっても必ず所属を引いて組み立てる。
+ * 予約が属する団体での操作する人を組み立てる（COND-030 の (1)）。
  *
- * `resolveReservationActor` は「事務局の役割だけで通る操作なら所属を引かない」最適化を行うが、
- * メッセージ送信（UC-009 / COND-023）では送信者がその団体のメンバーであるかどうかによって
- * `sent_as_staff`（団体側としての送信か、事務局としての送信か）が分岐するため、
- * 事務局であっても必ず所属を確認する必要がある。
- * 所属を省くと、その団体に所属する事務局員まで `membership: null` になり、
- * `sent_as_staff` を誤って true にしてしまう。
+ * 事務局の画面では団体での役割を使わないため所属を読まず、
+ * 利用者の画面では事務局であっても所属を読んで団体での役割だけで操作する。
+ * 事務局の画面では取り消し・キャンセルはできず、事務局キャンセルを使う。
+ * 団体として取り消すには利用者の画面から行う（COND-030 の (1)）。
  */
-export const resolveReservationActorWithMembership = (
+export const resolveReservationActor = (
   deps: ReservationAuthorizationDeps,
   groupId: string,
   request: ReservationAccessRequest,
-): ResultAsync<Actor, ReservationError> =>
-  deps.membershipRepository
+): ResultAsync<Actor, ReservationError> => {
+  if (request.isStaff) {
+    return okAsync<Actor, ReservationError>({ isStaff: true, membership: null });
+  }
+
+  return deps.membershipRepository
     .findByGroupAndUser(groupId, request.actorUserId)
     .mapErr((error): ReservationError => ({
       code: ReservationErrorCode.DatabaseError,
       message: "所属を読み取れなかった。",
       cause: error,
     }))
-    .map((membership): Actor => ({ isStaff: request.isStaff, membership }));
-
-/**
- * 予約が属する団体での操作する人を組み立てる。
- *
- * 事務局であっても、原則としてその団体での所属を引く。事務局の行が他の役割の行を
- * 含んでいないためで（取り消し・キャンセルは事務局の行に無い。COND-009 の項を参照）、
- * 所属を省くと、事務局の人が自分の所属する団体の予約を取り消せなくなる。
- *
- * ただし、これから判定する操作が事務局の役割だけで通るなら所属は引かない。
- * 結果が変わらないので、D1 への往復を 1 回省ける。省いてよいかは表から導いていて、
- * 人が書いた前提ではないため、表を書き換えれば判断も自動的に追従する。
- *
- * @param action この呼び出しのあとに判定する操作のうち、いちばん強い権限を要するもの。
- */
-export const resolveReservationActor = (
-  deps: ReservationAuthorizationDeps,
-  groupId: string,
-  request: ReservationAccessRequest,
-  action: ReservationAction,
-): ResultAsync<Actor, ReservationError> => {
-  if (request.isStaff && canAct(reservationPermissions, staffOnly, action)) {
-    return okAsync<Actor, ReservationError>(staffOnly);
-  }
-
-  return resolveReservationActorWithMembership(deps, groupId, request);
+    .map((membership): Actor => ({ isStaff: false, membership }));
 };
 
 /**
@@ -105,7 +79,7 @@ export const ensureReservationPermission = (
   action: ReservationAction,
   userMessage: string,
 ): ResultAsync<null, ReservationError> =>
-  resolveReservationActor(deps, groupId, request, action).andThen((actor) =>
+  resolveReservationActor(deps, groupId, request).andThen((actor) =>
     ensureActorCan(actor, action, userMessage),
   );
 

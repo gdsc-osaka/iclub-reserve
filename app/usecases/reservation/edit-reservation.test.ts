@@ -420,7 +420,7 @@ describe("editReservationUseCase", () => {
       expect(spies.applyContentEdit).not.toHaveBeenCalled();
     });
 
-    it("所属していない事務局は変えられない（事務局の変更は UC-008 で扱う）", async () => {
+    it("事務局の画面（isStaff: true）からは団体の変更はできず（UC-008 の直接変更を使う）、所属も引かない", async () => {
       const { deps, spies } = createDeps({ membership: null });
 
       const result = await editReservationUseCase(
@@ -428,20 +428,24 @@ describe("editReservationUseCase", () => {
         argsWith({ headCount: 6 }, { isStaff: true, actorUserId: "usr_staff_01" }),
       );
 
-      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
-      // 事務局の役割には変更が無いので、事務局でも所属を引きに行く
-      expect(spies.findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff_01");
+      expect(result._unsafeUnwrapErr()).toMatchObject({
+        code: ReservationErrorCode.Forbidden,
+        userMessage: "所属している団体の予約のみ変更できます。",
+      });
+      // COND-030 (1): 事務局の画面からの操作では所属を引かない
+      expect(spies.findByGroupAndUser).not.toHaveBeenCalled();
     });
 
-    it("事務局の人でも、所属する団体の予約ならメンバーとして変えられる", async () => {
-      const { deps } = createDeps();
+    it("事務局の人でも、利用者の画面（isStaff: false）からなら所属する団体の予約をメンバーとして変えられる", async () => {
+      const { deps, spies } = createDeps();
 
       const result = await editReservationUseCase(
         deps,
-        argsWith({ headCount: 6 }, { isStaff: true }),
+        argsWith({ headCount: 6 }, { isStaff: false }),
       );
 
       expect(result.isOk()).toBe(true);
+      expect(spies.findByGroupAndUser).toHaveBeenCalled();
     });
 
     it("権限が無い人には、入力の誤りより先に権限が無いことを返す", async () => {

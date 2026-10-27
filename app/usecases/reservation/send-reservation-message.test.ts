@@ -259,11 +259,12 @@ describe("sendReservationMessageUseCase", () => {
     expect(savedMails.map((m) => m.to.address)).toEqual([userStaff1.address, userStaff2.address]);
   });
 
-  it("その団体に所属しない事務局が送る場合、sentAsStaff: true となり、宛先は申請者・管理者・過去の団体側送信者となり、所属も引いている", async () => {
+  it("事務局の画面から送る場合、sentAsStaff: true となり、宛先は申請者・管理者・過去の団体側送信者となり、所属は引かない", async () => {
     const { deps, createMessage, findByGroupAndUser } = createDeps({
       membership: null, // その団体に所属していない
     });
 
+    // COND-030 (1): 事務局の画面（isStaff: true）からは所属を引かずに sentAsStaff: true となる
     const result = await sendReservationMessageUseCase(deps, {
       ...defaultArgs,
       actorUserId: "usr_staff1",
@@ -272,7 +273,7 @@ describe("sendReservationMessageUseCase", () => {
     });
 
     expect(result.isOk()).toBe(true);
-    expect(findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff1");
+    expect(findByGroupAndUser).not.toHaveBeenCalled();
 
     const [savedMessage, savedMails] = createMessage.mock.calls[0]!;
     expect(savedMessage.sentAsStaff).toBe(true);
@@ -285,8 +286,8 @@ describe("sendReservationMessageUseCase", () => {
     ]);
   });
 
-  it("その団体に所属する事務局が送る場合、sentAsStaff: false となり、宛先は（自分を除く）事務局となる", async () => {
-    const { deps, createMessage } = createDeps({
+  it("その団体に所属する事務局でも、事務局の画面から送る場合は所属に関わらず sentAsStaff: true となる", async () => {
+    const { deps, createMessage, findByGroupAndUser } = createDeps({
       membership: {
         id: "gm_test",
         groupId: "grp_robotics",
@@ -303,6 +304,31 @@ describe("sendReservationMessageUseCase", () => {
     });
 
     expect(result.isOk()).toBe(true);
+    expect(findByGroupAndUser).not.toHaveBeenCalled();
+    const [savedMessage] = createMessage.mock.calls[0]!;
+    expect(savedMessage.sentAsStaff).toBe(true);
+  });
+
+  it("その団体に所属する事務局が利用者の画面から送る場合、sentAsStaff: false となり、宛先は（自分を除く）事務局となる", async () => {
+    const { deps, createMessage, findByGroupAndUser } = createDeps({
+      membership: {
+        id: "gm_test",
+        groupId: "grp_robotics",
+        userId: "usr_staff1",
+        role: MembershipRole.Member,
+      },
+    });
+
+    // COND-030 (1): 利用者の画面（isStaff: false）からの送信は団体メンバーとして扱われる
+    const result = await sendReservationMessageUseCase(deps, {
+      ...defaultArgs,
+      actorUserId: "usr_staff1",
+      actorName: "事務局兼メンバー",
+      isStaff: false,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(findByGroupAndUser).toHaveBeenCalledWith("grp_robotics", "usr_staff1");
     const [savedMessage, savedMails] = createMessage.mock.calls[0]!;
     expect(savedMessage.sentAsStaff).toBe(false);
 

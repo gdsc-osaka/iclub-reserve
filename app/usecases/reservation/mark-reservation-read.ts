@@ -9,7 +9,7 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 import { canViewReservationDetail } from "~/domain/reservation/visibility";
-import { resolveReservationActorWithMembership } from "./_shared/reservation-authorization";
+import { resolveReservationActor } from "./_shared/reservation-authorization";
 
 export interface MarkReservationReadDeps {
   readonly reservationReadRepository: ReservationReadRepository;
@@ -20,6 +20,7 @@ export interface MarkReservationReadDeps {
 export interface MarkReservationReadArgs {
   readonly reservationId: string;
   readonly actorUserId: string;
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   readonly now: Date;
 }
@@ -41,7 +42,7 @@ export const markReservationReadUseCase = (
   safeTry(async function* () {
     const reservation = yield* deps.reservationRepository.findById(args.reservationId);
 
-    const actor = yield* resolveReservationActorWithMembership(
+    const actor = yield* resolveReservationActor(
       { membershipRepository: deps.membershipRepository },
       reservation.groupId,
       { actorUserId: args.actorUserId, isStaff: args.isStaff },

@@ -156,8 +156,8 @@ describe("cancelInvitationUseCase", () => {
     );
 
     expect(result.isOk()).toBe(true);
-    // COND-012: acted_as_staff 判定のため、事務局であっても操作者の所属を 1 回引く
-    expect(fakeMembership.findByGroupAndUser).toHaveBeenCalledTimes(1);
+    // COND-030 の (1): 事務局の画面では所属を読まない
+    expect(fakeMembership.findByGroupAndUser).toHaveBeenCalledTimes(0);
     expect(fakeInvitation.cancel).toHaveBeenCalledTimes(1);
     const auditLog = fakeInvitation.cancel.mock.calls[0]?.[2];
     expect(auditLog?.actedAsStaff).toBe(true);

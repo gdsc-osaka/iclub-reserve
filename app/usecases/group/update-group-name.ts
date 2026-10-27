@@ -11,11 +11,7 @@ import {
 import { toGroupNameUpdatedChanges } from "~/domain/group/audit-log";
 import { validateGroupName } from "~/domain/group/group-name";
 import type { MembershipRepository } from "~/domain/membership";
-import {
-  ensureActorCan,
-  groupNotFound,
-  resolveGroupActorWithMembership,
-} from "./_shared/group-authorization";
+import { ensureActorCan, groupNotFound, resolveGroupActor } from "./_shared/group-authorization";
 
 export interface UpdateGroupNameDeps {
   readonly groupRepository: GroupRepository;
@@ -25,7 +21,7 @@ export interface UpdateGroupNameDeps {
 export interface UpdateGroupNameArgs {
   readonly groupId: string;
   readonly actorUserId: string;
-  /** 事務局スタッフかどうか（COND-009）。団体に所属していなくても編集できる */
+  /** 事務局の画面からの操作か（COND-030 の (1)） */
   readonly isStaff: boolean;
   /** フォームから届いた未検証の団体名 */
   readonly name: string;
@@ -43,9 +39,9 @@ export interface UpdateGroupNameArgs {
  *    認可判定（DB 問い合わせ）より前に実行する。入力値の検証は特定の団体に依存しないため、
  *    先に返しても団体の有無が外部に漏れることはない。無効な入力に対して無駄な DB 往復を
  *    確実に 1 回削減できる（Cloudflare D1 のレイテンシとコストの削減）。
- * 3. 認可判定と acted_as_staff（COND-012）:
- *    `resolveGroupActorWithMembership` で事務局であっても実際の所属を引き、
- *    `isActedAsStaff` で「事務局の横断権限によって初めて許されたか」を正確に判定する。
+ * 3. 認可判定と acted_as_staff（COND-012・COND-030 の (1)・(2)）:
+ *    resolveGroupActor で画面に応じた Actor を組み立て、acted_as_staff を判定する。
+ *    事務局の画面からの操作は所属を読まず acted_as_staff: true、利用者の画面からは所属を読んで acted_as_staff: false となる。
  * 4. 変更前の値と変わった項目が無いときの処理（COND-013）:
  *    `findById` で変更前の団体名を取得する。読んでから書くまでに別の人が変えると記録の変更前が
  *    実際とずれることがある（楽観ロックが無いため）。
@@ -63,7 +59,7 @@ export const updateGroupNameUseCase = (
 
     const validatedName = yield* validateGroupName(args.name);
 
-    const actor = yield* resolveGroupActorWithMembership(deps, {
+    const actor = yield* resolveGroupActor(deps, {
       groupId,
       actorUserId: args.actorUserId,
       isStaff: args.isStaff,
