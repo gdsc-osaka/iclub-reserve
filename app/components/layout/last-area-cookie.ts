@@ -1,6 +1,6 @@
 import { findCookieValue } from "~/lib/cookie";
 
-import { type AppArea, parseAppArea } from "./app-area";
+import { type AppArea, parseAppArea } from "~/lib/app-area";
 
 /**
  * 前回使っていた画面の領域を覚えておくための cookie の名前（ADR-016 決定 3）。

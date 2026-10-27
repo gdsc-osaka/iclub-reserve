@@ -2,9 +2,11 @@
  * 自団体の予約カレンダー配信（iCal）のドメイン定義と変換処理（ADR-013 決定 5 / COND-029）。
  */
 
+import { AppArea } from "~/lib/app-area";
 import { addDays } from "~/lib/date";
 import { escapeIcalText, formatIcalDateTimeUtc, formatIcalDocument } from "~/lib/ical";
-import { reservationDetailPath, ReservationStatus } from "../reservation";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
+import { ReservationStatus } from "../reservation";
 
 /** 過去に遡って配信に含める日数（COND-029(2)） */
 export const GROUP_CALENDAR_FEED_SINCE_DAYS = 90;
@@ -47,9 +49,9 @@ export interface GroupCalendarReservation {
   readonly facilityUpdatedAt: Date;
 }
 
-/** 予約詳細の URL を組み立てる。baseUrl は末尾にスラッシュの無い origin */
+/** 予約詳細の URL を組み立てる。自団体の予約カレンダーなので利用者の画面（COND-030 の (5)） */
 const toReservationDetailUrl = (baseUrl: string, reservationId: string): string =>
-  `${baseUrl}${reservationDetailPath(reservationId)}`;
+  `${baseUrl}${toReservationDetailPath(AppArea.User, reservationId)}`;
 
 /**
  * 予定の最終更新日時（DTSTAMP・LAST-MODIFIED）を決める。

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { AppArea } from "./app-area";
+import { AppArea } from "~/lib/app-area";
 import {
   formatNavCount,
   hasAnyNavCount,
@@ -119,6 +119,7 @@ describe("toNavCount", () => {
 
   it("件数を持たない項目は undefined を返す", () => {
     expect(toNavCount(counts, navItem("availability"))).toBeUndefined();
+    expect(toNavCount(counts, navItem("staff-availability"))).toBeUndefined();
     expect(toNavCount(counts, navItem("staff-facilities"))).toBeUndefined();
     expect(toNavCount(counts, navItem("staff-calendars"))).toBeUndefined();
   });
@@ -191,7 +192,7 @@ describe("ボトムバーの項目配置", () => {
   it("事務局のボトムバーは 3 項目で、ダッシュボード・空き状況・予約の承認が並ぶ", () => {
     expect(toBottomNavItems(AppArea.Staff).map((item) => item.id)).toEqual([
       "staff-dashboard",
-      "availability",
+      "staff-availability",
       "staff-approvals",
     ]);
   });

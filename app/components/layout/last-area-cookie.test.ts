@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { AppArea } from "./app-area";
+import { AppArea } from "~/lib/app-area";
 import { readLastArea } from "./last-area-cookie";
 
 const requestWithCookie = (cookie: string | null): Request =>

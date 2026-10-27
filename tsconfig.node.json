@@ -9,8 +9,10 @@
     "app/db/schema/**/*",
     "app/domain/**/*",
     "app/components/brand/iclub-bolt.ts",
+    "app/lib/app-area.ts",
     "app/lib/date.ts",
-    "app/lib/ical.ts"
+    "app/lib/ical.ts",
+    "app/lib/reservation-paths.ts"
   ],
   "compilerOptions": {
     "composite": true,

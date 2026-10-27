@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
-import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { AppArea } from "~/lib/app-area";
 import { createUserGroupListQuery } from "~/query/user/user-group-list";
+import { requireAreaUser } from "~/routes/_shared/app-area.server";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
@@ -29,7 +30,11 @@ export function meta() {
  * ユースケースが返した `Forbidden` は、表を通して 403 になり、warn でログに残る（ADR-004 決定 9）。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
-  const user = requireRequestUser(context);
+  const { user, actsAsStaff } = await requireAreaUser(
+    context,
+    AppArea.Staff,
+    "staff.reservations.loader",
+  );
 
   const now = new Date();
   const url = new URL(request.url);
@@ -43,7 +48,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     },
     {
       actorUserId: user.id,
-      isStaff: user.is_staff,
+      isStaff: actsAsStaff,
       scope: "all",
       groupId: null,
       status: params.status,
@@ -69,7 +74,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
  * 事務局向け予約承認・管理画面からの状態変更アクション（承認・却下・キャンセル）。
  */
 export async function action({ request, context }: Route.ActionArgs) {
-  const user = requireRequestUser(context);
+  const { user, actsAsStaff } = await requireAreaUser(
+    context,
+    AppArea.Staff,
+    "staff.reservations.action",
+  );
   const formData = await request.formData();
   const intent = formData.get("intent");
   const reservationId = formData.get("reservationId");
@@ -99,6 +108,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     reason,
     unlockArrangement: formData.get("unlockArrangement"),
     now: new Date(),
+    actsAsStaff,
   });
 
   if (result.isErr()) {
@@ -134,7 +144,7 @@ export default function StaffReservationListRoute({
     <ReservationList
       result={result}
       params={params}
-      scope="all"
+      area={AppArea.Staff}
       now={new Date(now)}
       actionError={actionData?.formError}
     />

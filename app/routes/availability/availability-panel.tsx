@@ -4,10 +4,10 @@ import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 
 import { AvailabilityReservationCard } from "~/components/reservation/availability-detail-card";
 import type { AvailabilityDay } from "~/components/reservation/availability-week";
-import type { ReservationFormMode } from "~/components/reservation/editor/form-values";
 import { Button } from "~/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
+import type { AppArea } from "~/lib/app-area";
 import type { AvailabilityCalendar } from "~/query/facility/facility-availability-calendar";
 import type { ReservationEditTarget } from "~/usecases/reservation/get-reservation-edit-form";
 
@@ -30,6 +30,7 @@ export function AvailabilityPanel({
   anchorKey,
   days,
   now,
+  area,
   selection,
   selectionOps,
   createError,
@@ -46,6 +47,8 @@ export function AvailabilityPanel({
   anchorKey: string;
   days: readonly AvailabilityDay[];
   now: Date;
+  /** 開いている画面。欄の中の URL に使う（ADR-016 決定 15） */
+  area: AppArea;
   selection: CalendarSelection;
   selectionOps: CalendarSelectionOps;
   /** 予約を作る操作の失敗。欄の中に出す */
@@ -57,7 +60,7 @@ export function AvailabilityPanel({
   /** 事務局による直接変更か（UC-008） */
   isDirectEdit: boolean;
   /** 欄から予約を作る操作を送ったとき */
-  onSubmitCreate: (mode: ReservationFormMode) => void;
+  onSubmitCreate: () => void;
   /** 欄から予約を変更する操作を送ったとき */
   onSubmitEdit: () => void;
   /** スマホで欄を画面いっぱいに広げているか（ADR-014 決定 13）。カレンダーも見るので route が持つ */
@@ -173,6 +176,7 @@ export function AvailabilityPanel({
           days={days}
           reservations={calendar.reservations}
           now={now}
+          area={area}
           canCreateDirectly={calendar.canCreateDirectly}
           applicantGroups={calendar.applicantGroups}
           onDraftChange={selectionOps.openDraft}
@@ -194,6 +198,7 @@ export function AvailabilityPanel({
           days={days}
           reservations={calendar.reservations}
           now={now}
+          area={area}
           onDraftChange={selectionOps.openDraft}
           onCancel={selectionOps.cancelEdit}
           editError={editError}
@@ -208,6 +213,7 @@ export function AvailabilityPanel({
             <AvailabilityReservationCard
               reservation={reservation}
               facilityName={calendar.facility.name}
+              area={area}
             />
           )}
         </CardContent>

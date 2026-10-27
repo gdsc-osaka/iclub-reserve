@@ -3,6 +3,7 @@ import {
   startSlotMinutes,
   type SlotRange,
 } from "~/components/reservation/editor/reservation-slots";
+import { type AppArea, toSharedScreenPath } from "~/lib/app-area";
 import {
   parseTokyoDateKey,
   parseTokyoTimeKey,
@@ -127,12 +128,13 @@ export const toReservationDraft = ({
  * 仮の枠の値は数字・`-`・`T`・`:` だけなので、アドレス欄で読めるよう encodeURIComponent しない。
  */
 export const toCalendarPath = (
+  area: AppArea,
   facilityId: string | null,
   dateKey: string,
   selection?: CalendarSelection,
 ): string => {
   const facility = facilityId === null ? "" : `facility=${encodeURIComponent(facilityId)}&`;
-  const base = `/availability?${facility}date=${dateKey}`;
+  const base = `${toSharedScreenPath(area, "/availability")}?${facility}date=${dateKey}`;
   if (selection === undefined) return base;
   if (selection.kind === "reservation") {
     return `${base}&reservation=${encodeURIComponent(selection.reservationId)}`;

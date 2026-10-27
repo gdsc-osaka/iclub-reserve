@@ -25,11 +25,12 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { membershipRoleLabel } from "~/domain/membership";
-import { GroupUnreadEventType, reservationDetailPath } from "~/domain/reservation";
+import { GroupUnreadEventType } from "~/domain/reservation";
+import { AppArea } from "~/lib/app-area";
 import { formatMonthDay, formatRelativeTime, formatTimeRange } from "~/lib/date";
+import { toFormPathForFacility, toReservationDetailPath } from "~/lib/reservation-paths";
 import type { UserInvitationItem } from "~/query/group/user-invitations";
 import type { GroupUnreadUpdateItem } from "~/query/reservation/group-unread-updates";
-import { toFormPathForFacility } from "~/routes/reservations/new/paths";
 import { HomeIntent, type HomeActionData } from "./home-intent";
 import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
@@ -164,7 +165,7 @@ function UnreadReservationRow({ item, now }: Readonly<{ item: GroupUnreadUpdateI
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <EventIcon icon={view.icon} tone={view.tone} />
           <RowBody
-            to={reservationDetailPath(item.reservationId)}
+            to={toReservationDetailPath(AppArea.User, item.reservationId)}
             title={title}
             time={formatRelativeTime(latestEvent.eventAt, now)}
             where={where}
@@ -175,7 +176,7 @@ function UnreadReservationRow({ item, now }: Readonly<{ item: GroupUnreadUpdateI
         <div className="grid shrink-0 auto-cols-fr grid-flow-col gap-2 sm:flex sm:justify-end">
           {latestEvent.type === GroupUnreadEventType.Reject && (
             <Button asChild variant="outline" className="h-9 sm:h-8">
-              <Link to={toFormPathForFacility(item.facilityId)}>別の日時で申請</Link>
+              <Link to={toFormPathForFacility(AppArea.User, item.facilityId)}>別の日時で申請</Link>
             </Button>
           )}
           <fetcher.Form method="post" className="contents">

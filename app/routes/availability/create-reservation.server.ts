@@ -14,6 +14,7 @@ import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
+import type { AppArea } from "~/lib/app-area";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
@@ -29,9 +30,8 @@ import { resolveAnchorDateKey, toCalendarPath } from "./paths";
 /**
  * 空き状況カレンダーの仮の枠から仮予約を申請する（UC-002）か、事務局が承認済みの予約を直接作成する（UC-008）。
  *
- * ステータスは受け取らない。どちらで作るかは `mode` で選び、仮予約か承認済みかは
- * それぞれのユースケースが決める（STATE-001）。事務局でない人が `mode=direct` を送っても、
- * 直接作成のユースケースが Forbidden で止め、ログに残す。
+ * ステータスは受け取らない。どちらで作るかは画面の領域（URL）で決まり（ADR-016 決定 13）、
+ * 仮予約か承認済みかはそれぞれのユースケースが決める（STATE-001）。
  *
  * 成功したら、作った予約を欄に開く URL へ転送する（ADR-014 決定 10）。
  * 送信の結果をそのまま描くと、再読み込みで同じ予約がもう一度作られてしまう。
@@ -40,10 +40,14 @@ export async function createReservationAction({
   request,
   formData,
   user,
+  actsAsStaff,
+  area,
 }: {
-  request: Request;
-  formData: FormData;
-  user: SessionUser;
+  readonly request: Request;
+  readonly formData: FormData;
+  readonly user: SessionUser;
+  readonly actsAsStaff: boolean;
+  readonly area: AppArea;
 }): Promise<CreateReservationActionError> {
   const values = readValues(formData);
   const now = new Date();
@@ -60,7 +64,8 @@ export async function createReservationAction({
   }
 
   const db = createDb(env.DB);
-  const isDirect = values.mode === "direct";
+  // どちらで作るかは画面で決め、送られてきた値では決めない（ADR-016 決定 13）
+  const isDirect = actsAsStaff;
   const deps = {
     reservationRepository: createReservationRepository(db),
     membershipRepository: createMembershipRepository(db),
@@ -69,7 +74,7 @@ export async function createReservationAction({
   };
   const args = {
     actorUserId: user.id,
-    isStaff: user.is_staff,
+    isStaff: actsAsStaff,
     now,
     reservation,
     appBaseUrl: resolveAppBaseUrl(request),
@@ -114,7 +119,7 @@ export async function createReservationAction({
   const anchorDateKey = resolveAnchorDateKey(request.url, values.dateKey);
 
   throw redirect(
-    toCalendarPath(reservation.facilityId, anchorDateKey, {
+    toCalendarPath(area, reservation.facilityId, anchorDateKey, {
       kind: "reservation",
       reservationId: result.value.reservationId,
     }),

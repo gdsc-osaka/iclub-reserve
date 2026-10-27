@@ -15,14 +15,14 @@ import {
   SidebarRail,
 } from "~/components/ui/sidebar";
 
+import { toNewReservationPath } from "~/lib/reservation-paths";
 import { AccountMenu } from "./account-menu";
-import type { AppArea } from "./app-area";
+import type { AppArea } from "~/lib/app-area";
 import { AreaSwitch } from "./area-switch";
 import { BrandHeader } from "./brand-header";
 import { NavCountBadge, NavCountDot, NavCountText } from "./nav-count";
 import {
   isNavItemActive,
-  newReservationPath,
   toNavCount,
   toNavItems,
   toNewReservationLabel,
@@ -70,7 +70,7 @@ export function AppSidebar({
                   tooltip={toNewReservationLabel(area)}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/80 active:text-primary-foreground"
                 >
-                  <Link to={newReservationPath}>
+                  <Link to={toNewReservationPath(area)}>
                     <Plus aria-hidden />
                     <span>{toNewReservationLabel(area)}</span>
                   </Link>

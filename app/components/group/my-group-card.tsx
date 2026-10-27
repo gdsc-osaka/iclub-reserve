@@ -2,6 +2,8 @@ import { ChevronRight, Users } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import { AppArea } from "~/lib/app-area";
+import { toGroupDetailPath } from "~/lib/group-paths";
 
 import { GroupStatusBadge } from "./group-status-badge";
 import type { MyGroup } from "./my-group";
@@ -15,7 +17,7 @@ import type { MyGroup } from "./my-group";
 export function MyGroupCard({ group }: Readonly<{ group: MyGroup }>) {
   return (
     <Link
-      to={`/groups/${group.id}`}
+      to={toGroupDetailPath(AppArea.User, group.id)}
       className="flex h-full items-center gap-3 rounded-lg border p-4 transition-colors hover:bg-accent"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">

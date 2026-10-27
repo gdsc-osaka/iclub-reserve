@@ -1,6 +1,7 @@
 import { isRouteErrorResponse, Link } from "react-router";
 
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import type { AppArea } from "~/lib/app-area";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
 
 /**
@@ -17,11 +18,14 @@ import { toReservationDetailPath } from "~/lib/reservation-paths";
 export function ReservationEditError({
   error,
   reservationId,
+  area,
   backLink,
 }: Readonly<{
   error: unknown;
   /** 変更しようとした予約。分かれば詳細へ戻るリンクを出す */
   reservationId: string | undefined;
+  /** どちらの画面から開いているか */
+  area: AppArea;
   /** 詳細の次に出す戻り道 */
   backLink: { readonly to: string; readonly label: string };
 }>) {
@@ -55,7 +59,7 @@ export function ReservationEditError({
           <div className="flex flex-wrap items-center gap-4">
             {reservationId !== undefined && (
               <Link
-                to={toReservationDetailPath(reservationId)}
+                to={toReservationDetailPath(area, reservationId)}
                 className="text-primary underline underline-offset-4"
               >
                 予約の詳細へ戻る

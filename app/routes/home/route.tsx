@@ -4,7 +4,7 @@ import { CircleAlert } from "lucide-react";
 import { toMyGroup, type MyGroup } from "~/components/group/my-group";
 import { NoGroupsCard } from "~/components/group/my-group-card";
 import { PendingGroupsNotice } from "~/components/group/pending-groups-notice";
-import { AppArea } from "~/components/layout/app-area";
+import { AppArea } from "~/lib/app-area";
 import { StaffContact } from "~/components/layout/staff-contact";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { createGroupRecentActivitiesQuery } from "~/infra/audit-log/group-recent-activities-query";
@@ -12,8 +12,9 @@ import { createDb, type Database } from "~/infra/db";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
-import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
+import type { SessionUser } from "~/lib/auth/auth-session.server";
 import { findUserInvitations } from "~/query/group/user-invitations";
+import { requireAreaUser } from "~/routes/_shared/app-area.server";
 import {
   createGroupUnreadUpdatesQuery,
   findGroupUnreadUpdates,
@@ -53,10 +54,16 @@ export function meta() {
  */
 export async function loader({ context }: Route.LoaderArgs) {
   // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
-  const user = requireRequestUser(context);
+  const { user, actsAsStaff } = await requireAreaUser(context, AppArea.User, "home.loader");
   const db = createDb(env.DB);
   const now = new Date();
-  const ctx: LoadContext = { db, user, now, userGroupListQuery: shareUserGroupList(db, user) };
+  const ctx: LoadContext = {
+    db,
+    user,
+    now,
+    actsAsStaff,
+    userGroupListQuery: shareUserGroupList(db, user),
+  };
 
   const [groups, invitations, groupUnread, upcoming, recentActivities] = await Promise.all([
     loadMyGroups(ctx),
@@ -87,6 +94,7 @@ interface LoadContext {
   readonly db: Database;
   readonly user: SessionUser;
   readonly now: Date;
+  readonly actsAsStaff: boolean;
   /** 所属団体は 1 回だけ読んで使い回す（`shareUserGroupList`） */
   readonly userGroupListQuery: UserGroupListQuery;
 }
@@ -146,7 +154,7 @@ const loadUpcoming = ({ db, user, now, userGroupListQuery }: LoadContext) =>
   );
 
 /** 団体の最近の動き（UC-025） */
-const loadRecentActivities = ({ db, user, now, userGroupListQuery }: LoadContext) =>
+const loadRecentActivities = ({ db, user, now, actsAsStaff, userGroupListQuery }: LoadContext) =>
   loadSection(
     "home.loader.recentActivities",
     user,
@@ -155,7 +163,7 @@ const loadRecentActivities = ({ db, user, now, userGroupListQuery }: LoadContext
       {
         actorUserId: user.id,
         // 利用者の画面では、事務局も団体側の表示で読む（操作者を「事務局」と出す。COND-030 の (2)・ADR-016 決定 8）
-        isStaff: false,
+        isStaff: actsAsStaff,
         now,
       },
     ),
@@ -168,7 +176,7 @@ const loadRecentActivities = ({ db, user, now, userGroupListQuery }: LoadContext
  * 成功したら `{ ok: true }` を返し、React Router が loader を読み直して行を消す。
  */
 export async function action({ request, context }: Route.ActionArgs) {
-  const user = requireRequestUser(context);
+  const { user, actsAsStaff } = await requireAreaUser(context, AppArea.User, "home.action");
   const formData = await request.formData();
   const intent = formData.get("intent");
   const db = createDb(env.DB);
@@ -176,7 +184,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // 予約 1 件を確認済みにする（UC-037）
   if (intent === HomeIntent.MarkRead) {
-    return markReservationRead({ db, user, formData, now, where: "home.action.mark-read" });
+    return markReservationRead({
+      db,
+      user,
+      formData,
+      now,
+      where: "home.action.mark-read",
+      actsAsStaff,
+    });
   }
 
   // 一覧に出ている予約をまとめて確認済みにする（UC-037）

@@ -1,3 +1,5 @@
+import { type AppArea, toSharedScreenPath } from "~/lib/app-area";
+
 /**
  * 予約まわりの画面を行き来する URL を組み立てる。
  *
@@ -9,13 +11,27 @@
 /**
  * 予約詳細（SCR-005）の URL を組み立てる。
  */
-export const toReservationDetailPath = (reservationId: string): string =>
-  `/reservations/${encodeURIComponent(reservationId)}`;
+export const toReservationDetailPath = (area: AppArea, reservationId: string): string =>
+  toSharedScreenPath(area, `/reservations/${encodeURIComponent(reservationId)}`);
 
 /**
  * 予約の変更画面（UC-005 / UC-017）の URL を組み立てる。
  *
  * 施設・日付のクエリは付けない。付けなければ、変更画面は予約の施設・開始日で開く。
  */
-export const toReservationEditPath = (reservationId: string): string =>
-  `/reservations/${encodeURIComponent(reservationId)}/edit`;
+export const toReservationEditPath = (area: AppArea, reservationId: string): string =>
+  toSharedScreenPath(area, `/reservations/${encodeURIComponent(reservationId)}/edit`);
+
+/**
+ * 予約の申請（事務局は作成）の入口の行き先（SCR-002）。
+ */
+export const toNewReservationPath = (area: AppArea): string =>
+  toSharedScreenPath(area, "/reservations/new");
+
+/**
+ * 施設だけを選んだ状態で予約申請（カレンダーへの転送）を開く URL。日付は画面の既定（今日）になる。
+ *
+ * 却下された予約から「別の日時で申請」するときのように、日付を決めずに入るときに使う。
+ */
+export const toFormPathForFacility = (area: AppArea, facilityId: string): string =>
+  `${toNewReservationPath(area)}?facility=${encodeURIComponent(facilityId)}`;

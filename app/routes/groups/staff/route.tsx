@@ -15,7 +15,9 @@ import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { AppArea } from "~/lib/app-area";
 import { formatFullDate } from "~/lib/date";
+import { toGroupDetailPath } from "~/lib/group-paths";
 import {
   countGroupsByStatus,
   findGroupSearchList,
@@ -286,7 +288,7 @@ function StaffGroupRow({ item }: Readonly<{ item: GroupSearchItem }>) {
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            to={`/groups/${item.id}`}
+            to={toGroupDetailPath(AppArea.Staff, item.id)}
             className="truncate font-medium text-foreground hover:underline hover:underline-offset-4"
           >
             {item.name}

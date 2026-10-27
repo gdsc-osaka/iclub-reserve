@@ -45,6 +45,7 @@ import {
   requiresUnlockArrangementReselection,
   unlockArrangementLabel,
 } from "~/domain/reservation/unlock-arrangement";
+import type { AppArea } from "~/lib/app-area";
 import { atTokyoMinutes, formatMonthDay, formatTime, toTokyoTimeKey } from "~/lib/date";
 import type {
   AvailabilityFacility,
@@ -89,6 +90,7 @@ export function AvailabilityEditForm({
   days,
   reservations,
   now,
+  area,
   onDraftChange,
   onCancel,
   editError,
@@ -107,6 +109,8 @@ export function AvailabilityEditForm({
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
   now: Date;
+  /** 開いている画面。欄の送り先の URL に使う */
+  area: AppArea;
   onDraftChange: (draft: CalendarDraft) => void;
   onCancel: () => void;
   /** 予約変更の失敗情報 */
@@ -255,7 +259,7 @@ export function AvailabilityEditForm({
          */}
         <Form
           method="post"
-          action={toCalendarPath(facility.id, anchorKey, {
+          action={toCalendarPath(area, facility.id, anchorKey, {
             kind: "edit",
             reservationId: target.id,
             draft,

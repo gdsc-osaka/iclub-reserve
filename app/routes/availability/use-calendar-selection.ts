@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { toDayBlocks, type AvailabilityDay } from "~/components/reservation/availability-week";
 import type { SlotRange } from "~/components/reservation/editor/reservation-slots";
+import type { AppArea } from "~/lib/app-area";
 import { startOfTokyoDay, toTokyoDateKey } from "~/lib/date";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 import type { ReservationEditTarget } from "~/usecases/reservation/get-reservation-edit-form";
@@ -108,6 +109,7 @@ const isOpenedInCalendar = (state: unknown): boolean =>
  * 読み込み直しても同じものが開く。戻る操作で閉じられる。
  */
 export function useCalendarSelection({
+  area,
   facilityId,
   anchorKey,
   reservations,
@@ -115,6 +117,7 @@ export function useCalendarSelection({
   canApply,
   editReservation = null,
 }: Readonly<{
+  area: AppArea;
   facilityId: string;
   /** 基準の日（URL の `date`）。開く・閉じるときもそのまま持ち回る */
   anchorKey: string;
@@ -136,7 +139,7 @@ export function useCalendarSelection({
 
   /** 開いているものを外した URL へ移る。履歴には積まない */
   const replaceWithoutSelection = () => {
-    void navigate(toCalendarPath(facilityId, anchorKey), {
+    void navigate(toCalendarPath(area, facilityId, anchorKey), {
       replace: true,
       preventScrollReset: true,
       state: location.state,
@@ -161,7 +164,7 @@ export function useCalendarSelection({
     nextAnchorKey = anchorKey,
     nextFacilityId = facilityId,
   ) => {
-    const path = toCalendarPath(nextFacilityId, nextAnchorKey, next);
+    const path = toCalendarPath(area, nextFacilityId, nextAnchorKey, next);
     if (selection === null) {
       void navigate(path, { preventScrollReset: true, state: openedInCalendarState });
     } else {

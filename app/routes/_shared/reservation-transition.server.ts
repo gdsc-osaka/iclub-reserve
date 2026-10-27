@@ -27,6 +27,8 @@ export const changeReservationStatus = (
     /** フォームの `unlockArrangement` の値。承認のときだけ使う（COND-027） */
     readonly unlockArrangement: FormDataEntryValue | null;
     readonly now: Date;
+    /** 事務局の画面からの操作か（COND-030 の (1)） */
+    readonly actsAsStaff: boolean;
   },
 ) =>
   changeReservationStatusUseCase(
@@ -39,7 +41,7 @@ export const changeReservationStatus = (
     {
       reservationId: input.reservationId,
       actorUserId: user.id,
-      isStaff: user.is_staff,
+      isStaff: input.actsAsStaff,
       transition: input.transition,
       reason: typeof input.reason === "string" ? input.reason : null,
       unlockArrangement: parseUnlockArrangement(input.unlockArrangement),

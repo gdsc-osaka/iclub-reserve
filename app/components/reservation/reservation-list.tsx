@@ -3,7 +3,11 @@ import { CircleAlert } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import type { ReservationActor } from "~/domain/reservation/transition";
-import type { ParsedReservationListParams } from "~/routes/reservations/list/query-params";
+import { AppArea } from "~/lib/app-area";
+import {
+  toReservationListScope,
+  type ParsedReservationListParams,
+} from "~/routes/reservations/list/query-params";
 import type { ReservationListResult } from "~/usecases/reservation/get-reservation-list";
 import { ReservationListEmpty } from "./reservation-list-empty";
 import { ReservationListFilters, ReservationListGroupSwitcher } from "./reservation-list-filters";
@@ -12,7 +16,7 @@ import { ReservationListRow } from "./reservation-list-row";
 interface ReservationListProps {
   readonly result: ReservationListResult;
   readonly params: ParsedReservationListParams;
-  readonly scope: "own" | "all";
+  readonly area: AppArea;
   readonly now: Date;
   readonly actionError?: string | null;
 }
@@ -26,26 +30,30 @@ interface ReservationListProps {
 export function ReservationList({
   result,
   params,
-  scope,
+  area,
   now,
   actionError,
 }: Readonly<ReservationListProps>) {
   const { groups, selectedGroup, items, counts, facilities, viewerMembership } = result;
 
-  /*
-   * 見ている人。事務局の画面（scope="all"）では事務局の権限で、
-   * 自団体の画面では団体での役割（viewerMembership）で操作の可否が決まる（COND-009）。
-   */
-  const actor: ReservationActor = { isStaff: scope === "all", membership: viewerMembership };
+  const scope = toReservationListScope(area);
+  const isStaffArea = area === AppArea.Staff;
 
-  const noGroups = scope === "own" && groups.length === 0;
+  /*
+   * 見ている人。事務局の画面では事務局の権限で、
+   * 利用者の画面では団体での役割（viewerMembership）で操作の可否が決まる（COND-009・COND-030 の (1)）。
+   * 事務局の画面の一覧（scope="all"）は団体を選ばないので、viewerMembership はいつも null になる。
+   */
+  const actor: ReservationActor = { isStaff: isStaffArea, membership: viewerMembership };
+
+  const noGroups = !isStaffArea && groups.length === 0;
   /*
    * 「承認待ちはすべて処理されています」と言えるのは、既定の絞り込み（今後の予約・
    * 全施設）で 0 件のときだけ。施設や期間で絞った結果が 0 件なのに同じ文を出すと、
    * 別の施設に承認待ちが残っていても片付いたように読めてしまう。
    */
   const isStaffProvisionalEmpty =
-    scope === "all" &&
+    isStaffArea &&
     params.status === "provisional" &&
     params.period === "upcoming" &&
     params.facility === null &&
@@ -72,11 +80,11 @@ export function ReservationList({
       >
         <div className="flex items-center justify-between gap-3">
           <h1 className="shrink-0 text-xl font-bold tracking-tight md:text-2xl">
-            {scope === "all" ? "予約の承認・管理" : "予約一覧"}
+            {isStaffArea ? "予約の承認・管理" : "予約一覧"}
           </h1>
 
           {/* 団体の切り替え（事務局の画面は全団体を見るので出さない） */}
-          {scope === "own" && (
+          {!isStaffArea && (
             <ReservationListGroupSwitcher
               groups={groups}
               selectedGroup={selectedGroup}
@@ -119,9 +127,10 @@ export function ReservationList({
             <ReservationListRow
               key={item.id}
               item={item}
-              showGroupName={scope === "all"}
+              showGroupName={isStaffArea}
               actor={actor}
               now={now}
+              area={area}
             />
           ))}
         </ul>

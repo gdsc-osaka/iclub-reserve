@@ -1,16 +1,9 @@
+import type { AppArea } from "~/lib/app-area";
 import { parseTokyoDateKey } from "~/lib/date";
 import {
   parseDraftParam,
   toCalendarPath as toAvailabilityCalendarPath,
 } from "~/routes/availability/paths";
-
-/**
- * 施設だけを選んだ状態で予約申請（カレンダーへの転送）を開く URL。日付は画面の既定（今日）になる。
- *
- * 却下された予約から「別の日時で申請」するときのように、日付を決めずに入るときに使う。
- */
-export const toFormPathForFacility = (facilityId: string): string =>
-  `/reservations/new?facility=${encodeURIComponent(facilityId)}`;
 
 /**
  * 予約申請フォーム（/reservations/new）のクエリパラメータから、空き状況カレンダーへの URL を組み立てる。
@@ -19,6 +12,7 @@ export const toFormPathForFacility = (facilityId: string): string =>
  * mode や created は無視する。
  */
 export const toCalendarPathFromFormQuery = (
+  area: AppArea,
   searchParams: URLSearchParams,
   todayKey: string,
 ): string => {
@@ -33,7 +27,7 @@ export const toCalendarPathFromFormQuery = (
   const end = searchParams.get("end")?.trim();
   const timed = start && end ? parseDraftParam(`${dateKey}T${start}-${end}`) : null;
 
-  return toAvailabilityCalendarPath(facilityId, dateKey, {
+  return toAvailabilityCalendarPath(area, facilityId, dateKey, {
     kind: "draft",
     draft: { dateKey, range: timed?.range ?? null },
   });

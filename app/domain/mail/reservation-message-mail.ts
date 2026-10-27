@@ -1,6 +1,7 @@
+import { AppArea } from "~/lib/app-area";
 import { formatDateTime } from "~/lib/date";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import { STAFF_SENDER_LABEL, type ReservationMessage } from "../reservation/message";
-import { reservationDetailPath } from "../reservation";
 import type { MailDraft } from "./mail-outbox";
 import type { ReservationMailRecipient, ReservationMailRecipients } from "./reservation-mail";
 
@@ -71,10 +72,13 @@ export interface CreateReservationMessageMailDraftsArgs {
 
 /**
  * 予約メッセージ通知メールの本文を組み立てる純粋関数。
+ * 宛先に応じた予約詳細の URL を載せる（COND-030 の (5)）。
+ * 団体側からの送信（事務局宛て）は事務局の画面、事務局としての送信（団体宛て）は利用者の画面。
  */
 const buildMessageMailBody = (args: CreateReservationMessageMailDraftsArgs): string => {
   const senderDisplay = args.message.sentAsStaff ? STAFF_SENDER_LABEL : args.senderName;
-  const detailUrl = `${args.appBaseUrl}${reservationDetailPath(args.reservation.id)}`;
+  const area = args.message.sentAsStaff ? AppArea.User : AppArea.Staff;
+  const detailUrl = `${args.appBaseUrl}${toReservationDetailPath(area, args.reservation.id)}`;
 
   const lines = [
     "i-Club 予約システムをご利用いただきありがとうございます。",

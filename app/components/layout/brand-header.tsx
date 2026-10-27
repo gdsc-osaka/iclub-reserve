@@ -4,7 +4,8 @@ import { Link } from "react-router";
 import { ICLUB_BOLT_BOX } from "~/components/brand/iclub-bolt";
 import { ICLUB_WORDMARK_VIEW_BOX, IclubWordmark } from "~/components/brand/iclub-logo";
 
-import { type AppArea, appAreaLinks } from "./app-area";
+import type { AppArea } from "~/lib/app-area";
+import { appAreaLinks } from "./app-area";
 
 /** 開いているときのワードマークの幅（rem）。 */
 const WORDMARK_WIDTH = 9;
