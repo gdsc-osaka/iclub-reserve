@@ -38,6 +38,7 @@ const sampleReservation: Reservation = {
   note: null,
   status: ReservationStatus.Approved,
   statusReason: null,
+  unlockArrangement: null,
   createdBy: "usr_applicant",
   createdAt: new Date("2026-10-01T10:00:00+09:00"),
   requestedAt: new Date("2026-10-01T10:00:00+09:00"),

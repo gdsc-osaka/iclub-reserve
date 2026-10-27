@@ -245,6 +245,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
             headCount: insertValue("headCount", reservation.headCount),
             note: insertValue("note", reservation.note),
             status: insertValue("status", reservation.status),
+            unlockArrangement: insertValue("unlockArrangement", reservation.unlockArrangement),
             statusReason: insertValue("statusReason", reservation.statusReason),
             createdBy: insertValue("createdBy", reservation.createdBy),
             createdAt: insertValue("createdAt", reservation.createdAt),
@@ -325,6 +326,9 @@ export const createReservationRepository = (db: Database): ReservationRepository
       .set({
         status: args.status,
         statusReason: args.statusReason,
+        ...(args.unlockArrangement !== undefined
+          ? { unlockArrangement: args.unlockArrangement }
+          : {}),
         updatedAt: args.updatedAt,
       })
       .where(condition)
@@ -366,6 +370,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
         note: args.note,
         status: args.status,
         requestedAt: args.requestedAt,
+        unlockArrangement: args.unlockArrangement,
         updatedAt: args.updatedAt,
       })
       .where(condition)

@@ -25,14 +25,25 @@ import {
   type ScheduleDraft,
 } from "~/components/reservation/editor/use-schedule-draft";
 import {
+  shouldShowApplicationNotice,
+  shouldShowShortNoticeAlert,
+} from "~/components/reservation/editor/notice";
+import {
   ReservationStatusBadge,
   reservationStatusLabel,
 } from "~/components/reservation/reservation-status-badge";
+import { UnlockArrangementField } from "~/components/reservation/unlock-arrangement-field";
+import { useUnlockArrangementChoice } from "~/components/reservation/use-unlock-arrangement-choice";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
 import { RESERVATION_STEP_MINUTES, ReservationStatus } from "~/domain/reservation";
+import { APPLICATION_DEADLINE_NOTICE, SHORT_NOTICE_ALERT } from "~/domain/reservation/lead-time";
+import {
+  requiresUnlockArrangementReselection,
+  unlockArrangementLabel,
+} from "~/domain/reservation/unlock-arrangement";
 import {
   changedContentFields,
   editTargetStatus,
@@ -48,6 +59,7 @@ import {
   parseTokyoDateKey,
   parseTokyoTimeKey,
   startOfTokyoDay,
+  toTokyoDateKey,
   toTokyoTimeKey,
 } from "~/lib/date";
 import type {
@@ -167,6 +179,14 @@ export function ReservationEditorForm({
 
   const [headCount, setHeadCount] = useState(submitted?.headCount ?? initial.headCount ?? "");
   const [note, setNote] = useState(submitted?.note ?? initial.note ?? "");
+  /*
+   * 選んだ解錠の手配（COND-027）。承認済みの予約の施設・日時を直接変更するときに選ぶ。
+   * 選んだあとで施設・日時を変えたら、未選択に戻る（`useUnlockArrangementChoice`）。
+   */
+  const [unlockArrangement, selectUnlockArrangement] = useUnlockArrangementChoice(
+    { facilityId: draft.facility.id, dateKey: toTokyoDateKey(draft.day), range: draft.range },
+    submitted?.unlockArrangement ?? null,
+  );
   /** スマホの全画面の選択を開いているか */
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   /** 確認ダイアログを開いているか */
@@ -184,17 +204,47 @@ export function ReservationEditorForm({
   const needsReapproval =
     !isDirectEdit && editPreview?.outcome === ReservationEditOutcome.Reapproval;
 
+  /** 申請の期限の目安（COND-028）の、いつも出す案内と、7 日を切ったときの注意を出すか */
+  const noticeContext = {
+    kind: "edit",
+    isDirect: isDirectEdit,
+    outcome: editPreview?.outcome ?? null,
+  } as const;
+  const showApplicationNotice = shouldShowApplicationNotice(noticeContext);
+  const showShortNotice = shouldShowShortNoticeAlert(
+    noticeContext,
+    range === null ? null : atTokyoMinutes(draft.day, range.startMinutes),
+    now,
+  );
+
+  /*
+   * 解錠の手配（COND-027）の欄を出すか。承認済みの予約の施設・日時を直接変更するときだけ出す
+   * （判定は action と同じドメインの関数）。直接作成の欄は、空き状況カレンダーの欄にある。
+   * 欄を消したときは、選んでいた値も送らない（欄ごと消えるので、ラジオの値も送られない）。
+   */
+  const showUnlockArrangement =
+    isDirectEdit &&
+    editPreview !== null &&
+    requiresUnlockArrangementReselection(purpose.reservation.status, editPreview.changed);
+  /** 解錠の手配の欄を出しているのに、まだ選んでいない。確認へ進ませない */
+  const isUnlockArrangementMissing = showUnlockArrangement && unlockArrangement === null;
+
   /*
    * 確認へ進めるのは、時間帯を選んでいて、承認済みの予約と重なっておらず（COND-001）、
-   * 画面が次の状態へ移っている最中でなく、1 項目以上変えているときだけ。
+   * 画面が次の状態へ移っている最中でなく、1 項目以上変えていて、
+   * 解錠の手配の欄を出していればそれを選んでいるときだけ。
    *
    * 未選択でも止めるのは、そのすぐ上に「時間帯は未選択」と出しているため。
    * 承認済みと重なっているときも、すぐ上に理由の警告を出している。
-   * 何も変えていないときも、ボタンのすぐ上にそう出している。
+   * 何も変えていないときと、解錠の手配を選んでいないときも、ボタンのすぐ上にそう出している。
    * 理由の見えない場所で止めているわけではない。
    */
   const canConfirm =
-    range !== null && draft.approvedConflicts.length === 0 && !isBusy && !isUnchanged;
+    range !== null &&
+    draft.approvedConflicts.length === 0 &&
+    !isBusy &&
+    !isUnchanged &&
+    !isUnlockArrangementMissing;
 
   /** 変更前の施設。確認のダイアログで「変更前」を添えるために使う */
   const originalFacility =
@@ -299,11 +349,37 @@ export function ReservationEditorForm({
 
           <FieldError id={ids.periodError} message={fieldErrors.period} />
 
+          {/* 1 週間前までの申請の案内と、7 日を切ったときの注意（COND-028） */}
+          {showApplicationNotice && (
+            <p className="text-xs text-muted-foreground">{APPLICATION_DEADLINE_NOTICE}</p>
+          )}
+
+          {showShortNotice && (
+            <Alert className="border-amber-500/30 bg-amber-500/5">
+              <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+              <AlertDescription>{SHORT_NOTICE_ALERT}</AlertDescription>
+            </Alert>
+          )}
+
           <ScheduleConflictAlerts conflicts={draft} />
 
           {/* 送る前に気づけるよう、確認のダイアログを開く前から出しておく */}
           {needsReapproval && <ReapprovalAlert />}
           {isDirectEdit && <DirectEditAlert />}
+
+          {showUnlockArrangement && (
+            <div className="flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。
+              </p>
+              <UnlockArrangementField
+                idPrefix="direct-edit"
+                value={unlockArrangement}
+                onValueChange={selectUnlockArrangement}
+                error={fieldErrors.unlockArrangement}
+              />
+            </div>
+          )}
 
           <Separator />
 
@@ -325,6 +401,11 @@ export function ReservationEditorForm({
             {isUnchanged && (
               <p className="text-center text-xs text-muted-foreground">
                 まだ何も変更していません。
+              </p>
+            )}
+            {isUnlockArrangementMissing && (
+              <p className="text-center text-xs text-muted-foreground">
+                解錠の手配を選んでください。
               </p>
             )}
             <Button type="submit" size="lg" disabled={!canConfirm} className="w-full">
@@ -391,6 +472,11 @@ export function ReservationEditorForm({
 
         <dl className="flex flex-col gap-2">
           <SummaryItem label="団体">{purpose.reservation.groupName}</SummaryItem>
+          {showUnlockArrangement && unlockArrangement !== null && (
+            <SummaryItem label="解錠の手配">
+              {unlockArrangementLabel[unlockArrangement]}
+            </SummaryItem>
+          )}
           <SummaryItem label="使用人数">
             <div className="flex flex-col">
               <span>{headCount.trim() === "" ? null : `${headCount} 名`}</span>

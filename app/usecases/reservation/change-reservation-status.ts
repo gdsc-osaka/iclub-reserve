@@ -10,6 +10,7 @@ import {
   ReservationStatus,
   type ReservationError,
   type ReservationRepository,
+  type UnlockArrangement,
 } from "~/domain/reservation";
 import {
   toReservationStatusChanges,
@@ -26,6 +27,7 @@ import {
   validateTransitionReason,
   type ReservationActor,
 } from "~/domain/reservation/transition";
+import { validateUnlockArrangement } from "~/domain/reservation/unlock-arrangement";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
@@ -55,6 +57,12 @@ export interface ChangeReservationStatusArgs {
   readonly transition: ReservationTransition;
   /** 操作の理由（承認では使わず、それ以外の操作では必須。COND-002） */
   readonly reason?: string | null;
+  /**
+   * 施設の解錠の手配（COND-027）。
+   *
+   * 承認（Approve）のときだけ使い、それ以外の操作では送られてきても読まず列にも触れない。
+   */
+  readonly unlockArrangement?: UnlockArrangement | null;
   /** 更新日時の基準となる日時（テスト容易化のため任意指定可能） */
   readonly now?: Date;
   /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
@@ -74,7 +82,8 @@ export interface ChangeReservationStatusResult {
  * 【確かめる順序の理由】
  * 権限と状態遷移（canTransition）を、理由の検証（validateTransitionReason）より先に置く。
  * 操作そのものが許されていない人に「理由を入力してください」と返しても、
- * 入力し直したところで結局は弾かれる。
+ * 入力し直したところで結局は弾かれる。承認で選ぶ解錠の手配（validateUnlockArrangement・COND-027）も、
+ * 同じ理由で理由の検証の後に確かめる。
  * 事務局だけの操作では、事務局かどうかをさらに前、予約を引くより前に確かめる
  * （予約の有無を事務局でない人に伝えないため。本文のコメントを参照）。
  *
@@ -129,6 +138,11 @@ export const changeReservationStatusUseCase = (
     yield* canTransition(reservation, args.transition, actor);
     // 理由の検証（COND-002）。正規化した値をそのまま保存する
     const statusReason = yield* validateTransitionReason(args.transition, args.reason);
+    // 解錠の手配の検証（COND-027）。承認のときだけ必須で検証し、それ以外の操作では読まない
+    const unlockArrangement =
+      args.transition === ReservationTransition.Approve
+        ? yield* validateUnlockArrangement(args.unlockArrangement ?? null)
+        : undefined;
 
     // 承認のときだけ、同一施設・同一時間帯の承認済み予約を確かめる（COND-001）
     const overlapCheck =
@@ -152,6 +166,7 @@ export const changeReservationStatusUseCase = (
             startAt: reservation.startAt,
             endAt: reservation.endAt,
             statusReason,
+            unlockArrangement: unlockArrangement ?? reservation.unlockArrangement,
             updatedAt: now,
           },
           audience,
@@ -173,6 +188,7 @@ export const changeReservationStatusUseCase = (
       changes: toReservationStatusChanges(reservation, {
         status: targetStatus,
         statusReason,
+        unlockArrangement,
       }),
     };
 
@@ -199,6 +215,7 @@ export const changeReservationStatusUseCase = (
         expectedUpdatedAt: reservation.updatedAt,
         status: targetStatus,
         statusReason,
+        unlockArrangement,
         updatedAt: now,
         requireNoApprovedOverlap: args.transition === ReservationTransition.Approve,
       },

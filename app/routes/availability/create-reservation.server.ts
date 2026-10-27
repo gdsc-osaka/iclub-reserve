@@ -78,7 +78,10 @@ export async function createReservationAction({
 
   // 直接作成ではメールを送らないので、通知に使う依存は申請のときだけ渡す
   const result = isDirect
-    ? await createDirectReservationUseCase(deps, args)
+    ? await createDirectReservationUseCase(deps, {
+        ...args,
+        unlockArrangement: values.unlockArrangement,
+      })
     : await createProvisionalReservationUseCase(
         {
           ...deps,

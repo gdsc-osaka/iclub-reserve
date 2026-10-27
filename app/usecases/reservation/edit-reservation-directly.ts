@@ -11,8 +11,13 @@ import {
   type ReservationError,
   type ReservationRepository,
   type ReservationStatus,
+  type UnlockArrangement,
 } from "~/domain/reservation";
 import { toReservationContentEditChanges } from "~/domain/reservation/audit-log";
+import {
+  requiresUnlockArrangementReselection,
+  validateUnlockArrangement,
+} from "~/domain/reservation/unlock-arrangement";
 import {
   canDirectEditReservation,
   changedContentFields,
@@ -48,6 +53,8 @@ export interface EditReservationDirectlyArgs {
   /** 操作する人が事務局かどうか（COND-009） */
   readonly isStaff: boolean;
   readonly now: Date;
+  /** 承認済みの予約で施設・日時を変えたとき、解錠の手配を選び直す（COND-027） */
+  readonly unlockArrangement: UnlockArrangement | null;
   readonly content: ReservationContent;
   /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
   readonly appBaseUrl: string;
@@ -106,6 +113,10 @@ export const editReservationDirectlyUseCase = (
       return okAsync({ reservationId: reservation.id, outcome, status: reservation.status });
     }
 
+    const nextUnlockArrangement = requiresUnlockArrangementReselection(reservation.status, changed)
+      ? yield* validateUnlockArrangement(args.unlockArrangement)
+      : reservation.unlockArrangement;
+
     if (changed.has("facilityId")) {
       yield* ensureFacilityIsAvailable(deps, content.facilityId);
     }
@@ -121,6 +132,7 @@ export const editReservationDirectlyUseCase = (
       overlapUserMessage: APPROVED_OVERLAP_MESSAGE,
       mailEvent: directEditMailEvent[outcome],
       appBaseUrl: args.appBaseUrl,
+      unlockArrangement: nextUnlockArrangement,
     });
 
     // 直接変更ではステータスを変えない（いまのステータスのまま）
@@ -136,6 +148,7 @@ export const editReservationDirectlyUseCase = (
         ...content,
         status,
         statusReason: reservation.statusReason,
+        unlockArrangement: nextUnlockArrangement,
       }),
     };
 
@@ -171,6 +184,7 @@ export const editReservationDirectlyUseCase = (
          * 事務局が動かした時間帯は団体が申し込み直したものではないので、団体の順番を後ろへ回さない。
          */
         requestedAt: reservation.requestedAt,
+        unlockArrangement: nextUnlockArrangement,
         updatedAt: now,
         requireNoApprovedOverlap: checksOverlap,
       },

@@ -37,6 +37,13 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
 
+    // 申請の案内文が常に出ていること（COND-028）
+    await expect(
+      panel.getByText(
+        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
+
     // 欄の「終了時刻」で 12:00 を選ぶ
     await panel.getByRole("combobox", { name: "終了時刻" }).click();
     await page.getByRole("option", { name: "12:00" }).click();
@@ -122,6 +129,13 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
 
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
+
+    // 申請の案内文が常に出ていること（COND-028）
+    await expect(
+      panel.getByText(
+        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
 
     // 「終了時刻」で 11:00 を選ぶ
     await panel.getByRole("combobox", { name: "終了時刻" }).click();
@@ -267,5 +281,51 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     // 欄の時刻が 14:00〜16:00 になる
     await expect(panel.getByRole("combobox", { name: "開始時刻" })).toHaveText("14:00");
     await expect(panel.getByRole("combobox", { name: "終了時刻" })).toHaveText("16:00");
+  });
+
+  test("利用日まで7日を切った日時を選ぶと注意が出るが、申請はできる（COND-028）", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const member = await createUser(db);
+    await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
+    const facility = await createFacility(db);
+    await signInAs(member.id);
+
+    // 明日（7日を切っている）を基準の日にしてカレンダーを開き、「10:00 から申請」を押す
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    await openPage(page, `/availability?facility=${facility.id}&date=${toDateKey(tomorrow)}`);
+
+    const column = page.getByRole("group", { name: formatMonthDay(tomorrow) });
+    await column
+      .getByRole("button", { name: `${formatMonthDay(tomorrow)} 10:00 から申請` })
+      .click();
+
+    const panel = page.getByRole("region", { name: "新しい予約" });
+    await expect(panel).toBeVisible();
+
+    // 案内文と注意文の両方が表示されていること（COND-028）
+    await expect(
+      panel.getByText(
+        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
+    await expect(
+      panel.getByText(
+        "利用日まで7日を切っています。承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
+
+    await panel.getByLabel("使用人数").fill("4");
+
+    // 注意文が出ていても申請はできる
+    await panel.getByRole("button", { name: "内容を確認する" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "この内容で申請しますか？" });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "この内容で申請する" }).click();
+
+    await expect(page.getByText("仮予約を申請しました")).toBeVisible();
   });
 });

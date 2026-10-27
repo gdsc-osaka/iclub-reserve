@@ -142,6 +142,7 @@ export async function action({
     reservationId,
     transition,
     reason,
+    unlockArrangement: formData.get("unlockArrangement"),
     now: new Date(),
   });
 

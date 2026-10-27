@@ -43,6 +43,7 @@ const defaultReservation: Reservation = {
   note: "定期ミーティング",
   status: ReservationStatus.Provisional,
   statusReason: null,
+  unlockArrangement: null,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-14T09:00:00+09:00"),
   requestedAt: new Date("2026-09-14T09:00:00+09:00"),

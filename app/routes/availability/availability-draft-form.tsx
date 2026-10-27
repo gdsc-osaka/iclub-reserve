@@ -10,6 +10,10 @@ import type {
   FormValues,
   ReservationFormMode,
 } from "~/components/reservation/editor/form-values";
+import {
+  shouldShowApplicationNotice,
+  shouldShowShortNoticeAlert,
+} from "~/components/reservation/editor/notice";
 import { OperatingHoursNotice } from "~/components/reservation/editor/operating-hours-notice";
 import { ReservationConfirmDialog } from "~/components/reservation/editor/reservation-confirm-dialog";
 import {
@@ -30,6 +34,8 @@ import {
 import { SummaryItem } from "~/components/reservation/editor/summary-item";
 import { TimeRangeFields } from "~/components/reservation/editor/time-range-fields";
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
+import { UnlockArrangementField } from "~/components/reservation/unlock-arrangement-field";
+import { useUnlockArrangementChoice } from "~/components/reservation/use-unlock-arrangement-choice";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { CardContent, CardFooter } from "~/components/ui/card";
@@ -51,7 +57,9 @@ import {
 import { Separator } from "~/components/ui/separator";
 import { Switch } from "~/components/ui/switch";
 import { ReservationStatus } from "~/domain/reservation";
-import { formatMonthDay, toTokyoDateKey, toTokyoTimeKey } from "~/lib/date";
+import { APPLICATION_DEADLINE_NOTICE, SHORT_NOTICE_ALERT } from "~/domain/reservation/lead-time";
+import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
+import { atTokyoMinutes, formatMonthDay, toTokyoDateKey, toTokyoTimeKey } from "~/lib/date";
 import type {
   AvailabilityFacility,
   AvailabilityReservation,
@@ -120,6 +128,7 @@ export function AvailabilityDraftForm({
   const facilityErrorId = useId();
   const groupSelectId = useId();
   const groupErrorId = useId();
+  const unlockArrangementIdPrefix = useId();
 
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -134,6 +143,14 @@ export function AvailabilityDraftForm({
   const [headCount, setHeadCount] = useState(submitted?.headCount ?? "");
   const [note, setNote] = useState(submitted?.note ?? "");
   const [isDirect, setIsDirect] = useState(canCreateDirectly && submitted?.mode === "direct");
+  /*
+   * 直接作成で選んだ解錠の手配（COND-027）。
+   * 選んだあとで施設・日時を変えたら、未選択に戻る（`useUnlockArrangementChoice`）。
+   */
+  const [unlockArrangement, selectUnlockArrangement] = useUnlockArrangementChoice(
+    { facilityId: facility.id, dateKey: draft.dateKey, range: draft.range },
+    submitted?.unlockArrangement ?? null,
+  );
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   // 開いている仮の枠の日は、読み込んだ 4 週間の中にあることを確かめてある（toOpenSelection）
@@ -151,11 +168,28 @@ export function AvailabilityDraftForm({
   // 事務局でも、有効な団体が 1 つも無ければ申請元を選べない（一般のユーザーは、そもそも欄を開けない）
   const hasNoGroups = applicantGroups.length === 0;
 
+  /** 申請の期限の目安（COND-028）の、いつも出す案内と、7 日を切ったときの注意を出すか */
+  const noticeContext = { kind: "create", isDirect } as const;
+  const showApplicationNotice = shouldShowApplicationNotice(noticeContext);
+  const showShortNotice = shouldShowShortNoticeAlert(
+    noticeContext,
+    draft.range === null ? null : atTokyoMinutes(day.date, draft.range.startMinutes),
+    now,
+  );
+
   /*
-   * 確認へ進めるのは、時刻を選んでいて取れる時間帯で、画面が次の状態へ移っている最中でないときだけ。
-   * 止めるときは、その理由（時刻を選んでいない・過ぎている・埋まっている）をボタンより上に出している。
+   * 解錠の手配（COND-027）は、直接作成のときだけ選ばせる。選ぶまでは確認へ進ませない。
+   * 申請に切り替えたときは欄ごと消えるので、選んでいた値も送らない。
    */
-  const canSubmit = isAvailable && !isBusy && !hasNoGroups;
+  const isUnlockArrangementMissing = isDirect && unlockArrangement === null;
+
+  /*
+   * 確認へ進めるのは、時刻を選んでいて取れる時間帯で、画面が次の状態へ移っている最中でなく、
+   * 直接作成なら解錠の手配を選んでいるときだけ。
+   * 止めるときは、その理由（時刻を選んでいない・過ぎている・埋まっている）をボタンより上に、
+   * 解錠の手配を選んでいないことをボタンのすぐ上に出している。
+   */
+  const canSubmit = isAvailable && !isBusy && !hasNoGroups && !isUnlockArrangementMissing;
 
   // 開始が過ぎているなら、重なりより先にそれを伝える（選び直すしかないので）
   const isStartPast = draft.range !== null && pastSlots.has(draft.range.startMinutes);
@@ -281,6 +315,11 @@ export function AvailabilityDraftForm({
           <FieldError id={periodErrorId}>{fieldErrors.period}</FieldError>
           <FieldError id={facilityErrorId}>{fieldErrors.facilityId}</FieldError>
 
+          {/* 1 週間前までの申請の案内（COND-028） */}
+          {showApplicationNotice && (
+            <p className="text-xs text-muted-foreground">{APPLICATION_DEADLINE_NOTICE}</p>
+          )}
+
           {isStartPast ? (
             <Alert className="border-amber-500/30 bg-amber-500/5">
               <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
@@ -289,7 +328,16 @@ export function AvailabilityDraftForm({
               </AlertDescription>
             </Alert>
           ) : (
-            conflicts !== null && <ScheduleConflictAlerts conflicts={conflicts} />
+            <>
+              {/* 7 日を切ったときの注意（COND-028）。過ぎているときは選び直すしかないので出さない */}
+              {showShortNotice && (
+                <Alert className="border-amber-500/30 bg-amber-500/5">
+                  <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+                  <AlertDescription>{SHORT_NOTICE_ALERT}</AlertDescription>
+                </Alert>
+              )}
+              {conflicts !== null && <ScheduleConflictAlerts conflicts={conflicts} />}
+            </>
           )}
 
           {hasNoGroups ? (
@@ -315,6 +363,15 @@ export function AvailabilityDraftForm({
                     </FieldContent>
                     <Switch id={directSwitchId} checked={isDirect} onCheckedChange={setIsDirect} />
                   </Field>
+
+                  {isDirect && (
+                    <UnlockArrangementField
+                      idPrefix={unlockArrangementIdPrefix}
+                      value={unlockArrangement}
+                      onValueChange={selectUnlockArrangement}
+                      error={fieldErrors.unlockArrangement}
+                    />
+                  )}
                 </>
               )}
 
@@ -373,7 +430,12 @@ export function AvailabilityDraftForm({
 
       {/* 欄の中を送っても動かないよう、ボタンは中身の外の下端に置き、`form` 属性でフォームを指す */}
       {!hasNoGroups && (
-        <CardFooter className="shrink-0 border-t p-4">
+        <CardFooter className="shrink-0 flex-col gap-2 border-t p-4">
+          {isUnlockArrangementMissing && (
+            <p className="text-center text-xs text-muted-foreground">
+              解錠の手配を選んでください。
+            </p>
+          )}
           <Button type="submit" form={formId} disabled={!canSubmit} className="w-full">
             <ClipboardCheck aria-hidden />
             内容を確認する
@@ -408,6 +470,11 @@ export function AvailabilityDraftForm({
 
         <dl className="flex flex-col gap-2">
           <SummaryItem label="団体">{selectedGroup?.name ?? null}</SummaryItem>
+          {isDirect && unlockArrangement !== null && (
+            <SummaryItem label="解錠の手配">
+              {unlockArrangementLabel[unlockArrangement]}
+            </SummaryItem>
+          )}
           <SummaryItem label="使用人数">
             {headCount.trim() === "" ? null : `${headCount} 名`}
           </SummaryItem>

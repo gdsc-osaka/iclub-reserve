@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { UnlockArrangement } from "~/domain/reservation";
 import {
   createReservationMailDrafts,
   directEditMailEvent,
@@ -19,6 +20,7 @@ describe("reservation-mail", () => {
     startAt: new Date("2026-09-25T10:00:00+09:00"),
     endAt: new Date("2026-09-25T12:00:00+09:00"),
     statusReason: null,
+    unlockArrangement: null,
     // 1789866000000 ミリ秒。idempotencyKey に入る
     updatedAt: new Date("2026-09-20T10:00:00+09:00"),
   };
@@ -439,6 +441,82 @@ describe("reservation-mail", () => {
         [ReservationTransition.Reject]: ReservationMailEvent.Rejected,
         [ReservationTransition.StaffCancel]: ReservationMailEvent.CancelledByStaff,
       });
+    });
+  });
+
+  describe("解錠の手配の案内文（EVT-005 / COND-027）", () => {
+    it("承認で要手配のとき、本文に要手配の案内が入る", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        { ...baseReservation, unlockArrangement: UnlockArrangement.Required },
+        defaultAudience,
+        APP_BASE_URL,
+      );
+      const body = drafts[0]?.text ?? "";
+      expect(body).toContain(
+        "当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
+      );
+      expect(body).toContain(
+        [
+          "利用終了日時: 2026年9月25日 12:00",
+          "",
+          "当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
+          "",
+          "予約の詳細は、次のページでご確認ください。",
+        ].join("\n"),
+      );
+    });
+
+    it("承認で手配済みのとき、本文に手配済みの案内が入る", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        { ...baseReservation, unlockArrangement: UnlockArrangement.Arranged },
+        defaultAudience,
+        APP_BASE_URL,
+      );
+      const body = drafts[0]?.text ?? "";
+      expect(body).toContain("解錠の手配が済んでいます。方法はメッセージを確認してください。");
+    });
+
+    it("承認で不要のとき、案内は入らない", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        { ...baseReservation, unlockArrangement: UnlockArrangement.NotRequired },
+        defaultAudience,
+        APP_BASE_URL,
+      );
+      const body = drafts[0]?.text ?? "";
+      expect(body).not.toContain("施錠");
+      expect(body).not.toContain("解錠");
+    });
+
+    it("承認で未定（null）のとき、案内は入らない", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        { ...baseReservation, unlockArrangement: null },
+        defaultAudience,
+        APP_BASE_URL,
+      );
+      const body = drafts[0]?.text ?? "";
+      expect(body).not.toContain("施錠");
+      expect(body).not.toContain("解錠");
+    });
+
+    it("承認以外のイベントでは、unlockArrangement があっても案内は入らない", () => {
+      const nonApprovedEvents = Object.values(ReservationMailEvent).filter(
+        (event) => event !== ReservationMailEvent.Approved,
+      );
+      for (const event of nonApprovedEvents) {
+        const drafts = createReservationMailDrafts(
+          event,
+          { ...baseReservation, unlockArrangement: UnlockArrangement.Required },
+          defaultAudience,
+          APP_BASE_URL,
+        );
+        for (const draft of drafts) {
+          expect(draft.text).not.toContain("当日施設が施錠されている可能性があります");
+        }
+      }
     });
   });
 });
