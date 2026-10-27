@@ -3,8 +3,7 @@ import { useId, useState, type FocusEvent, type FormEvent } from "react";
 import { Form, useNavigation } from "react-router";
 
 import { CardItem } from "~/components/reservation/availability-detail-card";
-import { toDayBlocks, type AvailabilityDay } from "~/components/reservation/availability-week";
-import { DateNavigation } from "~/components/reservation/editor/date-navigation";
+import type { AvailabilityDay } from "~/components/reservation/availability-week";
 import type {
   FieldErrors,
   FormValues,
@@ -14,25 +13,17 @@ import {
   shouldShowApplicationNotice,
   shouldShowShortNoticeAlert,
 } from "~/components/reservation/editor/notice";
-import { OperatingHoursNotice } from "~/components/reservation/editor/operating-hours-notice";
 import { ReservationConfirmDialog } from "~/components/reservation/editor/reservation-confirm-dialog";
 import {
   HeadCountField,
   NoteField,
 } from "~/components/reservation/editor/reservation-content-fields";
-import {
-  formatSlotRange,
-  isRangeAvailable,
-  toBlockedSlots,
-  toConflicts,
-  toPastSlots,
-} from "~/components/reservation/editor/reservation-slots";
+import { formatSlotRange } from "~/components/reservation/editor/reservation-slots";
 import {
   ProvisionalConflictAlert,
   ScheduleConflictAlerts,
 } from "~/components/reservation/editor/schedule-conflict-alerts";
 import { SummaryItem } from "~/components/reservation/editor/summary-item";
-import { TimeRangeFields } from "~/components/reservation/editor/time-range-fields";
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
 import { UnlockArrangementField } from "~/components/reservation/unlock-arrangement-field";
 import { useUnlockArrangementChoice } from "~/components/reservation/use-unlock-arrangement-choice";
@@ -59,13 +50,15 @@ import { Switch } from "~/components/ui/switch";
 import { ReservationStatus } from "~/domain/reservation";
 import { APPLICATION_DEADLINE_NOTICE, SHORT_NOTICE_ALERT } from "~/domain/reservation/lead-time";
 import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
-import { atTokyoMinutes, formatMonthDay, toTokyoDateKey, toTokyoTimeKey } from "~/lib/date";
+import { atTokyoMinutes, formatMonthDay, toTokyoTimeKey } from "~/lib/date";
 import type {
   AvailabilityFacility,
   AvailabilityReservation,
 } from "~/query/facility/facility-availability-calendar";
 import type { ReservationFormGroup } from "~/query/reservation/reservation-form";
 
+import { calculateDraftSchedule } from "./draft-schedule";
+import { DraftScheduleFields } from "./draft-schedule-fields";
 import { toCalendarPath, type CalendarDraft } from "./paths";
 
 /** 予約を作る操作の識別子。同じ画面の事務局の操作（承認・却下・キャンセル）と action で分ける */
@@ -157,13 +150,12 @@ export function AvailabilityDraftForm({
   const day = days.find((item) => item.dateKey === draft.dateKey);
   if (day === undefined) return null;
 
-  const dayBlocks = toDayBlocks(day, reservations);
-  const blockedSlots = toBlockedSlots(dayBlocks);
-  const pastSlots = toPastSlots(day.date, now);
-
-  // カレンダーの 30 分の枠と同じ計算で、取れるかを決める
-  const isAvailable =
-    draft.range !== null && isRangeAvailable(draft.range, blockedSlots, pastSlots);
+  const { blockedSlots, pastSlots, isAvailable, isStartPast, conflicts } = calculateDraftSchedule({
+    draft,
+    day,
+    reservations,
+    now,
+  });
 
   // 事務局でも、有効な団体が 1 つも無ければ申請元を選べない（一般のユーザーは、そもそも欄を開けない）
   const hasNoGroups = applicantGroups.length === 0;
@@ -190,11 +182,6 @@ export function AvailabilityDraftForm({
    * 解錠の手配を選んでいないことをボタンのすぐ上に出している。
    */
   const canSubmit = isAvailable && !isBusy && !hasNoGroups && !isUnlockArrangementMissing;
-
-  // 開始が過ぎているなら、重なりより先にそれを伝える（選び直すしかないので）
-  const isStartPast = draft.range !== null && pastSlots.has(draft.range.startMinutes);
-  // 重なりは、カレンダーの帯と同じ予約で数える
-  const conflicts = draft.range === null ? null : toConflicts(dayBlocks, draft.range);
 
   const selectedGroup = applicantGroups.find((item) => item.id === groupId);
 
@@ -275,42 +262,16 @@ export function AvailabilityDraftForm({
             <CardItem label="施設・設備">{facility.name}</CardItem>
           </dl>
 
-          {/*
-           * 日付を変えたら、時間帯はそのままで仮の枠の日を移す。4 週間の外の日なら、
-           * その日を基準の日にして読み直す（ADR-014 決定 11。`openDraft` が決める）
-           */}
-          <DateNavigation
-            day={day.date}
-            dateKey={draft.dateKey}
-            todayKey={toTokyoDateKey(now)}
-            disabled={isBusy}
-            errorId={fieldErrors.period ? periodErrorId : undefined}
-            onSelectDate={(nextDateKey) =>
-              onDraftChange({ dateKey: nextDateKey, range: draft.range })
-            }
+          <DraftScheduleFields
+            day={day}
+            draft={draft}
+            now={now}
+            isBusy={isBusy}
+            blockedSlots={blockedSlots}
+            pastSlots={pastSlots}
+            periodErrorId={fieldErrors.period ? periodErrorId : undefined}
+            onDraftChange={onDraftChange}
           />
-
-          <div className="flex flex-col gap-1.5">
-            <TimeRangeFields
-              range={draft.range}
-              // 欄は SetStateAction を渡してくるので、今の時間帯に当ててから仮の枠を書き換える
-              onChange={(update) => {
-                const nextRange = typeof update === "function" ? update(draft.range) : update;
-                onDraftChange({ dateKey: draft.dateKey, range: nextRange });
-              }}
-              blockedSlots={blockedSlots}
-              pastSlots={pastSlots}
-              errorId={fieldErrors.period ? periodErrorId : undefined}
-            />
-
-            <OperatingHoursNotice />
-
-            {draft.range === null && (
-              <p className="text-xs text-muted-foreground">
-                カレンダーの空いている時間を押すか、開始時刻と終了時刻を選んでください。
-              </p>
-            )}
-          </div>
 
           <FieldError id={periodErrorId}>{fieldErrors.period}</FieldError>
           <FieldError id={facilityErrorId}>{fieldErrors.facilityId}</FieldError>
@@ -399,7 +360,16 @@ export function AvailabilityDraftForm({
                       <SelectValue placeholder="選んでください" />
                     </SelectTrigger>
 
-                    {/* 項目を `SelectGroup` で包む理由は `ReservationScheduler` の施設の欄を参照 */}
+                    {/*
+                     * 見出しを付けないときも、項目は `SelectGroup` で包むこと。
+                     *
+                     * この Select は「選んでいる項目の文字を、トリガーの値の文字に重ねる」
+                     * 置き方（radix-nova の既定 `item-aligned`）で、一覧の幅はそこから
+                     * 逆算される（トリガーの幅 + トリガーとの左端のずれ）。
+                     * つまり端をそろえているのは幅の指定ではなく、項目の左余白。
+                     * 包まないと `SelectGroup` の `p-1` が抜けて 4px 足りず、
+                     * 一覧の左端だけが内側へずれる。
+                     */}
                     <SelectContent>
                       <SelectGroup>
                         {applicantGroups.map((item) => (

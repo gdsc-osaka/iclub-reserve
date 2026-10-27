@@ -16,7 +16,6 @@ import { createReservationMailRecipientsQuery } from "~/infra/reservation/reserv
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
-import { parseTokyoDateKey } from "~/lib/date";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { createDirectReservationUseCase } from "~/usecases/reservation/create-direct-reservation";
 import { createProvisionalReservationUseCase } from "~/usecases/reservation/create-reservation";
@@ -25,7 +24,7 @@ import {
   CREATE_RESERVATION_INTENT,
   type CreateReservationActionError,
 } from "./availability-draft-form";
-import { toCalendarPath } from "./paths";
+import { resolveAnchorDateKey, toCalendarPath } from "./paths";
 
 /**
  * 空き状況カレンダーの仮の枠から仮予約を申請する（UC-002）か、事務局が承認済みの予約を直接作成する（UC-008）。
@@ -112,10 +111,7 @@ export async function createReservationAction({
    * 成功したら、作った予約を欄に開く URL へ転送する（ADR-014 決定 10）。
    * 基準の日は、送ってきた URL（request.url）の date が日付として読めればそれ、読めなければ申請した日。
    */
-  const requestUrl = new URL(request.url);
-  const dateParam = requestUrl.searchParams.get("date");
-  const anchorDateKey =
-    dateParam !== null && parseTokyoDateKey(dateParam) !== null ? dateParam : values.dateKey;
+  const anchorDateKey = resolveAnchorDateKey(request.url, values.dateKey);
 
   throw redirect(
     toCalendarPath(reservation.facilityId, anchorDateKey, {

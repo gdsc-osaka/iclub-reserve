@@ -1,4 +1,4 @@
-import { okAsync, ResultAsync, safeTry } from "neverthrow";
+import { okAsync, type ResultAsync, safeTry } from "neverthrow";
 
 import type { GroupRepository } from "~/domain/group";
 import type { MembershipRepository } from "~/domain/membership";
@@ -14,26 +14,14 @@ import {
   resolveEditMode,
   ReservationEditMode,
 } from "~/domain/reservation/edit";
-import { addDays, parseTokyoDateKey, startOfTokyoDay } from "~/lib/date";
-import type {
-  ReservationFormFacility,
-  ReservationFormQuery,
-  ReservationFormReservation,
-} from "~/query/reservation/reservation-form";
-import type { UserGroupListQuery } from "~/query/user/user-group-list";
 import { resolveReservationActor } from "./_shared/reservation-authorization";
-import { toVisibleReservation } from "./_shared/visible-reservation";
 
-/** 予約変更画面ローダー（UC-005 / UC-017）が必要とする依存 */
+/** 予約変更画面ローダー（UC-005 / UC-017 / ADR-014 決定 16）が必要とする依存 */
 export interface GetReservationEditFormDeps {
   readonly reservationRepository: ReservationRepository;
   readonly membershipRepository: MembershipRepository;
   /** 予約の団体名を表示するために使う（団体は変更不可） */
   readonly groupRepository: GroupRepository;
-  /** 施設の選択肢と、表示する日の予約一覧を取得するために使う */
-  readonly reservationFormQuery: ReservationFormQuery;
-  /** 見ている人の所属団体（タイムラインの「自団体」判定）を取得するために使う */
-  readonly userGroupListQuery: UserGroupListQuery;
 }
 
 /** 予約変更画面ローダーへの入力 */
@@ -41,11 +29,6 @@ export interface GetReservationEditFormArgs {
   readonly reservationId: string;
   readonly actorUserId: string;
   readonly isStaff: boolean;
-  /**
-   * 表示したい日（URL クエリの date）。
-   * 指定が無い・壊れているときは予約の開始日（日本時間）を出す。
-   */
-  readonly dateKey: string | null;
   readonly now: Date;
 }
 
@@ -64,21 +47,18 @@ export interface ReservationEditTarget {
 /** 予約変更画面ローダーの返却値 */
 export interface GetReservationEditFormResult {
   readonly reservation: ReservationEditTarget;
-  readonly facilities: readonly ReservationFormFacility[];
-  readonly reservations: readonly ReservationFormReservation[];
-  readonly selectedDay: Date;
   /** 事務局による直接変更か（UC-008） */
   readonly isDirect: boolean;
 }
 
 /**
- * 予約の変更画面（UC-005 / UC-008 / UC-017）に出すデータを取得するユースケース。
+ * 予約の変更（UC-005 / UC-008 / UC-017 / ADR-014 決定 16）に出す変更前の予約を取得するユースケース。
  *
  * 変更できるのは自団体のメンバーまたは事務局で、開始前の仮予約または承認済みの予約のみ。
  * action（`editReservationUseCase` / `editReservationDirectlyUseCase`）と同じ判定を先に通し、
  * 変更できない予約では画面を開かせない。開けてから送信で断られても、入力が無駄になるだけなので。
  *
- * 施設の選択肢と表示する日の予約は、ReservationFormQuery から読む。
+ * 施設の一覧やカレンダーの予約は、空き状況の読み取りから取得する。
  */
 export const getReservationEditFormUseCase = (
   deps: GetReservationEditFormDeps,
@@ -105,53 +85,14 @@ export const getReservationEditFormUseCase = (
     // 3. 誰が・いまの状態・開始前か（action と同じ判定）。ここで弾かれた予約は画面を開かせない
     yield* canChangeReservationContent(reservation, actor, args.now);
 
-    // 表示する日の決定（指定が無ければ予約の開始日）
-    const selectedDay = parseTokyoDateKey(args.dateKey) ?? startOfTokyoDay(reservation.startAt);
-    const from = selectedDay;
-    const to = addDays(selectedDay, 1);
-
-    // 4. ResultAsync.combine で同時に読む
-    const groupTask = deps.groupRepository
+    // 4. 団体名の読み取り
+    const group = yield* deps.groupRepository
       .findById(reservation.groupId)
       .mapErr((error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
         message: "団体情報を読み取れなかった。",
         cause: error,
       }));
-
-    // 表示する期間の施設と予約を取る
-    const formTask = deps.reservationFormQuery
-      .find({ from, to })
-      .mapErr((error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "予約フォーム用データを読み取れなかった。",
-        cause: error,
-      }));
-
-    const userGroupsTask = deps.userGroupListQuery
-      .findByUserId(args.actorUserId)
-      .mapErr((error): ReservationError => ({
-        code: ReservationErrorCode.DatabaseError,
-        message: "所属団体一覧を読み取れなかった。",
-        cause: error,
-      }));
-
-    const [group, formData, userGroups] = yield* ResultAsync.combine([
-      groupTask,
-      formTask,
-      userGroupsTask,
-    ]);
-
-    const myGroupIds = new Set(userGroups.map((g) => g.id));
-
-    /*
-     * 表示する日の予約から、変更中の予約そのものを除く。
-     *
-     * 除かないと自分自身と重なって「承認済みの予約と重なっています」になり、
-     * 承認済みの予約の人数や備考を変えるだけの操作すら確認へ進めなくなるため。
-     */
-    const otherReservations = formData.reservations.filter((r) => r.id !== reservation.id);
-    const visibleReservations = otherReservations.map((r) => toVisibleReservation(r, myGroupIds));
 
     // 5. 返す
     return okAsync({
@@ -165,9 +106,6 @@ export const getReservationEditFormUseCase = (
         note: reservation.note,
         status: reservation.status,
       },
-      facilities: formData.facilities,
-      reservations: visibleReservations,
-      selectedDay,
       isDirect,
     });
   });

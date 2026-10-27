@@ -2,10 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   differsOnlyInSelection,
+  isEditReservationChanged,
   parseCalendarSelection,
   parseDraftParam,
+  resolveAnchorDateKey,
   toCalendarPath,
   toDraftParam,
+  toReservationDraft,
   type CalendarDraft,
   type CalendarSelection,
 } from "./paths";
@@ -86,6 +89,58 @@ describe("availability paths", () => {
   });
 
   describe("parseCalendarSelection", () => {
+    it("edit があれば変更の選択を返す（draft もパースする）", () => {
+      const params = new URLSearchParams("edit=res_123&draft=2026-11-04T10:00-11:00");
+      expect(parseCalendarSelection(params)).toEqual({
+        kind: "edit",
+        reservationId: "res_123",
+        draft: {
+          dateKey: "2026-11-04",
+          range: { startMinutes: 600, endMinutes: 660 },
+        },
+      });
+    });
+
+    it("edit があり draft が無い場合は draft: null で返す", () => {
+      const params = new URLSearchParams("edit=res_123");
+      expect(parseCalendarSelection(params)).toEqual({
+        kind: "edit",
+        reservationId: "res_123",
+        draft: null,
+      });
+    });
+
+    it("edit があり draft が壊れている場合は draft: null で返す", () => {
+      const params = new URLSearchParams("edit=res_123&draft=invalid");
+      expect(parseCalendarSelection(params)).toEqual({
+        kind: "edit",
+        reservationId: "res_123",
+        draft: null,
+      });
+    });
+
+    it("edit は reservation や draft より優先される", () => {
+      const params = new URLSearchParams(
+        "edit=res_edit&reservation=res_rsv&draft=2026-11-04T10:00-11:00",
+      );
+      expect(parseCalendarSelection(params)).toEqual({
+        kind: "edit",
+        reservationId: "res_edit",
+        draft: {
+          dateKey: "2026-11-04",
+          range: { startMinutes: 600, endMinutes: 660 },
+        },
+      });
+    });
+
+    it("edit が空文字なら reservation を読む", () => {
+      const params = new URLSearchParams("edit=&reservation=res_123");
+      expect(parseCalendarSelection(params)).toEqual({
+        kind: "reservation",
+        reservationId: "res_123",
+      });
+    });
+
     it("reservation があれば予約の選択を返す", () => {
       const params = new URLSearchParams("reservation=res_123");
       expect(parseCalendarSelection(params)).toEqual({
@@ -105,7 +160,7 @@ describe("availability paths", () => {
       });
     });
 
-    it("両方ある場合は reservation を優先する", () => {
+    it("reservation と draft の両方がある場合は reservation を優先する", () => {
       const params = new URLSearchParams("reservation=res_123&draft=2026-11-04T10:00-11:00");
       expect(parseCalendarSelection(params)).toEqual({
         kind: "reservation",
@@ -124,8 +179,19 @@ describe("availability paths", () => {
       });
     });
 
-    it("どちらも無ければ null を返す", () => {
+    it("どれも無ければ null を返す", () => {
       expect(parseCalendarSelection(new URLSearchParams())).toBeNull();
+    });
+  });
+
+  describe("toReservationDraft", () => {
+    it("開始・終了日時から CalendarDraft を生成する", () => {
+      const startAt = new Date("2026-11-04T10:00:00+09:00");
+      const endAt = new Date("2026-11-04T11:30:00+09:00");
+      expect(toReservationDraft({ startAt, endAt })).toEqual({
+        dateKey: "2026-11-04",
+        range: { startMinutes: 600, endMinutes: 690 },
+      });
     });
   });
 
@@ -159,6 +225,17 @@ describe("availability paths", () => {
         "/availability?facility=fac_1&date=2026-11-04&draft=2026-11-04T10:00-11:00",
       );
     });
+
+    it("変更を開くときは、edit と draft を付ける", () => {
+      const selection: CalendarSelection = {
+        kind: "edit",
+        reservationId: "res/special 123",
+        draft: { dateKey: "2026-11-04", range: { startMinutes: 600, endMinutes: 660 } },
+      };
+      expect(toCalendarPath("fac_1", "2026-11-04", selection)).toBe(
+        "/availability?facility=fac_1&date=2026-11-04&edit=res%2Fspecial%20123&draft=2026-11-04T10:00-11:00",
+      );
+    });
   });
 
   describe("differsOnlyInSelection", () => {
@@ -186,6 +263,14 @@ describe("availability paths", () => {
       expect(differsOnlyInSelection(a, b)).toBe(true);
     });
 
+    it("edit を足しただけの場合は true を返す", () => {
+      const a = new URLSearchParams("facility=fac_1&date=2026-11-04");
+      const b = new URLSearchParams(
+        "facility=fac_1&date=2026-11-04&edit=res_1&draft=2026-11-04T10:00-11:00",
+      );
+      expect(differsOnlyInSelection(a, b)).toBe(true);
+    });
+
     it("値の順番だけ違う場合は true を返す", () => {
       const a = new URLSearchParams("facility=fac_1&date=2026-11-04");
       const b = new URLSearchParams("date=2026-11-04&facility=fac_1");
@@ -200,6 +285,72 @@ describe("availability paths", () => {
       const a = new URLSearchParams("facility=fac_1&date=2026-11-04&reservation=res_1");
       const b = new URLSearchParams("facility=fac_1&date=2026-11-04&draft=2026-11-04T10:00-11:00");
       expect(differsOnlyInSelection(a, b)).toBe(true);
+    });
+
+    it("reservation から edit に切り替わった場合も true を返す", () => {
+      const a = new URLSearchParams("facility=fac_1&date=2026-11-04&reservation=res_1");
+      const b = new URLSearchParams(
+        "facility=fac_1&date=2026-11-04&edit=res_1&draft=2026-11-04T10:00-11:00",
+      );
+      expect(differsOnlyInSelection(a, b)).toBe(true);
+    });
+  });
+
+  describe("isEditReservationChanged", () => {
+    it("next が edit でなく reservation のときは false", () => {
+      const prev = new URLSearchParams("reservation=res_1");
+      const next = new URLSearchParams("reservation=res_2");
+      expect(isEditReservationChanged(prev, next)).toBe(false);
+    });
+
+    it("prev が edit でなく next が edit のときは true（変更欄を開いた）", () => {
+      const prev = new URLSearchParams("reservation=res_1");
+      const next = new URLSearchParams("edit=res_1");
+      expect(isEditReservationChanged(prev, next)).toBe(true);
+    });
+
+    it("prev が何も開いておらず next が edit のときは true", () => {
+      const prev = new URLSearchParams("date=2026-11-04");
+      const next = new URLSearchParams("edit=res_1");
+      expect(isEditReservationChanged(prev, next)).toBe(true);
+    });
+
+    it("prev も next も同じ予約の edit のときは false（日時の変更など）", () => {
+      const prev = new URLSearchParams("edit=res_1&draft=2026-11-04T10:00-11:00");
+      const next = new URLSearchParams("edit=res_1&draft=2026-11-04T11:00-12:00");
+      expect(isEditReservationChanged(prev, next)).toBe(false);
+    });
+
+    it("prev と next で edit の予約 ID が異なる場合は true（別の予約の変更に替えた）", () => {
+      const prev = new URLSearchParams("edit=res_1");
+      const next = new URLSearchParams("edit=res_2");
+      expect(isEditReservationChanged(prev, next)).toBe(true);
+    });
+
+    it("next で edit を閉じた・やめたときは false", () => {
+      const prev = new URLSearchParams("edit=res_1");
+      const next = new URLSearchParams("reservation=res_1");
+      expect(isEditReservationChanged(prev, next)).toBe(false);
+    });
+  });
+
+  describe("resolveAnchorDateKey", () => {
+    it("URL に有効な date パラメータがあればそれを返す", () => {
+      expect(
+        resolveAnchorDateKey("http://localhost/availability?date=2026-11-15", "2026-11-01"),
+      ).toBe("2026-11-15");
+    });
+
+    it("URL に date パラメータが無いときはフォールバックを返す", () => {
+      expect(resolveAnchorDateKey("http://localhost/availability", "2026-11-01")).toBe(
+        "2026-11-01",
+      );
+    });
+
+    it("URL の date パラメータが不正な日付のときはフォールバックを返す", () => {
+      expect(resolveAnchorDateKey("http://localhost/availability?date=invalid", "2026-11-01")).toBe(
+        "2026-11-01",
+      );
     });
   });
 });

@@ -6,6 +6,7 @@ import {
   Link,
   redirect,
   useLocation,
+  useSearchParams,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { toast } from "sonner";
@@ -13,33 +14,48 @@ import { toast } from "sonner";
 import { buildDays } from "~/components/reservation/availability-week";
 import type { ReservationFormMode } from "~/components/reservation/editor/form-values";
 import { NoEnabledGroupReason } from "~/components/reservation/no-enabled-group-reason";
+import { ReservationEditError } from "~/components/reservation/reservation-edit-error";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb } from "~/infra/db";
 import { createFacilityAvailabilityCalendarQuery } from "~/infra/facility/facility-availability-calendar-query";
+import { createGroupRepository } from "~/infra/group/group-repo";
 import { createD1HolidayQuery } from "~/infra/holiday/d1-holiday-query";
+import { createMembershipRepository } from "~/infra/membership/membership-repo";
+import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import { addDays, parseTokyoDateKey, toTokyoDateKey } from "~/lib/date";
 import { createApplicantGroupQuery } from "~/query/reservation/applicant-groups";
 import { createUserGroupListQuery } from "~/query/user/user-group-list";
-import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import type { ActionErrors } from "~/routes/_shared/error-response.server";
-import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
+import { queryErrorResponse } from "~/routes/_shared/query-error.server";
+import {
+  reservationActionErrors,
+  reservationErrorResponse,
+} from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 import { getAvailabilityCalendarUseCase } from "~/usecases/facility/get-availability-calendar";
+import { getReservationEditFormUseCase } from "~/usecases/reservation/get-reservation-edit-form";
 
 import type { Route } from "./+types/route";
 import {
   CREATE_RESERVATION_INTENT,
   type CreateReservationActionError,
 } from "./availability-draft-form";
+import { EDIT_RESERVATION_INTENT, type EditReservationActionError } from "./availability-edit-form";
 import { AvailabilityPanel } from "./availability-panel";
 import { CalendarCard } from "./calendar-card";
 import { CALENDAR_WINDOW_DAYS, toCalendarWindowStart } from "./calendar-window";
 import { createReservationAction } from "./create-reservation.server";
+import { editReservationAction } from "./edit-reservation.server";
 import { FacilityTabs } from "./facility-tabs";
-import { differsOnlyInSelection, toDraftParam } from "./paths";
+import {
+  differsOnlyInSelection,
+  isEditReservationChanged,
+  parseCalendarSelection,
+  toDraftParam,
+} from "./paths";
 import { useCalendarScroll } from "./use-calendar-scroll";
 import { toRevealTarget, useCalendarSelection } from "./use-calendar-selection";
 
@@ -55,6 +71,8 @@ export function meta() {
  * クエリは利用者が自由に書き換えられるので、値はすべて確かめてから使う。
  *
  * 読むのは、基準の日の週の前の週から 4 週間（ADR-014 決定 4）。
+ *
+ * URL の選択が変更（edit）のときは、変更する予約も同時に読む（ADR-014 決定 16）。
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
   // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
@@ -75,7 +93,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const db = createDb(env.DB);
 
-  const result = await getAvailabilityCalendarUseCase(
+  const parsedSelection = parseCalendarSelection(url.searchParams);
+
+  // 空き状況の読み取りと、変更する予約の読み取りを同時に呼ぶ（順に待つと D1 との往復がそのまま待ち時間になるため）
+  const calendarPromise = getAvailabilityCalendarUseCase(
     {
       facilityAvailabilityCalendarQuery: createFacilityAvailabilityCalendarQuery(db),
       userGroupListQuery: createUserGroupListQuery(db),
@@ -93,31 +114,73 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     },
   );
 
-  if (result.isErr()) {
+  const editPromise =
+    parsedSelection?.kind === "edit"
+      ? getReservationEditFormUseCase(
+          {
+            reservationRepository: createReservationRepository(db),
+            membershipRepository: createMembershipRepository(db),
+            groupRepository: createGroupRepository(db),
+          },
+          {
+            reservationId: parsedSelection.reservationId,
+            actorUserId: user.id,
+            isStaff: user.is_staff,
+            now,
+          },
+        )
+      : null;
+
+  const [calendarResult, editResult] = await Promise.all([calendarPromise, editPromise]);
+
+  if (calendarResult.isErr()) {
     // 無い施設は 404、DB の失敗は 500 になる。どちらもログに残る
-    throw queryErrorResponse({ where: "availability.loader", userId: user.id }, result.error);
+    throw queryErrorResponse(
+      { where: "availability.loader", userId: user.id },
+      calendarResult.error,
+    );
   }
 
-  return { calendar: result.value, windowStart, anchorKey: toTokyoDateKey(anchorDate), now };
+  if (editResult !== null && editResult.isErr()) {
+    throw reservationErrorResponse(
+      { where: "availability.edit.loader", userId: user.id },
+      editResult.error,
+    );
+  }
+
+  const edit = editResult === null ? null : editResult.value;
+
+  return {
+    calendar: calendarResult.value,
+    windowStart,
+    anchorKey: toTokyoDateKey(anchorDate),
+    now,
+    edit,
+  };
 }
 
 /**
- * 空き状況カレンダーからの操作。欄からの予約の作成（申請・直接作成）と、
+ * 空き状況カレンダーからの操作。欄からの予約の作成（申請・直接作成）および変更と、
  * 事務局の状態変更（承認・却下・事務局キャンセル）を受け付ける。
  *
- * 戻り値の型を書いているのは、画面の側で 2 つの失敗を `intent` で見分けられるようにするため。
- * 書かないと、どちらも `formError` を持つので、TypeScript が `formError` だけの形にまとめてしまう。
+ * 戻り値の型を書いているのは、画面の側で失敗を `intent` で見分けられるようにするため。
  */
 export async function action({
   request,
   context,
-}: Route.ActionArgs): Promise<CreateReservationActionError | ActionErrors<never> | Response> {
+}: Route.ActionArgs): Promise<
+  CreateReservationActionError | EditReservationActionError | ActionErrors<never> | Response
+> {
   const user = requireRequestUser(context);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
   if (intent === CREATE_RESERVATION_INTENT) {
     return createReservationAction({ request, formData, user });
+  }
+
+  if (intent === EDIT_RESERVATION_INTENT) {
+    return editReservationAction({ request, formData, user });
   }
 
   const reservationId = formData.get("reservationId");
@@ -162,10 +225,10 @@ export async function action({
 }
 
 /**
- * 欄を開く・閉じる・選び直すだけでは、loader を走らせない（ADR-014 決定 8）。
+ * 欄を開く・閉じる・選び直すだけでは、loader を走らせない（ADR-014 決定 8・16）。
  *
  * 開いているもの（`reservation`・`draft`）は画面の中だけで決まり、読むデータは変わらない。
- * 走らせると、押すたびに 4 週間ぶんを読み直して、欄が開くのが遅れる。
+ * ただし、変更の欄を開いた・別の予約の変更に替えたときは、変更する予約を読むためローダーを再実行する。
  * 送信の後と、同じ URL での読み直し（`revalidate()`）は、今までどおり走らせる。
  */
 export function shouldRevalidate({
@@ -180,8 +243,17 @@ export function shouldRevalidate({
     currentUrl.search !== nextUrl.search &&
     differsOnlyInSelection(currentUrl.searchParams, nextUrl.searchParams);
 
-  return isSelectionOnly ? false : defaultShouldRevalidate;
+  if (isSelectionOnly) {
+    return isEditReservationChanged(currentUrl.searchParams, nextUrl.searchParams);
+  }
+
+  return defaultShouldRevalidate;
 }
+
+/** 欄から送った操作。成功したときに出すトーストを決める */
+type SubmittedAction =
+  | { readonly kind: "create"; readonly mode: ReservationFormMode }
+  | { readonly kind: "edit" };
 
 /**
  * 施設・設備ごとの予約状況を見る画面（SCR-001 / UC-001）。
@@ -194,7 +266,7 @@ export function shouldRevalidate({
  * 申請が重なっていることに気づけないまま同じ時間帯を申請してしまう。
  */
 export default function Availability({ loaderData, actionData }: Route.ComponentProps) {
-  const { calendar, windowStart, anchorKey, now } = loaderData;
+  const { calendar, windowStart, anchorKey, now, edit } = loaderData;
   const { facility, facilities, reservations, canApplyReservation } = calendar;
 
   const days = useMemo(
@@ -206,13 +278,18 @@ export default function Availability({ loaderData, actionData }: Route.Component
   const [isExpanded, setIsExpanded] = useState(false);
 
   const scroll = useCalendarScroll({ days, anchorKey, todayKey: toTokyoDateKey(now) });
-  const { selection, openDraft, openReservation, close } = useCalendarSelection({
+  const selectionOps = useCalendarSelection({
     facilityId: facility.id,
     anchorKey,
     reservations,
     days,
     canApply: canApplyReservation,
+    editReservation: edit?.reservation ?? null,
   });
+  const { selection, openDraft, openReservation } = selectionOps;
+
+  /** 空いている枠を押して申請または変更へ進めるか（ADR-014 決定 15） */
+  const canPickSlot = canApplyReservation || selection?.kind === "edit";
 
   /*
    * 欄が閉じたら、広げていない状態に戻す（戻る操作で閉じたときも）。
@@ -221,33 +298,47 @@ export default function Availability({ loaderData, actionData }: Route.Component
   if (selection === null && isExpanded) setIsExpanded(false);
 
   /*
-   * 予約を作る操作の失敗（`intent` 付きで返る）は欄の中に出すので、画面の上の「操作に失敗しました」は
+   * 予約を作る・変更する操作の失敗（`intent` 付きで返る）は欄の中に出すので、画面の上の「操作に失敗しました」は
    * 事務局の操作（承認・却下・キャンセル）の失敗のときだけ出す。
    */
-  const createError = actionData !== undefined && "intent" in actionData ? actionData : null;
+  const createError =
+    actionData !== undefined &&
+    "intent" in actionData &&
+    actionData.intent === CREATE_RESERVATION_INTENT
+      ? actionData
+      : null;
+  const editError =
+    actionData !== undefined &&
+    "intent" in actionData &&
+    actionData.intent === EDIT_RESERVATION_INTENT
+      ? actionData
+      : null;
   const staffError =
     actionData !== undefined && !("intent" in actionData) ? actionData.formError : null;
 
   /*
-   * 予約を作れたら、トーストで知らせる（ADR-014 決定 10）。
+   * 予約を作れた・変更できたときは、トーストで知らせる（ADR-014 決定 10・15）。
    *
-   * 成功すると action が作った予約を開く URL へ転送し、申請の欄は消えてしまうので、ここで見る。
-   * 欄から送ったときに作り方（申請か直接作成か）を覚えておき、次のどちらかで答え合わせをする。
-   * - 転送が終わって URL が変わった（`location.key`）: 作った予約を開いていれば知らせる
-   * - 失敗が返ってきた（`createError`）: 知らせずに忘れる。欄の中に誤りが出る
+   * 成功すると action が予約を開く URL へ転送し、欄は切り替わってしまうので、ここで見る。
+   * 欄から送ったときに操作（作成か変更か）を覚えておき、次のどちらかで答え合わせをする。
+   * - 転送が終わって URL が変わった（`location.key`）: 予約を開いていれば知らせる
+   * - 失敗が返ってきた（`actionData`）: 知らせずに忘れる。欄の中に誤りが出る
    *
    * `useNavigation()` の読み込み中（loading）を見て決めることはしない。React Router は状態の更新を
    * トランジションで描くので、読み込みが速いと loading を描かずに idle へ進み、見逃すことがある。
    */
   const location = useLocation();
-  const submittedModeRef = useRef<ReservationFormMode | null>(null);
+  const submittedActionRef = useRef<SubmittedAction | null>(null);
+
   useEffect(() => {
-    const mode = submittedModeRef.current;
-    if (mode === null) return;
-    submittedModeRef.current = null;
+    const submitted = submittedActionRef.current;
+    if (submitted === null) return;
+    submittedActionRef.current = null;
     if (selection?.kind !== "reservation") return;
 
-    if (mode === "direct") {
+    if (submitted.kind === "edit") {
+      toast.success("予約を変更しました");
+    } else if (submitted.mode === "direct") {
       toast.success("承認済みの予約を作成しました", { description: "メールは送信されません。" });
     } else {
       toast.success("仮予約を申請しました", {
@@ -255,7 +346,7 @@ export default function Availability({ loaderData, actionData }: Route.Component
           "事務局の承認後、ご利用いただけます。承認・却下の結果はメールでお知らせします。",
       });
     }
-  }, [location.key, createError]);
+  }, [location.key, createError, editError]);
 
   /*
    * 開いたものが変わったら、その日と時刻をカレンダーの見える範囲に入れる。
@@ -303,7 +394,7 @@ export default function Availability({ loaderData, actionData }: Route.Component
           days={days}
           anchorKey={anchorKey}
           now={now}
-          canApply={canApplyReservation}
+          canPickSlot={canPickSlot}
           scroll={scroll}
           selection={selection}
           onOpenDraft={openDraft}
@@ -313,19 +404,21 @@ export default function Availability({ loaderData, actionData }: Route.Component
 
         {selection !== null && (
           <AvailabilityPanel
-            selection={selection}
-            facility={facility}
+            calendar={calendar}
             anchorKey={anchorKey}
             days={days}
-            reservations={reservations}
             now={now}
-            canCreateDirectly={calendar.canCreateDirectly}
-            applicantGroups={calendar.applicantGroups}
-            onDraftChange={openDraft}
-            onClose={close}
+            selection={selection}
+            selectionOps={selectionOps}
             createError={createError}
+            editError={editError}
+            editReservation={edit?.reservation ?? null}
+            isDirectEdit={edit?.isDirect ?? false}
             onSubmitCreate={(mode) => {
-              submittedModeRef.current = mode;
+              submittedActionRef.current = { kind: "create", mode };
+            }}
+            onSubmitEdit={() => {
+              submittedActionRef.current = { kind: "edit" };
             }}
             isExpanded={isExpanded}
             onExpandedChange={setIsExpanded}
@@ -363,9 +456,22 @@ function CannotApplyNotice() {
  * このルートで例外が起きたときに出す画面。
  *
  * ローダーが投げた 404 / 500 をここで受け取り、利用者向けの日本語の案内に置き換える。
- * ルート単位のエラー画面がないと、root.tsx の英語の共通エラー画面が出てしまう。
+ * 変更する予約を読めなかったときは、変更できない理由に応じた見出しと戻り道を出す（ADR-014 決定 16）。
  */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const [searchParams] = useSearchParams();
+  const selection = parseCalendarSelection(searchParams);
+
+  if (selection?.kind === "edit") {
+    return (
+      <ReservationEditError
+        error={error}
+        reservationId={selection.reservationId}
+        backLink={{ to: "/availability", label: "空き状況へ戻る" }}
+      />
+    );
+  }
+
   const isNotFound = isRouteErrorResponse(error) && error.status === 404;
 
   return (

@@ -8,19 +8,9 @@
 
 /**
  * 予約詳細（SCR-005）の URL を組み立てる。
- *
- * `edited` は変更画面から戻るときにだけ付け、詳細画面に「変更しました」の案内を出させる。
  */
-export const toReservationDetailPath = (
-  reservationId: string,
-  options?: { readonly edited?: "changed" | "unchanged" },
-): string => {
-  const base = `/reservations/${encodeURIComponent(reservationId)}`;
-  if (options?.edited !== undefined) {
-    return `${base}?edited=${options.edited}`;
-  }
-  return base;
-};
+export const toReservationDetailPath = (reservationId: string): string =>
+  `/reservations/${encodeURIComponent(reservationId)}`;
 
 /**
  * 予約の変更画面（UC-005 / UC-017）の URL を組み立てる。

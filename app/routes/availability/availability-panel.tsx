@@ -1,7 +1,6 @@
 import { cn } from "cn";
 import { Maximize2, Minimize2, Pencil, X } from "lucide-react";
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
-import { Link } from "react-router";
 
 import { AvailabilityReservationCard } from "~/components/reservation/availability-detail-card";
 import type { AvailabilityDay } from "~/components/reservation/availability-week";
@@ -9,59 +8,58 @@ import type { ReservationFormMode } from "~/components/reservation/editor/form-v
 import { Button } from "~/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
-import { toReservationEditPath } from "~/lib/reservation-paths";
-import type {
-  AvailabilityFacility,
-  AvailabilityReservation,
-} from "~/query/facility/facility-availability-calendar";
-import type { ReservationFormGroup } from "~/query/reservation/reservation-form";
+import type { AvailabilityCalendar } from "~/query/facility/facility-availability-calendar";
+import type { ReservationEditTarget } from "~/usecases/reservation/get-reservation-edit-form";
 
 import {
   AvailabilityDraftForm,
   type CreateReservationActionError,
 } from "./availability-draft-form";
-import type { CalendarDraft, CalendarSelection } from "./paths";
+import { AvailabilityEditForm, type EditReservationActionError } from "./availability-edit-form";
+import type { CalendarSelection } from "./paths";
+import type { CalendarSelectionOps } from "./use-calendar-selection";
 
 /**
- * 空き状況カレンダーで開いたもの（予約・仮の枠）の内容を出す欄（ADR-014 決定 7）。
+ * 空き状況カレンダーで開いたもの（予約・仮の枠・予約の変更）の内容を出す欄（ADR-014 決定 7・15）。
  *
  * PC はカレンダーの右、スマホはカレンダーの下に並べ、画面に重ねない。
  * 重ねると、内容を見ながら隣の枠や帯を押して選び直せなくなる。
  */
 export function AvailabilityPanel({
-  selection,
-  facility,
+  calendar,
   anchorKey,
   days,
-  reservations,
   now,
-  canCreateDirectly,
-  applicantGroups,
-  onDraftChange,
-  onClose,
+  selection,
+  selectionOps,
   createError,
+  editError,
+  editReservation,
+  isDirectEdit,
   onSubmitCreate,
+  onSubmitEdit,
   isExpanded,
   onExpandedChange,
 }: Readonly<{
-  selection: CalendarSelection;
-  facility: AvailabilityFacility;
-  /** 基準の日（URL の `date`）。申請の送り先に使う */
+  calendar: AvailabilityCalendar;
+  /** 基準の日（URL の `date`）。申請・変更の送り先に使う */
   anchorKey: string;
   days: readonly AvailabilityDay[];
-  reservations: readonly AvailabilityReservation[];
   now: Date;
-  /** 承認済みの予約を直接作成できるか（UC-008。事務局だけ） */
-  canCreateDirectly: boolean;
-  /** 申請元として選べる有効な団体 */
-  applicantGroups: readonly ReservationFormGroup[];
-  /** 仮の枠の日・時間帯を変える（欄の日付・時刻の欄から） */
-  onDraftChange: (draft: CalendarDraft) => void;
-  onClose: () => void;
+  selection: CalendarSelection;
+  selectionOps: CalendarSelectionOps;
   /** 予約を作る操作の失敗。欄の中に出す */
   createError: CreateReservationActionError | null;
+  /** 予約を変更する操作の失敗。欄の中に出す */
+  editError: EditReservationActionError | null;
+  /** 変更する予約（変更を開いているとき） */
+  editReservation: ReservationEditTarget | null;
+  /** 事務局による直接変更か（UC-008） */
+  isDirectEdit: boolean;
   /** 欄から予約を作る操作を送ったとき */
   onSubmitCreate: (mode: ReservationFormMode) => void;
+  /** 欄から予約を変更する操作を送ったとき */
+  onSubmitEdit: () => void;
   /** スマホで欄を画面いっぱいに広げているか（ADR-014 決定 13）。カレンダーも見るので route が持つ */
   isExpanded: boolean;
   onExpandedChange: (isExpanded: boolean) => void;
@@ -84,12 +82,12 @@ export function AvailabilityPanel({
      */
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.stopPropagation();
-    onClose();
+    selectionOps.close();
   };
 
   const reservation =
     selection.kind === "reservation"
-      ? reservations.find((item) => item.id === selection.reservationId)
+      ? calendar.reservations.find((item) => item.id === selection.reservationId)
       : undefined;
 
   return (
@@ -111,18 +109,25 @@ export function AvailabilityPanel({
       <CardHeader className="shrink-0 items-center border-b py-4">
         <CardTitle>
           <h2 id={headingId} ref={headingRef} tabIndex={-1} className="outline-none">
-            {selection.kind === "reservation" ? "予約の内容" : "新しい予約"}
+            {selection.kind === "reservation"
+              ? "予約の内容"
+              : selection.kind === "edit"
+                ? "予約の変更"
+                : "新しい予約"}
           </h2>
         </CardTitle>
 
         <CardAction className="flex items-center gap-1 self-center">
           {/* 変更できるかはユースケースが決めている（get-availability-calendar.ts） */}
           {reservation?.canEdit && (
-            <Button asChild variant="outline" size="sm">
-              <Link to={toReservationEditPath(reservation.id)}>
-                <Pencil aria-hidden />
-                変更
-              </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => selectionOps.openEdit(reservation.id)}
+            >
+              <Pencil aria-hidden />
+              変更
             </Button>
           )}
 
@@ -150,7 +155,7 @@ export function AvailabilityPanel({
                 variant="ghost"
                 size="icon-sm"
                 aria-label="閉じる"
-                onClick={onClose}
+                onClick={selectionOps.close}
               >
                 <X aria-hidden />
               </Button>
@@ -160,25 +165,50 @@ export function AvailabilityPanel({
         </CardAction>
       </CardHeader>
 
-      {selection.kind === "draft" ? (
+      {selection.kind === "draft" && (
         <AvailabilityDraftForm
           draft={selection.draft}
-          facility={facility}
+          facility={calendar.facility}
           anchorKey={anchorKey}
           days={days}
-          reservations={reservations}
+          reservations={calendar.reservations}
           now={now}
-          canCreateDirectly={canCreateDirectly}
-          applicantGroups={applicantGroups}
-          onDraftChange={onDraftChange}
+          canCreateDirectly={calendar.canCreateDirectly}
+          applicantGroups={calendar.applicantGroups}
+          onDraftChange={selectionOps.openDraft}
           createError={createError}
           onSubmitCreate={onSubmitCreate}
           onExpand={() => onExpandedChange(true)}
         />
-      ) : (
+      )}
+
+      {selection.kind === "edit" && editReservation !== null && (
+        <AvailabilityEditForm
+          key={selection.reservationId}
+          target={editReservation}
+          isDirect={isDirectEdit}
+          draft={selection.draft}
+          facility={calendar.facility}
+          facilities={calendar.facilities}
+          anchorKey={anchorKey}
+          days={days}
+          reservations={calendar.reservations}
+          now={now}
+          onDraftChange={selectionOps.openDraft}
+          onCancel={selectionOps.cancelEdit}
+          editError={editError}
+          onSubmitEdit={onSubmitEdit}
+          onExpand={() => onExpandedChange(true)}
+        />
+      )}
+
+      {selection.kind === "reservation" && (
         <CardContent className="min-h-0 flex-1 overflow-y-auto py-4">
           {reservation !== undefined && (
-            <AvailabilityReservationCard reservation={reservation} facilityName={facility.name} />
+            <AvailabilityReservationCard
+              reservation={reservation}
+              facilityName={calendar.facility.name}
+            />
           )}
         </CardContent>
       )}
