@@ -33,6 +33,13 @@ describe("shouldRecountNavCounts", () => {
       expect(shouldRecountNavCounts({ currentUrl, nextUrl })).toBe(true);
     });
 
+    it("事務局のダッシュボード（/staff）を開いたときは true を返す", () => {
+      const currentUrl = new URL(`${baseUrl}/availability`);
+      const nextUrl = new URL(`${baseUrl}/staff`);
+
+      expect(shouldRecountNavCounts({ currentUrl, nextUrl })).toBe(true);
+    });
+
     it("予約の承認（/staff/reservations）や検索条件つきの URL を開いたときは true を返す", () => {
       const currentUrl = new URL(`${baseUrl}/availability`);
       const nextUrl = new URL(`${baseUrl}/staff/reservations?status=provisional`);

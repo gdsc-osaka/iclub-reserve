@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/button";
 import { formatMonthDay } from "~/lib/date";
 import type { GroupSearchItem } from "~/query/group/group-search";
 import { toStaffGroupPath } from "~/routes/groups/staff/query-params";
-import { SectionUnavailableAlert } from "./section-unavailable-alert";
+import { SectionUnavailableAlert } from "../section-unavailable-alert";
 
 export interface StaffPendingGroupsSectionProps {
   /** 登録が古い順に最大 5 件 */

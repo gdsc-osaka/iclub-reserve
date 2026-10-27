@@ -1,10 +1,13 @@
+import { useEffect, useState } from "react";
 import { env } from "cloudflare:workers";
 import { cn } from "cn";
-import { Outlet, type ShouldRevalidateFunctionArgs } from "react-router";
+import { Outlet, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 
+import { resolveShellArea, toAreaFromPathname } from "~/components/layout/app-area";
 import { DesktopHeader, MobileHeader } from "~/components/layout/app-header";
 import { AppSidebar } from "~/components/layout/app-sidebar";
 import { BottomNav } from "~/components/layout/bottom-nav";
+import { readLastArea, rememberLastArea } from "~/components/layout/last-area-cookie";
 import type { ShellUser } from "~/components/layout/shell-user";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { TooltipProvider } from "~/components/ui/tooltip";
@@ -36,6 +39,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     user: shellUser,
     sidebarDefaultOpen: readSidebarDefaultOpen(request),
+    lastArea: user.is_staff ? readLastArea(request) : null,
     navCounts: await loadNavCounts(createDb(env.DB), user, new Date()),
   };
 }
@@ -65,7 +69,27 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
  * 押せる項目が無いため。
  */
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
-  const { user, sidebarDefaultOpen, navCounts } = loaderData;
+  const { user, sidebarDefaultOpen, navCounts, lastArea: initialLastArea } = loaderData;
+  const { pathname } = useLocation();
+
+  const pathArea = toAreaFromPathname(pathname);
+  const [lastArea, setLastArea] = useState(initialLastArea);
+
+  /*
+   * 外枠に出す領域を決定する（ADR-016 決定 3）。
+   * 事務局の画面から予約の詳細やアカウント設定を開いたときに、ナビが利用者の画面のものに
+   * 変わるとどこにいるか分からなくなるため、「どちらでもない」画面では最後に開いていた画面のナビを出す。
+   */
+  const area = resolveShellArea({ isStaff: user.isStaff, pathArea, lastArea });
+
+  useEffect(() => {
+    if (pathArea !== null) {
+      setLastArea(pathArea);
+      if (user.isStaff) {
+        rememberLastArea(pathArea);
+      }
+    }
+  }, [pathArea, user.isStaff]);
 
   return (
     /*
@@ -75,11 +99,11 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
      */
     <TooltipProvider>
       <SidebarProvider defaultOpen={sidebarDefaultOpen}>
-        <AppSidebar user={user} counts={navCounts} />
+        <AppSidebar user={user} area={area} counts={navCounts} />
 
         <SidebarInset>
-          <MobileHeader user={user} />
-          <DesktopHeader user={user} />
+          <MobileHeader user={user} area={area} counts={navCounts} />
+          <DesktopHeader area={area} />
 
           {/*
            * ボトムバーは画面の下端に固定されているので、
@@ -109,7 +133,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             <Outlet />
           </div>
 
-          <BottomNav user={user} counts={navCounts} />
+          <BottomNav user={user} area={area} counts={navCounts} />
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

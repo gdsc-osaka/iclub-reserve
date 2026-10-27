@@ -20,7 +20,7 @@ test.describe("PWA ホーム画面への追加", { tag: "@PWA" }, () => {
     expect(manifest).toMatchObject({
       name: "i-Club 予約システム",
       short_name: "i-Club 予約",
-      start_url: "/",
+      start_url: "/start",
       display: "standalone",
       // 起動時の画面（スプラッシュ）の背景。ダークモードで白く光らないよう黒にしている
       background_color: "#0a0a0a",

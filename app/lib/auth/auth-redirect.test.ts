@@ -23,8 +23,11 @@ describe("toSafeRedirectTo", () => {
     ["相対パス", "reservation"],
     ["指定なし", null],
     ["空文字", ""],
-  ])("%s はトップページに送る", (_, value) => {
-    expect(toSafeRedirectTo(value)).toBe("/");
+    ["トップページ（/）", "/"],
+    ["クエリ付きのトップページ", "/?utm_source=mail"],
+    ["ハッシュ付きのトップページ", "/#top"],
+  ])("%s は /start に送る", (_, value) => {
+    expect(toSafeRedirectTo(value)).toBe("/start");
   });
 });
 
@@ -35,19 +38,19 @@ describe("readRedirectTo", () => {
     expect(readRedirectTo(request)).toBe("/reservation");
   });
 
-  it("外部サイトが指定されていてもトップページに送る", () => {
+  it("外部サイトが指定されていても /start に送る", () => {
     const request = new Request("https://example.com/login?redirectTo=https%3A%2F%2Fevil.example");
 
-    expect(readRedirectTo(request)).toBe("/");
+    expect(readRedirectTo(request)).toBe("/start");
   });
 
   it.each([
     ["今いる画面そのもの", "/passkey/suggest", "%2Fpasskey%2Fsuggest"],
     ["今いる画面（クエリ付き）", "/welcome", "%2Fwelcome%3Fstep%3D2"],
-  ])("遷移先に %s が指定されていたらトップページに送る", (_, pathname, encoded) => {
+  ])("遷移先に %s が指定されていたら /start に送る", (_, pathname, encoded) => {
     const request = new Request(`https://example.com${pathname}?redirectTo=${encoded}`);
 
-    expect(readRedirectTo(request)).toBe("/");
+    expect(readRedirectTo(request)).toBe("/start");
   });
 
   it("画面内の遷移で使われる .data 付きの URL でも、今いる画面だと判定できる", () => {
@@ -55,7 +58,7 @@ describe("readRedirectTo", () => {
       "https://example.com/passkey/suggest.data?redirectTo=%2Fpasskey%2Fsuggest",
     );
 
-    expect(readRedirectTo(request)).toBe("/");
+    expect(readRedirectTo(request)).toBe("/start");
   });
 });
 
@@ -135,8 +138,15 @@ describe("withRedirectTo", () => {
     expect(withRedirectTo(LOGIN_PATH, "/reservation")).toBe("/login?redirectTo=%2Freservation");
   });
 
-  it("戻り先がトップページならパラメータを付けない", () => {
-    expect(withRedirectTo(LOGIN_PATH, "/")).toBe("/login");
+  it.each([
+    ["トップページ（/）", "/"],
+    ["クエリ付きのトップページ", "/?utm_source=mail"],
+  ])("戻り先が %s ならパラメータを付けない", (_, redirectTo) => {
+    expect(withRedirectTo(LOGIN_PATH, redirectTo)).toBe("/login");
+  });
+
+  it("戻り先が /start（既定）ならパラメータを付けない", () => {
+    expect(withRedirectTo(LOGIN_PATH, "/start")).toBe("/login");
   });
 
   it("外部サイトが渡されてもパラメータを付けない", () => {

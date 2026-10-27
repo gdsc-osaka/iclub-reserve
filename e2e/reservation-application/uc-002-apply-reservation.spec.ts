@@ -184,7 +184,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     const staff = await createUser(db, { is_staff: true });
     await signInAs(staff.id);
 
-    await openPage(page, "/reservations");
+    await openPage(page, "/staff/reservations");
     await page
       .getByRole("link", { name: "予約を作成", exact: true })
       .filter({ visible: true })

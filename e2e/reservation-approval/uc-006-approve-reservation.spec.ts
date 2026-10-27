@@ -209,7 +209,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     });
 
     await signInAs(personas.staff.id);
-    await openPage(page, "/");
+    await openPage(page, "/staff");
 
     const section = page.getByRole("region", { name: "承認待ちの予約" });
     const row = section.getByRole("listitem").filter({ hasText: facility.name });

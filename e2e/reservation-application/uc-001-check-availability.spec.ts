@@ -215,7 +215,7 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     });
 
     await signInAs(personas.staff.id);
-    await openPage(page, "/");
+    await openPage(page, "/staff");
 
     // PC 幅ではタイムラインの帯に、スマホ幅では一覧の行に団体名が出る（もう片方は隠れている）
     const section = page.getByRole("region", { name: "今日の予約状況" });

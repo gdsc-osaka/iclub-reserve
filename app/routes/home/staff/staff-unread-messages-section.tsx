@@ -5,9 +5,9 @@ import { Button } from "~/components/ui/button";
 import { reservationDetailPath } from "~/domain/reservation";
 import { formatMonthDay, formatRelativeTime, formatTimeRange } from "~/lib/date";
 import type { StaffUnreadMessageItem } from "~/query/reservation/staff-unread-messages";
-import { HomeIntent, type HomeActionData } from "./home-intent";
+import { HomeIntent, type HomeActionData } from "../home-intent";
 import { STAFF_UNREAD_SECTION_ID } from "./staff-tiles-section";
-import { SectionUnavailableAlert } from "./section-unavailable-alert";
+import { SectionUnavailableAlert } from "../section-unavailable-alert";
 
 /** 予約詳細のメッセージ欄へ移るパス。欄の id は `reservation-message-section.tsx` に置いている */
 const toMessagesPath = (reservationId: string) =>
