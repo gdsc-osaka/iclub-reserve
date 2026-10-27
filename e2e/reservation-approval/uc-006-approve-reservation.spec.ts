@@ -124,7 +124,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     );
   });
 
-  test("事務局が定型文から理由を入れて却下すると、却下済みになり、理由つきの却下の通知が積まれる", async ({
+  test("事務局が書いた理由に定型文を足して却下すると、却下済みになり、理由つきの却下の通知が積まれる", async ({
     page,
     db,
     signInAs,
@@ -138,9 +138,13 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     await row.getByRole("button", { name: "却下" }).click();
 
     const dialog = page.getByRole("alertdialog", { name: "仮予約の却下" });
+    const reasonField = dialog.getByLabel(/却下理由/);
     const template = reasonTemplates[ReservationTransition.Reject][0];
+    // 先に書いた理由は消えず、改行をはさんで定型文が後ろに足される
+    const writtenReason = "先に書いた事情です。";
+    await reasonField.fill(writtenReason);
     await dialog.getByRole("button", { name: template.label }).click();
-    await expect(dialog.getByLabel(/却下理由/)).toHaveValue(template.text);
+    await expect(reasonField).toHaveValue(`${writtenReason}\n${template.text}`);
     await dialog.getByRole("button", { name: "却下する" }).click();
 
     // 仮予約ではなくなったので、既定の一覧からは消える
@@ -160,6 +164,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
         (mail) =>
           mail.subject.includes("利用予約が却下されました") &&
           mail.bodyText.includes(reservation.id) &&
+          mail.bodyText.includes(writtenReason) &&
           mail.bodyText.includes(template.text),
       ),
     ).toHaveLength(1);
