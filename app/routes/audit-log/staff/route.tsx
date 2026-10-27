@@ -38,7 +38,7 @@ import {
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "操作履歴 | iclub-reserve" }];
+  return [{ title: "操作履歴 | i-Club 予約システム" }];
 }
 
 /**
@@ -268,9 +268,7 @@ export default function StaffAuditLogRoute({ loaderData }: Route.ComponentProps)
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">操作履歴</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          システム内で行われたすべての変更操作の履歴を新しい順に確認できます。
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">新しい順に表示します。</p>
       </div>
 
       <FilterForm params={params} groups={groups} actors={actors} />
@@ -278,7 +276,7 @@ export default function StaffAuditLogRoute({ loaderData }: Route.ComponentProps)
       {/* 履歴は表ではなく行のリストにして、幅 320px のスマホでも横スクロールさせない */}
       {items.length === 0 ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-          条件に合う操作履歴はありません。
+          条件に合う操作履歴はありません
         </div>
       ) : (
         <ol aria-label="操作履歴" className="flex flex-col gap-3">
@@ -349,7 +347,7 @@ export default function StaffAuditLogRoute({ loaderData }: Route.ComponentProps)
               to={toAuditLogSearchPath({ ...params, page: params.page - 1 })}
               className="text-sm font-medium text-primary hover:underline"
             >
-              ← 新しい記録
+              ← 新しい履歴
             </Link>
           ) : (
             <span />
@@ -361,7 +359,7 @@ export default function StaffAuditLogRoute({ loaderData }: Route.ComponentProps)
               to={toAuditLogSearchPath({ ...params, page: params.page + 1 })}
               className="text-sm font-medium text-primary hover:underline"
             >
-              古い記録 →
+              古い履歴 →
             </Link>
           )}
         </div>
@@ -381,13 +379,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <Card className="[--card-spacing:--spacing(6)]">
         <CardHeader>
           <CardTitle className="text-xl">
-            {isForbidden ? "事務局スタッフ専用ページです" : "操作履歴を表示できません"}
+            {isForbidden ? "事務局専用のページです" : "操作履歴を表示できません"}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 text-sm">
           <p className="text-muted-foreground">
             {isForbidden
-              ? "この画面は事務局アカウントでのみご利用いただけます。"
+              ? "このページは、事務局のみご利用いただけます。"
               : "時間をおいて、もう一度お試しください。"}
           </p>
           <Link to="/" className="text-primary underline underline-offset-4">

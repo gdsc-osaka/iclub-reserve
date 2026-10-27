@@ -41,7 +41,7 @@ test.describe("UC-022 招待を承諾・辞退する", { tag: "@UC-022" }, () =>
     await expect(page).toHaveURL(`/groups/${group.id}`);
     const ownRow = page.getByRole("listitem").filter({ hasText: invitee.name });
     await expect(ownRow.getByText("あなた", { exact: true })).toBeVisible();
-    await expect(ownRow.getByText("メンバー", { exact: true })).toBeVisible();
+    await expect(ownRow.getByText("一般メンバー", { exact: true })).toBeVisible();
   });
 
   test("招待された本人がダッシュボードに出た招待を承諾できる", async ({ page, db, signInAs }) => {

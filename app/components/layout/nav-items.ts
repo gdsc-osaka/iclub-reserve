@@ -134,7 +134,7 @@ export const staffNavItems: readonly NavItem[] = [
   },
   {
     id: "staff-facilities",
-    label: "施設の管理",
+    label: "施設・設備の管理",
     to: "/staff/facilities",
     icon: Settings2,
     enabled: true,

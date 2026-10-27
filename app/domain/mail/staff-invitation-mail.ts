@@ -44,7 +44,7 @@ export const createStaffInvitationMailDraft = (args: StaffInvitationMailArgs): M
   return {
     idempotencyKey: `staff-invitation:created:${args.invitationId}:${args.email}`,
     to: { address: args.email },
-    subject: "【i-Club予約システム】事務局への招待が届いています",
+    subject: "【i-Club 予約システム】事務局への招待が届いています",
     text: lines.join("\n"),
   };
 };

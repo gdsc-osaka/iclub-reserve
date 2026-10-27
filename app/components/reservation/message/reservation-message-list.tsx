@@ -14,7 +14,7 @@ interface ReservationMessageListProps {
  */
 export function ReservationMessageList({ messages }: ReservationMessageListProps) {
   if (messages.length === 0) {
-    return <p className="text-sm text-muted-foreground">まだメッセージはありません。</p>;
+    return <p className="text-sm text-muted-foreground">まだメッセージはありません</p>;
   }
 
   return (

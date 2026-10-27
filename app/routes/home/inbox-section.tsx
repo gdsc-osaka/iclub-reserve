@@ -39,7 +39,7 @@ const eventView: Record<
   { readonly title: string; readonly icon: LucideIcon; readonly tone: "primary" | "destructive" }
 > = {
   [GroupUnreadEventType.Message]: {
-    title: "事務局からメッセージ",
+    title: "事務局からメッセージが届いています",
     icon: MessageSquareText,
     tone: "primary",
   },
@@ -323,9 +323,6 @@ export function InboxSection({
               </span>
             )}
           </h2>
-          <p className="text-xs text-muted-foreground">
-            予約を開くか「確認済み」を押すと、ここから消えます。
-          </p>
         </div>
         {reservations.length > 0 && (
           <Button type="button" variant="ghost" className="h-9 sm:h-8" onClick={markAllRead}>

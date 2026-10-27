@@ -203,7 +203,7 @@ describe("editReservationDirectlyUseCase", () => {
       expect(result.isErr()).toBe(true);
       const error = result._unsafeUnwrapErr();
       expect(error.code).toBe(ReservationErrorCode.Forbidden);
-      expect(error.userMessage).toBe("予約を直接変更できるのは事務局だけです。");
+      expect(error.userMessage).toBe("予約の直接変更は、事務局のみ行えます。");
     });
 
     it("事務局なら、団体に所属していなくても所属テーブルを引かずに通る", async () => {
@@ -521,7 +521,7 @@ describe("editReservationDirectlyUseCase", () => {
         `reservation:${ReservationMailEvent.EditedByStaff}:`,
       );
       expect(mails[0]?.subject).toBe(
-        "【i-Club予約システム】施設・設備の利用予約が事務局により変更されました",
+        "【i-Club 予約システム】施設・設備の利用予約が事務局により変更されました",
       );
     });
   });

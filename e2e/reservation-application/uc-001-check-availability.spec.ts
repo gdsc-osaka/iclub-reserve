@@ -110,7 +110,7 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     // 自団体の予約の帯を押すと、欄に使用人数と備考が出る
     await page.getByRole("button", { name: new RegExp(`${ownGroup.name}.*の詳細を見る`) }).click();
     await expect(panel).toBeVisible();
-    await expect(panel.getByText("自団体", { exact: true })).toBeVisible();
+    await expect(panel.getByText("所属団体", { exact: true })).toBeVisible();
     await expect(panel.getByText("4 名")).toBeVisible();
     await expect(panel.getByText("自団体の備考")).toBeVisible();
 

@@ -40,8 +40,8 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return [
     {
       title: loaderData?.view
-        ? `${loaderData.view.group.name} | iclub-reserve`
-        : "団体情報 | iclub-reserve",
+        ? `${loaderData.view.group.name} | i-Club 予約システム`
+        : "団体情報 | i-Club 予約システム",
     },
   ];
 }
@@ -352,7 +352,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     section: "name",
     submittedName: "",
     nameError: null,
-    formError: "不正な操作です。",
+    formError: "この操作は受け付けられませんでした。画面を読み込み直してください。",
   } satisfies GroupActionData;
 }
 
@@ -375,9 +375,6 @@ export default function GroupManagementRoute({ loaderData, actionData }: Route.C
           </h1>
           <GroupStatusBadge status={view.group.status} />
         </div>
-        <p className="text-sm text-muted-foreground">
-          団体の基本情報と所属メンバーを確認できます。
-        </p>
       </div>
 
       {/* 団体情報カード */}

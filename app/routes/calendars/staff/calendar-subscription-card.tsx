@@ -1,4 +1,5 @@
 import { ExternalLink, Info } from "lucide-react";
+import { Link } from "react-router";
 
 import { CalendarUrlCopyField } from "~/components/calendar/calendar-url-copy-field";
 import { Button } from "~/components/ui/button";
@@ -53,7 +54,16 @@ export function CalendarSubscriptionCard({ facility }: CalendarSubscriptionCardP
         ) : (
           <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
             <Info className="size-4 shrink-0 text-muted-foreground" />
-            <span>カレンダーはまだ用意されていません</span>
+            <span>
+              Google カレンダーが連携されていません。
+              <Link
+                to={`/staff/facilities/${facility.id}`}
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                施設・設備の編集画面
+              </Link>
+              で設定できます。
+            </span>
           </div>
         )}
       </CardContent>

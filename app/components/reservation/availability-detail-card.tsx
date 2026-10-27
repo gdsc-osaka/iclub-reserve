@@ -36,7 +36,7 @@ export function AvailabilityReservationCard({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <ReservationStatusBadge status={reservation.status} />
-        {reservation.isOwnGroup && <Badge>自団体</Badge>}
+        {reservation.isOwnGroup && <Badge>所属団体</Badge>}
       </div>
 
       <p className="text-sm font-medium break-words">{reservation.groupName}</p>
@@ -89,7 +89,7 @@ export function AvailabilityReservationCard({
       )}
 
       <Button asChild variant="outline" size="sm" className="w-full">
-        <Link to={`/reservations/${reservation.id}`}>予約詳細を見る</Link>
+        <Link to={`/reservations/${reservation.id}`}>予約の詳細を見る</Link>
       </Button>
     </div>
   );

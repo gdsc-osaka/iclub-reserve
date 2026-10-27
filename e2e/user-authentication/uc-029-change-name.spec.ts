@@ -17,7 +17,7 @@ test.describe("UC-029 氏名を変更する", { tag: "@UC-029" }, () => {
     await openPage(page, "/account");
     const card = accountCard(page, "氏名");
     await card.getByRole("button", { name: "変更" }).click();
-    await card.getByLabel("お名前（本名）").fill(newName);
+    await card.getByLabel("氏名（本名）").fill(newName);
     await card.getByRole("button", { name: "保存" }).click();
 
     await expect(page.getByText("氏名を更新しました。")).toBeVisible();
@@ -35,7 +35,7 @@ test.describe("UC-029 氏名を変更する", { tag: "@UC-029" }, () => {
     const card = accountCard(page, "氏名");
     await card.getByRole("button", { name: "変更" }).click();
     // 全角の空白も、前後の空白として取り除いてから確かめる（COND-017）
-    await card.getByLabel("お名前（本名）").fill("　 　");
+    await card.getByLabel("氏名（本名）").fill("　 　");
     await card.getByRole("button", { name: "保存" }).click();
 
     await expect(card.getByText("氏名を入力してください。")).toBeVisible();

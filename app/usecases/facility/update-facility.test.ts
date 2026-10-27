@@ -345,7 +345,7 @@ describe("updateFacilityUseCase", () => {
           errAsync({
             code: FacilityErrorCode.Conflict,
             message: "写真が先に変わっていた",
-            userMessage: "ほかの人が同時にこの施設を更新しました。",
+            userMessage: "ほかの人が同時にこの施設・設備を更新しました。",
           }),
         ),
       },

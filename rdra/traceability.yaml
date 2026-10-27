@@ -288,7 +288,7 @@ elements:
 
   - id: "REQ-041"
     type: requirement
-    name: "事務局権限の付与・剥奪"
+    name: "事務局権限の付与・解除"
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["GOAL-002", "GOAL-007"]
 
@@ -505,7 +505,7 @@ elements:
 
   - id: "BUC-027"
     type: business_usecase
-    name: "事務局権限の付与・剥奪"
+    name: "事務局権限の付与・解除"
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["REQ-041"]
 
@@ -710,7 +710,7 @@ elements:
 
   - id: "UC-028"
     type: usecase
-    name: "事務局権限を剥奪する"
+    name: "事務局権限を解除する"
     defined_in: "rdra/contexts/user-authentication.md"
     traces_to: ["BUC-027"]
 

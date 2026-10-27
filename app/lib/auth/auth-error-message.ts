@@ -24,7 +24,7 @@ export type AuthClientError = {
  */
 const MESSAGES: Record<string, string> = {
   INVALID_OTP: "認証コードが正しくありません。入力内容を確認してください。",
-  OTP_EXPIRED: "認証コードの有効期限が切れました。もう一度送信してください。",
+  OTP_EXPIRED: "認証コードの有効期限が切れました。認証コードを再送信してください。",
   TOO_MANY_ATTEMPTS:
     "認証に何度も失敗したため、このコードは無効になりました。もう一度送信してください。",
   INVALID_EMAIL: "メールアドレスの形式が正しくありません。",
@@ -43,7 +43,7 @@ const MESSAGES: Record<string, string> = {
     "この端末はパスキーの保存に対応していません。メールの認証コードをご利用ください。",
   ERROR_AUTHENTICATOR_MISSING_USER_VERIFICATION_SUPPORT:
     "この端末で本人確認（顔認証・指紋・画面ロック）を行えませんでした。設定をご確認ください。",
-  CHALLENGE_NOT_FOUND: "時間が経ちすぎたため、やり直しが必要です。もう一度お試しください。",
+  CHALLENGE_NOT_FOUND: "時間が経ちすぎました。もう一度お試しください。",
   FAILED_TO_VERIFY_REGISTRATION: "パスキーを登録できませんでした。もう一度お試しください。",
   AUTHENTICATION_FAILED: "パスキーで認証できませんでした。もう一度お試しください。",
   PASSKEY_NOT_FOUND: "このパスキーは登録されていません。メールの認証コードをご利用ください。",

@@ -22,6 +22,6 @@ describe("openFacilityCreateFormUseCase", () => {
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(FacilityErrorCode.Forbidden);
-    expect(error.userMessage).toBe("施設の管理は事務局のみが行えます。");
+    expect(error.userMessage).toBe("施設・設備の管理は、事務局のみ行えます。");
   });
 });

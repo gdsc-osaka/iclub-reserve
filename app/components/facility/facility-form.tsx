@@ -228,7 +228,7 @@ export function FacilityForm({
             className="size-4 rounded border-gray-300 text-primary focus:ring-primary"
           />
           <Label htmlFor="is_active" className="text-sm font-medium cursor-pointer">
-            この施設をすぐに予約受付可能（有効）にする
+            登録後すぐに予約を受け付ける（有効にする）
           </Label>
         </div>
       )}

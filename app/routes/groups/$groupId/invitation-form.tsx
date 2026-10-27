@@ -146,7 +146,7 @@ export function InvitationForm({ state }: Readonly<{ state: GroupInviteFormState
               disabled={isSubmitting}
             >
               <SelectTrigger id="invite-role" className="w-full">
-                <SelectValue placeholder="役割を選択" />
+                <SelectValue placeholder="選んでください" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -168,6 +168,9 @@ export function InvitationForm({ state }: Readonly<{ state: GroupInviteFormState
             </Button>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          管理者は、メンバーの招待・削除や団体情報の編集ができます。
+        </p>
       </div>
     </Form>
   );

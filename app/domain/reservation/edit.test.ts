@@ -153,7 +153,7 @@ describe("canDirectEditReservation", () => {
       const error = canDirectEditReservation(upcoming, actor, now)._unsafeUnwrapErr();
 
       expect(error.code).toBe(ReservationErrorCode.Forbidden);
-      expect(error.userMessage).toBe("予約を直接変更できるのは事務局だけです。");
+      expect(error.userMessage).toBe("予約の直接変更は、事務局のみ行えます。");
     });
 
     it("権限が無いことを、状態や開始日時より先に答える", () => {

@@ -22,5 +22,5 @@ export const ensureFacilityPermission = (
     : err({
         code: FacilityErrorCode.Forbidden,
         message: `事務局ではないユーザーが施設操作 ${action} を試みた。`,
-        userMessage: "施設の管理は事務局のみが行えます。",
+        userMessage: "施設・設備の管理は、事務局のみ行えます。",
       });

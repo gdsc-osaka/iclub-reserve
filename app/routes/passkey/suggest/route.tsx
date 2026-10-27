@@ -14,7 +14,7 @@ import { usePasskeySupport } from "~/lib/auth/passkey-support";
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "パスキーの登録 | iclub-reserve" }];
+  return [{ title: "パスキーの登録 | i-Club 予約システム" }];
 }
 
 /**

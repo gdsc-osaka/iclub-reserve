@@ -158,7 +158,7 @@ describe("Staff Repositories (D1)", () => {
     expect(await countAuditLogs("inv_not_exist")).toBe(0);
   });
 
-  it("revoke の条件: 事務局が 2 人のとき片方を剥奪すると 1 件、続けてもう片方を剥奪すると 0 件で is_staff が true のまま残る、事務局でない人は 0 件", async () => {
+  it("revoke の条件: 事務局が 2 人のとき片方を解除すると 1 件、続けてもう片方を解除すると 0 件で is_staff が true のまま残る、事務局でない人は 0 件", async () => {
     await testDb.seed(
       seedUser({
         id: "usr_staff_1",
@@ -177,7 +177,7 @@ describe("Staff Repositories (D1)", () => {
 
     const repo = createStaffMemberRepository(testDb.db);
 
-    // 事務局が 2 人のとき、片方を剥奪すると 1 件
+    // 事務局が 2 人のとき、片方を解除すると 1 件
     const now = new Date("2026-10-05T12:00:00Z");
     const revoke1 = await repo.revoke(
       "usr_staff_1",
@@ -192,7 +192,7 @@ describe("Staff Repositories (D1)", () => {
     }
     expect(await countAuditLogs("usr_staff_1")).toBe(1);
 
-    // 剥奪されたことを確認
+    // 解除されたことを確認
     const row1 = (await testDb.d1
       .prepare(`SELECT is_staff FROM "user" WHERE id = ?`)
       .bind("usr_staff_1")
@@ -201,7 +201,7 @@ describe("Staff Repositories (D1)", () => {
     };
     expect(row1.is_staff).toBe(0);
 
-    // 続けてもう片方を剥奪すると 0 件（最後の事務局保護 COND-014）
+    // 続けてもう片方を解除すると 0 件（最後の事務局保護 COND-014）
     const revoke2 = await repo.revoke(
       "usr_staff_2",
       now,

@@ -10,13 +10,13 @@ import { SectionUnavailableAlert } from "./section-unavailable-alert";
 export interface StaffPendingGroupsSectionProps {
   /** 登録が古い順に最大 5 件 */
   readonly groups: readonly GroupSearchItem[];
-  /** 有効化を待っている団体の総数（5 件を超えた分も含む） */
+  /** 承認待ちの団体の総数（5 件を超えた分も含む） */
   readonly totalCount: number;
   readonly isUnavailable: boolean;
 }
 
 /**
- * 事務局のダッシュボードの「有効化を待っている団体」（SCR-022 / UC-014）。
+ * 事務局のダッシュボードの「承認待ちの団体」（SCR-022 / UC-014）。
  *
  * 待たせている団体から片付けられるよう、登録が古い順に並べる。
  * 団体を選ぶと団体管理画面（SCR-007）でメンバーを確かめられる。
@@ -33,7 +33,7 @@ export function StaffPendingGroupsSection({
         <div>
           <h2 id="staff-pending-groups-title" className="flex items-center gap-2 font-semibold">
             <Building2 aria-hidden className="size-4.5 text-muted-foreground" />
-            有効化を待っている団体
+            承認待ちの団体
           </h2>
           <p className="text-xs text-muted-foreground">登録が古い順</p>
         </div>
@@ -46,11 +46,11 @@ export function StaffPendingGroupsSection({
         </Button>
       </div>
 
-      {isUnavailable && <SectionUnavailableAlert what="有効化を待っている団体" forStaff />}
+      {isUnavailable && <SectionUnavailableAlert what="承認待ちの団体" forStaff />}
 
       {!isUnavailable && groups.length === 0 && (
         <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          有効化を待っている団体はありません
+          承認待ちの団体はありません
         </p>
       )}
 

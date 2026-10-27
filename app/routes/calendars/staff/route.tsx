@@ -12,7 +12,7 @@ import type { Route } from "./+types/route";
 import { CalendarSubscriptionCard } from "./calendar-subscription-card";
 
 export function meta() {
-  return [{ title: "カレンダー購読 | iclub-reserve" }];
+  return [{ title: "カレンダー購読 | i-Club 予約システム" }];
 }
 
 /**
@@ -60,11 +60,6 @@ export default function StaffCalendarsPage({ loaderData }: Route.ComponentProps)
         <AlertDescription className="mt-2 text-sm text-muted-foreground">
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
-              <strong>Google カレンダーをお使いの方</strong>: 各施設の「Google
-              カレンダーに追加」ボタンを押すと、お使いの Google
-              アカウントにカレンダーを追加できます。
-            </li>
-            <li>
               <strong>Apple カレンダー・Outlook などをお使いの方</strong>: iCal の URL
               をコピーし、カレンダーアプリの「照会」や「URL で追加」に貼り付けて登録してください。
             </li>
@@ -84,7 +79,7 @@ export default function StaffCalendarsPage({ loaderData }: Route.ComponentProps)
       {facilities.length === 0 ? (
         <Card className="w-full">
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            利用可能な施設・設備がありません。
+            利用できる施設・設備がありません
           </CardContent>
         </Card>
       ) : (

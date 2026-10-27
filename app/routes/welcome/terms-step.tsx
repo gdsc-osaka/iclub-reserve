@@ -12,9 +12,9 @@ import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
  *
  * ほかの段階（`NAME_STEP_TITLE` など）と同じく、見出しはその段階のファイルが持つ。
  */
-export const TERMS_STEP_TITLE = "利用規約への同意";
+export const TERMS_STEP_TITLE = "施設使用規約への同意";
 export const TERMS_STEP_DESCRIPTION =
-  "i-Club の施設を予約するには、施設の使用規約への同意が必要です。内容をご確認ください。";
+  "i-Club の施設・設備を予約するには、施設使用規約への同意が必要です。内容をご確認ください。";
 
 /** この段階のフォームを、ルートのアクションが見分けるための値 */
 export const ACCEPT_TERMS_INTENT = "accept-terms";

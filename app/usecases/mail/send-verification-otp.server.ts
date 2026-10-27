@@ -32,19 +32,19 @@ export type SendVerificationOtpUseCase = (
 /** 用途ごとの件名と、本文の書き出しに使う文言 */
 const TEMPLATES: Record<VerificationOtpType, { subject: string; purpose: string }> = {
   "sign-in": {
-    subject: "【i-Club予約システム】ログイン用の認証コード",
+    subject: "【i-Club 予約システム】ログイン用の認証コード",
     purpose: "ログイン",
   },
   "email-verification": {
-    subject: "【i-Club予約システム】メールアドレス変更の本人確認用認証コード",
+    subject: "【i-Club 予約システム】メールアドレス変更の本人確認用認証コード",
     purpose: "メールアドレス変更の本人確認",
   },
   "forget-password": {
-    subject: "【i-Club予約システム】パスワード再設定用の認証コード",
+    subject: "【i-Club 予約システム】パスワード再設定用の認証コード",
     purpose: "パスワードの再設定",
   },
   "change-email": {
-    subject: "【i-Club予約システム】メールアドレス変更用の認証コード",
+    subject: "【i-Club 予約システム】メールアドレス変更用の認証コード",
     purpose: "メールアドレスの変更",
   },
 };

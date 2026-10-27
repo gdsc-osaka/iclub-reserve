@@ -71,7 +71,7 @@ export function GroupMemberCard({
                           isCurrentUser={isCurrentUser}
                           trigger={
                             <Button variant="outline" size="sm">
-                              {isAdmin ? "メンバーにする" : "管理者にする"}
+                              {isAdmin ? "一般メンバーにする" : "管理者にする"}
                             </Button>
                           }
                         />
@@ -87,7 +87,7 @@ export function GroupMemberCard({
                               variant="ghost"
                               size="icon"
                               className="size-11 text-muted-foreground hover:text-destructive"
-                              aria-label={`${member.name} を団体から削除`}
+                              aria-label={`${member.name} さんを団体から削除`}
                             >
                               <Trash2 className="size-4" />
                             </Button>

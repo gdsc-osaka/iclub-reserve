@@ -189,7 +189,7 @@ describe("createProvisionalReservationUseCase", () => {
     expect(mails?.[0]?.idempotencyKey).toMatch(keyOf("usr_student_01"));
     expect(mails?.[1]?.idempotencyKey).toMatch(keyOf("usr_admin_01"));
     expect(mails?.[2]?.idempotencyKey).toMatch(keyOf("usr_staff_01"));
-    expect(mails?.[0]?.subject).toBe("【i-Club予約システム】施設・設備の利用予約が申請されました");
+    expect(mails?.[0]?.subject).toBe("【i-Club 予約システム】施設・設備の利用予約が申請されました");
     expect(mails?.[0]?.text).toContain("施設・設備の利用予約が申請されました。");
 
     // COND-013: 操作履歴の草稿が渡ること

@@ -59,7 +59,7 @@ test.describe("UC-026 事務局に招待する・招待を取り消す", { tag: 
 
     await openPage(page, "/staff/staff-members");
 
-    await expect(page.getByRole("heading", { name: "事務局スタッフ専用ページです" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "事務局専用のページです" })).toBeVisible();
   });
 
   test("すでに承諾待ちの招待があるアドレスに再度送ろうとすると重複エラーが表示される", async ({

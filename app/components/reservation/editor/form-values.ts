@@ -126,7 +126,7 @@ export const parseReservationContent = (
     !Number.isSafeInteger(headCount) ||
     headCount < RESERVATION_MIN_HEAD_COUNT
   ) {
-    fieldErrors.headCount = `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 以上の整数で入力してください。`;
+    fieldErrors.headCount = `使用人数は ${RESERVATION_MIN_HEAD_COUNT} 名以上で入力してください。`;
   }
 
   const note = values.note.trim();

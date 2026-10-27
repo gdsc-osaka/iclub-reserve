@@ -42,7 +42,7 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
 
     // 事務局の予約一覧（SCR-003）で承認済みに絞り、その予約の行の「変更」を押す
     await openPage(page, "/staff/reservations");
-    const statusFilter = page.getByRole("navigation", { name: "ステータスの絞り込み" });
+    const statusFilter = page.getByRole("navigation", { name: "状態の絞り込み" });
     await statusFilter.getByRole("link", { name: /承認済み/ }).click();
 
     const row = page.getByRole("listitem").filter({ hasText: facility.name });

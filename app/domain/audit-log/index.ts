@@ -29,9 +29,9 @@ export type AuditLogTargetType = (typeof AuditLogTargetType)[keyof typeof AuditL
 export const auditLogTargetTypeLabel: Record<AuditLogTargetType, string> = {
   [AuditLogTargetType.Reservation]: "予約",
   [AuditLogTargetType.Group]: "団体",
-  [AuditLogTargetType.Membership]: "メンバーシップ",
+  [AuditLogTargetType.Membership]: "メンバー",
   [AuditLogTargetType.Invitation]: "招待",
-  [AuditLogTargetType.Facility]: "施設/設備",
+  [AuditLogTargetType.Facility]: "施設・設備",
   [AuditLogTargetType.StaffRole]: "事務局権限",
 };
 
@@ -104,7 +104,7 @@ export const auditLogActionLabel: Record<AuditLogAction, string> = {
   [AuditLogAction.GroupEnable]: "有効化",
   [AuditLogAction.GroupDisable]: "無効化",
 
-  [AuditLogAction.MembershipChangeRole]: "ロールの変更",
+  [AuditLogAction.MembershipChangeRole]: "役割の変更",
   [AuditLogAction.MembershipRemove]: "削除",
 
   [AuditLogAction.InvitationSend]: "送信",
@@ -121,7 +121,7 @@ export const auditLogActionLabel: Record<AuditLogAction, string> = {
   [AuditLogAction.StaffRoleCancelInvitation]: "招待の取り消し",
   [AuditLogAction.StaffRoleAccept]: "承諾",
   [AuditLogAction.StaffRoleDecline]: "辞退",
-  [AuditLogAction.StaffRoleRevoke]: "剥奪",
+  [AuditLogAction.StaffRoleRevoke]: "解除",
 };
 
 /**

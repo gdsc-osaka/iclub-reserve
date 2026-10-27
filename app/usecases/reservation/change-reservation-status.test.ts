@@ -202,7 +202,7 @@ describe("changeReservationStatusUseCase", () => {
           expect.objectContaining({
             idempotencyKey: "reservation:withdrawn:res_provisional_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
-            subject: "【i-Club予約システム】施設・設備の仮予約が取り消されました",
+            subject: "【i-Club 予約システム】施設・設備の仮予約が取り消されました",
             text: expect.stringContaining("都合がつかなくなったため"),
           }),
         ],
@@ -256,13 +256,13 @@ describe("changeReservationStatusUseCase", () => {
           expect.objectContaining({
             idempotencyKey: "reservation:cancelled:res_approved_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
-            subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
+            subject: "【i-Club 予約システム】施設・設備の利用予約がキャンセルされました",
             text: expect.stringContaining("イベント延期のため"),
           }),
           expect.objectContaining({
             idempotencyKey: "reservation:cancelled:res_approved_01:1789866000000:usr_staff_01",
             to: { address: "staff@example.com", name: "事務局スタッフ" },
-            subject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
+            subject: "【i-Club 予約システム】施設・設備の利用予約がキャンセルされました",
             text: expect.stringContaining("イベント延期のため"),
           }),
         ],
@@ -444,7 +444,7 @@ describe("changeReservationStatusUseCase", () => {
           expect.objectContaining({
             idempotencyKey: "reservation:rejected:res_provisional_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
-            subject: "【i-Club予約システム】施設・設備の利用予約が却下されました",
+            subject: "【i-Club 予約システム】施設・設備の利用予約が却下されました",
             text: expect.stringContaining("理由: 設備点検のため利用できません"),
           }),
         ],
@@ -499,7 +499,8 @@ describe("changeReservationStatusUseCase", () => {
             idempotencyKey:
               "reservation:cancelledByStaff:res_approved_01:1789866000000:usr_student_01",
             to: { address: "student@example.com", name: "学生代表" },
-            subject: "【i-Club予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
+            subject:
+              "【i-Club 予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
             text: expect.stringContaining("理由: 大学の公式行事のため"),
           }),
         ],

@@ -46,6 +46,8 @@ const getDialogConfig = (
   targetName: string,
   isCurrentUser: boolean,
 ): DialogConfig => {
+  // 本名を呼び捨てにしない。自分を操作するときは「あなた」と呼ぶ
+  const who = isCurrentUser ? "あなた" : `${targetName} さん`;
   switch (action) {
     case MemberAction.Promote:
       return {
@@ -54,19 +56,19 @@ const getDialogConfig = (
         title: "管理者にしますか？",
         actionLabel: "管理者にする",
         actionVariant: "default",
-        description: `${targetName} を管理者にします。管理者はメンバーの招待・削除や団体情報の編集など、団体のすべての管理を行えるようになります。`,
+        description: `${who}を管理者にします。管理者はメンバーの招待・削除や団体情報の編集など、団体のすべての管理を行えるようになります。`,
         currentUserNotice: null,
       };
     case MemberAction.Demote:
       return {
         intent: "update-member-role",
         role: MembershipRole.Member,
-        title: "メンバーに戻しますか？",
-        actionLabel: "メンバーにする",
+        title: "一般メンバーに戻しますか？",
+        actionLabel: "一般メンバーにする",
         actionVariant: "default",
-        description: `${targetName} を一般メンバーに変更します。`,
+        description: `${who}を一般メンバーにします。`,
         currentUserNotice: isCurrentUser
-          ? "この操作のあと、あなたはこの画面を編集できなくなります。"
+          ? "この操作のあと、あなたは団体の管理ができなくなります。"
           : null,
       };
     case MemberAction.Remove:
@@ -75,7 +77,7 @@ const getDialogConfig = (
         title: "団体から削除しますか？",
         actionLabel: "削除する",
         actionVariant: "destructive",
-        description: `${targetName} を団体から削除します。この操作は取り消せません。再び団体に参加してもらうには、改めて招待を送る必要があります。`,
+        description: `${who}を団体から削除します。再び参加するには、招待し直してもらう必要があります。`,
         currentUserNotice: isCurrentUser ? "この操作のあと、あなたはこの団体から外れます。" : null,
       };
   }
@@ -155,7 +157,7 @@ export function MemberActionDialog({
 
             <AlertDialogFooter className="mt-2">
               <AlertDialogCancel type="button" disabled={isSubmitting}>
-                キャンセル
+                やめる
               </AlertDialogCancel>
               <Button type="submit" variant={config.actionVariant} disabled={isSubmitting}>
                 {isSubmitting ? "処理中…" : config.actionLabel}

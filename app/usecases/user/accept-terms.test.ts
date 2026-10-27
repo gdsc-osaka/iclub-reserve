@@ -44,7 +44,7 @@ describe("acceptTermsUseCase", () => {
 
     expect(result._unsafeUnwrapErr()).toMatchObject({
       code: UserErrorCode.TermsNotAgreed,
-      userMessage: expect.stringContaining("同意する"),
+      userMessage: expect.stringContaining("「同意します」"),
     });
     expect(termsAcceptanceRepository.recordAcceptance).not.toHaveBeenCalled();
   });

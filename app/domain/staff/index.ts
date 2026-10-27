@@ -123,7 +123,7 @@ export interface CreateStaffInvitationOutcome {
 /**
  * 操作の実行後に、事務局が居なくなってしまうかを判定する純粋関数（COND-014）。
  *
- * 剥奪した後に事務局が 1 人以上残るなら false、0 人になるなら true を返す。
+ * 解除した後に事務局が 1 人以上残るなら false、0 人になるなら true を返す。
  */
 export const wouldRemoveLastStaff = (staffCount: number): boolean => staffCount - 1 < 1;
 

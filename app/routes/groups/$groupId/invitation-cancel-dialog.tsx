@@ -74,7 +74,7 @@ export function InvitationCancelDialog({
             <AlertDialogHeader>
               <AlertDialogTitle>招待を取り消しますか？</AlertDialogTitle>
               <AlertDialogDescription>
-                {`${email} への招待を取り消します。この招待のリンクは使えなくなります。改めて招待し直すことはできます。`}
+                {`${email} への招待を取り消します。招待のリンクは使えなくなります。あとから招待し直すこともできます。`}
               </AlertDialogDescription>
             </AlertDialogHeader>
 

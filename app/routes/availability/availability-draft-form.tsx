@@ -344,8 +344,7 @@ export function AvailabilityDraftForm({
             <Alert className="border-amber-500/30 bg-amber-500/5">
               <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
               <AlertDescription>
-                申請元にできる有効な団体がまだ 1
-                つもありません。団体を有効にしてから申請してください。
+                予約を作成できる有効な団体がまだありません。先に団体を承認するか、有効にしてください。
               </AlertDescription>
             </Alert>
           ) : (
@@ -358,7 +357,7 @@ export function AvailabilityDraftForm({
                     <FieldContent>
                       <FieldLabel htmlFor={directSwitchId}>承認済みとして直接作成する</FieldLabel>
                       <FieldDescription>
-                        仮予約を経ずに最初から承認済みとして登録します（事務局専用）。
+                        仮予約を経ずに、最初から承認済みとして登録します。
                       </FieldDescription>
                     </FieldContent>
                     <Switch id={directSwitchId} checked={isDirect} onCheckedChange={setIsDirect} />
@@ -452,7 +451,7 @@ export function AvailabilityDraftForm({
         description={
           isDirect
             ? "仮予約を経ずに最初から承認済みとして作成されます。メールは送信されません。"
-            : "申請すると仮予約として登録され、あなたと団体の管理者、事務局にお知らせのメールが届きます。施設・設備を利用できるのは、事務局が承認してからです。"
+            : "申請すると、あなたと団体の管理者、事務局にお知らせのメールが届きます。"
         }
         submitLabel={isDirect ? "承認済みで作成する" : "この内容で申請する"}
         submittingLabel={isDirect ? "作成中…" : "申請中…"}

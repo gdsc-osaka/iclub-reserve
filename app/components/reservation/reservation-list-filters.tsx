@@ -43,7 +43,7 @@ const statusTabs: readonly {
   { key: "all", label: "すべて", countKey: "all" },
   { key: "provisional", label: "仮予約", countKey: "provisional" },
   { key: "approved", label: "承認済み", countKey: "approved" },
-  { key: "ended", label: "キャンセル・却下", countKey: "ended" },
+  { key: "ended", label: "取り消し・キャンセル・却下", countKey: "ended" },
 ];
 
 const periodOptions: readonly {
@@ -179,7 +179,7 @@ export function ReservationListFilters({
          * 縦に並べるときは、固定したブロックの左右の余白（px-4 md:px-6）まで線を伸ばす。
          */}
         <nav
-          aria-label="ステータスの絞り込み"
+          aria-label="状態の絞り込み"
           className="-mx-4 overflow-x-auto px-4 shadow-[inset_0_-1px_0_var(--color-border)] [scrollbar-width:none] md:-mx-6 md:px-6 @4xl:mx-0 @4xl:px-0 @4xl:shadow-none [&::-webkit-scrollbar]:hidden"
         >
           <ul className="flex w-max gap-1 @4xl:gap-2">

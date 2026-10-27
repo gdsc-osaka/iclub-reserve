@@ -50,7 +50,7 @@ test.describe("UC-025 自団体の操作履歴を閲覧する", { tag: "@UC-025"
       },
     });
 
-    // (b) 事務局が actedAsStaff: true で行ったロールの変更
+    // (b) 事務局が actedAsStaff: true で行った役割の変更
     await createAuditLog(db, {
       actorId: staff.id,
       actedAsStaff: true,
@@ -72,9 +72,9 @@ test.describe("UC-025 自団体の操作履歴を閲覧する", { tag: "@UC-025"
     await expect(groupUpdate).toContainText(`名称: 変更前の団体名 → ${group.name}`);
 
     // (b) 事務局権限の操作は「事務局」と表示される
-    const roleChange = recordOf(page, "ロールの変更");
+    const roleChange = recordOf(page, "役割の変更");
     await expect(roleChange).toContainText("事務局");
-    await expect(roleChange).toContainText("役割: メンバー → 管理者");
+    await expect(roleChange).toContainText("役割: 一般メンバー → 管理者");
 
     // 一覧の中に事務局員の氏名が含まれていない
     await expect(page.getByRole("list", { name: "操作履歴" })).not.toContainText(staff.name);

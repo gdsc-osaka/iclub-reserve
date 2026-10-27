@@ -9,12 +9,12 @@ import { GroupStatus } from "~/domain/group";
  * 同じ状態が「承認待ち」「申請中」のように場所によって違う名前で出てしまう。
  */
 export const groupStatusLabel: Record<GroupStatus, string> = {
-  [GroupStatus.Enabled]: "活動中",
+  [GroupStatus.Enabled]: "有効",
   [GroupStatus.Pending]: "承認待ち",
-  [GroupStatus.Disabled]: "停止中",
+  [GroupStatus.Disabled]: "無効",
 };
 
-/** 状態ごとの配色。活動中だけを目立たせ、承認待ちは注意を促す色にする。 */
+/** 状態ごとの配色。有効だけを目立たせ、承認待ちは注意を促す色にする。 */
 const groupStatusStyle: Record<GroupStatus, { readonly badge: string; readonly dot: string }> = {
   [GroupStatus.Enabled]: {
     badge: "bg-primary/10 text-primary ring-primary/20",

@@ -208,7 +208,7 @@ export const canDirectEditReservation = (
     return err({
       code: ReservationErrorCode.Forbidden,
       message: "事務局でない人が、予約の内容を直接変えようとした。",
-      userMessage: "予約を直接変更できるのは事務局だけです。",
+      userMessage: "予約の直接変更は、事務局のみ行えます。",
     });
   }
 

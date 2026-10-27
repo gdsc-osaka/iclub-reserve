@@ -90,7 +90,7 @@ describe("事務局権限の操作履歴（audit-log）", () => {
     });
   });
 
-  it("#29 staff_role.revoke: 剥奪の記録（is_staff: true -> false）が組み立てられ、targetId は剥奪された人", () => {
+  it("#29 staff_role.revoke: 解除の記録（is_staff: true -> false）が組み立てられ、targetId は解除された人", () => {
     const draft = toStaffRoleRevokeAuditLog("usr_target", "usr_actor", now);
 
     expect(draft).toEqual({

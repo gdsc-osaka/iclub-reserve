@@ -568,7 +568,7 @@ function ReservationBlock({
       {content.showStatus && (
         <p className="truncate text-[11px] leading-tight">
           {statusLabel}
-          {reservation.isOwnGroup && "・自団体"}
+          {reservation.isOwnGroup && "・所属団体"}
         </p>
       )}
 

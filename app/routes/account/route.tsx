@@ -59,7 +59,7 @@ import {
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "アカウント設定 | iclub-reserve" }];
+  return [{ title: "アカウント設定 | i-Club 予約システム" }];
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
@@ -140,7 +140,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       } satisfies AccountActionData;
     }
 
-    return { message: "端末をログアウトしました。", formError: null } satisfies AccountActionData;
+    return { message: "端末からログアウトしました。", formError: null } satisfies AccountActionData;
   }
 
   if (intent === "revoke-other-sessions") {
@@ -154,13 +154,16 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
 
     return {
-      message: "この端末以外をすべてログアウトしました。",
+      message: "この端末以外のすべての端末からログアウトしました。",
       formError: null,
     } satisfies AccountActionData;
   }
 
   // この画面が出している操作以外は受け付けない
-  return { message: null, formError: "不正な操作です。" } satisfies AccountActionData;
+  return {
+    message: null,
+    formError: "この操作は受け付けられませんでした。画面を読み込み直してください。",
+  } satisfies AccountActionData;
 }
 
 export default function AccountSettingsRoute({ loaderData }: Route.ComponentProps) {
@@ -170,9 +173,6 @@ export default function AccountSettingsRoute({ loaderData }: Route.ComponentProp
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-bold tracking-tight">アカウント設定</h1>
-        <p className="text-sm text-muted-foreground">
-          氏名、メールアドレス、ログイン方法、およびログイン中の端末を管理します。
-        </p>
       </div>
 
       <div className="flex flex-col gap-6">
@@ -242,15 +242,13 @@ function ProfileNameCard({ currentName }: Readonly<{ currentName: string }>) {
           <UserIcon aria-hidden className="size-4 text-muted-foreground" />
           氏名
         </CardTitle>
-        <CardDescription>
-          予約画面や所属団体などで他の利用者に表示されるお名前です。
-        </CardDescription>
+        <CardDescription>予約や団体の画面で、ほかの利用者にも表示されます。</CardDescription>
       </CardHeader>
       <CardContent>
         {isEditing ? (
           <form onSubmit={handleSave} className="max-w-md space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="user-name">お名前（本名）</Label>
+              <Label htmlFor="user-name">氏名（本名）</Label>
               <Input
                 id="user-name"
                 value={name}
@@ -305,9 +303,7 @@ function EmailCard({ currentEmail }: Readonly<{ currentEmail: string }>) {
           <Mail aria-hidden className="size-4 text-muted-foreground" />
           メールアドレス
         </CardTitle>
-        <CardDescription>
-          ログインおよびシステムからの各種通知に使用されるメールアドレスです。
-        </CardDescription>
+        <CardDescription>ログインと、システムからのお知らせに使います。</CardDescription>
       </CardHeader>
       <CardContent className="flex items-center justify-between">
         <span className="text-base font-medium">{currentEmail}</span>
@@ -487,7 +483,7 @@ function EmailChangeDialog({
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={pending || newEmail.trim() === ""}>
-                {pending ? "送信中…" : "次へ（認証コード送信）"}
+                {pending ? "送信中…" : "認証コードを送る"}
               </Button>
             </DialogFooter>
           </form>
@@ -550,7 +546,7 @@ function EmailChangeDialog({
                   return;
                 }
                 toast.info(
-                  "送り直すには、現在のアドレスでの確認からやり直す必要があります。現在のアドレスへ認証コードを送りました。",
+                  "現在のアドレスへ認証コードを送り直しました。もう一度、現在のアドレスでの確認から進めてください。",
                 );
                 setStep(2);
               }}
@@ -702,11 +698,13 @@ function PasskeyCard({
           <KeyRound aria-hidden className="size-4 text-muted-foreground" />
           パスキー
         </CardTitle>
-        <CardDescription>生体認証や画面ロックを使ったパスキーを登録・管理します。</CardDescription>
+        <CardDescription>
+          顔認証・指紋・画面ロックだけでログインできるようになります。
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {passkeys.length === 0 ? (
-          <p className="text-sm text-muted-foreground">登録されているパスキーはありません。</p>
+          <p className="text-sm text-muted-foreground">登録されているパスキーはありません</p>
         ) : (
           <div className="divide-y rounded-md border">
             {passkeys.map((pk) => (
@@ -769,7 +767,7 @@ function PasskeyCard({
                         {pk.lastUsedAt ? formatDateTime(pk.lastUsedAt) : "まだ使っていません"}
                       </span>
                       <span>
-                        {pk.backedUp ? "同期される" : "同期されない（登録した認証器だけ）"}
+                        {pk.backedUp ? "ほかの端末でも使えます" : "登録した端末だけで使えます"}
                       </span>
                     </div>
                   </div>
@@ -799,7 +797,7 @@ function PasskeyCard({
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                      <AlertDialogCancel>やめる</AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"
                         onClick={() => void handleDeletePasskey(pk)}
@@ -824,8 +822,8 @@ function PasskeyCard({
             <div className="flex items-start gap-2">
               <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>
-                最後のログインから 24
-                時間以上たっているため、安全のためもう一度ログインしてから追加してください。
+                安全のため、もう一度ログインしてから追加してください（最後のログインから 24
+                時間以上たっています）。
               </span>
             </div>
             <div>
@@ -877,7 +875,7 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
           ログイン中の端末
         </CardTitle>
         <CardDescription>
-          現在ログインしている端末の一覧です。身に覚えのない端末や使わなくなった端末からログアウトできます。
+          身に覚えのない端末や、使わなくなった端末はログアウトできます。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -907,7 +905,7 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
                   triggerLabel="ログアウト"
                   triggerClassName="self-start text-destructive hover:bg-destructive/10 sm:self-center"
                   title="端末からログアウトしますか？"
-                  description={`「${sess.deviceName}」をログアウトします。この端末で再度利用するにはログインが必要になります。`}
+                  description={`「${sess.deviceName}」からログアウトします。その端末で再び使うには、ログインし直す必要があります。`}
                   disabled={isRevoking}
                   onConfirm={() => {
                     fetcher.submit(
@@ -926,7 +924,7 @@ function SessionsCard({ sessions }: Readonly<{ sessions: readonly AccountSession
             <RevokeConfirmDialog
               triggerLabel="この端末以外をすべてログアウト"
               title="他のすべての端末からログアウトしますか？"
-              description={`現在利用中のこの端末以外の、他のすべての端末（${otherSessions.length} 台）からログアウトします。`}
+              description={`この端末以外の ${otherSessions.length} 台からログアウトします。`}
               disabled={isRevoking}
               onConfirm={() => {
                 fetcher.submit({ intent: "revoke-other-sessions" }, { method: "post" });
@@ -973,7 +971,7 @@ function RevokeConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>キャンセル</AlertDialogCancel>
+          <AlertDialogCancel>やめる</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={onConfirm}>
             ログアウトする
           </AlertDialogAction>

@@ -191,7 +191,7 @@ describe("updateGroupNameUseCase", () => {
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.Forbidden);
-    expect(error.userMessage).toBe("団体情報を編集できるのは管理者と事務局だけです。");
+    expect(error.userMessage).toBe("団体情報の編集は、管理者と事務局のみ行えます。");
     expect(groups.updateName).not.toHaveBeenCalled();
   });
 

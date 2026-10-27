@@ -36,12 +36,12 @@ export function StaffTilesSection({ counts }: Readonly<{ counts: StaffTileCounts
         to="/staff/reservations"
         icon={CalendarClock}
         label="承認待ちの予約"
-        shortLabel="承認待ち"
+        shortLabel="予約の承認待ち"
         count={pendingReservations?.total ?? null}
       >
         {pendingReservations !== null && pendingReservations.shortNotice > 0 && (
           <span className="font-medium text-amber-700 dark:text-amber-400">
-            うち 7 日を切っている {pendingReservations.shortNotice} 件
+            うち利用日まで 7 日以内 {pendingReservations.shortNotice} 件
           </span>
         )}
       </Tile>
@@ -57,8 +57,8 @@ export function StaffTilesSection({ counts }: Readonly<{ counts: StaffTileCounts
       <Tile
         to={toStaffGroupPath({ status: "pending" })}
         icon={Building2}
-        label="有効化を待っている団体"
-        shortLabel="有効化待ち"
+        label="承認待ちの団体"
+        shortLabel="団体の承認待ち"
         count={pendingGroups?.total ?? null}
       >
         {pendingGroups?.oldest && (

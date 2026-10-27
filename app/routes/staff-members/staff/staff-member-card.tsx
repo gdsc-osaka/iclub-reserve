@@ -13,7 +13,7 @@ import { StaffRevokeDialog } from "./staff-revoke-dialog";
  * 事務局スタッフ一覧を表示するカード。
  *
  * 事務局スタッフの一覧（氏名・メールアドレス）を表示し、
- * 各行から事務局権限の剥奪（確認ダイアログ付き）を行える。
+ * 各行から事務局権限の解除（確認ダイアログ付き）を行える。
  * 操作者本人には「あなた」のバッジを表示する。
  */
 export function StaffMemberCard({
@@ -30,7 +30,7 @@ export function StaffMemberCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldCheck className="size-5 text-primary" />
-          <span>事務局スタッフ</span>
+          <span>事務局の一覧</span>
         </CardTitle>
         <CardAction>
           <Badge variant="secondary">{members.length}人</Badge>
@@ -85,9 +85,9 @@ export function StaffMemberCard({
                         variant="outline"
                         size="sm"
                         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        aria-label={`${member.name} の事務局権限を剥奪`}
+                        aria-label={`${member.name} さんの事務局権限を解除`}
                       >
-                        剥奪
+                        解除
                       </Button>
                     }
                   />

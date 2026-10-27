@@ -56,6 +56,10 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 
 - **React Router**: Keep data loaders and actions collocated with route components where possible to maintain feature-based cohesion.
 - **UI Components**: Rely on `shadcn/ui` components before creating custom ones. Keep styling isolated via Tailwind utility classes.
+- **UI の文言**: 利用者に見せる文は「です・ます」で、丁寧に短く書く（「利用できるのは承認してからです」ではなく「承認後、ご利用いただけます」、「〜できるのは〜だけです」ではなく「〜は〜のみ行えます」）。
+  - 画面を見れば分かること（見出しやボタンの言い換え、押せば分かる操作の手順）は書かない。書くのは、押した結果が画面に表れないこと（誰にメールが届くか・元に戻せないか）、ほかの人にどう見えるか、待つ必要があることだけ。
+  - 用語は「施設・設備」「事務局」「状態」「所属団体」「氏名」「一般メンバー」にそろえる。ダイアログを閉じるボタンは「やめる」にする（予約の「キャンセル」と紛らわしいため）。人の名前には「さん」を付ける。
+  - 見出し・ラベル・空の状態の 1 文には句点を付けず、説明文とエラーの文には付ける。画面の部品で「事務局にお問い合わせください」と案内するときは、宛先（`StaffContact`）を添える。
 - **Constraints**: Do not introduce unnecessary dependencies. Ensure code runs on Edge environments (Cloudflare Workers). Node.js specific APIs (`fs`, `path`, etc.) might not be available or require special handling.
 - **UseCase の構造**: 本線は `safeTry(async function* () { ... })` に平らに並べ、各ステップを `yield*` で繋ぐ（`andThen` を入れ子にしない）。補助関数は接頭辞で役割を示し、複数のユースケースから使うものは `_shared/` に置く。
 

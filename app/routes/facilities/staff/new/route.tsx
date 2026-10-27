@@ -4,7 +4,7 @@ import { Form, isRouteErrorResponse, Link, redirect, useNavigation } from "react
 
 import { FacilityForm } from "~/components/facility/facility-form";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { FacilityField } from "~/domain/facility";
 import { createDb } from "~/infra/db";
 import {
@@ -24,7 +24,7 @@ import { openFacilityCreateFormUseCase } from "~/usecases/facility/open-facility
 import type { Route } from "./+types/route";
 
 export function meta() {
-  return [{ title: "施設の登録 | iclub-reserve" }];
+  return [{ title: "施設・設備の登録 | i-Club 予約システム" }];
 }
 
 /** 施設写真を含む送信の許容上限バイト数（6 MiB） */
@@ -159,9 +159,6 @@ export default function NewFacilityPage({ loaderData, actionData }: Route.Compon
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">施設・設備の新規登録</CardTitle>
-          <CardDescription>
-            新しい施設や設備をシステムに登録します。登録した施設は予約対象として利用者に公開されます。
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <Form method="post" encType="multipart/form-data">
@@ -184,12 +181,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     return (
       <div className="flex flex-col items-center justify-center p-8 min-h-[50vh] text-center">
         <CircleAlert className="size-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold">事務局スタッフ専用ページです</h1>
+        <h1 className="text-2xl font-bold">事務局専用のページです</h1>
         <p className="text-muted-foreground mt-2 max-w-md">
-          施設を登録するには事務局スタッフの権限が必要です。
+          このページは、事務局のみご利用いただけます。
         </p>
         <Button asChild className="mt-6">
-          <Link to="/">ホームに戻る</Link>
+          <Link to="/">ホームへ戻る</Link>
         </Button>
       </div>
     );
@@ -200,10 +197,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <CircleAlert className="size-12 text-destructive mb-4" />
       <h1 className="text-2xl font-bold">エラーが発生しました</h1>
       <p className="text-muted-foreground mt-2 max-w-md">
-        ページの表示に失敗しました。時間をおいてもう一度お試しください。
+        ページを表示できませんでした。時間をおいて、もう一度お試しください。
       </p>
       <Button onClick={() => window.location.reload()} className="mt-6">
-        再読み込み
+        読み込み直す
       </Button>
     </div>
   );

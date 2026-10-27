@@ -330,7 +330,7 @@ export function ReservationTimelineLegend() {
       </li>
       <li className="w-full sm:w-auto">
         枠を押すと {RESERVATION_STEP_MINUTES}{" "}
-        分選べます。続けて後ろの枠を押すと、その枠まで伸びます。マウスなら、なぞって選ぶこともできます。
+        分選べます。続けて後ろの枠を押すと、そこまで伸びます。マウスなら、なぞっても選べます。
       </li>
     </ul>
   );

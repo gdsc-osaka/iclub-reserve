@@ -16,7 +16,7 @@ import type { Route } from "./+types/route";
 import { parseReservationListParams } from "./query-params";
 
 export function meta() {
-  return [{ title: "予約 | iclub-reserve" }];
+  return [{ title: "予約 | i-Club 予約システム" }];
 }
 
 /**
@@ -82,7 +82,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   const transition = parseReservationTransition(intent);
 
   if (transition === null || isStaffTransition(transition)) {
-    return { formError: "不正な操作です。" };
+    return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };
   }
 
   const db = createDb(env.DB);

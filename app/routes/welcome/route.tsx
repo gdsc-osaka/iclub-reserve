@@ -32,7 +32,7 @@ import {
 } from "./terms-step";
 
 export function meta() {
-  return [{ title: "初回設定 | iclub-reserve" }];
+  return [{ title: "初回設定 | i-Club 予約システム" }];
 }
 
 /**
@@ -78,7 +78,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // この画面が出している操作以外は受け付けない
   if (formData.get("intent") !== ACCEPT_TERMS_INTENT) {
-    return { formError: "不正な操作です。" };
+    return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };
   }
 
   const result = await acceptTermsUseCase(
@@ -181,7 +181,7 @@ export default function Onboarding({ loaderData, actionData }: Route.ComponentPr
     if (error) {
       setPending(false);
       setNameErrorMessage(
-        toAuthErrorMessage(error, "お名前を登録できませんでした。もう一度お試しください。"),
+        toAuthErrorMessage(error, "氏名を登録できませんでした。もう一度お試しください。"),
       );
       return;
     }

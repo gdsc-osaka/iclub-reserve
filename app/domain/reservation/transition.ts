@@ -266,7 +266,7 @@ export const canPerformTransition = (
       return err({
         code: ReservationErrorCode.Forbidden,
         message: `事務局だけの操作 (${transition}) を、事務局でない人が行おうとした。`,
-        userMessage: "この操作は事務局スタッフのみ実行できます。",
+        userMessage: "この操作は、事務局のみ行えます。",
       });
     }
     /*

@@ -550,7 +550,7 @@ function DirectEditAlert() {
       <CircleAlert aria-hidden className="text-blue-600 dark:text-blue-400" />
       <AlertTitle>再承認は不要です</AlertTitle>
       <AlertDescription>
-        事務局による直接変更のため、施設や日時を変更しても再承認は不要です（ステータスは変わりません）。
+        事務局による直接変更のため、施設や日時を変更しても再承認は不要です（状態は変わりません）。
       </AlertDescription>
     </Alert>
   );

@@ -1,7 +1,7 @@
 /**
  * 事務局権限（BIZ-006）の操作履歴ドラフト生成純粋関数。
  *
- * 事務局への招待・取り消し・承諾・辞退・剥奪の 5 種類を扱う（VAR-002 #25〜#29）。
+ * 事務局への招待・取り消し・承諾・辞退・解除の 5 種類を扱う（VAR-002 #25〜#29）。
  * 施設・事務局権限の操作は、COND-012 により acted_as_staff は常に true、group_id は常に null となる。
  */
 import {
@@ -130,7 +130,7 @@ export const toStaffRoleDeclineAuditLog = (
 });
 
 /**
- * #29 事務局権限の剥奪（staff_role.revoke）の操作履歴ドラフトを生成する。
+ * #29 事務局権限の解除（staff_role.revoke）の操作履歴ドラフトを生成する。
  */
 export const toStaffRoleRevokeAuditLog = (
   targetUserId: string,

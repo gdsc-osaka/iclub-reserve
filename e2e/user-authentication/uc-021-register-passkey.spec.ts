@@ -50,7 +50,7 @@ test.describe("UC-021 パスキーを登録する", { tag: "@UC-021" }, () => {
 
     await openPage(page, "/account");
     const card = accountCard(page, "パスキー");
-    await expect(card.getByText("登録されているパスキーはありません。")).toBeVisible();
+    await expect(card.getByText("登録されているパスキーはありません")).toBeVisible();
 
     await card.getByRole("button", { name: "パスキーを追加" }).click();
     await expect(page.getByText("パスキーを登録しました。")).toBeVisible();
@@ -81,7 +81,7 @@ test.describe("UC-021 パスキーを登録する", { tag: "@UC-021" }, () => {
     const card = accountCard(page, "パスキー");
 
     // 追加のボタンの代わりに、ログインし直すよう案内が出る（COND-019）
-    await expect(card.getByText(/最後のログインから 24\s*時間以上たっている/)).toBeVisible();
+    await expect(card.getByText(/最後のログインから 24\s*時間以上たっています/)).toBeVisible();
     await expect(card.getByRole("button", { name: "もう一度ログイン" })).toBeVisible();
     await expect(card.getByRole("button", { name: "パスキーを追加" })).toBeHidden();
   });

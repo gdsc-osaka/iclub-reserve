@@ -292,7 +292,7 @@ describe("updateMemberRoleUseCase", () => {
     expect(result.isErr()).toBe(true);
     const error = result._unsafeUnwrapErr();
     expect(error.code).toBe(GroupErrorCode.Forbidden);
-    expect(error.userMessage).toBe("メンバーの役割を変更できるのは管理者と事務局だけです。");
+    expect(error.userMessage).toBe("メンバーの役割の変更は、管理者と事務局のみ行えます。");
     expect(fake.updateRole).not.toHaveBeenCalled();
   });
 

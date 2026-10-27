@@ -37,8 +37,7 @@ const dialogConfigs: Record<FacilityStatusChangeTarget, FacilityStatusDialogConf
     triggerLabel: "無効化",
     triggerVariant: "outline",
     title: (name) => `${name} を無効にしますか？`,
-    description:
-      "無効にすると、利用者はこの施設・設備を新しく予約できなくなります。今後の予約（仮予約・開始前の承認済み予約）が残っている場合は無効化できません。",
+    description: "無効にすると、利用者はこの施設・設備を新しく予約できなくなります。",
     actionLabel: "無効化する",
     actionVariant: "destructive",
   },
@@ -105,7 +104,7 @@ export function FacilityStatusDialog({
 
             <AlertDialogFooter>
               <AlertDialogCancel type="button" disabled={isSubmitting}>
-                キャンセル
+                やめる
               </AlertDialogCancel>
               <Button type="submit" variant={config.actionVariant} disabled={isSubmitting}>
                 {isSubmitting ? "処理中…" : config.actionLabel}

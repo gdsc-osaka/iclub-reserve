@@ -84,7 +84,7 @@ test.describe("UC-011 メンバーを招待・削除する", { tag: "@UC-011" },
     await signInAs(admin.id);
 
     await openPage(page, `/groups/${group.id}`);
-    await page.getByRole("button", { name: `${member.name} を団体から削除` }).click();
+    await page.getByRole("button", { name: `${member.name} さんを団体から削除` }).click();
     const dialog = page.getByRole("alertdialog", { name: "団体から削除しますか？" });
     await dialog.getByRole("button", { name: "削除する" }).click();
 

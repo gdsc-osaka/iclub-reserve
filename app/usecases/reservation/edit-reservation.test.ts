@@ -227,7 +227,7 @@ describe("editReservationUseCase", () => {
         [
           expect.objectContaining({
             idempotencyKey: "reservation:approvedEdited:res_01:1789866000000:usr_student_01",
-            subject: "【i-Club予約システム】施設・設備の利用予約の内容が変更されました",
+            subject: "【i-Club 予約システム】施設・設備の利用予約の内容が変更されました",
           }),
           // 団体の操作なので、事務局にも知らせる（EVT-004）
           expect.objectContaining({
@@ -286,7 +286,7 @@ describe("editReservationUseCase", () => {
       });
       expect(mails?.[0]).toMatchObject({
         idempotencyKey: "reservation:reapprovalRequested:res_01:1789866000000:usr_student_01",
-        subject: "【i-Club予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
+        subject: "【i-Club 予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
       });
       // 通知には変更後の日時を載せる
       expect(mails?.[0]?.text).toContain("利用開始日時: 2026年9月25日 11:00");

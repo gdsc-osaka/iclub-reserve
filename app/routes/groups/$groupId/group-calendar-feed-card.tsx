@@ -196,7 +196,7 @@ function RegenerateCalendarFeedDialog({ isSubmitting }: { readonly isSubmitting:
 
           <AlertDialogFooter className="mt-2">
             <AlertDialogCancel type="button" disabled={isSubmitting}>
-              キャンセル
+              やめる
             </AlertDialogCancel>
             <Button type="submit" variant="destructive" disabled={isSubmitting}>
               {isSubmitting ? "処理中…" : "作り直す"}

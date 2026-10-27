@@ -142,7 +142,7 @@ function NextReservationCard({
             <span>·</span>
             <span>{item.groupName}</span>
             <span>·</span>
-            <span>{item.headCount} 人</span>
+            <span>{item.headCount} 名</span>
           </div>
         </div>
       </CardContent>
@@ -165,7 +165,7 @@ function UpcomingReservationRow({
       <Link
         to={`/reservations/${item.id}`}
         className="absolute inset-0 z-0"
-        aria-label={`予約詳細を開く: ${item.facilityName} ${item.groupName}`}
+        aria-label={`予約の詳細を開く: ${item.facilityName} ${item.groupName}`}
       />
 
       {/* 日時 */}

@@ -11,7 +11,7 @@ const config = {
 const message = createMailMessage({
   from: { address: "noreply@gdgoc-osaka.jp", name: "i-Club 予約システム" },
   to: { address: "taro@osaka-u.ac.jp" },
-  subject: "【i-Club予約システム】ログイン用の認証コード",
+  subject: "【i-Club 予約システム】ログイン用の認証コード",
   text: "認証コードは 123456 です。",
 })._unsafeUnwrap();
 

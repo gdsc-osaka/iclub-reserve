@@ -195,7 +195,7 @@ function TodayTimeline({
                       <Link
                         key={reservation.id}
                         to={reservationDetailPath(reservation.id)}
-                        aria-label={`${timeRange} ${reservation.groupName} ${statusLabel} の予約詳細を開く`}
+                        aria-label={`${timeRange} ${reservation.groupName} ${statusLabel} の予約の詳細を開く`}
                         title={`${timeRange}｜${reservation.groupName}｜${statusLabel}`}
                         className={cn(
                           "absolute flex items-center overflow-hidden rounded-md border px-1.5 text-[11px] font-medium hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring",
@@ -279,7 +279,7 @@ function TodayList({
                     {reservation.facilityName}
                     <span className="text-muted-foreground">
                       {" "}
-                      · {reservation.groupName} · {reservation.headCount} 人
+                      · {reservation.groupName} · {reservation.headCount} 名
                     </span>
                   </p>
                 </Link>

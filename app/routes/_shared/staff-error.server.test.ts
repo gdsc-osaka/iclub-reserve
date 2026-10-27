@@ -108,12 +108,12 @@ describe("staffActionErrors", () => {
     const actionErrors = staffActionErrors(
       context,
       errorOf(StaffErrorCode.LastStaffRequired, {
-        userMessage: "事務局が 0 人になるため、剥奪できません。",
+        userMessage: "事務局が 0 人になるため、解除できません。",
       }),
     );
 
     expect(actionErrors).toEqual({
-      formError: "事務局が 0 人になるため、剥奪できません。",
+      formError: "事務局が 0 人になるため、解除できません。",
     });
   });
 });

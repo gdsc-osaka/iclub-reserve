@@ -8,8 +8,9 @@ import { Label } from "~/components/ui/label";
  * パスキーの段階（`PASSKEY_STEP_TITLE`）と同じく、見出しはその段階のファイルが持つ。
  * 呼び出し元に書き並べると、段階を足したときに直す場所が 2 か所に増える。
  */
-export const NAME_STEP_TITLE = "お名前の登録";
-export const NAME_STEP_DESCRIPTION = "ようこそ。予約画面などで表示されるお名前を登録してください。";
+export const NAME_STEP_TITLE = "氏名の登録";
+export const NAME_STEP_DESCRIPTION =
+  "ようこそ。予約の画面などに表示される氏名を登録してください。事務局が利用者を確かめられるよう、ニックネームではなく本名を入力してください。";
 
 /**
  * お名前を入力する段階。
@@ -37,7 +38,7 @@ export function NameStep({
       }}
     >
       <div className="space-y-2">
-        <Label htmlFor="name">お名前</Label>
+        <Label htmlFor="name">氏名（本名）</Label>
         <Input
           id="name"
           type="text"

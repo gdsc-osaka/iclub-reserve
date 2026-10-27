@@ -48,7 +48,7 @@ export function CalendarUrlCopyField({ id, label, url, ariaLabel }: CalendarUrlC
       }
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      toast.success("iCal URL をクリップボードにコピーしました。");
+      toast.success("URL をコピーしました。");
 
       if (copiedTimerRef.current !== null) {
         clearTimeout(copiedTimerRef.current);

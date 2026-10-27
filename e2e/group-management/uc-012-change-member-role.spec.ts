@@ -29,7 +29,7 @@ test.describe("UC-012 管理者を昇格・降格する", { tag: "@UC-012" }, ()
     await dialog.getByRole("button", { name: "管理者にする" }).click();
 
     await expect(row.getByText("管理者", { exact: true })).toBeVisible();
-    await expect(row.getByRole("button", { name: "メンバーにする" })).toBeVisible();
+    await expect(row.getByRole("button", { name: "一般メンバーにする" })).toBeVisible();
   });
 
   test("管理者がほかの管理者を一般メンバーに下げられる", async ({ page, db, signInAs }) => {
@@ -45,11 +45,11 @@ test.describe("UC-012 管理者を昇格・降格する", { tag: "@UC-012" }, ()
 
     await openPage(page, `/groups/${group.id}`);
     const row = page.getByRole("listitem").filter({ hasText: otherAdmin.name });
-    await row.getByRole("button", { name: "メンバーにする" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "メンバーに戻しますか？" });
-    await dialog.getByRole("button", { name: "メンバーにする" }).click();
+    await row.getByRole("button", { name: "一般メンバーにする" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "一般メンバーに戻しますか？" });
+    await dialog.getByRole("button", { name: "一般メンバーにする" }).click();
 
-    await expect(row.getByText("メンバー", { exact: true })).toBeVisible();
+    await expect(row.getByText("一般メンバー", { exact: true })).toBeVisible();
     await expect(row.getByRole("button", { name: "管理者にする" })).toBeVisible();
   });
 
@@ -67,9 +67,9 @@ test.describe("UC-012 管理者を昇格・降格する", { tag: "@UC-012" }, ()
     // ただ 1 人の管理者が、自分を一般メンバーに下げようとする
     await openPage(page, `/groups/${group.id}`);
     const ownRow = page.getByRole("listitem").filter({ hasText: admin.name });
-    await ownRow.getByRole("button", { name: "メンバーにする" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "メンバーに戻しますか？" });
-    await dialog.getByRole("button", { name: "メンバーにする" }).click();
+    await ownRow.getByRole("button", { name: "一般メンバーにする" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "一般メンバーに戻しますか？" });
+    await dialog.getByRole("button", { name: "一般メンバーにする" }).click();
 
     // 管理者がいなくなるので断られる（COND-016）
     await expect(page.getByText("最後の管理者は降格できません", { exact: false })).toBeVisible();

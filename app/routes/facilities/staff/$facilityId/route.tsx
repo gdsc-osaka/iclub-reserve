@@ -33,7 +33,7 @@ import type { Route } from "./+types/route";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   const facilityName = loaderData?.facility?.name ?? "施設";
-  return [{ title: `${facilityName} の編集 | iclub-reserve` }];
+  return [{ title: `${facilityName} の編集 | i-Club 予約システム` }];
 }
 
 const MAX_CONTENT_LENGTH_BYTES = 6 * 1024 * 1024;
@@ -182,7 +182,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   return {
     intent: "update" as const,
     success: {
-      message: "施設情報を保存しました。",
+      message: "施設・設備の情報を保存しました。",
     },
   };
 }
@@ -240,7 +240,7 @@ export default function EditFacilityPage({ loaderData, actionData }: Route.Compo
       <div className="flex flex-col gap-1">
         <div className="text-sm text-muted-foreground mb-1">
           <Link to="/staff/facilities" className="hover:underline">
-            ← 施設管理一覧に戻る
+            ← 施設・設備の管理へ戻る
           </Link>
         </div>
         <div className="flex items-center justify-between gap-4">
@@ -252,7 +252,7 @@ export default function EditFacilityPage({ loaderData, actionData }: Route.Compo
       {/* 基本情報フォーム */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">施設情報</CardTitle>
+          <CardTitle className="text-lg">施設・設備の情報</CardTitle>
           <CardDescription>
             施設・設備の名称、説明文、写真、Google カレンダー連携を設定します。
           </CardDescription>
@@ -279,14 +279,12 @@ export default function EditFacilityPage({ loaderData, actionData }: Route.Compo
       {/* 状態管理セクション */}
       <Card className="border-muted-foreground/20">
         <CardHeader>
-          <CardTitle className="text-lg">施設の状態</CardTitle>
+          <CardTitle className="text-lg">施設・設備の状態</CardTitle>
           <CardDescription>
-            現在のステータス:{" "}
+            現在の状態:{" "}
             <span className="font-semibold">{facilityStatusLabel(facility.isActive)}</span>
             {facility.isActive ? (
-              <span className="block mt-1">
-                現在、利用者はこの施設・設備を予約できます。無効化するには下のボタンを押してください。
-              </span>
+              <span className="block mt-1">現在、利用者はこの施設・設備を予約できます。</span>
             ) : (
               <span className="block mt-1">
                 現在、この施設・設備は新規の予約を受け付けていません。
@@ -317,12 +315,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       return (
         <div className="flex flex-col items-center justify-center p-8 min-h-[50vh] text-center">
           <CircleAlert className="size-12 text-destructive mb-4" />
-          <h1 className="text-2xl font-bold">事務局スタッフ専用ページです</h1>
+          <h1 className="text-2xl font-bold">事務局専用のページです</h1>
           <p className="text-muted-foreground mt-2 max-w-md">
-            施設の編集には事務局スタッフの権限が必要です。
+            このページは、事務局のみご利用いただけます。
           </p>
           <Button asChild className="mt-6">
-            <Link to="/">ホームに戻る</Link>
+            <Link to="/">ホームへ戻る</Link>
           </Button>
         </div>
       );
@@ -332,12 +330,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       return (
         <div className="flex flex-col items-center justify-center p-8 min-h-[50vh] text-center">
           <CircleAlert className="size-12 text-destructive mb-4" />
-          <h1 className="text-2xl font-bold">施設が見つかりません</h1>
+          <h1 className="text-2xl font-bold">施設・設備が見つかりません</h1>
           <p className="text-muted-foreground mt-2 max-w-md">
             指定された施設・設備は存在しないか、削除された可能性があります。
           </p>
           <Button asChild className="mt-6">
-            <Link to="/staff/facilities">施設一覧に戻る</Link>
+            <Link to="/staff/facilities">施設・設備の管理へ戻る</Link>
           </Button>
         </div>
       );
@@ -349,10 +347,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <CircleAlert className="size-12 text-destructive mb-4" />
       <h1 className="text-2xl font-bold">エラーが発生しました</h1>
       <p className="text-muted-foreground mt-2 max-w-md">
-        ページの表示に失敗しました。時間をおいてもう一度お試しください。
+        ページを表示できませんでした。時間をおいて、もう一度お試しください。
       </p>
       <Button onClick={() => window.location.reload()} className="mt-6">
-        再読み込み
+        読み込み直す
       </Button>
     </div>
   );

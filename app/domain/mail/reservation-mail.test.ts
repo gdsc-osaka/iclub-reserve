@@ -42,7 +42,9 @@ describe("reservation-mail", () => {
         defaultAudience,
         APP_BASE_URL,
       );
-      expect(drafts[0]?.subject).toBe("【i-Club予約システム】施設・設備の利用予約が承認されました");
+      expect(drafts[0]?.subject).toBe(
+        "【i-Club 予約システム】施設・設備の利用予約が承認されました",
+      );
     });
 
     it("本文に予約IDと日時が含まれる", () => {
@@ -93,7 +95,7 @@ describe("reservation-mail", () => {
           address: "student@example.com",
           name: "山田太郎",
         },
-        subject: "【i-Club予約システム】施設・設備の利用予約が承認されました",
+        subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
         text: expect.stringContaining("res_test_123"),
       });
 
@@ -103,7 +105,7 @@ describe("reservation-mail", () => {
           address: "admin@example.com",
           name: "管理者花子",
         },
-        subject: "【i-Club予約システム】施設・設備の利用予約が承認されました",
+        subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
         text: expect.stringContaining("res_test_123"),
       });
     });
@@ -171,44 +173,44 @@ describe("reservation-mail", () => {
     const testCases = [
       {
         event: ReservationMailEvent.Applied,
-        expectedSubject: "【i-Club予約システム】施設・設備の利用予約が申請されました",
+        expectedSubject: "【i-Club 予約システム】施設・設備の利用予約が申請されました",
         expectedOpening: "施設・設備の利用予約が申請されました。",
         prefix: "reservation:applied:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Withdrawn,
-        expectedSubject: "【i-Club予約システム】施設・設備の仮予約が取り消されました",
+        expectedSubject: "【i-Club 予約システム】施設・設備の仮予約が取り消されました",
         expectedOpening: "申請されていた仮予約が取り消されました。",
         prefix: "reservation:withdrawn:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Cancelled,
-        expectedSubject: "【i-Club予約システム】施設・設備の利用予約がキャンセルされました",
+        expectedSubject: "【i-Club 予約システム】施設・設備の利用予約がキャンセルされました",
         expectedOpening: "承認済みの利用予約がキャンセルされました。",
         prefix: "reservation:cancelled:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Approved,
-        expectedSubject: "【i-Club予約システム】施設・設備の利用予約が承認されました",
+        expectedSubject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
         expectedOpening: "申請されていた利用予約が承認されました。",
         prefix: "reservation:approved:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.Rejected,
-        expectedSubject: "【i-Club予約システム】施設・設備の利用予約が却下されました",
+        expectedSubject: "【i-Club 予約システム】施設・設備の利用予約が却下されました",
         expectedOpening: "申請されていた利用予約が却下されました。",
         prefix: "reservation:rejected:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.CancelledByStaff,
         expectedSubject:
-          "【i-Club予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
+          "【i-Club 予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
         expectedOpening: "承認済みの利用予約が事務局によりキャンセルされました。",
         prefix: "reservation:cancelledByStaff:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.ApprovedEdited,
-        expectedSubject: "【i-Club予約システム】施設・設備の利用予約の内容が変更されました",
+        expectedSubject: "【i-Club 予約システム】施設・設備の利用予約の内容が変更されました",
         expectedOpening:
           "承認済みの利用予約の内容（使用人数・備考）が変更されました。承認済みのまま変わりません。",
         prefix: "reservation:approvedEdited:res_test_123:1789866000000:",
@@ -216,22 +218,21 @@ describe("reservation-mail", () => {
       {
         event: ReservationMailEvent.ReapprovalRequested,
         expectedSubject:
-          "【i-Club予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
+          "【i-Club 予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
         expectedOpening:
           "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。事務局が改めて承認するまで、施設・設備は利用できません。",
         prefix: "reservation:reapprovalRequested:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.ProvisionalEdited,
-        expectedSubject: "【i-Club予約システム】施設・設備の仮予約の内容が変更されました",
+        expectedSubject: "【i-Club 予約システム】施設・設備の仮予約の内容が変更されました",
         expectedOpening: "申請されていた仮予約の内容が変更されました。",
         prefix: "reservation:provisionalEdited:res_test_123:1789866000000:",
       },
       {
         event: ReservationMailEvent.EditedByStaff,
-        expectedSubject: "【i-Club予約システム】施設・設備の利用予約が事務局により変更されました",
-        expectedOpening:
-          "利用予約の内容が事務局により変更されました。予約のステータスは変わりません。",
+        expectedSubject: "【i-Club 予約システム】施設・設備の利用予約が事務局により変更されました",
+        expectedOpening: "利用予約の内容が事務局により変更されました。予約の状態は変わりません。",
         prefix: "reservation:editedByStaff:res_test_123:1789866000000:",
       },
     ] as const;
