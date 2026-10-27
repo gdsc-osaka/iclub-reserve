@@ -85,7 +85,7 @@ test.describe("UC-014 団体を有効化・無効化する", { tag: "@UC-014" },
     });
     await signInAs(personas.staff.id);
 
-    await openPage(page, "/");
+    await openPage(page, "/staff");
     const section = page.getByRole("region", { name: "承認待ちの団体" });
     await section.getByRole("link", { name: new RegExp(group.name) }).click();
 

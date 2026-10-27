@@ -15,7 +15,7 @@ import { openPage } from "../support/page.js";
 /**
  * UC-037 確認が必要なことを確認する（`rdra/contexts/reservation-approval.md`）
  *
- * ダッシュボード（SCR-022、`/`）の「確認が必要なこと」区画。
+ * ダッシュボード（SCR-022、利用者は `/`、事務局は `/staff`）の「確認が必要なこと」区画。
  * COND-026（未読の判定）、INFO-012（既読の記録）。
  */
 
@@ -139,7 +139,7 @@ test.describe("UC-037 確認が必要なことを確認する", { tag: "@UC-037"
     });
 
     await signInAs(personas.staff.id);
-    await openPage(page, "/");
+    await openPage(page, "/staff");
 
     const section = page.getByRole("region", { name: "団体からの未読メッセージ" });
     await expect(section.getByText(messageBody)).toBeVisible();
@@ -154,7 +154,7 @@ test.describe("UC-037 確認が必要なことを確認する", { tag: "@UC-037"
     });
 
     // 事務局の誰かが返信すると、返信していない事務局の一覧からも消える（COND-026 (3)）
-    await openPage(page, "/");
+    await openPage(page, "/staff");
     await expect(section.getByText(messageBody)).toBeHidden();
   });
 });
