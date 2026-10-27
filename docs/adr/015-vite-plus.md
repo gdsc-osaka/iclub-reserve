@@ -56,10 +56,12 @@ Issue #246 を受けて決める。
 
 ### 5. pnpm を 12 に上げ、版を package.json に書く
 
-- `package.json` の `devEngines.packageManager` に `^12.15.0` を書く。
-  pnpm は実際に使った版を `pnpm-lock.yaml` の先頭に書き、別の版の pnpm で動かしても、その版を落として切り替える（`onFail: download`）。
+- `package.json` の `devEngines.packageManager` に `12.15.0` を書く。版を上げるときは、ここを書き換えて `pnpm install` する。
+  pnpm は使う版を `pnpm-lock.yaml` の先頭にも書き、別の版の pnpm で動かしても、その版を落として切り替える（`onFail: download`）。
   Vite+ の `vp install` もこの版を使う。
-- CI（`pnpm/setup@v2`）の `version` も 12 にする。`pnpm/setup` が package.json の版を読むのは v3 の README にしか書かれておらず、v2 で確かめていないため、明示する。
+- 範囲（`^12.15.0`）ではなく、決まった版を書く。範囲にすると、CI の `pnpm/setup` は範囲の中の最新（12.16.0）を入れる一方、
+  pnpm はロックファイルの版（12.15.0）に従うため、`pnpm/setup` の版の確認で落ちた（この PR の最初の CI）。
+- CI（`pnpm/setup@v2`）には `version` を書かず、package.json の `devEngines.packageManager` から読ませる。版を書くのは package.json の 1 か所だけにする。
 - Cloudflare の Workers Builds のビルド変数 `PNPM_VERSION` も 12 にする（README の「Workers Builds のビルド変数」）。
 
 ### 6. CI の手順は今のまま

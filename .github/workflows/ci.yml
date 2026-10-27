@@ -29,8 +29,9 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/setup@v2
+        # pnpm の版は書かない。package.json の devEngines.packageManager から読む
+        # (ここに別の版を書くと、pnpm がプロジェクトで決めた版に従うため、版の確認で落ちる)
         with:
-          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -53,8 +54,9 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/setup@v2
+        # pnpm の版は書かない。package.json の devEngines.packageManager から読む
+        # (ここに別の版を書くと、pnpm がプロジェクトで決めた版に従うため、版の確認で落ちる)
         with:
-          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -77,8 +79,9 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/setup@v2
+        # pnpm の版は書かない。package.json の devEngines.packageManager から読む
+        # (ここに別の版を書くと、pnpm がプロジェクトで決めた版に従うため、版の確認で落ちる)
         with:
-          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -101,8 +104,9 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/setup@v2
+        # pnpm の版は書かない。package.json の devEngines.packageManager から読む
+        # (ここに別の版を書くと、pnpm がプロジェクトで決めた版に従うため、版の確認で落ちる)
         with:
-          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -146,8 +150,9 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/setup@v2
+        # pnpm の版は書かない。package.json の devEngines.packageManager から読む
+        # (ここに別の版を書くと、pnpm がプロジェクトで決めた版に従うため、版の確認で落ちる)
         with:
-          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
