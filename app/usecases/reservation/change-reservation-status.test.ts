@@ -1,9 +1,16 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { AuditLogAction } from "~/domain/audit-log";
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
-import { ReservationErrorCode, ReservationStatus, type Reservation } from "~/domain/reservation";
+import {
+  ReservationErrorCode,
+  ReservationField,
+  ReservationStatus,
+  UnlockArrangement,
+  type ApplyStatusTransitionArgs,
+  type Reservation,
+} from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import type { ReservationMailAudience } from "~/query/reservation/reservation-mail-recipients";
 import {
@@ -33,6 +40,7 @@ const baseProvisionalReservation: Reservation = {
   note: null,
   status: ReservationStatus.Provisional,
   statusReason: null,
+  unlockArrangement: null,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-20T09:00:00+09:00"),
   requestedAt: new Date("2026-09-20T09:00:00+09:00"),
@@ -101,8 +109,12 @@ const createMockDeps = (options?: {
 
   const existsApprovedOverlap = vi.fn((_args: unknown) => okAsync(hasOverlap));
   const applyStatusTransition = vi.fn(
-    (_args: unknown, _mails: unknown, _auditLog?: unknown, _calendarSync?: unknown) =>
-      okAsync({ applied, enqueuedMailIds }),
+    (
+      _args: ApplyStatusTransitionArgs,
+      _mails: unknown,
+      _auditLog?: AuditLogDraft,
+      _calendarSync?: unknown,
+    ) => okAsync({ applied, enqueuedMailIds }),
   );
   const create = vi.fn((_res: unknown, _mails: unknown) => okAsync({ enqueuedMailIds: [] }));
 
@@ -284,6 +296,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -310,6 +323,7 @@ describe("changeReservationStatusUseCase", () => {
           expectedUpdatedAt: readAt,
           status: ReservationStatus.Approved,
           statusReason: null,
+          unlockArrangement: UnlockArrangement.Required,
           updatedAt: testNow,
           requireNoApprovedOverlap: true,
         },
@@ -330,6 +344,7 @@ describe("changeReservationStatusUseCase", () => {
           changes: {
             status: { before: "provisional", after: "approved" },
             status_reason: { before: null, after: null },
+            unlock_arrangement: { before: null, after: "required" },
           },
         },
         {
@@ -358,6 +373,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -760,6 +776,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -800,6 +817,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -840,6 +858,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -862,6 +881,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -888,6 +908,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -906,6 +927,7 @@ describe("changeReservationStatusUseCase", () => {
         actorUserId: "usr_staff_01",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         appBaseUrl: "https://reserve.example.com",
         now: testNow,
       };
@@ -993,6 +1015,118 @@ describe("changeReservationStatusUseCase", () => {
           previousFacilityId: null,
         },
       );
+    });
+  });
+
+  describe("解錠の手配（unlockArrangement / COND-027）", () => {
+    it("承認時に解錠の手配が無いと InvalidInput（field: UnlockArrangement）で、書き込みもメールも起きない", async () => {
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        hasOverlap: false,
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        unlockArrangement: null,
+        appBaseUrl: "https://reserve.example.com",
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isErr()).toBe(true);
+
+      const error = result._unsafeUnwrapErr();
+      expect(error.code).toBe(ReservationErrorCode.InvalidInput);
+      expect(error.field).toBe(ReservationField.UnlockArrangement);
+      expect(error.userMessage).toBe(
+        "解錠の手配を「要手配」「手配済み」「不要」から選んでください。",
+      );
+
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+      expect(spies.notifyEnqueued).not.toHaveBeenCalled();
+    });
+
+    it("承認時に選んだ値が applyStatusTransition に渡され、changes に unlock_arrangement が入る", async () => {
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        hasOverlap: false,
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Arranged,
+        appBaseUrl: "https://reserve.example.com",
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isOk()).toBe(true);
+
+      expect(spies.applyStatusTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unlockArrangement: UnlockArrangement.Arranged,
+        }),
+        expect.anything(),
+        expect.objectContaining({
+          changes: expect.objectContaining({
+            unlock_arrangement: { before: null, after: "arranged" },
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("理由が要る操作（却下など）では、解錠の手配の値を渡しても列にも changes にも出ない", async () => {
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Reject,
+        reason: "定員超過のため",
+        unlockArrangement: UnlockArrangement.Required, // 渡しても使われない
+        appBaseUrl: "https://reserve.example.com",
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isOk()).toBe(true);
+
+      const [statusArgs, , auditLog] = spies.applyStatusTransition.mock.calls[0] ?? [];
+      expect(statusArgs?.unlockArrangement).toBeUndefined();
+      expect("unlock_arrangement" in (auditLog?.changes ?? {})).toBe(false);
+    });
+
+    it("権限の無い人には、解錠の手配の検証より先に権限のエラーが返る", async () => {
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_student_01",
+        isStaff: false, // 事務局でない
+        transition: ReservationTransition.Approve,
+        unlockArrangement: null, // 解錠の手配も未指定
+        appBaseUrl: "https://reserve.example.com",
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isErr()).toBe(true);
+
+      const error = result._unsafeUnwrapErr();
+      expect(error.code).toBe(ReservationErrorCode.Forbidden);
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
   });
 });

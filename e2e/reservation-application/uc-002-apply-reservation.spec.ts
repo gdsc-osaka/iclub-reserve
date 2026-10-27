@@ -32,6 +32,13 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     const day = toDateKey(nextWeekAt(Weekday.Wednesday, 0));
     await openPage(page, `/reservations/new?facility=${facility.id}&date=${day}&start=10:00`);
 
+    // 申請の案内文が常に出ていること（COND-028）
+    await expect(
+      page.getByText(
+        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
+
     /*
      * 時刻の欄は、PC ではフォームの右側にあり、スマホでは「施設・日時」のカードから開く
      * 全画面の選択の中にある。選択肢の一覧はどちらでもページの末尾に出るので、`page` から探す。
@@ -103,6 +110,13 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     // その時間に重なる 10:00 から申請しようとする
     const day = toDateKey(nextWeekAt(Weekday.Wednesday, 0));
     await openPage(page, `/reservations/new?facility=${facility.id}&date=${day}&start=10:00`);
+
+    // 申請の案内文が常に出ていること（COND-028）
+    await expect(
+      page.getByText(
+        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
     await page.getByLabel("使用人数").fill("4");
 
     // 埋まっている理由が出て、確認へ進むボタンが押せない。確認のダイアログまで進めない（COND-001）
@@ -144,5 +158,53 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
 
     await expect(page).toHaveURL(/\/reservations\/new$/);
     await expect(page.getByRole("heading", { level: 1, name: "予約の作成" })).toBeVisible();
+  });
+
+  test("利用日まで7日を切った日時を選ぶと注意が出るが、申請はできる（COND-028）", async ({
+    page,
+    db,
+    signInAs,
+    isMobile,
+  }) => {
+    const member = await createUser(db);
+    await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
+    const facility = await createFacility(db);
+    await signInAs(member.id);
+
+    // 明日（7日を切っている）の日時を選ぶ
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const day = toDateKey(tomorrow);
+    await openPage(page, `/reservations/new?facility=${facility.id}&date=${day}&start=10:00`);
+
+    if (isMobile) await page.getByRole("button", { name: /施設・日時/ }).click();
+    const schedule = isMobile ? page.getByRole("dialog", { name: "施設・日時を選ぶ" }) : page;
+
+    await expect(schedule.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
+    await schedule.getByRole("combobox", { name: "終了時刻" }).click();
+    await page.getByRole("option", { name: "12:00" }).click();
+    if (isMobile) await schedule.getByRole("button", { name: "決定" }).click();
+
+    // 案内文と注意文の両方が表示されていること（COND-028）
+    await expect(
+      page.getByText(
+        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "利用日まで7日を切っています。承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeVisible();
+
+    await page.getByLabel("使用人数").fill("4");
+
+    // 注意文が出ていても申請はできる
+    await page.getByRole("button", { name: "内容を確認する" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "この内容で申請しますか？" });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "この内容で申請する" }).click();
+
+    await expect(page.getByText("仮予約を申請しました")).toBeVisible();
   });
 });

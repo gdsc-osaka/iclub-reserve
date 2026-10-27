@@ -10,6 +10,7 @@ import {
   ReservationErrorCode,
   ReservationField,
   ReservationStatus,
+  UnlockArrangement,
   type ApplyContentEditArgs,
   type Reservation,
   type ReservationOverlapArgs,
@@ -38,6 +39,7 @@ const approvedReservation: Reservation = {
   note: null,
   status: ReservationStatus.Approved,
   statusReason: null,
+  unlockArrangement: UnlockArrangement.Arranged,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-18T09:00:00+09:00"),
   requestedAt: new Date("2026-09-18T09:00:00+09:00"),
@@ -47,6 +49,7 @@ const approvedReservation: Reservation = {
 const provisionalReservation: Reservation = {
   ...approvedReservation,
   status: ReservationStatus.Provisional,
+  unlockArrangement: null,
 };
 
 /** いまの予約の内容そのまま。テストごとに変えたい項目だけ上書きする */
@@ -217,6 +220,7 @@ describe("editReservationUseCase", () => {
           status: ReservationStatus.Approved,
           // 使用人数・備考は時間帯の取り合いに関わらないので、申し込み直したことにしない
           requestedAt: approvedReservation.requestedAt,
+          unlockArrangement: UnlockArrangement.Arranged,
           updatedAt: now,
           requireNoApprovedOverlap: false,
         },
@@ -298,6 +302,7 @@ describe("editReservationUseCase", () => {
           end_at: { before: "2026-09-25T03:00:00.000Z", after: "2026-09-25T04:00:00.000Z" },
           status: { before: "approved", after: "provisional" },
           status_reason: { before: null, after: null },
+          unlock_arrangement: { before: "arranged", after: null },
         },
       });
     });
@@ -666,6 +671,78 @@ describe("editReservationUseCase", () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
+        null,
+      );
+    });
+  });
+
+  describe("解錠の手配（COND-027）", () => {
+    it("承認済みで日時を変えて仮予約に戻ると null になり、changes に残る", async () => {
+      const { deps, spies } = createDeps();
+      const startAt = new Date("2026-09-25T14:00:00+09:00");
+      const endAt = new Date("2026-09-25T16:00:00+09:00");
+
+      const result = await editReservationUseCase(deps, argsWith({ startAt, endAt }));
+
+      expect(result.isOk()).toBe(true);
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: ReservationStatus.Provisional,
+          unlockArrangement: null,
+        }),
+        expect.anything(),
+        expect.objectContaining({
+          changes: expect.objectContaining({
+            unlock_arrangement: {
+              before: "arranged",
+              after: null,
+            },
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("承認済みのまま使用人数だけ変えると今の値のままで changes に残らない", async () => {
+      const { deps, spies } = createDeps();
+
+      const result = await editReservationUseCase(deps, argsWith({ headCount: 10 }));
+
+      expect(result.isOk()).toBe(true);
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: ReservationStatus.Approved,
+          unlockArrangement: UnlockArrangement.Arranged,
+        }),
+        expect.anything(),
+        expect.objectContaining({
+          changes: expect.not.objectContaining({
+            unlock_arrangement: expect.anything(),
+          }),
+        }),
+        null,
+      );
+    });
+
+    it("仮予約の編集では null のまま維持され changes に残らない", async () => {
+      const { deps, spies } = createDeps({ reservation: provisionalReservation });
+      const startAt = new Date("2026-09-25T14:00:00+09:00");
+      const endAt = new Date("2026-09-25T16:00:00+09:00");
+
+      const result = await editReservationUseCase(deps, argsWith({ startAt, endAt }));
+
+      expect(result.isOk()).toBe(true);
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: ReservationStatus.Provisional,
+          unlockArrangement: null,
+        }),
+        expect.anything(),
+        expect.objectContaining({
+          changes: expect.not.objectContaining({
+            unlock_arrangement: expect.anything(),
+          }),
+        }),
         null,
       );
     });

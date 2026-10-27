@@ -1,7 +1,7 @@
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
 import { InvitationStatus, invitationExpiresAt } from "~/domain/invitation";
-import { ReservationStatus } from "~/domain/reservation";
+import { ReservationStatus, UnlockArrangement } from "~/domain/reservation";
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import * as schema from "~/db/schema";
@@ -302,6 +302,46 @@ const reservationSeeds: SeedReservation[] = [
     note: "週次プロジェクト定例ミーティング",
     status: ReservationStatus.Approved,
     statusReason: null,
+    unlockArrangement: UnlockArrangement.Required,
+    createdBy: "usr_student_01",
+  },
+  {
+    id: "res_sample_approved_arranged",
+    groupId: "grp_robotics",
+    facilityId: "fac_suita_laser_cutter",
+    startAt: atWeek(2, 10),
+    endAt: atWeek(2, 12),
+    headCount: 2,
+    note: "レーザーカッター講習会",
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    unlockArrangement: UnlockArrangement.Arranged,
+    createdBy: "usr_student_01",
+  },
+  {
+    id: "res_sample_approved_not_required",
+    groupId: "grp_ai_hackers",
+    facilityId: "fac_toyonaka_lab",
+    startAt: atWeek(3, 10),
+    endAt: atWeek(3, 12),
+    headCount: 5,
+    note: "共同研究ディスカッション",
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    unlockArrangement: UnlockArrangement.NotRequired,
+    createdBy: "usr_student_01",
+  },
+  {
+    id: "res_sample_approved_required_2",
+    groupId: "grp_robotics",
+    facilityId: "fac_suita_3dp_sla",
+    startAt: atWeek(4, 14),
+    endAt: atWeek(4, 16),
+    headCount: 3,
+    note: "プロトタイプ出力",
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    unlockArrangement: UnlockArrangement.Required,
     createdBy: "usr_student_01",
   },
   {
@@ -420,6 +460,7 @@ const reservationSeeds: SeedReservation[] = [
     note: "先週のプロジェクト定例ミーティング",
     status: ReservationStatus.Approved,
     statusReason: null,
+    unlockArrangement: UnlockArrangement.Arranged,
     createdBy: "usr_student_01",
   },
   {

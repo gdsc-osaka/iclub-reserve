@@ -1,0 +1,1 @@
+ALTER TABLE `reservation` ADD `unlock_arrangement` text;

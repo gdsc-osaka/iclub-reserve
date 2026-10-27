@@ -1,5 +1,5 @@
 import { MembershipRole } from "~/domain/membership";
-import { ReservationStatus } from "~/domain/reservation";
+import { ReservationStatus, UnlockArrangement } from "~/domain/reservation";
 import { formatMonthDay } from "~/lib/date";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
@@ -67,23 +67,30 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     await page.getByLabel("使用人数").fill("5");
     await page.getByLabel("備考").fill("事務局の直接作成テスト");
 
+    // 解錠の手配欄が表示され、選ぶまで進めない
+    await expect(page.getByRole("button", { name: "内容を確認する" })).toBeDisabled();
+    await expect(page.getByText("解錠の手配を選んでください。")).toBeVisible();
+    await page.getByLabel("要手配").click();
+
     // 確認へ進む
     await page.getByRole("button", { name: "内容を確認する" }).click();
 
-    // 確認ダイアログが直接作成向けになっている
+    // 確認ダイアログが直接作成向けになっており、解錠の手配の要約がある
     const confirm = page.getByRole("alertdialog", { name: "予約の直接作成" });
     await expect(confirm).toBeVisible();
     await expect(confirm.getByText("承認済み", { exact: true })).toBeVisible();
+    await expect(confirm.getByText("要手配", { exact: true })).toBeVisible();
     await confirm.getByRole("button", { name: "承認済みで作成する" }).click();
 
     // 完了画面で承認済みとして作成されたことが表示される
     await expect(page.getByText("承認済みの予約を作成しました")).toBeVisible();
     await expect(page.getByText("承認済み", { exact: true })).toBeVisible();
 
-    // DB 上でステータスが最初から Approved になっている
+    // DB 上でステータスが最初から Approved になっており、解錠の手配が入っている
     const [reservation] = await findReservationsOfFacility(db, facility.id);
     expect(reservation).toBeDefined();
     expect(reservation.status).toBe(ReservationStatus.Approved);
+    expect(reservation.unlockArrangement).toBe(UnlockArrangement.Required);
     expect(reservation.headCount).toBe(5);
 
     /*

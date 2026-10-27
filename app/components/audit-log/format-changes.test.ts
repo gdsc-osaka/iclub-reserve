@@ -99,6 +99,35 @@ describe("format-changes", () => {
       expect(text).toBe("役割: メンバー → 管理者");
     });
 
+    it("解錠の手配（unlock_arrangement）を unlockArrangementLabel で整形し、null は「未定」にする", () => {
+      const text1 = formatSingleChangeText(
+        "unlock_arrangement",
+        "required",
+        "arranged",
+        defaultOptions,
+      );
+      expect(text1).toBe("解錠の手配: 要手配 → 手配済み");
+
+      const text2 = formatSingleChangeText("unlock_arrangement", "required", null, defaultOptions);
+      expect(text2).toBe("解錠の手配: 要手配 → 未定");
+
+      const text3 = formatSingleChangeText(
+        "unlock_arrangement",
+        null,
+        "not_required",
+        defaultOptions,
+      );
+      expect(text3).toBe("解錠の手配: 不要");
+
+      const textUnknown = formatSingleChangeText(
+        "unlock_arrangement",
+        "required",
+        "unknown_val",
+        defaultOptions,
+      );
+      expect(textUnknown).toBe("解錠の手配: 要手配 → unknown_val");
+    });
+
     it("有効/無効（is_active）を整形する", () => {
       const text = formatSingleChangeText("is_active", true, false, {
         targetType: AuditLogTargetType.Facility,

@@ -10,6 +10,7 @@ import {
   ReservationErrorCode,
   ReservationField,
   ReservationStatus,
+  UnlockArrangement,
   type ApplyContentEditArgs,
   type Reservation,
   type ReservationOverlapArgs,
@@ -41,6 +42,7 @@ const approvedReservation: Reservation = {
   note: null,
   status: ReservationStatus.Approved,
   statusReason: null,
+  unlockArrangement: UnlockArrangement.Arranged,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-18T09:00:00+09:00"),
   requestedAt: new Date("2026-09-18T09:00:00+09:00"),
@@ -50,6 +52,7 @@ const approvedReservation: Reservation = {
 const provisionalReservation: Reservation = {
   ...approvedReservation,
   status: ReservationStatus.Provisional,
+  unlockArrangement: null,
 };
 
 const currentContent: ReservationContent = {
@@ -93,6 +96,7 @@ const argsWith = (
   appBaseUrl: "https://reserve.example.com",
   isStaff: true,
   now,
+  unlockArrangement: UnlockArrangement.Arranged,
   content: { ...currentContent, ...content },
   ...overrides,
 });
@@ -581,6 +585,115 @@ describe("editReservationDirectlyUseCase", () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
+        null,
+      );
+    });
+  });
+
+  describe("解錠の手配（COND-027）", () => {
+    it("承認済みで日時を変えたとき、解錠の手配が無いと InvalidInput になる", async () => {
+      const { deps, spies } = createDeps();
+
+      const result = await editReservationDirectlyUseCase(
+        deps,
+        argsWith(
+          {
+            startAt: new Date("2026-09-25T14:00:00+09:00"),
+            endAt: new Date("2026-09-25T16:00:00+09:00"),
+          },
+          { unlockArrangement: null },
+        ),
+      );
+
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr()).toMatchObject({
+        code: ReservationErrorCode.InvalidInput,
+        field: ReservationField.UnlockArrangement,
+        userMessage: "解錠の手配を「要手配」「手配済み」「不要」から選んでください。",
+      });
+      expect(spies.applyContentEdit).not.toHaveBeenCalled();
+    });
+
+    it("承認済みで日時を変えて選び直したとき、選んだ値が書かれ changes に入る", async () => {
+      const { deps, spies } = createDeps();
+
+      const result = await editReservationDirectlyUseCase(
+        deps,
+        argsWith(
+          {
+            startAt: new Date("2026-09-25T14:00:00+09:00"),
+            endAt: new Date("2026-09-25T16:00:00+09:00"),
+          },
+          { unlockArrangement: UnlockArrangement.Required },
+        ),
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unlockArrangement: UnlockArrangement.Required,
+        }),
+        expect.anything(),
+        expect.objectContaining({
+          changes: expect.objectContaining({
+            unlock_arrangement: {
+              before: "arranged",
+              after: "required",
+            },
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("承認済みで使用人数だけ変えたとき、送られた値を無視して今の値を書き changes に入らない", async () => {
+      const { deps, spies } = createDeps();
+
+      const result = await editReservationDirectlyUseCase(
+        deps,
+        argsWith({ headCount: 10 }, { unlockArrangement: UnlockArrangement.Required }),
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unlockArrangement: UnlockArrangement.Arranged,
+        }),
+        expect.anything(),
+        expect.objectContaining({
+          changes: expect.not.objectContaining({
+            unlock_arrangement: expect.anything(),
+          }),
+        }),
+        null,
+      );
+    });
+
+    it("仮予約で日時を変えたとき、送られた値を無視して null のまま維持される", async () => {
+      const { deps, spies } = createDeps({ reservation: provisionalReservation });
+
+      const result = await editReservationDirectlyUseCase(
+        deps,
+        argsWith(
+          {
+            startAt: new Date("2026-09-25T14:00:00+09:00"),
+            endAt: new Date("2026-09-25T16:00:00+09:00"),
+          },
+          { unlockArrangement: UnlockArrangement.Required },
+        ),
+      );
+
+      expect(result.isOk()).toBe(true);
+      expect(spies.applyContentEdit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unlockArrangement: null,
+        }),
+        expect.anything(),
+        expect.objectContaining({
+          changes: expect.not.objectContaining({
+            unlock_arrangement: expect.anything(),
+          }),
+        }),
         null,
       );
     });

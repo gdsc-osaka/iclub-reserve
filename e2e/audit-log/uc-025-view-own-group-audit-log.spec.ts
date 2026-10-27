@@ -226,6 +226,7 @@ test.describe("UC-025 自団体の操作履歴を閲覧する", { tag: "@UC-025"
     await openPage(page, `/reservations/${reservation.id}`);
     await page.getByRole("button", { name: "承認" }).click();
     const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
+    await dialog.getByLabel("要手配").click();
     await dialog.getByRole("button", { name: "承認する" }).click();
     await expect(page.getByText("承認済み", { exact: true })).toBeVisible();
 
