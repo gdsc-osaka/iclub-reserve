@@ -202,7 +202,6 @@ export default function EditReservation({ loaderData, actionData }: Route.Compon
     <PageShell reservationId={reservation.id}>
       <ReservationEditorForm
         purpose={{
-          kind: "edit",
           reservation,
           isDirect,
         }}

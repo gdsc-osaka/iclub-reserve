@@ -40,7 +40,6 @@ export interface ReservationFormReservationRow {
 
 /** Query が返す、マスク前の画面 1 つ分のデータ。 */
 export interface ReservationFormData {
-  readonly groups: readonly ReservationFormGroup[];
   readonly facilities: readonly ReservationFormFacility[];
   readonly reservations: readonly ReservationFormReservationRow[];
 }
@@ -62,51 +61,8 @@ export interface ReservationFormReservation {
   readonly isOwnGroup: boolean;
 }
 
-/** 申請し終えた直後に出す、いま作った予約の控え。 */
-export interface CreatedReservation {
-  readonly id: string;
-  readonly groupName: string;
-  readonly facilityName: string;
-  readonly startAt: Date;
-  readonly endAt: Date;
-  readonly headCount: number;
-  readonly note: string | null;
-  /**
-   * 作ったときの状態。仮予約の申請なら仮予約、事務局の直接作成（UC-008）なら承認済み。
-   *
-   * 控えの見出しと案内はこれで切り替える。URL の値で切り替えると、
-   * 書き換えただけで仮予約が「承認済み」と表示されてしまう。
-   */
-  readonly status: ReservationStatus;
-}
-
-/** 画面へ渡してよい、予約申請フォーム（SCR-002）1 画面分のデータ。 */
-export interface ReservationForm {
-  /** 申請元として選べる団体。1 件も無ければ申請できない（COND-006） */
-  readonly groups: readonly ReservationFormGroup[];
-  readonly facilities: readonly ReservationFormFacility[];
-  /** 表示中の期間に入っている予約。施設をまたいで入っている */
-  readonly reservations: readonly ReservationFormReservation[];
-  /** 直前の申請の控え。まだ申請していなければ null */
-  readonly created: CreatedReservation | null;
-  /**
-   * 見ている人が、承認済みの予約を直接作成できるかどうか（UC-008 / COND-009）。
-   *
-   * 権限表の CreateDirect から導く。事務局スタッフのときだけ true になる。
-   */
-  readonly canCreateDirectly: boolean;
-}
-
 /** {@link ReservationFormQuery.find} への入力。 */
 export interface ReservationFormArgs {
-  /**
-   * 団体を所属で絞り込むときのユーザー ID。
-   *
-   * null を渡すと所属で絞らず、有効な団体をすべて返す。
-   * 事務局が所属に関わらず任意の団体として申請できるようにするために使う（COND-009）。
-   * 「事務局かどうか」の判断はユースケース層が持ち、この層は絞るか絞らないかだけを受け取る。
-   */
-  readonly memberUserId: string | null;
   /** 予約を取得する期間の開始（この時刻を含む） */
   readonly from: Date;
   /** 予約を取得する期間の終了（この時刻を含まない） */
@@ -114,7 +70,7 @@ export interface ReservationFormArgs {
 }
 
 /**
- * 予約申請フォーム（SCR-002）の読み取り専用の窓口（ポート）。
+ * 予約変更フォームの読み取り専用の窓口（ポート）。
  *
  * 返る型はドメインの不変条件を持たないので、
  * **この結果を使って更新してはいけない**。更新は必ず Repository を通すこと。
@@ -123,19 +79,17 @@ export interface ReservationFormQuery {
   /**
    * フォームに出す選択肢と、期間内の予約をまとめて取得する。
    *
-   * - 選べる団体が無い場合: ok（`groups` が空の配列）
    * - 有効な施設が無い場合: ok（`facilities` が空の配列）
    * - DB アクセスに失敗した場合: err(DATABASE_ERROR)
    *
-   * 「見つからない」を NOT_FOUND にしないのは、どちらも画面側で
-   * 「まだ申請できません」と理由を説明したいため。エラーにすると
-   * 理由の分からないエラー画面になってしまう。
+   * 「見つからない」を NOT_FOUND にしないのは、画面側で理由を説明したいため。
+   * エラーにすると理由の分からないエラー画面になってしまう。
    *
-   * 予約は施設を絞らずに期間ぶんまとめて取る。画面（SCR-002）は
+   * 予約は施設を絞らずに期間ぶんまとめて取る。画面は
    * 施設を切り替えても同じ日を出し続けるので、絞って取ると
    * 切り替えのたびにサーバーへの往復が 1 回増えるだけになる。
    *
-   * 並び順は、団体・施設は名前の昇順（同名は ID の昇順）、
+   * 並び順は、施設は名前の昇順（同名は ID の昇順）、
    * 予約は開始日時の昇順（同時刻は ID の昇順）で固定する。
    */
   find(args: ReservationFormArgs): ResultAsync<ReservationFormData, QueryError>;

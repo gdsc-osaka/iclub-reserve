@@ -32,6 +32,7 @@ export function CalendarCard({
   selection,
   onOpenDraft,
   onOpenReservation,
+  className,
 }: Readonly<{
   facility: AvailabilityFacility;
   reservations: readonly AvailabilityReservation[];
@@ -47,9 +48,10 @@ export function CalendarCard({
   selection: CalendarSelection | null;
   onOpenDraft: (draft: CalendarDraft) => void;
   onOpenReservation: (reservationId: string) => void;
+  className?: string;
 }>) {
   return (
-    <Card className="min-h-0 min-w-0 flex-1 gap-0 overflow-hidden py-0">
+    <Card className={cn("min-h-0 min-w-0 flex-1 gap-0 overflow-hidden py-0", className)}>
       <CardHeader className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-3 border-b py-4">
         <CardTitle className="flex min-w-0 items-center gap-2 text-base">
           <CalendarDays aria-hidden className="size-4 shrink-0 text-muted-foreground" />
@@ -122,7 +124,7 @@ function Legend({ className }: Readonly<{ className?: string }>) {
         左端の線が太いものが所属団体の予約
       </li>
       <li className="ml-auto hidden md:block">
-        {`受付は ${FACILITY_OPEN_HOUR}:00〜${FACILITY_CLOSE_HOUR}:00 です。空いている時間を押すと申請できます。`}
+        {`受付は ${FACILITY_OPEN_HOUR}:00〜${FACILITY_CLOSE_HOUR}:00 です。空いている時間を押すかなぞると申請できます。`}
       </li>
     </ul>
   );

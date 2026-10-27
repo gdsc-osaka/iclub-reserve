@@ -21,6 +21,7 @@ import {
   toBlockedSlots,
   toDefaultRange,
   toPastSlots,
+  type RangeEdge,
   type SlotRange,
 } from "~/components/reservation/editor/reservation-slots";
 import { reservationStatusLabel } from "~/components/reservation/reservation-status-badge";
@@ -30,6 +31,7 @@ import type { AvailabilityReservation } from "~/query/facility/facility-availabi
 
 import { findDayIndex } from "./calendar-window";
 import type { CalendarDraft, CalendarSelection } from "./paths";
+import { useDraftGesture, type DraftGesture, type GestureDraft } from "./use-draft-gesture";
 
 /** 「9/12」の形式。日付の見出しの 2 行目に使う */
 const shortDateFormatter = new Intl.DateTimeFormat("ja-JP", {
@@ -97,6 +99,7 @@ export function AvailabilityCalendar({
   onOpenReservation: (reservationId: string) => void;
 }>) {
   const anchorIndex = findDayIndex(days, anchorKey);
+  const gesture = useDraftGesture({ onOpenDraft });
 
   return (
     /*
@@ -129,6 +132,7 @@ export function AvailabilityCalendar({
             now={now}
             canApply={canApply}
             selection={selection}
+            gesture={gesture}
             onOpenDraft={onOpenDraft}
             onOpenReservation={onOpenReservation}
           />
@@ -152,6 +156,22 @@ const toHiddenUntilReady = (index: number, anchorIndex: number): string | null =
     return "group-data-[ready=false]/calendar:hidden @min-[52rem]:group-data-[ready=false]/calendar:flex";
   }
   return null;
+};
+
+/**
+ * この日の列に描く仮の枠の時間帯。描かないなら null（時刻を選んでいない仮の枠も描かない）。
+ *
+ * なぞる操作・丸を動かす操作の途中は、URL の仮の枠の代わりに途中の時間帯を描く（ADR-014 決定 12）。
+ * 仮の枠が 2 つ見えないよう、操作中は操作している日にだけ描く。
+ */
+const toShownDraftRange = (
+  gestureDraft: GestureDraft | null,
+  selection: CalendarSelection | null,
+  dateKey: string,
+): SlotRange | null => {
+  if (gestureDraft !== null) return gestureDraft.dateKey === dateKey ? gestureDraft.range : null;
+  if (selection?.kind !== "draft" || selection.draft.dateKey !== dateKey) return null;
+  return selection.draft.range;
 };
 
 /**
@@ -210,6 +230,7 @@ function DayColumn({
   now,
   canApply,
   selection,
+  gesture,
   onOpenDraft,
   onOpenReservation,
 }: Readonly<{
@@ -219,6 +240,7 @@ function DayColumn({
   now: Date;
   canApply: boolean;
   selection: CalendarSelection | null;
+  gesture: DraftGesture;
   onOpenDraft: (draft: CalendarDraft) => void;
   onOpenReservation: (reservationId: string) => void;
 }>) {
@@ -232,9 +254,12 @@ function DayColumn({
   const blockedSlots = toBlockedSlots(blocks);
   // 過ぎた時刻からは申請できない。今日の現在時刻より前と、過ぎた日の枠がここに入る
   const pastSlots = toPastSlots(day.date, now);
+  // なぞる操作・丸を動かす操作で選べない枠（承認済み予約・過ぎた枠）
+  const unselectableSlots = new Set([...blockedSlots, ...pastSlots]);
   const nowMinutes = tokyoMinutesOfDay(now);
   const showNowLine = day.isToday && nowMinutes >= OPEN_MINUTES && nowMinutes <= CLOSE_MINUTES;
   const weekday = weekdayStyle(day);
+  const draftRange = toShownDraftRange(gesture.gestureDraft, selection, day.dateKey);
 
   return (
     <div
@@ -267,7 +292,7 @@ function DayColumn({
       <div
         data-slot="day-body"
         className={cn(
-          "relative isolate grid flex-1 border-l",
+          "relative isolate grid flex-1 border-l select-none",
           day.isToday ? "bg-primary/10" : weekday.surface,
         )}
         style={{
@@ -283,12 +308,20 @@ function DayColumn({
             isOccupied={blockedSlots.has(slotMinutes)}
             isPast={pastSlots.has(slotMinutes)}
             canApply={canApply}
-            onSelect={() => {
-              onOpenDraft({
-                dateKey: day.dateKey,
-                range: toDefaultRange(slotMinutes, blockedSlots),
-              });
-            }}
+            onPointerDown={(event) =>
+              gesture.onSlotPointerDown(event, day.dateKey, slotMinutes, unselectableSlots)
+            }
+            onPointerMove={gesture.onPointerMove}
+            onPointerUp={gesture.onPointerUp}
+            onPointerCancel={gesture.onPointerCancel}
+            onClick={() =>
+              gesture.onSlotClick(() => {
+                onOpenDraft({
+                  dateKey: day.dateKey,
+                  range: toDefaultRange(slotMinutes, blockedSlots),
+                });
+              })
+            }
           />
         ))}
 
@@ -313,8 +346,16 @@ function DayColumn({
           />
         ))}
 
-        {selection?.kind === "draft" && selection.draft.dateKey === day.dateKey && (
-          <DraftBlock range={selection.draft.range} />
+        {draftRange !== null && (
+          <DraftBlock
+            range={draftRange}
+            onHandlePointerDown={(event, edge) =>
+              gesture.onHandlePointerDown(event, day.dateKey, draftRange, edge, unselectableSlots)
+            }
+            onHandlePointerMove={gesture.onPointerMove}
+            onHandlePointerUp={gesture.onPointerUp}
+            onHandlePointerCancel={gesture.onPointerCancel}
+          />
         )}
       </div>
     </div>
@@ -385,14 +426,22 @@ function SlotButton({
   isOccupied,
   isPast,
   canApply,
-  onSelect,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  onClick,
 }: Readonly<{
   day: AvailabilityDay;
   slotMinutes: number;
   isOccupied: boolean;
   isPast: boolean;
   canApply: boolean;
-  onSelect: () => void;
+  onPointerDown: (event: React.PointerEvent) => void;
+  onPointerMove: (event: React.PointerEvent) => void;
+  onPointerUp: () => void;
+  onPointerCancel: () => void;
+  onClick: () => void;
 }>) {
   const at = `${formatMonthDay(day.date)} ${toTokyoTimeKey(slotMinutes)}`;
   const label = isOccupied
@@ -420,7 +469,11 @@ function SlotButton({
          */
         isPast && "bg-muted/40",
       )}
-      onClick={onSelect}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onClick={onClick}
     />
   );
 }
@@ -529,14 +582,33 @@ function ReservationBlock({
 /**
  * 仮の枠。これから申請する時間帯を、予約の帯より手前に描く。
  *
- * 押せなくしている（pointer-events-none）のは、下の 30 分の枠を押して選び直せるようにするため。
- * 中身は欄の見出しと時間帯で、読み上げでは欄を読めば足りるので隠す。
+ * 枠そのものは押せなくしている（pointer-events-none）。下の 30 分の枠を押して選び直せるようにするため。
+ * 上端（開始）と下端（終了）の丸だけ押せるようにし、上下に動かして時間帯を伸び縮みさせられる（ADR-014 決定 12）。
+ * 中身は欄の見出しと時間帯で、読み上げでは欄を読めば足りるので全体を隠す（aria-hidden）。
  */
-function DraftBlock({ range }: Readonly<{ range: SlotRange }>) {
+function DraftBlock({
+  range,
+  onHandlePointerDown,
+  onHandlePointerMove,
+  onHandlePointerUp,
+  onHandlePointerCancel,
+}: Readonly<{
+  range: SlotRange;
+  onHandlePointerDown: (event: React.PointerEvent, edge: RangeEdge) => void;
+  onHandlePointerMove: (event: React.PointerEvent) => void;
+  onHandlePointerUp: () => void;
+  onHandlePointerCancel: () => void;
+}>) {
+  const handleProps = {
+    onPointerMove: onHandlePointerMove,
+    onPointerUp: onHandlePointerUp,
+    onPointerCancel: onHandlePointerCancel,
+  };
+
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 z-10 flex flex-col overflow-hidden rounded-md border-2 border-primary bg-primary/15 px-1.5 py-1 text-[11px] leading-tight"
+      className="pointer-events-none absolute inset-x-0 z-10 flex flex-col rounded-md border-2 border-primary bg-primary/15 px-1.5 py-1 text-[11px] leading-tight"
       style={{
         top: `${toAxisPercent(range.startMinutes - OPEN_MINUTES)}%`,
         height: `${toAxisPercent(range.endMinutes - range.startMinutes)}%`,
@@ -546,6 +618,58 @@ function DraftBlock({ range }: Readonly<{ range: SlotRange }>) {
       <span className="tabular-nums">
         {toTokyoTimeKey(range.startMinutes)}〜{toTokyoTimeKey(range.endMinutes)}
       </span>
+
+      <DraftHandle
+        edge="start"
+        onPointerDown={(event) => onHandlePointerDown(event, "start")}
+        {...handleProps}
+      />
+      <DraftHandle
+        edge="end"
+        onPointerDown={(event) => onHandlePointerDown(event, "end")}
+        {...handleProps}
+      />
+    </div>
+  );
+}
+
+/**
+ * 仮の枠の端の丸。上下に動かして時間帯を伸び縮みさせる（ADR-014 決定 12）。
+ *
+ * Google カレンダーに合わせて、開始の丸は上端の左寄り、終了の丸は下端の右寄りに置き、枠の線の上に中心を合わせる。
+ * 見た目は小さな丸（size-3）だが、指でも押せるよう透明な外側の箱（size-8）で押せる範囲を広げている。
+ *
+ * `touch-none` を付けるのは、丸の上で指を動かしたときに、カレンダーが縦にスクロールせず丸が動くようにするため。
+ * 30 分の枠には付けない。指でなぞる操作は無く、枠の上ではスクロールに使う。
+ *
+ * 読み上げでは仮の枠ごと隠れる。E2E で探せるよう data-slot を付ける。
+ */
+function DraftHandle({
+  edge,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+}: Readonly<{
+  edge: RangeEdge;
+  onPointerDown: (event: React.PointerEvent) => void;
+  onPointerMove: (event: React.PointerEvent) => void;
+  onPointerUp: () => void;
+  onPointerCancel: () => void;
+}>) {
+  return (
+    <div
+      data-slot={edge === "start" ? "draft-start-handle" : "draft-end-handle"}
+      className={cn(
+        "pointer-events-auto absolute flex size-8 cursor-ns-resize touch-none items-center justify-center",
+        edge === "start" ? "-top-4 left-2" : "-bottom-4 right-2",
+      )}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+    >
+      <span className="size-3 rounded-full border-2 border-primary bg-card shadow-xs" />
     </div>
   );
 }

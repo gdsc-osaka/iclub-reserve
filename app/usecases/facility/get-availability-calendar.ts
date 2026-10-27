@@ -15,6 +15,7 @@ import type {
   FacilityAvailabilityCalendarQuery,
 } from "~/query/facility/facility-availability-calendar";
 import type { HolidayQuery } from "~/query/holiday";
+import type { ApplicantGroupQuery } from "~/query/reservation/applicant-groups";
 import type { UserGroupList, UserGroupListQuery } from "~/query/user/user-group-list";
 
 /** このユースケースが必要とする依存 */
@@ -24,6 +25,8 @@ export interface GetAvailabilityCalendarDeps {
   readonly userGroupListQuery: UserGroupListQuery;
   /** 表示期間内の祝日を取得するクエリ */
   readonly holidayQuery: HolidayQuery;
+  /** 申請元として選べる団体を取得するクエリ */
+  readonly applicantGroupQuery: ApplicantGroupQuery;
 }
 
 /** このユースケースへの入力 */
@@ -112,8 +115,13 @@ const canApplyReservation = (groups: UserGroupList, isStaff: boolean): boolean =
  * 知るためのものだから。自団体の予約だけでは空いているか分からない。
  * そのうえで、他団体の予約は使用人数・備考を落として渡す（COND-008）。
  *
- * 所属団体の取得とカレンダーの取得は同時に投げる。
- * 順に待つと D1 との往復が 2 回分そのまま表示の待ち時間になる。
+ * 申請元として選べる団体は、事務局かどうかで変わる。
+ * 事務局は所属に関わらず任意の団体として申請できるので、所属で絞らない（COND-009）。
+ * 一般のユーザーは自分が所属している有効な団体だけ（COND-006）。
+ * 「事務局かどうか」を Query に渡さずにここで絞り方へ翻訳しているのは、
+ * この分岐が要件（COND-009）であって、読み取りの都合ではないため。
+ *
+ * 4 つの読み取りは同時に投げる。順に待つと D1 との往復がそのまま待ち時間になる。
  *
  * NOTE: 施設を指定しない（facilityId が null）呼び出しを許しているのは、
  * 画面を開いた直後にどの施設を出すかが、施設の一覧を見るまで決まらないため。
@@ -134,7 +142,10 @@ export const getAvailabilityCalendarUseCase = (
       to: args.to,
     }),
     deps.holidayQuery.findHolidaysBetween(fromDateKey, toDateKey),
-  ]).map(([groups, calendar, holidayDateKeys]): AvailabilityCalendar => {
+    deps.applicantGroupQuery.find({
+      memberUserId: args.isStaff ? null : args.actorUserId,
+    }),
+  ]).map(([groups, calendar, holidayDateKeys, applicantGroups]): AvailabilityCalendar => {
     const viewer: CalendarViewer = {
       userId: args.actorUserId,
       isStaff: args.isStaff,
@@ -145,6 +156,7 @@ export const getAvailabilityCalendarUseCase = (
       facilities: calendar.facilities,
       facility: calendar.facility,
       reservations: calendar.reservations.map((row) => toVisibleReservation(row, viewer, args.now)),
+      applicantGroups,
       canApplyReservation: canApplyReservation(groups, args.isStaff),
       canCreateDirectly: canAct(
         reservationPermissions,

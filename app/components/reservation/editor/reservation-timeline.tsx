@@ -21,6 +21,7 @@ import {
 
 import {
   dragRange,
+  slotAtRatio,
   startSlotMinutes,
   type SlotRange,
   type TimelineReservation,
@@ -118,9 +119,7 @@ export function ReservationTimeline({
     const rect = gridRef.current?.getBoundingClientRect();
     if (rect === undefined || rect.height === 0) return null;
 
-    const index = Math.floor(((clientY - rect.top) / rect.height) * startSlotMinutes.length);
-
-    return startSlotMinutes[Math.min(startSlotMinutes.length - 1, Math.max(0, index))] ?? null;
+    return slotAtRatio((clientY - rect.top) / rect.height);
   };
 
   const endDrag = () => {

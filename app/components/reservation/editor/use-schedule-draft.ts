@@ -1,14 +1,13 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
-import { ReservationStatus } from "~/domain/reservation";
 import type {
   ReservationFormFacility,
   ReservationFormReservation,
 } from "~/query/reservation/reservation-form";
 
 import {
-  findOverlapping,
   toBlockedSlots,
+  toConflicts,
   toPastSlots,
   toTimelineReservations,
   type SlotRange,
@@ -77,7 +76,10 @@ export function useScheduleDraft({
   const facility = facilities.find((item) => item.id === facilityId) ?? facilities[0];
 
   const items = toTimelineReservations(reservations, facility.id, day);
-  const overlapping = range === null ? [] : findOverlapping(items, range);
+  const { approvedConflicts, provisionalConflicts } =
+    range === null
+      ? { approvedConflicts: [], provisionalConflicts: [] }
+      : toConflicts(items, range);
 
   return {
     day,
@@ -89,11 +91,7 @@ export function useScheduleDraft({
     items,
     blockedSlots: toBlockedSlots(items),
     pastSlots: toPastSlots(day, now),
-    approvedConflicts: overlapping.filter(
-      (item) => item.reservation.status === ReservationStatus.Approved,
-    ),
-    provisionalConflicts: overlapping.filter(
-      (item) => item.reservation.status === ReservationStatus.Provisional,
-    ),
+    approvedConflicts,
+    provisionalConflicts,
   };
 }

@@ -78,8 +78,7 @@ export interface GetReservationEditFormResult {
  * action（`editReservationUseCase` / `editReservationDirectlyUseCase`）と同じ判定を先に通し、
  * 変更できない予約では画面を開かせない。開けてから送信で断られても、入力が無駄になるだけなので。
  *
- * 施設の選択肢と表示する日の予約は、申請フォーム（SCR-002）と同じ Query から読む。
- * 申請元の団体の一覧（`groups`）も一緒に返ってくるが、変更では団体を変えられないので使わない。
+ * 施設の選択肢と表示する日の予約は、ReservationFormQuery から読む。
  */
 export const getReservationEditFormUseCase = (
   deps: GetReservationEditFormDeps,
@@ -120,9 +119,9 @@ export const getReservationEditFormUseCase = (
         cause: error,
       }));
 
-    // 団体は使わないので、所属で絞るかどうかはどちらでもよい。絞らずに取る
+    // 表示する期間の施設と予約を取る
     const formTask = deps.reservationFormQuery
-      .find({ memberUserId: null, from, to })
+      .find({ from, to })
       .mapErr((error): ReservationError => ({
         code: ReservationErrorCode.DatabaseError,
         message: "予約フォーム用データを読み取れなかった。",

@@ -151,7 +151,7 @@ export function SchedulePickerSheet({
         </div>
 
         <SheetFooter className="gap-3 border-t pb-[calc(1rem+env(safe-area-inset-bottom))]">
-          <ScheduleConflictAlerts draft={draft} />
+          <ScheduleConflictAlerts conflicts={draft} />
 
           <TimeRangeFields
             range={draft.range}
