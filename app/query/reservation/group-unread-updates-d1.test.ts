@@ -356,6 +356,41 @@ describe("findGroupUnreadUpdates", () => {
     expect(item.otherCount).toBe(2); // 承認 + メッセージ 1
   });
 
+  it("承認と同時に送ったメッセージ（同じ日時）は、承認ではなくメッセージが行の代表になる（REQ-048）", async () => {
+    await insertReservation("res_1", USER_APPLICANT.id, ReservationStatus.Approved);
+
+    const approvedAt = new Date("2026-10-15T10:00:00+09:00");
+    await insertAuditLog(
+      "log_app",
+      "res_1",
+      USER_STAFF.id,
+      true,
+      AuditLogAction.ReservationApprove,
+      approvedAt,
+    );
+    await insertMessage(
+      "msg_1",
+      "res_1",
+      USER_STAFF.id,
+      true,
+      "カードキーは事務局で受け取ってください",
+      approvedAt,
+    );
+
+    const res = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_APPLICANT.id,
+      now: NOW,
+    });
+    expect(res.isOk()).toBe(true);
+    if (!res.isOk()) return;
+
+    expect(res.value.items).toHaveLength(1);
+    const item = res.value.items[0]!;
+    expect(item.latestEvent.type).toBe(GroupUnreadEventType.Message);
+    expect(item.latestEvent.messageBody).toBe("カードキーは事務局で受け取ってください");
+    expect(item.otherCount).toBe(1); // 承認
+  });
+
   it("10 件を超えた予約は overflowCount に反映され、allUnreadReservationIds にはすべて含まれる", async () => {
     // 12 件の予約を作成し、それぞれメッセージを付ける
     for (let i = 1; i <= 12; i++) {

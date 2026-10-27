@@ -1,9 +1,15 @@
+import { createId } from "@paralleldrive/cuid2";
 import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
 import { toCalendarSyncDraft } from "~/domain/calendar";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
-import { createReservationMailDrafts, transitionMailEvent } from "~/domain/mail/reservation-mail";
+import {
+  createReservationMailDrafts,
+  transitionMailEvent,
+  type ReservationMailAudience,
+} from "~/domain/mail/reservation-mail";
+import { selectApprovalMailRecipients } from "~/domain/mail/reservation-message-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import {
   ReservationErrorCode,
@@ -16,6 +22,11 @@ import {
   toReservationStatusChanges,
   transitionAuditLogAction,
 } from "~/domain/reservation/audit-log";
+import {
+  isSentAsStaff,
+  validateOptionalReservationMessageBody,
+  type ReservationMessage,
+} from "~/domain/reservation/message";
 import {
   canPerformTransition,
   canTransition,
@@ -63,6 +74,13 @@ export interface ChangeReservationStatusArgs {
    * 承認（Approve）のときだけ使い、それ以外の操作では送られてきても読まず列にも触れない。
    */
   readonly unlockArrangement?: UnlockArrangement | null;
+  /**
+   * 承認と同時に団体へ送るメッセージ（REQ-048 / COND-023）。画面から届いた未検証の本文。
+   *
+   * 承認（Approve）のときだけ使い、それ以外の操作では送られてきても読まない。
+   * 欄は任意なので、空欄や空白だけなら添えなかったものとして扱う。
+   */
+  readonly message?: string | null;
   /** 更新日時の基準となる日時（テスト容易化のため任意指定可能） */
   readonly now?: Date;
   /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
@@ -74,7 +92,37 @@ export interface ChangeReservationStatusResult {
   readonly reservationId: string;
   readonly status: ReservationStatus;
   readonly statusReason: string | null;
+  /** 承認と同時に送ったメッセージの ID。添えなかったときは null */
+  readonly messageId: string | null;
 }
+
+/**
+ * 状態変更の通知（EVT-002/003/005/006/007）の宛先を引く。
+ *
+ * 承認と同時にメッセージを送ったときは、メッセージ通知（EVT-008）を別に送らないかわりに、
+ * EVT-008 で事務局としての送信を受け取る人（その予約に団体側としてメッセージを送ったことのある人）も
+ * 承認通知の宛先に加える（EVT-005）。どちらの読み取りも、申請者・団体の管理者を同じ条件で引く。
+ */
+const resolveTransitionMailAudience = (
+  deps: Pick<ChangeReservationStatusDeps, "reservationMailRecipientsQuery">,
+  reservationId: string,
+  message: ReservationMessage | null,
+): ResultAsync<ReservationMailAudience, ReservationError> => {
+  if (message === null) {
+    return deps.reservationMailRecipientsQuery
+      .findByReservationId(reservationId)
+      .mapErr(toRecipientsError);
+  }
+
+  return deps.reservationMailRecipientsQuery
+    .findForMessage(reservationId)
+    .mapErr(toRecipientsError)
+    .map((audience) => ({
+      groupMembers: selectApprovalMailRecipients(audience, message.senderId),
+      // 承認通知は事務局に送らない（notifiesStaff）。操作したのが事務局のため
+      staff: [],
+    }));
+};
 
 /**
  * 予約のステータスを変更するユースケース（UC-003 / UC-004 / UC-006 / UC-007）。
@@ -83,7 +131,7 @@ export interface ChangeReservationStatusResult {
  * 権限と状態遷移（canTransition）を、理由の検証（validateTransitionReason）より先に置く。
  * 操作そのものが許されていない人に「理由を入力してください」と返しても、
  * 入力し直したところで結局は弾かれる。承認で選ぶ解錠の手配（validateUnlockArrangement・COND-027）も、
- * 同じ理由で理由の検証の後に確かめる。
+ * 同じ理由で理由の検証の後に確かめる。承認と同時に送るメッセージの本文（COND-023）は、その後に確かめる。
  * 事務局だけの操作では、事務局かどうかをさらに前、予約を引くより前に確かめる
  * （予約の有無を事務局でない人に伝えないため。本文のコメントを参照）。
  *
@@ -97,6 +145,12 @@ export interface ChangeReservationStatusResult {
  * ここまでの確認結果には頼らず、「読んだときのステータスと更新日時から変わっていないこと」を
  * UPDATE 文の条件に持ち込む。
  * 状態変更通知メールは、その UPDATE と不可分に outbox へ積む（ADR-002 決定 3）。
+ *
+ * 【承認と同時に送るメッセージ（REQ-048 / COND-023）】
+ * メッセージの行も同じ UPDATE と不可分に書く。承認が通らなければ（COND-001 や競合）メッセージも残らず、
+ * 本文が条件を満たさなければ承認もしない。通知は承認通知（EVT-005）の 1 通にまとめ、
+ * メッセージ通知（EVT-008）は積まない。別に送ると、団体には短い間に 2 通届くためである。
+ * 送った人の既読（COND-026 (5)）は、予約詳細からの送信と同じく、ルートの側で進める。
  */
 export const changeReservationStatusUseCase = (
   deps: ChangeReservationStatusDeps,
@@ -135,6 +189,27 @@ export const changeReservationStatusUseCase = (
       args.transition === ReservationTransition.Approve
         ? yield* validateUnlockArrangement(args.unlockArrangement ?? null)
         : undefined;
+    // 承認と同時に送るメッセージの検証（COND-023）。承認のときだけ読み、空欄なら添えない
+    const messageBody =
+      args.transition === ReservationTransition.Approve
+        ? yield* validateOptionalReservationMessageBody(args.message ?? null)
+        : null;
+    /*
+     * 承認できるのは事務局の画面だけなので、sent_as_staff は必ず true になる。
+     * それでも UC-009 と同じ判定（isSentAsStaff）で決め、決め方を 1 か所にまとめておく（COND-023）。
+     * 送った日時は承認と同じにする。
+     */
+    const message: ReservationMessage | null =
+      messageBody === null
+        ? null
+        : {
+            id: createId(),
+            reservationId: reservation.id,
+            senderId: args.actorUserId,
+            sentAsStaff: isSentAsStaff(actor),
+            body: messageBody,
+            sentAt: now,
+          };
 
     // 承認のときだけ、同一施設・同一時間帯の承認済み予約を確かめる（COND-001）
     const overlapCheck =
@@ -147,10 +222,8 @@ export const changeReservationStatusUseCase = (
         : okAsync<null, ReservationError>(null);
 
     // 状態変更通知メール（EVT-002/003/005/006/007）を組み立てる
-    const mailDraftsCheck = deps.reservationMailRecipientsQuery
-      .findByReservationId(reservation.id)
-      .mapErr(toRecipientsError)
-      .map((audience) =>
+    const mailDraftsCheck = resolveTransitionMailAudience(deps, reservation.id, message).map(
+      (audience) =>
         createReservationMailDrafts(
           transitionMailEvent[args.transition],
           {
@@ -163,8 +236,9 @@ export const changeReservationStatusUseCase = (
           },
           audience,
           args.appBaseUrl,
+          message?.body ?? null,
         ),
-      );
+    );
 
     // この 2 つは同時に投げる。どちらも D1 への往復なので、順に待つとそのまま待ち時間になる
     const [, mailDrafts] = yield* ResultAsync.combine([overlapCheck, mailDraftsCheck]);
@@ -214,6 +288,7 @@ export const changeReservationStatusUseCase = (
       mailDrafts,
       auditLog,
       calendarSyncDraft,
+      message,
     );
 
     if (!outcome.applied) {
@@ -225,12 +300,13 @@ export const changeReservationStatusUseCase = (
       });
     }
 
-    // 競合で 0 件更新だったときは outbox にも積まれていないため、ここへは来ない
+    // 競合で 0 件更新だったときは outbox にもメッセージにも書かれていないため、ここへは来ない
     requestImmediateDelivery(deps.mailOutboxNotifier, outcome.enqueuedMailIds);
 
     return okAsync({
       reservationId: reservation.id,
       status: targetStatus,
       statusReason,
+      messageId: message?.id ?? null,
     });
   });

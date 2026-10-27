@@ -4,6 +4,7 @@ import { formatDateTime } from "~/lib/date";
 import type { ReservationMessage } from "../reservation/message";
 import {
   createReservationMessageMailDrafts,
+  selectApprovalMailRecipients,
   selectReservationMessageRecipients,
   type ReservationMessageAudience,
 } from "./reservation-message-mail";
@@ -89,6 +90,33 @@ describe("selectReservationMessageRecipients", () => {
     });
 
     expect(recipients.find((r) => r.userId === userApplicant.userId)).toBeUndefined();
+  });
+});
+
+describe("selectApprovalMailRecipients", () => {
+  it("申請者・管理者に、過去に団体側として送った人を加え、メールアドレスの重複を除く。事務局は入れない", () => {
+    const recipients = selectApprovalMailRecipients(audience, "usr_staff1");
+
+    // 申請者・管理者が先、加える人が後。userApplicant は priorGroupSideSenders にもいるが 1 回だけ
+    expect(recipients).toEqual([userApplicant, userAdmin, userStaffAdmin, userPriorSender]);
+  });
+
+  it("加える人からは送信者本人を除く", () => {
+    const recipients = selectApprovalMailRecipients(
+      { groupMembers: [userApplicant], priorGroupSideSenders: [userPriorSender, userStaffAdmin] },
+      userStaffAdmin.userId,
+    );
+
+    expect(recipients).toEqual([userApplicant, userPriorSender]);
+  });
+
+  it("申請者・管理者は、送信者本人でも除かない（承認だけのときの宛先と同じ）", () => {
+    const recipients = selectApprovalMailRecipients(
+      { groupMembers: [userApplicant, userStaffAdmin], priorGroupSideSenders: [] },
+      userStaffAdmin.userId,
+    );
+
+    expect(recipients).toEqual([userApplicant, userStaffAdmin]);
   });
 });
 

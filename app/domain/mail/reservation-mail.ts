@@ -4,6 +4,7 @@ import {
   type DirectReservationEditOutcome,
 } from "~/domain/reservation/edit";
 import type { UnlockArrangement } from "~/domain/reservation";
+import { STAFF_SENDER_LABEL } from "~/domain/reservation/message";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { unlockArrangementGroupNotice } from "~/domain/reservation/unlock-arrangement";
 import { AppArea } from "~/lib/app-area";
@@ -102,6 +103,8 @@ interface EventMailCopy {
   readonly allowsReason: boolean;
   /** 解錠の手配の案内を載せるか（EVT-005） */
   readonly includesUnlockNotice: boolean;
+  /** 操作と同時に送ったメッセージを載せるか（EVT-005・REQ-048） */
+  readonly includesMessage: boolean;
 }
 
 const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
@@ -110,36 +113,42 @@ const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
     opening: "施設・設備の利用予約が申請されました。",
     allowsReason: false,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.Withdrawn]: {
     subject: "【i-Club 予約システム】施設・設備の仮予約が取り消されました",
     opening: "申請されていた仮予約が取り消されました。",
     allowsReason: true,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.Cancelled]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約がキャンセルされました",
     opening: "承認済みの利用予約がキャンセルされました。",
     allowsReason: true,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.Approved]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
     opening: "申請されていた利用予約が承認されました。",
     allowsReason: false,
     includesUnlockNotice: true,
+    includesMessage: true,
   },
   [ReservationMailEvent.Rejected]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が却下されました",
     opening: "申請されていた利用予約が却下されました。",
     allowsReason: true,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.CancelledByStaff]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
     opening: "承認済みの利用予約が事務局によりキャンセルされました。",
     allowsReason: true,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.ApprovedEdited]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約の内容が変更されました",
@@ -147,6 +156,7 @@ const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
       "承認済みの利用予約の内容（使用人数・備考）が変更されました。承認済みのまま変わりません。",
     allowsReason: false,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.ReapprovalRequested]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
@@ -154,18 +164,21 @@ const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
       "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。事務局が改めて承認するまで、施設・設備は利用できません。",
     allowsReason: false,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.ProvisionalEdited]: {
     subject: "【i-Club 予約システム】施設・設備の仮予約の内容が変更されました",
     opening: "申請されていた仮予約の内容が変更されました。",
     allowsReason: false,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
   [ReservationMailEvent.EditedByStaff]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が事務局により変更されました",
     opening: "利用予約の内容が事務局により変更されました。予約の状態は変わりません。",
     allowsReason: false,
     includesUnlockNotice: false,
+    includesMessage: false,
   },
 };
 
@@ -191,7 +204,7 @@ export interface ReservationMailSubject {
 
 /**
  * イベント種別と予約情報から本文を組み立てる純粋関数。
- * 署名と冒頭以外の骨組みは全イベント共通で、理由の有無のみイベントと入力値により分岐する。
+ * 署名と冒頭以外の骨組みは全イベント共通で、理由・解錠の手配の案内・メッセージの有無だけがイベントと入力値により分岐する。
  * 末尾には、どのイベントでも予約詳細（SCR-005）へのリンクを載せる（EVT-001〜007・EVT-012・EVT-017）。
  * リンクは `area` の画面の予約詳細にする（団体側の宛先は利用者の画面、事務局の宛先は事務局の画面。COND-030 の (5)）。
  */
@@ -200,6 +213,7 @@ const buildBody = (
   reservation: ReservationMailSubject,
   appBaseUrl: string,
   area: AppArea,
+  message: string | null,
 ): string => {
   const copy = eventMailCopy[event];
   const detailUrl = `${appBaseUrl}${toReservationDetailPath(area, reservation.id)}`;
@@ -224,9 +238,23 @@ const buildBody = (
     }
   }
 
+  /*
+   * 承認と同時に送ったメッセージ（EVT-005・REQ-048）。解錠の手配の案内の後に置く。
+   * 「方法はメッセージを確認してください」の案内のすぐ下に、その方法が読めるようにするため。
+   * 送るのは事務局としての送信だけで、宛先はすべて団体側なので、送信者は「事務局」とだけ出す（COND-008）。
+   */
+  const includesMessage = copy.includesMessage && message !== null;
+  if (includesMessage) {
+    lines.push("", `${STAFF_SENDER_LABEL}からのメッセージ:`, message);
+  }
+
   lines.push(
     "",
     "予約の詳細は、次のページでご確認ください。",
+    // 返信の仕方は、メッセージ通知（EVT-008）と同じく案内する
+    ...(includesMessage
+      ? ["メッセージへの返信は、このメールではなく次のページから送ってください。"]
+      : []),
     detailUrl,
     "",
     "----------------------------------------",
@@ -260,6 +288,8 @@ const buildBody = (
  * @param reservation 対象の予約情報
  * @param audience 宛先（団体メンバーおよび事務局）
  * @param appBaseUrl 予約詳細へのリンクを組み立てるための、アプリの URL の起点（例: `https://example.com`）
+ * @param message 操作と同時に送ったメッセージの本文（検証済み）。承認通知（EVT-005）にだけ載せ、
+ *   ほかのイベントでは渡しても載せない。添えなかったときは null
  * @returns Transactional Outbox に積むための MailDraft の配列
  */
 export const createReservationMailDrafts = (
@@ -267,6 +297,7 @@ export const createReservationMailDrafts = (
   reservation: ReservationMailSubject,
   audience: ReservationMailAudience,
   appBaseUrl: string,
+  message: string | null = null,
 ): readonly MailDraft[] => {
   const copy = eventMailCopy[event];
   /*
@@ -274,7 +305,7 @@ export const createReservationMailDrafts = (
    * 団体側には利用者の画面、事務局には事務局の画面を載せる（COND-030 の (5)・ADR-016 決定 17）。
    */
   const toDrafts = (recipients: ReservationMailRecipients, area: AppArea): MailDraft[] => {
-    const text = buildBody(event, reservation, appBaseUrl, area);
+    const text = buildBody(event, reservation, appBaseUrl, area, message);
     return recipients.map((recipient) => {
       const targetId = recipient.userId ?? recipient.address;
       return {

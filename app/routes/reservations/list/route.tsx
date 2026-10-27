@@ -87,24 +87,22 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = createDb(env.DB);
+  // ログの where に操作の種類まで入れて、どの操作で失敗したかを絞り込めるようにする
+  const where = `reservations.${transition}`;
   const result = await changeReservationStatus(db, request, user, {
     reservationId,
     transition,
     reason,
     unlockArrangement: formData.get("unlockArrangement"),
+    message: formData.get("message"),
     now: new Date(),
     actsAsStaff,
+    where,
   });
 
   if (result.isErr()) {
-    /*
-     * 一覧には欄が無いので、誤りはすべて一覧の上に出す。
-     * ログの where に操作の種類まで入れて、どの操作で失敗したかを絞り込めるようにする。
-     */
-    return reservationActionErrors(
-      { where: `reservations.${transition}`, userId: user.id },
-      result.error,
-    );
+    // 一覧には欄が無いので、誤りはすべて一覧の上に出す
+    return reservationActionErrors({ where, userId: user.id }, result.error);
   }
 
   /*

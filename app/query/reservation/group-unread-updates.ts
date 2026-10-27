@@ -196,6 +196,11 @@ export const findGroupUnreadUpdates = (
       wrapError(QueryErrorCode.DatabaseError, "団体側の未読情報の取得に失敗しました。"),
     );
 
+    /*
+     * メッセージを操作履歴より先に渡す。同じ日時なら、メッセージを行の代表にするため（toUnreadRows を参照）。
+     * 承認と同時に送ったメッセージ（REQ-048）は、承認の記録と同じ日時になる。代表に出すなら、
+     * 「承認されました」より、カードキーの受け取り方などが書かれたメッセージの本文のほうが役に立つ。
+     */
     const allEvents: RawEvent[] = [
       ...messageRows.map((row): RawEvent => ({
         reservationId: row.reservationId,

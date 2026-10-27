@@ -134,20 +134,20 @@ export async function action({ request, context }: Route.ActionArgs) {
     const reservationId = readFormText(formData, "reservationId");
     const reason = formData.get("reason");
 
+    const where = `staff-home.action.${transition}`;
     const result = await changeReservationStatus(db, request, user, {
       reservationId,
       transition,
       reason,
       unlockArrangement: formData.get("unlockArrangement"),
+      message: formData.get("message"),
       now,
       actsAsStaff,
+      where,
     });
 
     if (result.isErr()) {
-      return reservationActionErrors(
-        { where: `staff-home.action.${transition}`, userId: user.id },
-        result.error,
-      );
+      return reservationActionErrors({ where, userId: user.id }, result.error);
     }
     return { ok: true } as const;
   }

@@ -22,10 +22,12 @@ import {
   type ReservationRepository,
 } from "~/domain/reservation";
 import type { CalendarSyncTaskDraft } from "~/domain/calendar";
+import type { ReservationMessage } from "~/domain/reservation/message";
 import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import { guardedCalendarSyncTaskInserts } from "../calendar/calendar-sync-task-writes";
 import type { Database } from "../db";
 import { guardedMailOutboxInserts, mailOutboxInserts } from "../mail/mail-outbox-writes";
+import { guardedReservationMessageInserts } from "./reservation-message-writes";
 
 /** 重なりを探すとき、同じ予約テーブルをもう一度読むための別名 */
 const overlapping = alias(reservationTable, "overlapping");
@@ -109,12 +111,13 @@ export const createReservationRepository = (db: Database): ReservationRepository
    * - 操作履歴は UPDATE の**直前**に置き、UPDATE と同じ条件（更新前の状態）を見る。
    *   仕組みは guardedAuditLogInsert の JSDoc を参照。
    * - メールは UPDATE の**後**に置き、「直前の UPDATE が書いた行」（更新後の status と updatedAt）を見る。
-   *   仕組みは guardedMailOutboxInserts の JSDoc を参照。
+   *   仕組みは guardedMailOutboxInserts の JSDoc を参照。操作と同時に送るメッセージも同じ条件で書く。
    *
    * @param updateQuery 更新した行の id を返す（`.returning({ id })` 付きの）条件付き UPDATE
    * @param condition updateQuery と同じ WHERE の条件。操作履歴の INSERT と共有する
    * @param written 更新後の行を見分ける値
    * @param auditLog 更新できたときに書く操作履歴
+   * @param message 更新できたときに書く、操作と同時に送るメッセージ（無ければ null。COND-023）
    * @param subject エラーの説明に入れる、何を書き込もうとしたか
    */
   const runGuardedUpdate = (
@@ -124,6 +127,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
     calendarSync: CalendarSyncTaskDraft | null,
+    message: ReservationMessage | null,
     subject: string,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
     const auditStatement = guardedAuditLogInsert(db, auditLog, {
@@ -137,6 +141,11 @@ export const createReservationRepository = (db: Database): ReservationRepository
       eq(reservationTable.updatedAt, written.updatedAt),
     );
 
+    const messageStatements = guardedReservationMessageInserts(db, message, {
+      from: reservationTable,
+      where: guardCondition,
+    });
+
     const outbox = guardedMailOutboxInserts(db, mails, {
       from: reservationTable,
       where: guardCondition,
@@ -148,10 +157,16 @@ export const createReservationRepository = (db: Database): ReservationRepository
     });
 
     return ResultAsync.fromPromise(
-      db.batch([auditStatement, updateQuery, ...outbox.statements, ...calendarSyncStatements]),
+      db.batch([
+        auditStatement,
+        updateQuery,
+        ...messageStatements,
+        ...outbox.statements,
+        ...calendarSyncStatements,
+      ]),
       wrapError(
         ReservationErrorCode.DatabaseError,
-        `${subject}、操作履歴、通知の outbox、カレンダー同期タスクを書き込めなかった。`,
+        `${subject}、操作履歴、メッセージ、通知の outbox、カレンダー同期タスクを書き込めなかった。`,
       ),
     ).map((results) => {
       const updateRows = results[1] as { id: string }[];
@@ -312,6 +327,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
     calendarSync: CalendarSyncTaskDraft | null,
+    message: ReservationMessage | null,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
     const condition = allOf(
       eq(reservationTable.id, args.id),
@@ -342,6 +358,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
       mails,
       auditLog,
       calendarSync,
+      message,
       "予約のステータス",
     );
   };
@@ -384,6 +401,8 @@ export const createReservationRepository = (db: Database): ReservationRepository
       mails,
       auditLog,
       calendarSync,
+      // 内容の変更と同時に送るメッセージは無い
+      null,
       "予約の内容",
     );
   };

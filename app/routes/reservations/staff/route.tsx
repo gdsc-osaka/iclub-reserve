@@ -102,25 +102,25 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const db = createDb(env.DB);
+  // ログの where に操作の種類まで入れて、どの操作で失敗したかを絞り込めるようにする
+  const where = `staff.reservations.${transition}`;
   const result = await changeReservationStatus(db, request, user, {
     reservationId,
     transition,
     reason,
     unlockArrangement: formData.get("unlockArrangement"),
+    message: formData.get("message"),
     now: new Date(),
     actsAsStaff,
+    where,
   });
 
   if (result.isErr()) {
     /*
-     * 一覧には欄が無いので、誤りはすべて一覧の上に出す。却下・キャンセルの理由も、
+     * 一覧には欄が無いので、誤りはすべて一覧の上に出す。却下・キャンセルの理由と承認に添えるメッセージも、
      * 入力するダイアログは送信のたびに閉じるので、欄の下に出す先が無い。
-     * ログの where に操作の種類まで入れて、どの操作で失敗したかを絞り込めるようにする。
      */
-    return reservationActionErrors(
-      { where: `staff.reservations.${transition}`, userId: user.id },
-      result.error,
-    );
+    return reservationActionErrors({ where, userId: user.id }, result.error);
   }
 
   /*
