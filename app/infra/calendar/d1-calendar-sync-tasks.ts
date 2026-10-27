@@ -8,13 +8,13 @@ import {
   CalendarSyncStatus,
   CalendarSyncTaskErrorCode,
   isRetryableCalendarError,
-  type CalendarError,
   type CalendarSyncTask,
   type CalendarSyncTasks,
 } from "~/domain/calendar";
 import { wrapError } from "~/domain/error";
 
 import type { Database } from "../db";
+import { formatLastError } from "../format-last-error";
 import { reconcileCalendarSyncTaskInserts } from "./calendar-sync-task-writes";
 
 /** 処理中のまま放置されたとみなすまでの時間（5分）。Worker が途中で落ちた行を救う（ADR-008） */
@@ -24,11 +24,6 @@ const toCalendarSyncTaskError = wrapError(
   CalendarSyncTaskErrorCode.DatabaseError,
   "カレンダー同期タスクの操作に失敗しました。",
 );
-
-const formatCalendarError = (error: CalendarError): string => {
-  const cause = error.cause ? String(error.cause) : "";
-  return cause ? `${error.code}: ${cause}` : error.code;
-};
 
 const toCalendarSyncTask = (row: typeof calendarSyncTaskTable.$inferSelect): CalendarSyncTask => ({
   id: row.id,
@@ -98,7 +93,7 @@ export const createD1CalendarSyncTasks = (db: Database): CalendarSyncTasks => ({
     }
 
     const isRetryable = isRetryableCalendarError(error);
-    const formattedError = formatCalendarError(error);
+    const formattedError = formatLastError(error);
 
     // 再試行不可のエラーは即座に dead（まとめて 1 クエリで更新）
     if (!isRetryable) {

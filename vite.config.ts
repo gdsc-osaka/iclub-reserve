@@ -19,7 +19,8 @@ const persistState = process.env.E2E_PERSIST_TO ? { path: process.env.E2E_PERSIS
 export default defineConfig({
   /*
    * コミットの前に、コミットするファイルだけをフォーマットし、リントで直せるところを直す
-   * （`.vite-hooks/pre-commit`）。止めたいときは `VP_GIT_HOOKS=0 git commit` か `vp hooks disable`。
+   * （`.vite-hooks/pre-commit`）。直せないリントや型のエラーが残っていれば、コミットを止める。
+   * 止めたいときは `VP_GIT_HOOKS=0 git commit` か `vp hooks disable`。
    */
   staged: {
     "*": "vp check --fix",
@@ -40,14 +41,31 @@ export default defineConfig({
       builtin: true,
     },
     /*
-     * 型の情報を使うリント（`options.typeAware`・`options.typeCheck`）は、まだ有効にしていない。
-     * 有効にすると、今のコードで通らない規則（`unbound-method` など）が出るため。
-     * 型の検査は、今までどおり `pnpm typecheck`（`tsc -b`）で行う。
+     * 型の情報を使うリント（`typeAware`）と、型の検査（`typeCheck`）を行う（ADR-015 決定 3）。
+     * React Router と wrangler が生成する型も読むので、無いと「`./+types/route` が見つからない」で止まる。
+     * 生成した型は `pnpm install` のとき（`postinstall`）に作られる。ルートを足したら `pnpm typecheck` で作り直す。
      */
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
     jsPlugins: [
       {
         name: "vite-plus",
         specifier: "vite-plus/oxlint-plugin",
+      },
+    ],
+    overrides: [
+      {
+        /*
+         * テストでは `expect(fake.findById).toHaveBeenCalled()` のように、偽物のメソッドを呼ばずに渡す。
+         * 偽物（`vi.fn`）は `this` を使わないので、`unbound-method` が止めるような誤りは起きない。
+         * ESLint にはこれを見分けるテスト向けの規則があるが、oxlint には無いため、テストでだけ切る。
+         */
+        files: ["**/*.test.ts", "**/*.test.tsx"],
+        rules: {
+          "typescript/unbound-method": "off",
+        },
       },
     ],
   },

@@ -130,7 +130,7 @@ function StaffUnreadMessageRow({
             size="sm"
             variant="outline"
             onClick={() => {
-              fetcher.submit(
+              void fetcher.submit(
                 { intent: HomeIntent.MarkRead, reservationId: item.reservationId },
                 { method: "post" },
               );

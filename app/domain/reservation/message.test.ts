@@ -27,7 +27,7 @@ describe("validateReservationMessageBody", () => {
 
     expect(result.isOk()).toBe(true);
     const normalized = result._unsafeUnwrap();
-    expect([...normalized].length).toBe(2000);
+    expect(Array.from(normalized).length).toBe(2000);
     expect(normalized).not.toContain("\r");
   });
 
@@ -35,7 +35,7 @@ describe("validateReservationMessageBody", () => {
     const emoji2000 = "🎉".repeat(2000);
     const result2000 = validateReservationMessageBody(emoji2000);
     expect(result2000.isOk()).toBe(true);
-    expect([...result2000._unsafeUnwrap()].length).toBe(2000);
+    expect(Array.from(result2000._unsafeUnwrap()).length).toBe(2000);
 
     const emoji2001 = "🎉".repeat(2001);
     const result2001 = validateReservationMessageBody(emoji2001);

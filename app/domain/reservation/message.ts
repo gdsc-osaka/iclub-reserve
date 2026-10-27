@@ -73,7 +73,7 @@ export const isSentAsStaff = (actor: Actor): boolean => actor.isStaff && actor.m
  */
 export const validateReservationMessageBody = (raw: string): Result<string, ReservationError> => {
   const normalized = raw.replace(/\r\n|\r/g, "\n").trim();
-  const codePointLength = [...normalized].length;
+  const codePointLength = Array.from(normalized).length;
 
   if (codePointLength === 0) {
     return err({
