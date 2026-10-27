@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { reservationTable } from "~/db/schema";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
+import { reasonTemplates } from "~/domain/reservation/reason-templates";
+import { ReservationTransition } from "~/domain/reservation/transition";
 import type { E2eDb } from "../support/db.js";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
@@ -122,7 +124,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     );
   });
 
-  test("事務局が理由を入れて却下すると却下済みになり、理由つきの却下の通知が積まれる", async ({
+  test("事務局が定型文から理由を入れて却下すると、却下済みになり、理由つきの却下の通知が積まれる", async ({
     page,
     db,
     signInAs,
@@ -136,7 +138,9 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     await row.getByRole("button", { name: "却下" }).click();
 
     const dialog = page.getByRole("alertdialog", { name: "仮予約の却下" });
-    await dialog.getByLabel(/却下理由/).fill("同じ時間に学内行事があるため");
+    const template = reasonTemplates[ReservationTransition.Reject][0];
+    await dialog.getByRole("button", { name: template.label }).click();
+    await expect(dialog.getByLabel(/却下理由/)).toHaveValue(template.text);
     await dialog.getByRole("button", { name: "却下する" }).click();
 
     // 仮予約ではなくなったので、既定の一覧からは消える
@@ -156,7 +160,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
         (mail) =>
           mail.subject.includes("利用予約が却下されました") &&
           mail.bodyText.includes(reservation.id) &&
-          mail.bodyText.includes("同じ時間に学内行事があるため"),
+          mail.bodyText.includes(template.text),
       ),
     ).toHaveLength(1);
   });

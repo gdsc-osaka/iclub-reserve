@@ -15,6 +15,7 @@ import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import type { UnlockArrangement } from "~/domain/reservation";
+import { reasonTemplates, toReasonWithTemplate } from "~/domain/reservation/reason-templates";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
 import { formatMonthDayParts, formatTime, toTokyoDateKey } from "~/lib/date";
@@ -134,6 +135,7 @@ export function ReservationActionDialog({
   const navigation = useNavigation();
 
   const config = getDialogConfig(transition);
+  const templates = reasonTemplates[transition];
   const isSubmitDisabled =
     (config.hasReason && reason.trim() === "") ||
     (config.hasUnlockArrangement && unlockArrangement === null);
@@ -212,6 +214,38 @@ export function ReservationActionDialog({
                   {config.reasonLabel}
                   <span className="ml-1.5 text-xs font-semibold text-destructive">(必須)</span>
                 </Label>
+                {/* 定型文のボタン（事務局の却下・キャンセルだけ。COND-002） */}
+                {templates.length > 0 && (
+                  <div
+                    role="group"
+                    aria-labelledby={`reason-templates-${item.id}-${transition}`}
+                    className="flex flex-wrap items-center gap-1.5"
+                  >
+                    <span
+                      id={`reason-templates-${item.id}-${transition}`}
+                      className="text-xs text-muted-foreground"
+                    >
+                      定型文を入れる
+                    </span>
+                    {/*
+                      押した後にフォーカスを入力欄へ移さない。
+                      スマホでキーボードが出て、送信のボタン（「却下する」など）が隠れるため。
+                    */}
+                    {templates.map((template) => (
+                      <Button
+                        key={template.label}
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={() =>
+                          setReason((current) => toReasonWithTemplate(current, template.text))
+                        }
+                      >
+                        {template.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
                 <Textarea
                   id={`reason-${item.id}-${transition}`}
                   name="reason"
@@ -259,6 +293,7 @@ export function ReservationActionDialog({
           {/*
             理由の欄はダイアログと同じくここにも置く。承認以外の操作は理由が必須
             （COND-002）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
+            定型文のボタンは JavaScript が無いと動かないため、ここでは出さない。
           */}
           {config.hasReason && (
             <>
