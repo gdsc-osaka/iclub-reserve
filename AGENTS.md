@@ -33,7 +33,7 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 - **Start development server**: `pnpm run dev`
 - **Read a sign-in code (Local)**: `pnpm -s run dev:otp [人物の名前かメールアドレス]`（ローカルの D1 からログインの認証コードを読む。引数なしならシードの人物の一覧。手順は `local-login` スキル）
 - **Run unit tests**: `pnpm test`（`vp test run`）。テストの関数は `vitest` ではなく `vite-plus/test` から読み込む（`vitest` から読み込むとリントで止まる）。
-- **Lint / Format**: `pnpm lint`（`vp lint`。型の情報を使うリントと型の検査も行う）・`pnpm format`（`vp fmt --check .`）。直すときは `pnpm run lint:fix`・`pnpm run format:fix`。型の検査だけなら `pnpm typecheck`。リントは React Router・wrangler が生成した型を読むので、ルートを足して `./+types/route` が見つからないと出たら `pnpm typecheck` で作り直す。
+- **Lint / Format**: `pnpm lint`（`vp lint`。型の情報を使うリントと型の検査も行う）・`pnpm format`（`vp fmt --check .`）。直すときは `pnpm run lint:fix`・`pnpm run format:fix`。型の検査だけなら `pnpm typecheck`。リントは React Router・wrangler が生成した型を読むので、ルートを足して `./+types/route` が見つからないと出たときと、`wrangler.jsonc` を変えたときは `pnpm typecheck` で作り直す。
 - **Run a TypeScript script**: `pnpm exec vpx <ファイル>`（tsx は使わない）
 - **Run E2E tests**: `pnpm run test:e2e`（ビルドしてから Playwright で、パソコンの Chromium・Firefox・WebKit とスマホの Chrome・Safari の 5 種類で動かす。1 種類だけなら `pnpm exec playwright test --project=chromium`。方針は `docs/adr/007-e2e-testing.md`）。テストは `e2e/<RDRA のコンテキスト>/uc-<番号>-*.spec.ts` に置き、`@UC-<番号>` のタグを付ける。UC を `docs/implementation-status.md` で ✅ にする PR には、その UC の E2E も含める。E2E で確かめるのは主な流れ・権限の境目・UC ごとに代表的な失敗 1 つだけで、業務ルールの分岐はユースケースの単体テスト（Vitest）に書く。
 - **Database**: We are using SQLite (D1), **NOT** PostgreSQL. Keep this in mind when writing Drizzle schema or migrations.

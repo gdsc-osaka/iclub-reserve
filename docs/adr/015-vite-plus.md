@@ -57,6 +57,7 @@ Issue #246 を受けて決める。
 - リントは React Router と wrangler が生成した型（`.react-router/types`・`worker-configuration.d.ts`）を読む。
   無いと「`./+types/route` が見つからない」で止まるので、`postinstall` で `wrangler types` に加えて `react-router typegen` も動かす。
   ルートを足したときは `pnpm run dev` の間に作り直されるが、そうでなければ `pnpm typecheck` で作り直す。
+  `worker-configuration.d.ts` は `pnpm run dev` の間も作り直されないので、`wrangler.jsonc` を変えたときも `pnpm typecheck` で作り直す。
   - pnpm は、入れるものが変わっていないと install を飛ばし、`postinstall` も動かさない。CI はまっさらな状態から入れるので動く。
 - `pnpm typecheck`（`tsc -b`）と CI の Type Check は残す。ブランチのルールで必須にしているチェックで、
   `tsconfig` の参照のとおりに確かめるため。型のエラーは Lint と Type Check の両方で出る。

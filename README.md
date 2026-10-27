@@ -147,8 +147,8 @@ pnpm typecheck     # 型の検査
 テストでは `describe`・`it`・`expect`・`vi` などを `vitest` ではなく `vite-plus/test` から読み込みます（`vitest` から読み込むとリントで止まります）。
 
 リントは、React Router と wrangler が作る型（`.react-router/types`・`worker-configuration.d.ts`）も読みます。
-どちらも `pnpm install` のときに作られ、`pnpm run dev` の間も作り直されます。
-ルートを足したあとに「`./+types/route` が見つからない」と出たら、`pnpm typecheck` を 1 回動かして作り直してください。
+どちらも `pnpm install` のときに作られます。`pnpm run dev` の間に作り直されるのは `.react-router/types` だけです。
+ルートを足したあとに「`./+types/route` が見つからない」と出たときや、`wrangler.jsonc` を変えたときは、`pnpm typecheck` を 1 回動かして作り直してください。
 
 E2E テストは、ユースケース（UC）ごとに画面の主な流れと権限の境目を確かめます。方針は [ADR-007](docs/adr/007-e2e-testing.md) を参照してください。
 
