@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { cn } from "cn";
 import { Outlet, useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 
-import { resolveShellArea, toAreaFromPathname } from "~/components/layout/app-area";
+import { resolveShellArea, toAreaFromPathname } from "~/lib/app-area";
 import { DesktopHeader, MobileHeader } from "~/components/layout/app-header";
 import { AppSidebar } from "~/components/layout/app-sidebar";
 import { BottomNav } from "~/components/layout/bottom-nav";

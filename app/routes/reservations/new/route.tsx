@@ -1,22 +1,13 @@
-import { redirect } from "react-router";
-
-import { toTokyoDateKey } from "~/lib/date";
+import { AppArea } from "~/lib/app-area";
 
 import type { Route } from "./+types/route";
-import { toCalendarPathFromFormQuery } from "./paths";
+import { redirectToNewReservationCalendar } from "./new-reservation-entry.server";
 
 /**
- * 予約申請の入口（ADR-014 決定 10）。
- *
- * 画面は持たず、受け取ったクエリ（施設・日付・開始時刻・終了時刻）を仮の枠に直して
- * 空き状況カレンダーへ転送する。ナビの入口、ダッシュボードのボタン、ブックマークしたリンクから
- * カレンダーの申請欄を直接開けるようにするため。
+ * 利用者の画面の予約申請の入口（ADR-014 決定 10）。中身は `redirectToNewReservationCalendar`。
  */
-export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const todayKey = toTokyoDateKey(new Date());
-
-  throw redirect(toCalendarPathFromFormQuery(url.searchParams, todayKey));
+export async function loader({ request, context }: Route.LoaderArgs) {
+  return redirectToNewReservationCalendar({ request, context }, AppArea.User);
 }
 
 /**

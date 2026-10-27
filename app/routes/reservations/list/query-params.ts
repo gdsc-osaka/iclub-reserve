@@ -1,3 +1,4 @@
+import { AppArea } from "~/lib/app-area";
 import type {
   ReservationListPeriodFilter,
   ReservationListStatusFilter,
@@ -59,6 +60,13 @@ export const parseReservationListParams = (
     facility,
   };
 };
+
+/** 画面ごとの予約一覧の範囲。利用者の画面は自団体、事務局の画面は全団体（COND-030 の (3)） */
+const reservationListScopes: Readonly<Record<AppArea, "own" | "all">> = {
+  [AppArea.User]: "own",
+  [AppArea.Staff]: "all",
+};
+export const toReservationListScope = (area: AppArea): "own" | "all" => reservationListScopes[area];
 
 /**
  * 絞り込み条件から URL パスを組み立てる。

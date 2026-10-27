@@ -20,12 +20,14 @@ export const markReservationRead = async ({
   formData,
   now,
   where,
+  actsAsStaff,
 }: {
   readonly db: Database;
   readonly user: SessionUser;
   readonly formData: FormData;
   readonly now: Date;
   readonly where: string;
+  readonly actsAsStaff: boolean;
 }) => {
   const result = await markReservationReadUseCase(
     {
@@ -36,8 +38,8 @@ export const markReservationRead = async ({
     {
       reservationId: readFormText(formData, "reservationId"),
       actorUserId: user.id,
-      // 1 段階目では、どちらの画面から確認済みにしても立場はセッションで決める（ADR-016 決定 9）
-      isStaff: user.is_staff,
+      // 画面の立場に応じて、利用者のダッシュボードでは団体側として、事務局のダッシュボードでは事務局として確認済みにする（ADR-016 決定 14）
+      isStaff: actsAsStaff,
       now,
     },
   );

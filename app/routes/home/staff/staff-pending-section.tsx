@@ -8,9 +8,11 @@ import {
 } from "~/components/reservation/reservation-notices";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { isShortNotice, reservationDetailPath, ReservationStatus } from "~/domain/reservation";
+import { isShortNotice, ReservationStatus } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
+import { AppArea } from "~/lib/app-area";
 import { formatDaysUntil, formatMonthDay, formatTimeRange, tokyoDaysUntil } from "~/lib/date";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { StaffPendingReservationItem } from "~/query/reservation/staff-pending-reservations";
 import type { HomeActionData } from "../home-intent";
 import { SectionUnavailableAlert } from "../section-unavailable-alert";
@@ -128,7 +130,7 @@ function PendingReservationRow({
     <li className="flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:p-4">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Link
-          to={reservationDetailPath(item.id)}
+          to={toReservationDetailPath(AppArea.Staff, item.id)}
           className="flex flex-wrap items-center gap-2 rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
         >
           <DaysUntilBadge startAt={item.startAt} now={now} />

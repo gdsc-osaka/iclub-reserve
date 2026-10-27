@@ -517,12 +517,6 @@ export const calendarVisibleStatuses = [
 ] as const;
 
 /**
- * 予約詳細画面のパスを生成する純粋関数（SCR-005 / UC-034）。
- */
-export const reservationDetailPath = (reservationId: string): string =>
-  `/reservations/${reservationId}`;
-
-/**
  * ダッシュボード「今後の予約」に表示する予約の最大件数（SCR-022 / UC-032）。
  */
 export const UPCOMING_RESERVATIONS_LIMIT = 5;

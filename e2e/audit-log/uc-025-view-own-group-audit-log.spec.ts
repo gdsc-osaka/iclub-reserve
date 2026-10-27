@@ -223,7 +223,7 @@ test.describe("UC-025 自団体の操作履歴を閲覧する", { tag: "@UC-025"
 
     // 団体に所属しない事務局として予約詳細を開き、承認する
     await signInAs(staff.id);
-    await openPage(page, `/reservations/${reservation.id}`);
+    await openPage(page, `/staff/reservations/${reservation.id}`);
     await page.getByRole("button", { name: "承認" }).click();
     const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
     await dialog.getByLabel("要手配").click();

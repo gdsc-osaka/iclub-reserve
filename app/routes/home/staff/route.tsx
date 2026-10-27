@@ -1,16 +1,15 @@
 import { env } from "cloudflare:workers";
 
-import { AppArea } from "~/components/layout/app-area";
+import { AppArea } from "~/lib/app-area";
 import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb, type Database } from "~/infra/db";
-import { requireRequestUser, type SessionUser } from "~/lib/auth/auth-session.server";
-import { ensureStaff } from "~/query/_shared/staff";
+import type { SessionUser } from "~/lib/auth/auth-session.server";
+import { requireAreaUser } from "~/routes/_shared/app-area.server";
 import { findGroupSearchList } from "~/query/group/group-search";
 import { findStaffPendingReservations } from "~/query/reservation/staff-pending-reservations";
 import { findStaffTodaySchedule } from "~/query/reservation/staff-today-schedule";
 import { findStaffUnreadMessages } from "~/query/reservation/staff-unread-messages";
-import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 
@@ -39,18 +38,11 @@ export function meta() {
  */
 export async function loader({ context }: Route.LoaderArgs) {
   // この画面はログイン必須 (root.tsx のミドルウェアが先に確認している)
-  const user = requireRequestUser(context);
-  const staffCheck = await ensureStaff(
-    user.is_staff,
-    "事務局ではない人が、事務局のダッシュボードを開こうとした。",
-  );
-  if (staffCheck.isErr()) {
-    throw queryErrorResponse({ where: "staff-home.loader", userId: user.id }, staffCheck.error);
-  }
+  const { user, actsAsStaff } = await requireAreaUser(context, AppArea.Staff, "staff-home.loader");
 
   const db = createDb(env.DB);
   const now = new Date();
-  const ctx: LoadContext = { db, user, now };
+  const ctx: LoadContext = { db, user, now, actsAsStaff };
 
   // 区画どうしは互いの結果を使わないので、D1 への問い合わせを並べて待つ
   const [pending, unreadMessages, pendingGroups, today] = await Promise.all([
@@ -75,22 +67,23 @@ interface LoadContext {
   readonly db: Database;
   readonly user: SessionUser;
   readonly now: Date;
+  readonly actsAsStaff: boolean;
 }
 
 /** 承認待ちの予約と、その件数（UC-006） */
-const loadStaffPending = ({ db, user, now }: LoadContext) =>
+const loadStaffPending = ({ db, user, now, actsAsStaff }: LoadContext) =>
   loadSection(
     "staff-home.loader.staffPending",
     user,
-    findStaffPendingReservations(db, { isStaff: user.is_staff, now }),
+    findStaffPendingReservations(db, { isStaff: actsAsStaff, now }),
   );
 
 /** 団体からの未読メッセージ（UC-037 / COND-026 (3)） */
-const loadStaffUnreadMessages = ({ db, user, now }: LoadContext) =>
+const loadStaffUnreadMessages = ({ db, user, now, actsAsStaff }: LoadContext) =>
   loadSection(
     "staff-home.loader.staffUnread",
     user,
-    findStaffUnreadMessages(db, { actorUserId: user.id, isStaff: user.is_staff, now }),
+    findStaffUnreadMessages(db, { actorUserId: user.id, isStaff: actsAsStaff, now }),
   );
 
 /**
@@ -99,11 +92,11 @@ const loadStaffUnreadMessages = ({ db, user, now }: LoadContext) =>
  * 承認待ちで絞ると、団体の一覧は登録が古い順に並ぶ（`app/query/group/group-search.ts`）。
  * 待たせている団体から片付けられるよう、その並びのまま先頭の数件を出す。
  */
-const loadPendingGroups = async ({ db, user }: LoadContext) => {
+const loadPendingGroups = async ({ db, user, actsAsStaff }: LoadContext) => {
   const groups = await loadSection(
     "staff-home.loader.pendingGroups",
     user,
-    findGroupSearchList(db, { isStaff: user.is_staff, status: GroupStatus.Pending }),
+    findGroupSearchList(db, { isStaff: actsAsStaff, status: GroupStatus.Pending }),
   );
   return groups === null
     ? null
@@ -111,11 +104,11 @@ const loadPendingGroups = async ({ db, user }: LoadContext) => {
 };
 
 /** 今日の予約状況（UC-001） */
-const loadStaffToday = ({ db, user, now }: LoadContext) =>
+const loadStaffToday = ({ db, user, now, actsAsStaff }: LoadContext) =>
   loadSection(
     "staff-home.loader.staffToday",
     user,
-    findStaffTodaySchedule(db, { isStaff: user.is_staff, now }),
+    findStaffTodaySchedule(db, { isStaff: actsAsStaff, now }),
   );
 
 /**
@@ -125,7 +118,7 @@ const loadStaffToday = ({ db, user, now }: LoadContext) =>
  * 成功したら `{ ok: true }` を返し、React Router が loader を読み直して行を消す。
  */
 export async function action({ request, context }: Route.ActionArgs) {
-  const user = requireRequestUser(context);
+  const { user, actsAsStaff } = await requireAreaUser(context, AppArea.Staff, "staff-home.action");
   const formData = await request.formData();
   const intent = formData.get("intent");
   const db = createDb(env.DB);
@@ -147,6 +140,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       reason,
       unlockArrangement: formData.get("unlockArrangement"),
       now,
+      actsAsStaff,
     });
 
     if (result.isErr()) {
@@ -160,7 +154,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   // 予約 1 件を確認済みにする（UC-037）
   if (intent === HomeIntent.MarkRead) {
-    return markReservationRead({ db, user, formData, now, where: "staff-home.action.mark-read" });
+    return markReservationRead({
+      db,
+      user,
+      formData,
+      now,
+      where: "staff-home.action.mark-read",
+      actsAsStaff,
+    });
   }
 
   return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };

@@ -7,7 +7,10 @@ import {
   auditLogActionLabel,
   auditLogTargetTypeLabel,
 } from "~/domain/audit-log";
+import { AppArea } from "~/lib/app-area";
 import { formatMonthDayParts, formatRelativeTime, formatTime } from "~/lib/date";
+import { toGroupDetailPath } from "~/lib/group-paths";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { GroupRecentActivityView } from "~/usecases/audit-log/get-group-recent-activities";
 import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
@@ -73,8 +76,8 @@ function RecentActivityRow({
   // 予約の記録は予約詳細へ、それ以外（管理者にだけ出る団体・メンバーシップ・招待）は団体管理画面へ
   const targetUrl =
     item.targetType === AuditLogTargetType.Reservation
-      ? `/reservations/${item.targetId}`
-      : `/groups/${item.groupId}`;
+      ? toReservationDetailPath(AppArea.User, item.targetId)
+      : toGroupDetailPath(AppArea.User, item.groupId);
 
   return (
     <li className="group relative flex flex-col gap-1.5 p-3.5 transition-colors hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring/50">

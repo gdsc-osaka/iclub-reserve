@@ -25,6 +25,10 @@ export default [
     route("staff", "routes/home/staff/route.tsx"),
     route("availability", "routes/availability/route.tsx"),
     /*
+     * 事務局の空き状況カレンダー（SCR-001 / ADR-016 決定 10）。
+     */
+    route("staff/availability", "routes/availability/staff/route.tsx"),
+    /*
      * 施設カレンダー一覧・購読ページ（SCR-010 / UC-018 / ADR-013 決定 7）。
      * 全施設・設備の Google Calendar 追加リンクおよび iCal 形式の購読 URL を一覧表示する。
      * 事務局スタッフ限定の画面。
@@ -44,6 +48,10 @@ export default [
      */
     route("groups/new", "routes/groups/new/route.tsx"),
     route("groups/:groupId", "routes/groups/$groupId/route.tsx"),
+    /*
+     * 事務局の団体管理（SCR-007 / ADR-016 決定 10）。
+     */
+    route("staff/groups/:groupId", "routes/groups/staff/$groupId/route.tsx"),
     route("invitations/:invitationId", "routes/invitations/$invitationId/route.tsx"),
     /*
      * 事務局招待の承諾（SCR-020）。
@@ -67,12 +75,30 @@ export default [
     route("reservations", "routes/reservations/list/route.tsx"),
     route("staff/reservations", "routes/reservations/staff/route.tsx"),
     route("reservations/new", "routes/reservations/new/route.tsx"),
+    /*
+     * 事務局の予約直接作成（ADR-014 決定 10 / ADR-016 決定 10）。
+     */
+    route("staff/reservations/new", "routes/reservations/staff/new/route.tsx"),
     route("reservations/:reservationId", "routes/reservations/$reservationId/route.tsx"),
+    /*
+     * 事務局の予約詳細（SCR-005 / ADR-016 決定 10）。
+     */
+    route(
+      "staff/reservations/:reservationId",
+      "routes/reservations/staff/$reservationId/route.tsx",
+    ),
     /*
      * 予約の内容の変更（UC-005 / UC-017 / ADR-014 決定 15）。
      * 画面は持たず、変更できるかを確かめてから空き状況カレンダーの変更の欄へ転送する。
      */
     route("reservations/:reservationId/edit", "routes/reservations/$reservationId/edit/route.tsx"),
+    /*
+     * 事務局の予約変更（UC-017 / ADR-014 決定 15 / ADR-016 決定 10）。
+     */
+    route(
+      "staff/reservations/:reservationId/edit",
+      "routes/reservations/staff/$reservationId/edit/route.tsx",
+    ),
     /*
      * アカウント設定（SCR-021）。
      */

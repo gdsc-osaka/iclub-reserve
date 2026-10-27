@@ -4,11 +4,7 @@ import { Form, useNavigation } from "react-router";
 
 import { CardItem } from "~/components/reservation/availability-detail-card";
 import type { AvailabilityDay } from "~/components/reservation/availability-week";
-import type {
-  FieldErrors,
-  FormValues,
-  ReservationFormMode,
-} from "~/components/reservation/editor/form-values";
+import type { FieldErrors, FormValues } from "~/components/reservation/editor/form-values";
 import {
   shouldShowApplicationNotice,
   shouldShowShortNoticeAlert,
@@ -30,13 +26,7 @@ import { useUnlockArrangementChoice } from "~/components/reservation/use-unlock-
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { CardContent, CardFooter } from "~/components/ui/card";
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "~/components/ui/field";
+import { Field, FieldError, FieldLabel } from "~/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -46,10 +36,10 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Separator } from "~/components/ui/separator";
-import { Switch } from "~/components/ui/switch";
 import { ReservationStatus } from "~/domain/reservation";
 import { APPLICATION_DEADLINE_NOTICE, SHORT_NOTICE_ALERT } from "~/domain/reservation/lead-time";
 import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
+import type { AppArea } from "~/lib/app-area";
 import { atTokyoMinutes, formatMonthDay, toTokyoTimeKey } from "~/lib/date";
 import type {
   AvailabilityFacility,
@@ -91,6 +81,7 @@ export function AvailabilityDraftForm({
   days,
   reservations,
   now,
+  area,
   canCreateDirectly,
   applicantGroups,
   onDraftChange,
@@ -105,18 +96,19 @@ export function AvailabilityDraftForm({
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
   now: Date;
+  /** 開いている画面。欄の送り先の URL に使う */
+  area: AppArea;
   canCreateDirectly: boolean;
   applicantGroups: readonly ReservationFormGroup[];
   onDraftChange: (draft: CalendarDraft) => void;
   /** 予約を作る操作の失敗。送った値・欄ごとの誤り・全体の誤り */
   createError: CreateReservationActionError | null;
   /** 確認のダイアログから送ったとき。作れたことを知らせるのに使う（欄は転送で消えるので、知らせるのは呼び出し側） */
-  onSubmitCreate: (mode: ReservationFormMode) => void;
+  onSubmitCreate: () => void;
   /** スマホで欄を広げる（文字を打つ欄に入ったとき） */
   onExpand: () => void;
 }>) {
   const formId = useId();
-  const directSwitchId = useId();
   const periodErrorId = useId();
   const facilityErrorId = useId();
   const groupSelectId = useId();
@@ -135,7 +127,8 @@ export function AvailabilityDraftForm({
   const [groupId, setGroupId] = useState(submitted?.groupId ?? applicantGroups.at(0)?.id ?? "");
   const [headCount, setHeadCount] = useState(submitted?.headCount ?? "");
   const [note, setNote] = useState(submitted?.note ?? "");
-  const [isDirect, setIsDirect] = useState(canCreateDirectly && submitted?.mode === "direct");
+  // 直接作成できる人（事務局の画面）の欄は、いつも直接作成になる（ADR-016 決定 13）
+  const isDirect = canCreateDirectly;
   /*
    * 直接作成で選んだ解錠の手配（COND-027）。
    * 選んだあとで施設・日時を変えたら、未選択に戻る（`useUnlockArrangementChoice`）。
@@ -196,7 +189,7 @@ export function AvailabilityDraftForm({
       setIsConfirmOpen(true);
       return;
     }
-    onSubmitCreate(isDirect ? "direct" : "provisional");
+    onSubmitCreate();
   };
 
   /*
@@ -227,7 +220,7 @@ export function AvailabilityDraftForm({
          */}
         <Form
           method="post"
-          action={toCalendarPath(facility.id, anchorKey, { kind: "draft", draft })}
+          action={toCalendarPath(area, facility.id, anchorKey, { kind: "draft", draft })}
           replace
           id={formId}
           onSubmit={handleSubmit}
@@ -247,7 +240,6 @@ export function AvailabilityDraftForm({
             name="end_time"
             value={draft.range === null ? "" : toTokyoTimeKey(draft.range.endMinutes)}
           />
-          <input type="hidden" name="mode" value={isDirect ? "direct" : "provisional"} />
 
           {formError !== null && (
             <Alert variant="destructive">
@@ -310,28 +302,16 @@ export function AvailabilityDraftForm({
             </Alert>
           ) : (
             <>
-              {/* 直接作成の切り替えは事務局だけ（UC-008） */}
-              {canCreateDirectly && (
+              {/* 直接作成（UC-008）では解錠の手配を選ぶ（COND-027） */}
+              {isDirect && (
                 <>
                   <Separator />
-                  <Field orientation="horizontal">
-                    <FieldContent>
-                      <FieldLabel htmlFor={directSwitchId}>承認済みとして直接作成する</FieldLabel>
-                      <FieldDescription>
-                        仮予約を経ずに、最初から承認済みとして登録します。
-                      </FieldDescription>
-                    </FieldContent>
-                    <Switch id={directSwitchId} checked={isDirect} onCheckedChange={setIsDirect} />
-                  </Field>
-
-                  {isDirect && (
-                    <UnlockArrangementField
-                      idPrefix={unlockArrangementIdPrefix}
-                      value={unlockArrangement}
-                      onValueChange={selectUnlockArrangement}
-                      error={fieldErrors.unlockArrangement}
-                    />
-                  )}
+                  <UnlockArrangementField
+                    idPrefix={unlockArrangementIdPrefix}
+                    value={unlockArrangement}
+                    onValueChange={selectUnlockArrangement}
+                    error={fieldErrors.unlockArrangement}
+                  />
                 </>
               )}
 

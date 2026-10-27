@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { AppArea } from "./app-area";
+import { AppArea } from "~/lib/app-area";
 
 /**
  * サイドバー・ボトムバーに並べるナビゲーション項目。
@@ -80,14 +80,26 @@ export type NavCounts = Readonly<Record<CountedNavItemId, number | null>>;
 const isCountedNavItemId = (id: string): id is CountedNavItemId =>
   (countedNavItemIds as readonly string[]).includes(id);
 
-/** 空き状況は利用者の画面と事務局の画面の両方に置く（ADR-016 決定 6 / COND-030 の (3)） */
-const availabilityNavItem: NavItem = {
-  id: "availability",
+/** 空き状況の共通定義（SCR-001 / COND-030 の (3)） */
+const availabilityNavBase = {
   label: "空き状況",
-  to: "/availability",
   icon: CalendarDays,
   enabled: true,
   screen: "SCR-001",
+} as const;
+
+/** 利用者の空き状況 */
+const userAvailabilityNavItem: NavItem = {
+  id: "availability",
+  to: "/availability",
+  ...availabilityNavBase,
+};
+
+/** 事務局の空き状況 */
+const staffAvailabilityNavItem: NavItem = {
+  id: "staff-availability",
+  to: "/staff/availability",
+  ...availabilityNavBase,
 };
 
 /**
@@ -106,7 +118,7 @@ export const userNavItems: readonly NavItem[] = [
     screen: "SCR-022",
     end: true,
   },
-  availabilityNavItem,
+  userAvailabilityNavItem,
   {
     id: "reservations",
     label: "予約",
@@ -138,7 +150,7 @@ export const staffNavItems: readonly NavItem[] = [
     screen: "SCR-022",
     end: true,
   },
-  availabilityNavItem,
+  staffAvailabilityNavItem,
   {
     id: "staff-approvals",
     label: "予約の承認",
@@ -198,13 +210,6 @@ export const areaNavItems: Readonly<Record<AppArea, readonly NavItem[]>> = {
 const allNavItems: readonly NavItem[] = [...userNavItems, ...staffNavItems];
 
 /**
- * 予約の申請（事務局は作成）の入口の行き先。サイドバー・ボトムバー・ダッシュボードの見出しのボタンが使う。
- *
- * /reservations/new から空き状況カレンダーへ転送し、時刻を選んでいない欄を開く（ADR-014 決定 10・11）。
- */
-export const newReservationPath = "/reservations/new";
-
-/**
  * 予約の申請の入口の文言。
  *
  * 事務局は承認を待たずに作れる（UC-008）ので「予約を作成」にする（ADR-014 決定 9）。
@@ -246,7 +251,7 @@ export const toNavItems = (area: AppArea): readonly NavItem[] => areaNavItems[ar
  */
 const bottomNavIds: Readonly<Record<AppArea, readonly string[]>> = {
   [AppArea.User]: ["dashboard", "availability", "reservations"],
-  [AppArea.Staff]: ["staff-dashboard", "availability", "staff-approvals"],
+  [AppArea.Staff]: ["staff-dashboard", "staff-availability", "staff-approvals"],
 };
 
 /**

@@ -23,7 +23,10 @@ import {
 } from "~/domain/audit-log";
 import { createDb } from "~/infra/db";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { AppArea } from "~/lib/app-area";
 import { formatDateTime } from "~/lib/date";
+import { toGroupDetailPath } from "~/lib/group-paths";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import {
   findAuditLogSearchResult,
   type AuditLogSearchItem,
@@ -98,14 +101,16 @@ function TargetLink({
 function TargetDisplay({ item }: { readonly item: AuditLogSearchItem }) {
   const groupName = item.groupName ?? "（削除された団体）";
   const groupPath =
-    item.groupId !== null && item.groupName !== null ? `/groups/${item.groupId}` : null;
+    item.groupId !== null && item.groupName !== null
+      ? toGroupDetailPath(AppArea.Staff, item.groupId)
+      : null;
 
   switch (item.targetType) {
     case AuditLogTargetType.Reservation:
       return item.reservation === null ? (
         <TargetLink to={null}>予約</TargetLink>
       ) : (
-        <TargetLink to={`/reservations/${item.targetId}`}>
+        <TargetLink to={toReservationDetailPath(AppArea.Staff, item.targetId)}>
           {item.reservation.facilityName} {formatDateTime(item.reservation.startAt)}
         </TargetLink>
       );

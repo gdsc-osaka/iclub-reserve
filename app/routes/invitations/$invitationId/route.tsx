@@ -13,7 +13,9 @@ import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { AppArea } from "~/lib/app-area";
 import { formatDateTime } from "~/lib/date";
+import { toGroupDetailPath } from "~/lib/group-paths";
 import {
   invitationActionErrors,
   invitationErrorResponse,
@@ -103,7 +105,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
 
     // 承諾成功時は、参加した団体の詳細画面へ案内する
-    return redirect(`/groups/${result.value.groupId}`);
+    return redirect(toGroupDetailPath(AppArea.User, result.value.groupId));
   }
 
   // 2. 辞退

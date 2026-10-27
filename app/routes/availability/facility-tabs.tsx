@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { Link } from "react-router";
 
+import type { AppArea } from "~/lib/app-area";
 import type { AvailabilityFacility } from "~/query/facility/facility-availability-calendar";
 
 import { toCalendarPath, type CalendarSelection } from "./paths";
@@ -21,11 +22,13 @@ export function FacilityTabs({
   current,
   anchorKey,
   selection,
+  area,
 }: Readonly<{
   facilities: readonly AvailabilityFacility[];
   current: AvailabilityFacility;
   anchorKey: string;
   selection: CalendarSelection | null;
+  area: AppArea;
 }>) {
   const carriedSelection =
     selection === null || selection.kind === "reservation" ? undefined : selection;
@@ -42,7 +45,7 @@ export function FacilityTabs({
           return (
             <li key={item.id}>
               <Link
-                to={toCalendarPath(item.id, anchorKey, carriedSelection)}
+                to={toCalendarPath(area, item.id, anchorKey, carriedSelection)}
                 aria-current={isCurrent ? "page" : undefined}
                 className={cn(
                   "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm transition-colors",

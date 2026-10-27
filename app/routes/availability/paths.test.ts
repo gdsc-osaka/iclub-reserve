@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { AppArea } from "~/lib/app-area";
+
 import {
   differsOnlyInSelection,
   isEditReservationChanged,
@@ -196,45 +198,70 @@ describe("availability paths", () => {
   });
 
   describe("toCalendarPath", () => {
-    it("施設と基準の日だけの URL を作る", () => {
-      expect(toCalendarPath("fac_1", "2026-11-04")).toBe(
-        "/availability?facility=fac_1&date=2026-11-04",
-      );
+    it.each([
+      [AppArea.User, "/availability?facility=fac_1&date=2026-11-04"],
+      [AppArea.Staff, "/staff/availability?facility=fac_1&date=2026-11-04"],
+    ])("%s で施設と基準の日だけの URL を作る", (area, expected) => {
+      expect(toCalendarPath(area, "fac_1", "2026-11-04")).toBe(expected);
     });
 
-    it("facilityId が null のときは facility を付けない", () => {
-      expect(toCalendarPath(null, "2026-11-04")).toBe("/availability?date=2026-11-04");
+    it.each([
+      [AppArea.User, "/availability?date=2026-11-04"],
+      [AppArea.Staff, "/staff/availability?date=2026-11-04"],
+    ])("%s で facilityId が null のときは facility を付けない", (area, expected) => {
+      expect(toCalendarPath(area, null, "2026-11-04")).toBe(expected);
     });
 
-    it("予約を開くときは、ID を encodeURIComponent して reservation に付ける", () => {
-      const selection: CalendarSelection = {
-        kind: "reservation",
-        reservationId: "res/special 123",
-      };
-      expect(toCalendarPath("fac_1", "2026-11-04", selection)).toBe(
+    it.each([
+      [
+        AppArea.User,
         "/availability?facility=fac_1&date=2026-11-04&reservation=res%2Fspecial%20123",
-      );
-    });
+      ],
+      [
+        AppArea.Staff,
+        "/staff/availability?facility=fac_1&date=2026-11-04&reservation=res%2Fspecial%20123",
+      ],
+    ])(
+      "%s で予約を開くときは、ID を encodeURIComponent して reservation に付ける",
+      (area, expected) => {
+        const selection: CalendarSelection = {
+          kind: "reservation",
+          reservationId: "res/special 123",
+        };
+        expect(toCalendarPath(area, "fac_1", "2026-11-04", selection)).toBe(expected);
+      },
+    );
 
-    it("仮の枠を開くときは、: を %3A にせずに draft に付ける", () => {
+    it.each([
+      [AppArea.User, "/availability?facility=fac_1&date=2026-11-04&draft=2026-11-04T10:00-11:00"],
+      [
+        AppArea.Staff,
+        "/staff/availability?facility=fac_1&date=2026-11-04&draft=2026-11-04T10:00-11:00",
+      ],
+    ])("%s で仮の枠を開くときは、: を %3A にせずに draft に付ける", (area, expected) => {
       const selection: CalendarSelection = {
         kind: "draft",
         draft: { dateKey: "2026-11-04", range: { startMinutes: 600, endMinutes: 660 } },
       };
-      expect(toCalendarPath("fac_1", "2026-11-04", selection)).toBe(
-        "/availability?facility=fac_1&date=2026-11-04&draft=2026-11-04T10:00-11:00",
-      );
+      expect(toCalendarPath(area, "fac_1", "2026-11-04", selection)).toBe(expected);
     });
 
-    it("変更を開くときは、edit と draft を付ける", () => {
+    it.each([
+      [
+        AppArea.User,
+        "/availability?facility=fac_1&date=2026-11-04&edit=res%2Fspecial%20123&draft=2026-11-04T10:00-11:00",
+      ],
+      [
+        AppArea.Staff,
+        "/staff/availability?facility=fac_1&date=2026-11-04&edit=res%2Fspecial%20123&draft=2026-11-04T10:00-11:00",
+      ],
+    ])("%s で変更を開くときは、edit と draft を付ける", (area, expected) => {
       const selection: CalendarSelection = {
         kind: "edit",
         reservationId: "res/special 123",
         draft: { dateKey: "2026-11-04", range: { startMinutes: 600, endMinutes: 660 } },
       };
-      expect(toCalendarPath("fac_1", "2026-11-04", selection)).toBe(
-        "/availability?facility=fac_1&date=2026-11-04&edit=res%2Fspecial%20123&draft=2026-11-04T10:00-11:00",
-      );
+      expect(toCalendarPath(area, "fac_1", "2026-11-04", selection)).toBe(expected);
     });
   });
 

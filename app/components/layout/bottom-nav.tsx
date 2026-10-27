@@ -14,13 +14,13 @@ import {
 } from "~/components/ui/sheet";
 import { useSignOut } from "~/lib/auth/use-sign-out";
 
+import { toNewReservationPath } from "~/lib/reservation-paths";
 import { UserAvatar } from "./account-menu";
-import type { AppArea } from "./app-area";
+import type { AppArea } from "~/lib/app-area";
 import { NavCountBadge, NavCountDot, NavCountText } from "./nav-count";
 import {
   hasAnyNavCount,
   isNavItemActive,
-  newReservationPath,
   toBottomNavItems,
   toNavCount,
   toNewReservationLabel,
@@ -93,7 +93,7 @@ function BottomNavAction({ area }: Readonly<{ area: AppArea }>) {
   const label = toNewReservationLabel(area);
 
   return (
-    <Link to={newReservationPath} className={cn(tabClassName, "text-muted-foreground")}>
+    <Link to={toNewReservationPath(area)} className={cn(tabClassName, "text-muted-foreground")}>
       {/*
        * セル自体が Link なので、中に Button は入れず span で丸を描く。
        * 他のタブと同じく高さ h-14 の中に収めるため size-10 にする。

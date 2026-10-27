@@ -109,7 +109,7 @@ test.describe("UC-009 予約へのメッセージ", { tag: "@UC-009" }, () => {
 
     // 事務局でログインして予約詳細を開く
     await signInAs(personas.staff.id);
-    await openPage(page, `/reservations/${reservation.id}`);
+    await openPage(page, `/staff/reservations/${reservation.id}`);
 
     // 一般メンバーの氏名と問い合わせが見える
     const messageList = page.getByRole("list", { name: "メッセージの一覧" });

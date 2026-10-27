@@ -5,7 +5,9 @@ import { ReservationStatusBadge } from "~/components/reservation/reservation-sta
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
+import { AppArea } from "~/lib/app-area";
 import { formatDaysUntil, formatMonthDay, formatMonthDayParts, formatTime } from "~/lib/date";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
 import { SectionUnavailableAlert } from "./section-unavailable-alert";
 
@@ -101,7 +103,7 @@ function NextReservationCard({
   return (
     <Card className="relative overflow-hidden transition-colors hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring/50">
       <Link
-        to={`/reservations/${item.id}`}
+        to={toReservationDetailPath(AppArea.User, item.id)}
         className="absolute inset-0 z-0"
         aria-label={`次の予約の詳細を開く: ${item.facilityName} ${item.groupName}`}
       />
@@ -163,7 +165,7 @@ function UpcomingReservationRow({
   return (
     <li className="group relative flex flex-col justify-between gap-2 p-3 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:gap-3 focus-within:ring-2 focus-within:ring-ring/50">
       <Link
-        to={`/reservations/${item.id}`}
+        to={toReservationDetailPath(AppArea.User, item.id)}
         className="absolute inset-0 z-0"
         aria-label={`予約の詳細を開く: ${item.facilityName} ${item.groupName}`}
       />

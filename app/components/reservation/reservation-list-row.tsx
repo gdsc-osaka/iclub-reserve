@@ -17,7 +17,8 @@ import {
   isSameTokyoDay,
   toTokyoDateKey,
 } from "~/lib/date";
-import { toReservationEditPath } from "~/lib/reservation-paths";
+import { toReservationDetailPath, toReservationEditPath } from "~/lib/reservation-paths";
+import type { AppArea } from "~/lib/app-area";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
 import { ReservationActionButtons } from "./reservation-action-buttons";
 import {
@@ -47,6 +48,7 @@ export function ReservationListRow({
   showGroupName,
   actor,
   now,
+  area,
 }: Readonly<{
   item: ReservationListItem;
   showGroupName: boolean;
@@ -56,6 +58,8 @@ export function ReservationListRow({
    */
   actor: ReservationActor;
   now: Date;
+  /** 開いている画面の領域（ADR-016 決定 15） */
+  area: AppArea;
 }>) {
   const isEnded = isEndedReservationStatus(item.status);
   const isToday = isSameTokyoDay(item.startAt, now);
@@ -163,7 +167,7 @@ export function ReservationListRow({
           {canEdit && (
             <Button asChild size="sm" variant="outline" className="h-8 px-3 text-xs font-medium">
               <Link
-                to={toReservationEditPath(item.id)}
+                to={toReservationEditPath(area, item.id)}
                 aria-label={`${monthDayStr}(${weekday}) ${item.facilityName} の予約を変更`}
               >
                 変更
@@ -205,7 +209,7 @@ export function ReservationListRow({
        * クリックが成立しない（リンク先は出るのに移動しない）。
        */}
       <Link
-        to={`/reservations/${item.id}`}
+        to={toReservationDetailPath(area, item.id)}
         /*
          * どの行のリンクかが読み上げだけで分かるようにする。
          * すべての行が同じ「予約の詳細を表示」だと、読み上げでは

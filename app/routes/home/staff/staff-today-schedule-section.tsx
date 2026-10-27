@@ -17,8 +17,10 @@ import {
 import { layoutTimelineItems } from "~/components/reservation/timeline-layout";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { reservationDetailPath, ReservationStatus } from "~/domain/reservation";
+import { ReservationStatus } from "~/domain/reservation";
+import { AppArea, toSharedScreenPath } from "~/lib/app-area";
 import { formatTimeRange, startOfTokyoDay, tokyoMinutesOfDay } from "~/lib/date";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type {
   TodayScheduleFacility,
   TodayScheduleReservation,
@@ -64,7 +66,7 @@ export function StaffTodayScheduleSection({
             </span>
           </div>
           <Button asChild variant="outline" size="sm" className="h-9 text-xs">
-            <Link to="/availability">空き状況で見る</Link>
+            <Link to={toSharedScreenPath(AppArea.Staff, "/availability")}>空き状況で見る</Link>
           </Button>
         </div>
       </div>
@@ -194,7 +196,7 @@ function TodayTimeline({
                     return (
                       <Link
                         key={reservation.id}
-                        to={reservationDetailPath(reservation.id)}
+                        to={toReservationDetailPath(AppArea.Staff, reservation.id)}
                         aria-label={`${timeRange} ${reservation.groupName} ${statusLabel} の予約の詳細を開く`}
                         title={`${timeRange}｜${reservation.groupName}｜${statusLabel}`}
                         className={cn(
@@ -260,7 +262,7 @@ function TodayList({
             return (
               <li key={reservation.id}>
                 <Link
-                  to={reservationDetailPath(reservation.id)}
+                  to={toReservationDetailPath(AppArea.Staff, reservation.id)}
                   className="flex flex-col gap-1 p-3.5 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <div className="flex flex-wrap items-center gap-2">

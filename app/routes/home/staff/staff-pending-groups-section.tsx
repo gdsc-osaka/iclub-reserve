@@ -2,7 +2,9 @@ import { Building2, ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import { AppArea } from "~/lib/app-area";
 import { formatMonthDay } from "~/lib/date";
+import { toGroupDetailPath } from "~/lib/group-paths";
 import type { GroupSearchItem } from "~/query/group/group-search";
 import { toStaffGroupPath } from "~/routes/groups/staff/query-params";
 import { SectionUnavailableAlert } from "../section-unavailable-alert";
@@ -59,7 +61,7 @@ export function StaffPendingGroupsSection({
           {groups.map((group) => (
             <li key={group.id}>
               <Link
-                to={`/groups/${group.id}`}
+                to={toGroupDetailPath(AppArea.Staff, group.id)}
                 className="flex items-center gap-3 p-3.5 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring sm:p-4"
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-1">

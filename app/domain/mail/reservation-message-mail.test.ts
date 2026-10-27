@@ -136,7 +136,7 @@ describe("createReservationMessageMailDrafts", () => {
     expect(draft.text).toContain("送信者: 山田太郎");
     expect(draft.text).toContain("メッセージ:\n利用人数の変更をお願いできますでしょうか。");
     expect(draft.text).toContain("返信は、このメールではなく予約詳細ページから送ってください。");
-    expect(draft.text).toContain(`https://example.com/reservations/${reservation.id}`);
+    expect(draft.text).toContain(`https://example.com/staff/reservations/${reservation.id}`);
     expect(draft.text).toContain("※このメールは送信専用です。返信はできません。");
   });
 
@@ -162,6 +162,7 @@ describe("createReservationMessageMailDrafts", () => {
     const draft = drafts[0]!;
 
     expect(draft.text).toContain("送信者: 事務局");
+    expect(draft.text).toContain(`https://example.com/reservations/${reservation.id}`);
     expect(draft.text).not.toContain("秘密の事務局員名");
   });
 });

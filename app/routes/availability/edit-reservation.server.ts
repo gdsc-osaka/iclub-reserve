@@ -14,8 +14,10 @@ import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationMailRecipientsQuery } from "~/infra/reservation/reservation-mail-recipients-query";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
+import type { AppArea } from "~/lib/app-area";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
+import { toAreaWhere } from "~/routes/_shared/app-area.server";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { editReservationUseCase } from "~/usecases/reservation/edit-reservation";
 import { editReservationDirectlyUseCase } from "~/usecases/reservation/edit-reservation-directly";
@@ -29,6 +31,8 @@ import { parseCalendarSelection, resolveAnchorDateKey, toCalendarPath } from "./
  * 予約 ID はフォームの値ではなく URL から取る。フォームの値を信じると、
  * この画面から別の予約を書き換えられてしまうため（ローダーが読んで欄に出した予約と同じものを指す）。
  *
+ * 事務局の画面では直接変更し、利用者の画面では団体の変更として保存する（COND-030 の (2)・ADR-016 決定 12）。
+ *
  * 成功したら、変更した予約を欄に開く URL へ転送する（ADR-014 決定 10・15）。
  * 送信の結果をそのまま描くと、再読み込みが再送信になってしまう。
  */
@@ -36,10 +40,14 @@ export async function editReservationAction({
   request,
   formData,
   user,
+  actsAsStaff,
+  area,
 }: {
-  request: Request;
-  formData: FormData;
-  user: SessionUser;
+  readonly request: Request;
+  readonly formData: FormData;
+  readonly user: SessionUser;
+  readonly actsAsStaff: boolean;
+  readonly area: AppArea;
 }): Promise<EditReservationActionError> {
   const values = readValues(formData);
   const now = new Date();
@@ -77,7 +85,7 @@ export async function editReservationAction({
   const args = {
     reservationId,
     actorUserId: user.id,
-    isStaff: user.is_staff,
+    isStaff: actsAsStaff,
     now,
     content,
     appBaseUrl: resolveAppBaseUrl(request),
@@ -97,7 +105,7 @@ export async function editReservationAction({
       values,
       ...toFormErrors(
         reservationActionErrors(
-          { where: "availability.edit", userId: user.id },
+          { where: toAreaWhere(area, "availability.edit"), userId: user.id },
           result.error,
           fieldKeyOf,
         ),
@@ -112,7 +120,7 @@ export async function editReservationAction({
   const anchorDateKey = resolveAnchorDateKey(request.url, values.dateKey);
 
   throw redirect(
-    toCalendarPath(content.facilityId, anchorDateKey, {
+    toCalendarPath(area, content.facilityId, anchorDateKey, {
       kind: "reservation",
       reservationId,
     }),

@@ -328,6 +328,30 @@ describe("reservation-mail", () => {
         expect(drafts[0]?.to.address).toBe("student@example.com");
       }
     });
+
+    it("事務局宛ては /staff/reservations/...、団体宛ては /reservations/... の URL になる（COND-030 の (5)）", () => {
+      const audience: ReservationMailAudience = {
+        groupMembers: [{ userId: "usr_student", address: "student@example.com" }],
+        staff: [{ userId: "usr_staff", address: "staff@example.com" }],
+      };
+
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Applied,
+        baseReservation,
+        audience,
+        APP_BASE_URL,
+      );
+
+      const memberDraft = drafts.find((d) => d.to.address === "student@example.com");
+      const staffDraft = drafts.find((d) => d.to.address === "staff@example.com");
+
+      expect(memberDraft?.text).toContain(
+        `https://reserve.example.com/reservations/${baseReservation.id}`,
+      );
+      expect(staffDraft?.text).toContain(
+        `https://reserve.example.com/staff/reservations/${baseReservation.id}`,
+      );
+    });
   });
 
   // --- 理由行の出力条件テスト ---

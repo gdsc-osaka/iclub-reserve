@@ -1,10 +1,11 @@
 import { cn } from "cn";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
 import { useSidebar } from "~/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
+import { type AppArea, toAreaSwitchPath } from "~/lib/app-area";
 
-import { type AppArea, type AppAreaLink, toAvailableAreas } from "./app-area";
+import { type AppAreaLink, toAvailableAreas } from "./app-area";
 import { NavCountDot } from "./nav-count";
 import { hasAnyNavCount, toNavItems, type NavCounts } from "./nav-items";
 import type { ShellUser } from "./shell-user";
@@ -27,6 +28,7 @@ const itemClassName = (isActive: boolean) =>
 /**
  * 画面の領域（利用者・事務局）を切り替える部品（ADR-016 決定 5）。
  *
+ * 開いている画面に当たるものがもう一方の画面にあればそこへ、無ければダッシュボードへ移す（ADR-016 決定 16）。
  * 行ける画面が 2 つ以上ある人（事務局スタッフなど）にのみ表示する。
  */
 export function AreaSwitch({
@@ -40,13 +42,14 @@ export function AreaSwitch({
   counts: NavCounts;
   variant: "sidebar" | "header";
 }>) {
+  const location = useLocation();
   const availableAreas = toAvailableAreas(user);
   if (availableAreas.length < 2) return null;
 
   const items = availableAreas.map((link): AreaSwitchItem => {
     const isActive = link.area === area;
     return {
-      link,
+      link: { ...link, to: toAreaSwitchPath(link.area, location) },
       isActive,
       hasCount: !isActive && hasAnyNavCount(counts, toNavItems(link.area)),
     };

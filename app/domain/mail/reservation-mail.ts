@@ -1,12 +1,14 @@
-import { formatDateTime } from "~/lib/date";
 import {
   ReservationEditOutcome,
   type AppliedReservationEdit,
   type DirectReservationEditOutcome,
 } from "~/domain/reservation/edit";
-import { reservationDetailPath, type UnlockArrangement } from "~/domain/reservation";
+import type { UnlockArrangement } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { unlockArrangementGroupNotice } from "~/domain/reservation/unlock-arrangement";
+import { AppArea } from "~/lib/app-area";
+import { formatDateTime } from "~/lib/date";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { MailDraft } from "./mail-outbox";
 
 /** 予約に関する通知メールの種別。値は idempotencyKey にそのまま入るので変えないこと */
@@ -191,14 +193,16 @@ export interface ReservationMailSubject {
  * イベント種別と予約情報から本文を組み立てる純粋関数。
  * 署名と冒頭以外の骨組みは全イベント共通で、理由の有無のみイベントと入力値により分岐する。
  * 末尾には、どのイベントでも予約詳細（SCR-005）へのリンクを載せる（EVT-001〜007・EVT-012・EVT-017）。
+ * リンクは `area` の画面の予約詳細にする（団体側の宛先は利用者の画面、事務局の宛先は事務局の画面。COND-030 の (5)）。
  */
 const buildBody = (
   event: ReservationMailEvent,
   reservation: ReservationMailSubject,
   appBaseUrl: string,
+  area: AppArea,
 ): string => {
   const copy = eventMailCopy[event];
-  const detailUrl = `${appBaseUrl}${reservationDetailPath(reservation.id)}`;
+  const detailUrl = `${appBaseUrl}${toReservationDetailPath(area, reservation.id)}`;
   const lines = [
     "i-Club 予約システムをご利用いただきありがとうございます。",
     "",
@@ -237,6 +241,7 @@ const buildBody = (
  * 予約通知の MailDraft の配列を生成する純粋関数。
  *
  * - 宛先ごとに 1 通ずつ MailDraft を生成する。notifiesStaff が真のイベントのみ事務局にも送信する。
+ * - 団体の宛先には利用者の画面、事務局宛てには事務局の画面の予約詳細 URL を載せる（COND-030 の (5)）。
  * - idempotencyKey は `reservation:<event>:<reservationId>:<updatedAt のミリ秒>:<userId ?? address>` の形式とする。
  * - 本文は送信時に DB を読み直さずに済むよう、レンダリング済みテキストとして埋め込む。
  *
@@ -264,21 +269,28 @@ export const createReservationMailDrafts = (
   appBaseUrl: string,
 ): readonly MailDraft[] => {
   const copy = eventMailCopy[event];
-  const text = buildBody(event, reservation, appBaseUrl);
-  const recipients = notifiesStaff[event]
-    ? [...audience.groupMembers, ...audience.staff]
-    : audience.groupMembers;
+  /*
+   * 本文は宛先の側（団体側・事務局）ごとに 1 回だけ組み立てる。違うのは予約の詳細へのリンクだけで、
+   * 団体側には利用者の画面、事務局には事務局の画面を載せる（COND-030 の (5)・ADR-016 決定 17）。
+   */
+  const toDrafts = (recipients: ReservationMailRecipients, area: AppArea): MailDraft[] => {
+    const text = buildBody(event, reservation, appBaseUrl, area);
+    return recipients.map((recipient) => {
+      const targetId = recipient.userId ?? recipient.address;
+      return {
+        idempotencyKey: `reservation:${event}:${reservation.id}:${reservation.updatedAt.getTime()}:${targetId}`,
+        to: {
+          address: recipient.address,
+          ...(recipient.name ? { name: recipient.name } : {}),
+        },
+        subject: copy.subject,
+        text,
+      };
+    });
+  };
 
-  return recipients.map((recipient) => {
-    const targetId = recipient.userId ?? recipient.address;
-    return {
-      idempotencyKey: `reservation:${event}:${reservation.id}:${reservation.updatedAt.getTime()}:${targetId}`,
-      to: {
-        address: recipient.address,
-        ...(recipient.name ? { name: recipient.name } : {}),
-      },
-      subject: copy.subject,
-      text,
-    };
-  });
+  const groupDrafts = toDrafts(audience.groupMembers, AppArea.User);
+  return notifiesStaff[event]
+    ? [...groupDrafts, ...toDrafts(audience.staff, AppArea.Staff)]
+    : groupDrafts;
 };

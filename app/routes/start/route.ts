@@ -1,6 +1,7 @@
 import { redirect } from "react-router";
 
-import { appAreaLinks, resolveShellArea } from "~/components/layout/app-area";
+import { appAreaLinks } from "~/components/layout/app-area";
+import { resolveShellArea } from "~/lib/app-area";
 import { readLastArea } from "~/components/layout/last-area-cookie";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 

@@ -89,7 +89,7 @@ test.describe("UC-014 団体を有効化・無効化する", { tag: "@UC-014" },
     const section = page.getByRole("region", { name: "承認待ちの団体" });
     await section.getByRole("link", { name: new RegExp(group.name) }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/groups/${group.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/staff/groups/${group.id}$`));
     await expect(page.getByRole("heading", { level: 1, name: group.name })).toBeVisible();
   });
 });

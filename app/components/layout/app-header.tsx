@@ -4,7 +4,7 @@ import { IclubMark } from "~/components/brand/iclub-logo";
 import { Separator } from "~/components/ui/separator";
 import { SidebarTrigger } from "~/components/ui/sidebar";
 
-import type { AppArea } from "./app-area";
+import type { AppArea } from "~/lib/app-area";
 import { AreaSwitch } from "./area-switch";
 import { findActiveNavItem, type NavCounts } from "./nav-items";
 import type { ShellUser } from "./shell-user";

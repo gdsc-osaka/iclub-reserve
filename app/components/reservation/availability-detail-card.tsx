@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
+import type { AppArea } from "~/lib/app-area";
 import { formatMonthDay, formatTimeRange } from "~/lib/date";
+import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 
 import { Badge } from "../ui/badge";
@@ -28,9 +30,11 @@ import { ReservationStatusBadge } from "./reservation-status-badge";
 export function AvailabilityReservationCard({
   reservation,
   facilityName,
+  area,
 }: Readonly<{
   reservation: AvailabilityReservation;
   facilityName: string;
+  area: AppArea;
 }>) {
   return (
     <div className="flex flex-col gap-2">
@@ -89,7 +93,7 @@ export function AvailabilityReservationCard({
       )}
 
       <Button asChild variant="outline" size="sm" className="w-full">
-        <Link to={`/reservations/${reservation.id}`}>予約の詳細を見る</Link>
+        <Link to={toReservationDetailPath(area, reservation.id)}>予約の詳細を見る</Link>
       </Button>
     </div>
   );
