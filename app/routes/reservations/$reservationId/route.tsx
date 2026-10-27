@@ -260,6 +260,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     reservationId,
     transition,
     reason,
+    unlockArrangement: formData.get("unlockArrangement"),
     now: new Date(),
   });
 

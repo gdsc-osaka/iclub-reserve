@@ -62,6 +62,7 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     // 確認ダイアログが開いていることを確認
     const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
     await expect(dialog).toBeVisible();
+    await dialog.getByLabel("要手配").click();
     await dialog.getByRole("button", { name: "承認する" }).click();
 
     /*
@@ -92,8 +93,11 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     const row = page.getByRole("listitem").filter({ hasText: facility.name });
     await row.getByRole("button", { name: "承認" }).click();
 
-    // 確認のダイアログで承認する
+    // 確認のダイアログで、解錠の手配を選ぶまで「承認する」を押せない
     const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
+    await expect(dialog.getByRole("button", { name: "承認する" })).toBeDisabled();
+    await dialog.getByLabel("要手配").click();
+    await expect(dialog.getByRole("button", { name: "承認する" })).toBeEnabled();
     await dialog.getByRole("button", { name: "承認する" }).click();
 
     // 仮予約ではなくなったので、既定の一覧からは消える
@@ -106,15 +110,16 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
       .click();
     await expect(row.getByText("承認済み", { exact: true })).toBeVisible();
 
-    // 申請者への承認の通知（EVT-005）が積まれている
+    // 申請者への承認の通知（EVT-005）が積まれ、要手配の案内が入っている
     const mails = await findQueuedMails(db, applicant.email);
-    expect(
-      mails.filter(
-        (mail) =>
-          mail.subject.includes("利用予約が承認されました") &&
-          mail.bodyText.includes(reservation.id),
-      ),
-    ).toHaveLength(1);
+    const approvedMails = mails.filter(
+      (mail) =>
+        mail.subject.includes("利用予約が承認されました") && mail.bodyText.includes(reservation.id),
+    );
+    expect(approvedMails).toHaveLength(1);
+    expect(approvedMails[0]?.bodyText).toContain(
+      "当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
+    );
   });
 
   test("事務局が理由を入れて却下すると却下済みになり、理由つきの却下の通知が積まれる", async ({
@@ -210,7 +215,12 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     const row = section.getByRole("listitem").filter({ hasText: facility.name });
     await row.getByRole("button", { name: "承認" }).click();
 
-    // 確認のダイアログを挟まずに承認され、行が一覧から消える
+    // 確認ダイアログで解錠の手配を選んで承認する
+    const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
+    await dialog.getByLabel("要手配").click();
+    await dialog.getByRole("button", { name: "承認する" }).click();
+
+    // 承認され、行が一覧から消える
     await expect(row).toBeHidden();
     await expect
       .poll(async () => {
@@ -241,10 +251,9 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
 
     const row = page.getByRole("listitem").filter({ hasText: facility.name });
     await row.getByRole("button", { name: "承認" }).click();
-    await page
-      .getByRole("alertdialog", { name: "仮予約の承認" })
-      .getByRole("button", { name: "承認する" })
-      .click();
+    const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
+    await dialog.getByLabel("要手配").click();
+    await dialog.getByRole("button", { name: "承認する" }).click();
     await expect(row).toBeHidden();
 
     /*

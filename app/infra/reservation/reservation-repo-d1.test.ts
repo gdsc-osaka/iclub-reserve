@@ -19,6 +19,7 @@ import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain
 import type { CalendarSyncTaskDraft } from "~/domain/calendar";
 import {
   ReservationStatus,
+  UnlockArrangement,
   type ApplyContentEditArgs,
   type ApplyStatusTransitionArgs,
   type Reservation,
@@ -69,6 +70,7 @@ interface ReservationRow {
   readonly startAt: Date;
   readonly endAt: Date;
   readonly headCount?: number;
+  readonly unlockArrangement?: UnlockArrangement | null;
   readonly updatedAt?: Date;
 }
 
@@ -82,6 +84,7 @@ const insertReservation = (row: ReservationRow) =>
       endAt: row.endAt,
       headCount: row.headCount ?? 4,
       status: row.status,
+      unlockArrangement: row.unlockArrangement,
       createdBy: "usr_taro",
       requestedAt: REQUESTED_AT,
       updatedAt: row.updatedAt ?? READ_AT,
@@ -109,6 +112,7 @@ const editArgs = (overrides: Partial<ApplyContentEditArgs>): ApplyContentEditArg
   note: null,
   status: ReservationStatus.Provisional,
   requestedAt: REQUESTED_AT,
+  unlockArrangement: null,
   updatedAt: EDITED_AT,
   requireNoApprovedOverlap: false,
   ...overrides,
@@ -464,6 +468,7 @@ describe("createApproved を SQLite で実行する", () => {
     note: "直接作成のテスト",
     status: ReservationStatus.Approved,
     statusReason: null,
+    unlockArrangement: UnlockArrangement.Required,
     createdBy: "usr_taro",
     createdAt: at("09:00"),
     requestedAt: at("09:01"),
@@ -588,6 +593,7 @@ describe("カレンダー同期タスクの書き込み", () => {
     note: "カレンダー同期テスト",
     status: ReservationStatus.Approved,
     statusReason: null,
+    unlockArrangement: UnlockArrangement.Arranged,
     createdBy: "usr_taro",
     createdAt: at("09:00"),
     requestedAt: at("09:00"),
@@ -767,6 +773,7 @@ describe("create を SQLite で実行する", () => {
       note: "申請メモ",
       status: ReservationStatus.Provisional,
       statusReason: null,
+      unlockArrangement: null,
       createdBy: "usr_taro",
       createdAt: at("09:00"),
       requestedAt: at("09:00"),
@@ -793,5 +800,159 @@ describe("create を SQLite で実行する", () => {
       groupId: "grp_robotics",
       action: AuditLogAction.ReservationApply,
     });
+  });
+});
+
+describe("解錠の手配（unlock_arrangement）の D1 での書き込み", () => {
+  it("applyStatusTransition に unlockArrangement を渡すと書かれ、渡さないと今の値のまま", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_status_unlock",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+      unlockArrangement: null,
+      updatedAt: READ_AT,
+    });
+
+    // 1. unlockArrangement を渡して承認
+    const argsWithUnlock: ApplyStatusTransitionArgs = {
+      id: "res_status_unlock",
+      expectedStatus: ReservationStatus.Provisional,
+      expectedUpdatedAt: READ_AT,
+      status: ReservationStatus.Approved,
+      statusReason: null,
+      unlockArrangement: UnlockArrangement.Required,
+      updatedAt: EDITED_AT,
+      requireNoApprovedOverlap: false,
+    };
+    const outcome1 = await repository.applyStatusTransition(
+      argsWithUnlock,
+      [],
+      dummyAuditLog({ targetId: "res_status_unlock" }),
+      null,
+    );
+    expect(outcome1._unsafeUnwrap().applied).toBe(true);
+
+    const saved1 = (await repository.findById("res_status_unlock"))._unsafeUnwrap();
+    expect(saved1.unlockArrangement).toBe(UnlockArrangement.Required);
+
+    // 2. unlockArrangement を渡さずに状態変更（キャンセルなど）
+    const CANCELLED_AT = new Date("2026-09-20T11:00:00+09:00");
+    const argsWithoutUnlock: ApplyStatusTransitionArgs = {
+      id: "res_status_unlock",
+      expectedStatus: ReservationStatus.Approved,
+      expectedUpdatedAt: EDITED_AT,
+      status: ReservationStatus.Cancelled,
+      statusReason: "キャンセル理由",
+      updatedAt: CANCELLED_AT,
+      requireNoApprovedOverlap: false,
+    };
+    const outcome2 = await repository.applyStatusTransition(
+      argsWithoutUnlock,
+      [],
+      dummyAuditLog({ targetId: "res_status_unlock" }),
+      null,
+    );
+    expect(outcome2._unsafeUnwrap().applied).toBe(true);
+
+    const saved2 = (await repository.findById("res_status_unlock"))._unsafeUnwrap();
+    expect(saved2.unlockArrangement).toBe(UnlockArrangement.Required); // 変わらずそのまま
+  });
+
+  it("applyContentEdit で値が書かれる（null に戻すことも含む）", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_edit_unlock",
+      status: ReservationStatus.Approved,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+      unlockArrangement: UnlockArrangement.Required,
+      updatedAt: READ_AT,
+    });
+
+    // 1. 手配済みに変更
+    const args1: ApplyContentEditArgs = {
+      id: "res_edit_unlock",
+      expectedStatus: ReservationStatus.Approved,
+      expectedUpdatedAt: READ_AT,
+      facilityId: "fac_a",
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+      headCount: 4,
+      note: null,
+      status: ReservationStatus.Approved,
+      requestedAt: REQUESTED_AT,
+      unlockArrangement: UnlockArrangement.Arranged,
+      updatedAt: EDITED_AT,
+      requireNoApprovedOverlap: false,
+    };
+    const outcome1 = await repository.applyContentEdit(
+      args1,
+      [],
+      dummyAuditLog({ targetId: "res_edit_unlock" }),
+      null,
+    );
+    expect(outcome1._unsafeUnwrap().applied).toBe(true);
+    const saved1 = (await repository.findById("res_edit_unlock"))._unsafeUnwrap();
+    expect(saved1.unlockArrangement).toBe(UnlockArrangement.Arranged);
+
+    // 2. null（未定）に戻す（仮予約に戻ったときなど）
+    const REAPPROVAL_AT = new Date("2026-09-20T11:00:00+09:00");
+    const args2: ApplyContentEditArgs = {
+      id: "res_edit_unlock",
+      expectedStatus: ReservationStatus.Approved,
+      expectedUpdatedAt: EDITED_AT,
+      facilityId: "fac_a",
+      startAt: at("13:00"),
+      endAt: at("15:00"),
+      headCount: 4,
+      note: null,
+      status: ReservationStatus.Provisional,
+      requestedAt: REAPPROVAL_AT,
+      unlockArrangement: null,
+      updatedAt: REAPPROVAL_AT,
+      requireNoApprovedOverlap: false,
+    };
+    const outcome2 = await repository.applyContentEdit(
+      args2,
+      [],
+      dummyAuditLog({ targetId: "res_edit_unlock" }),
+      null,
+    );
+    expect(outcome2._unsafeUnwrap().applied).toBe(true);
+    const saved2 = (await repository.findById("res_edit_unlock"))._unsafeUnwrap();
+    expect(saved2.unlockArrangement).toBeNull();
+  });
+
+  it("createApproved で値が書かれる", async () => {
+    const repository = createReservationRepository(testDb.db);
+    const reservation: Reservation = {
+      id: "res_direct_unlock",
+      groupId: "grp_robotics",
+      facilityId: "fac_a",
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+      headCount: 3,
+      note: "直接作成",
+      status: ReservationStatus.Approved,
+      statusReason: null,
+      unlockArrangement: UnlockArrangement.NotRequired,
+      createdBy: "usr_taro",
+      createdAt: at("09:00"),
+      requestedAt: at("09:00"),
+      updatedAt: at("09:00"),
+    };
+
+    const outcome = await repository.createApproved(
+      reservation,
+      dummyAuditLog({ targetId: "res_direct_unlock" }),
+      null,
+    );
+    expect(outcome._unsafeUnwrap().applied).toBe(true);
+
+    const saved = (await repository.findById("res_direct_unlock"))._unsafeUnwrap();
+    expect(saved.unlockArrangement).toBe(UnlockArrangement.NotRequired);
+    expect(saved).toEqual(reservation);
   });
 });

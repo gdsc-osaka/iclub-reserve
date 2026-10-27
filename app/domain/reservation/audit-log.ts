@@ -5,7 +5,7 @@ import {
   type AuditLogChanges,
 } from "../audit-log";
 import { type AppliedReservationEdit, ReservationEditOutcome } from "./edit";
-import type { Reservation, ReservationStatus } from "./index";
+import type { Reservation, ReservationStatus, UnlockArrangement } from "./index";
 import { ReservationTransition } from "./transition";
 
 /**
@@ -30,6 +30,9 @@ export const groupEditAuditLogAction: Record<AppliedReservationEdit, AuditLogAct
 
 /**
  * 予約の新規作成（申請・直接作成）時の changes を組み立てる。
+ *
+ * 解錠の手配（COND-027）は、直接作成（UC-008）で選んだときだけ渡して残す。
+ * 申請（UC-002）では未定なので渡さない。
  */
 export const toReservationCreatedChanges = (input: {
   readonly facilityId: string;
@@ -38,6 +41,7 @@ export const toReservationCreatedChanges = (input: {
   readonly headCount: number;
   readonly note: string | null;
   readonly status: ReservationStatus;
+  readonly unlockArrangement?: UnlockArrangement;
 }): AuditLogChanges =>
   toCreatedChanges({
     facility_id: input.facilityId,
@@ -46,16 +50,29 @@ export const toReservationCreatedChanges = (input: {
     head_count: input.headCount,
     note: input.note,
     status: input.status,
+    ...(input.unlockArrangement === undefined
+      ? {}
+      : { unlock_arrangement: input.unlockArrangement }),
   });
 
 /**
  * 予約の状態変更時の changes を組み立てる。
  *
  * status と status_reason を必ず含める（null -> null でも残す）。
+ * 承認（UC-006）では選んだ解錠の手配（COND-027）を after に渡し、unlock_arrangement も残す。
+ * ほかの操作では渡さない（列に触れないので、記録にも残さない）。
  */
 export const toReservationStatusChanges = (
-  before: { readonly status: ReservationStatus; readonly statusReason: string | null },
-  after: { readonly status: ReservationStatus; readonly statusReason: string | null },
+  before: {
+    readonly status: ReservationStatus;
+    readonly statusReason: string | null;
+    readonly unlockArrangement: UnlockArrangement | null;
+  },
+  after: {
+    readonly status: ReservationStatus;
+    readonly statusReason: string | null;
+    readonly unlockArrangement?: UnlockArrangement;
+  },
 ): AuditLogChanges => ({
   status: {
     before: before.status,
@@ -65,12 +82,27 @@ export const toReservationStatusChanges = (
     before: before.statusReason,
     after: after.statusReason,
   },
+  ...(after.unlockArrangement === undefined
+    ? {}
+    : {
+        unlock_arrangement: {
+          before: before.unlockArrangement,
+          after: after.unlockArrangement,
+        },
+      }),
 });
 
 /** 内容変更の記録で比べる予約の項目。ステータスも含める（UC-005 で仮予約に戻ることがあるため） */
 type ReservationEditedFields = Pick<
   Reservation,
-  "facilityId" | "startAt" | "endAt" | "headCount" | "note" | "status" | "statusReason"
+  | "facilityId"
+  | "startAt"
+  | "endAt"
+  | "headCount"
+  | "note"
+  | "status"
+  | "statusReason"
+  | "unlockArrangement"
 >;
 
 /**
@@ -79,6 +111,7 @@ type ReservationEditedFields = Pick<
  * 変わった項目だけを残す。承認済みの予約の施設・日時を変えて仮予約に戻るとき（Reapproval）は、
  * status（approved → provisional）も変わった項目として入る。
  * 状態が変わるときは、ほかの状態の変更と同じく status_reason も含める（INFO-008）。
+ * 解錠の手配（unlock_arrangement）も、変わったときだけ残る（直接変更で選び直したときと、仮予約に戻って未定になったとき。COND-027）。
  */
 export const toReservationContentEditChanges = (
   before: ReservationEditedFields,
@@ -92,6 +125,7 @@ export const toReservationContentEditChanges = (
       head_count: before.headCount,
       note: before.note,
       status: before.status,
+      unlock_arrangement: before.unlockArrangement,
     },
     {
       facility_id: after.facilityId,
@@ -100,6 +134,7 @@ export const toReservationContentEditChanges = (
       head_count: after.headCount,
       note: after.note,
       status: after.status,
+      unlock_arrangement: after.unlockArrangement,
     },
   );
 

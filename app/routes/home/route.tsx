@@ -273,6 +273,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       reservationId,
       transition,
       reason,
+      unlockArrangement: formData.get("unlockArrangement"),
       now,
     });
 

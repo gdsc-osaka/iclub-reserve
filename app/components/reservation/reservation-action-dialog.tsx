@@ -14,9 +14,12 @@ import {
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import type { UnlockArrangement } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
+import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
 import { formatMonthDayParts, formatTime, toTokyoDateKey } from "~/lib/date";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
+import { UnlockArrangementField, unlockArrangementOptions } from "./unlock-arrangement-field";
 
 /**
  * 操作ダイアログで表示に必要な予約の項目。
@@ -50,6 +53,8 @@ interface DialogConfig {
   readonly hasReason: boolean;
   readonly reasonLabel: string;
   readonly reasonPlaceholder: string;
+  /** 解錠の手配の欄を出すか。承認では必ず選ぶ（COND-027） */
+  readonly hasUnlockArrangement: boolean;
 }
 
 const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
@@ -62,6 +67,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         hasReason: true,
         reasonLabel: "取り消し理由",
         reasonPlaceholder: "取り消しの理由を入力してください",
+        hasUnlockArrangement: false,
       };
     case ReservationTransition.Cancel:
       return {
@@ -71,6 +77,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         hasReason: true,
         reasonLabel: "キャンセル理由",
         reasonPlaceholder: "キャンセルの理由を入力してください",
+        hasUnlockArrangement: false,
       };
     case ReservationTransition.Approve:
       return {
@@ -80,6 +87,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         hasReason: false,
         reasonLabel: "",
         reasonPlaceholder: "",
+        hasUnlockArrangement: true,
       };
     case ReservationTransition.Reject:
       return {
@@ -89,6 +97,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         hasReason: true,
         reasonLabel: "却下理由",
         reasonPlaceholder: "却下の理由を入力してください",
+        hasUnlockArrangement: false,
       };
     case ReservationTransition.StaffCancel:
       return {
@@ -98,6 +107,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         hasReason: true,
         reasonLabel: "キャンセル理由",
         reasonPlaceholder: "キャンセルの理由を入力してください",
+        hasUnlockArrangement: false,
       };
   }
 };
@@ -120,10 +130,13 @@ export function ReservationActionDialog({
 }: Readonly<ReservationActionDialogProps>) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [unlockArrangement, setUnlockArrangement] = useState<UnlockArrangement | null>(null);
   const navigation = useNavigation();
 
   const config = getDialogConfig(transition);
-  const isSubmitDisabled = config.hasReason && reason.trim() === "";
+  const isSubmitDisabled =
+    (config.hasReason && reason.trim() === "") ||
+    (config.hasUnlockArrangement && unlockArrangement === null);
 
   // この予約のこの操作が送信中か。同じ画面に他の予約のボタンが並ぶので、
   // intent（操作）だけでなく reservationId まで見て、押したボタンだけを見分ける
@@ -220,6 +233,14 @@ export function ReservationActionDialog({
               </div>
             )}
 
+            {config.hasUnlockArrangement && (
+              <UnlockArrangementField
+                idPrefix={`unlock-arrangement-${item.id}-${transition}`}
+                value={unlockArrangement}
+                onValueChange={setUnlockArrangement}
+              />
+            )}
+
             <AlertDialogFooter className="mt-2">
               <AlertDialogCancel type="button">やめる</AlertDialogCancel>
               <Button type="submit" variant={config.actionVariant} disabled={isSubmitDisabled}>
@@ -253,6 +274,21 @@ export function ReservationActionDialog({
                 className="text-sm"
               />
             </>
+          )}
+          {/*
+            解錠の手配の欄はダイアログと同じくここにも置く。承認では解錠の手配が必須
+            （COND-027）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
+          */}
+          {config.hasUnlockArrangement && (
+            <fieldset className="flex flex-col gap-1">
+              <legend className="text-xs">解錠の手配</legend>
+              {unlockArrangementOptions.map((option) => (
+                <label key={option} className="flex items-center gap-1.5 text-xs">
+                  <input type="radio" name="unlockArrangement" value={option} required />
+                  {unlockArrangementLabel[option]}
+                </label>
+              ))}
+            </fieldset>
           )}
           <Button
             type="submit"

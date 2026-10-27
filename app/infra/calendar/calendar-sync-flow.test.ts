@@ -6,7 +6,7 @@ import { toCalendarEventId, type CalendarClient, type CalendarEvent } from "~/do
 import { FacilityErrorCode, type FacilityRepository } from "~/domain/facility";
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import { MembershipErrorCode, type MembershipRepository } from "~/domain/membership";
-import { ReservationStatus } from "~/domain/reservation";
+import { ReservationStatus, UnlockArrangement } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { QueryErrorCode } from "~/query/error";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
@@ -149,6 +149,7 @@ describe("予約の操作から Google Calendar への反映まで", () => {
         actorUserId: "usr_staff",
         isStaff: true,
         transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
         now: testNow,
       },
     );
@@ -225,6 +226,7 @@ describe("予約の操作から Google Calendar への反映まで", () => {
         actorUserId: "usr_staff",
         isStaff: true,
         now: testNow,
+        unlockArrangement: UnlockArrangement.Arranged,
         content: { facilityId: "fac_2", startAt, endAt, headCount: 3, note: null },
       },
     );

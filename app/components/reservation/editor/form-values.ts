@@ -12,8 +12,10 @@ import {
   RESERVATION_MIN_HEAD_COUNT,
   RESERVATION_NOTE_MAX_LENGTH,
   ReservationField,
+  type UnlockArrangement,
 } from "~/domain/reservation";
 import type { ReservationContent } from "~/domain/reservation/edit";
+import { parseUnlockArrangement } from "~/domain/reservation/unlock-arrangement";
 import { validateReservationPeriod } from "~/domain/reservation/validation";
 import { atTokyoMinutes, parseTokyoDateKey, parseTokyoTimeKey } from "~/lib/date";
 
@@ -35,6 +37,8 @@ export interface FormValues {
   readonly note: string;
   /** 決まった値以外が送られてきたら、仮予約の申請として扱う */
   readonly mode: ReservationFormMode;
+  /** 直接作成または承認済みの直接変更で指定された解錠の手配（COND-027） */
+  readonly unlockArrangement: UnlockArrangement | null;
 }
 
 /**
@@ -43,7 +47,7 @@ export interface FormValues {
  * 日付・開始・終了は 3 つで 1 つの「日時」なので、まとめて `period` に出す。
  * 欄ごとに分けても、直すべき組み合わせが伝わらない。
  */
-type FieldKey = "groupId" | "facilityId" | "period" | "headCount" | "note";
+type FieldKey = "groupId" | "facilityId" | "period" | "headCount" | "note" | "unlockArrangement";
 
 /** 入力の欄ごとのエラー。誤りのある欄だけを持つ */
 export type FieldErrors = Partial<Record<FieldKey, string>>;
@@ -63,6 +67,7 @@ export const readValues = (formData: FormData): FormValues => ({
   headCount: readString(formData, "head_count"),
   note: readString(formData, "note"),
   mode: readString(formData, "mode") === "direct" ? "direct" : "provisional",
+  unlockArrangement: parseUnlockArrangement(formData.get("unlockArrangement")),
 });
 
 /**
@@ -202,6 +207,7 @@ export const fieldKeyOf = {
   [ReservationField.Period]: "period",
   [ReservationField.HeadCount]: "headCount",
   [ReservationField.Note]: "note",
+  [ReservationField.UnlockArrangement]: "unlockArrangement",
 } as const satisfies Partial<Record<ReservationField, FieldKey>>;
 
 /**

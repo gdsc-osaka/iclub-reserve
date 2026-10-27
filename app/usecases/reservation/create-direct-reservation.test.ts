@@ -1,7 +1,7 @@
 import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vitest";
 
-import { AuditLogAction } from "~/domain/audit-log";
+import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { FacilityErrorCode, type Facility } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type Group } from "~/domain/group";
 import { MembershipRole, type StoredMembership } from "~/domain/membership";
@@ -9,6 +9,7 @@ import {
   ReservationErrorCode,
   ReservationField,
   ReservationStatus,
+  UnlockArrangement,
   type Reservation,
 } from "~/domain/reservation";
 import {
@@ -53,6 +54,7 @@ const args = {
   actorUserId: "usr_staff_01",
   isStaff: true,
   now,
+  unlockArrangement: UnlockArrangement.Arranged,
   reservation: {
     facilityId: "fac_meeting_a",
     groupId: "grp_robotics",
@@ -76,7 +78,7 @@ const createDeps = (
   } = {},
 ) => {
   const createApproved = vi.fn(
-    (_reservation: Reservation, _auditDraft: unknown, _calendarSync?: unknown) =>
+    (_reservation: Reservation, _auditDraft: AuditLogDraft, _calendarSync?: unknown) =>
       okAsync({ applied: overrides.blockedOnWrite !== true }),
   );
 
@@ -130,6 +132,7 @@ describe("createDirectReservationUseCase", () => {
     expect(created).toMatchObject({
       status: ReservationStatus.Approved,
       statusReason: null,
+      unlockArrangement: UnlockArrangement.Arranged,
       createdBy: "usr_staff_01",
       facilityId: "fac_meeting_a",
       groupId: "grp_robotics",
@@ -150,6 +153,7 @@ describe("createDirectReservationUseCase", () => {
         head_count: { before: null, after: 4 },
         note: { before: null, after: "事務局主催説明会" },
         status: { before: null, after: "approved" },
+        unlock_arrangement: { before: null, after: "arranged" },
       },
     });
     expect(calendarSyncDraft).toEqual({
@@ -335,6 +339,46 @@ describe("createDirectReservationUseCase", () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr()).toMatchObject({ code, field });
       expect(createApproved).not.toHaveBeenCalled();
+    },
+  );
+
+  it("解錠の手配が未指定（null）のときは InvalidInput になり、作成されない（COND-027）", async () => {
+    const { deps, createApproved } = createDeps();
+
+    const result = await createDirectReservationUseCase(deps, {
+      ...args,
+      unlockArrangement: null,
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.InvalidInput,
+      field: ReservationField.UnlockArrangement,
+      userMessage: "解錠の手配を「要手配」「手配済み」「不要」から選んでください。",
+    });
+    expect(createApproved).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [UnlockArrangement.Required, "required"],
+    [UnlockArrangement.NotRequired, "not_required"],
+  ])(
+    "指定した解錠の手配（%s）で作られ、changes に記録される（COND-027）",
+    async (unlockArrangement, expectedChangeValue) => {
+      const { deps, createApproved } = createDeps();
+
+      const result = await createDirectReservationUseCase(deps, {
+        ...args,
+        unlockArrangement,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const [created, auditDraft] = createApproved.mock.calls[0] ?? [];
+      expect(created?.unlockArrangement).toBe(unlockArrangement);
+      expect(auditDraft?.changes.unlock_arrangement).toEqual({
+        before: null,
+        after: expectedChangeValue,
+      });
     },
   );
 });

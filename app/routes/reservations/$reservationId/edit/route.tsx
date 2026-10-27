@@ -168,7 +168,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const result =
     resolveEditMode(args) === ReservationEditMode.Direct
-      ? await editReservationDirectlyUseCase(deps, args)
+      ? await editReservationDirectlyUseCase(deps, {
+          ...args,
+          unlockArrangement: values.unlockArrangement,
+        })
       : await editReservationUseCase(deps, args);
 
   if (result.isErr()) {

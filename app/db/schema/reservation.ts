@@ -2,7 +2,7 @@ import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlit
 import { createId } from "@paralleldrive/cuid2";
 import { user } from "./auth";
 import { groupTable } from "./group";
-import { ReservationStatus } from "~/domain/reservation";
+import { type UnlockArrangement, ReservationStatus } from "~/domain/reservation";
 
 export const facilityTable = sqliteTable("facility", {
   id: text("id")
@@ -59,6 +59,14 @@ export const reservationTable = sqliteTable("reservation", {
     .$type<ReservationStatus>()
     .notNull()
     .$default(() => ReservationStatus.Provisional),
+
+  /**
+   * 施設の解錠の手配（INFO-001 / STATE-004 / COND-027）。
+   *
+   * "required"（要手配）、"arranged"（手配済み）、"not_required"（不要）。
+   * null は未定を表す。
+   */
+  unlockArrangement: text("unlock_arrangement").$type<UnlockArrangement>(),
 
   statusReason: text("status_reason"),
 

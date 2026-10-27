@@ -1,4 +1,5 @@
 import type { ReservationTransition } from "~/domain/reservation/transition";
+import { parseUnlockArrangement } from "~/domain/reservation/unlock-arrangement";
 import type { Database } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
@@ -23,6 +24,8 @@ export const changeReservationStatus = (
     readonly transition: ReservationTransition;
     /** フォームの `reason` の値。文字列でなければ理由なしとして扱う */
     readonly reason: FormDataEntryValue | null;
+    /** フォームの `unlockArrangement` の値。承認のときだけ使う（COND-027） */
+    readonly unlockArrangement: FormDataEntryValue | null;
     readonly now: Date;
   },
 ) =>
@@ -39,6 +42,7 @@ export const changeReservationStatus = (
       isStaff: user.is_staff,
       transition: input.transition,
       reason: typeof input.reason === "string" ? input.reason : null,
+      unlockArrangement: parseUnlockArrangement(input.unlockArrangement),
       now: input.now,
       appBaseUrl: resolveAppBaseUrl(request),
     },

@@ -18,6 +18,23 @@ export const ReservationStatus = {
 
 export type ReservationStatus = (typeof ReservationStatus)[keyof typeof ReservationStatus];
 
+/**
+ * 施設の解錠の手配（INFO-001 / STATE-004 / COND-027）。
+ *
+ * 建物の玄関や施設の部屋が施錠される日時の利用で、事務局が解錠を手配するかどうか。
+ * 施錠される日時かどうかはシステムでは判定せず、事務局が予約ごとに判断して選ぶ。
+ * 予約ステータス（STATE-001）とは別の軸なので、別の列で持つ。
+ *
+ * 値が無い（null）ことが「未定」を表す。仮予約の間は未定のまま。
+ */
+export const UnlockArrangement = {
+  Required: "required",
+  Arranged: "arranged",
+  NotRequired: "not_required",
+} as const;
+
+export type UnlockArrangement = (typeof UnlockArrangement)[keyof typeof UnlockArrangement];
+
 export interface Reservation {
   id: string;
   facilityId: string;
@@ -28,6 +45,8 @@ export interface Reservation {
   note: string | null;
   status: ReservationStatus;
   statusReason: string | null;
+  /** 施設の解錠の手配。null は未定（COND-027） */
+  unlockArrangement: UnlockArrangement | null;
   createdBy: string;
   createdAt: Date;
   /**
@@ -241,6 +260,8 @@ export const ReservationField = {
   Note: "reservation_note",
   /** 却下・キャンセルの理由（COND-002） */
   StatusReason: "reservation_status_reason",
+  /** 施設の解錠の手配（COND-027） */
+  UnlockArrangement: "reservation_unlock_arrangement",
   /** メッセージ本文（COND-023） */
   MessageBody: "reservation_message_body",
 } as const;
@@ -288,6 +309,12 @@ export interface ApplyStatusTransitionArgs {
   /** 更新後の予約ステータス */
   readonly status: ReservationStatus;
   readonly statusReason: string | null;
+  /**
+   * 施設の解錠の手配（COND-027）。
+   *
+   * 承認のときだけ渡し、渡さなければ列に触れない。
+   */
+  readonly unlockArrangement?: UnlockArrangement;
   readonly updatedAt: Date;
   /**
    * 承認（approve）のときだけ true。
@@ -326,6 +353,8 @@ export interface ApplyContentEditArgs {
   readonly status: ReservationStatus;
   /** 変更後の申請日時。団体が施設・日時を変えたときだけ変わる（resolveRequestedAtAfterEdit） */
   readonly requestedAt: Date;
+  /** 変更後の解錠の手配。再承認待ち（Reapproval）なら null に戻り、それ以外は決めた値を書く（COND-027） */
+  readonly unlockArrangement: UnlockArrangement | null;
   readonly updatedAt: Date;
   /**
    * 施設か日時を変えるときだけ true。
