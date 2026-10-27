@@ -281,6 +281,12 @@ describe("availability paths", () => {
       expect(differsOnlyInSelection(new URLSearchParams(), new URLSearchParams())).toBe(true);
     });
 
+    it("reservation から draft に切り替わった場合も true を返す", () => {
+      const a = new URLSearchParams("facility=fac_1&date=2026-11-04&reservation=res_1");
+      const b = new URLSearchParams("facility=fac_1&date=2026-11-04&draft=2026-11-04T10:00-11:00");
+      expect(differsOnlyInSelection(a, b)).toBe(true);
+    });
+
     it("reservation から edit に切り替わった場合も true を返す", () => {
       const a = new URLSearchParams("facility=fac_1&date=2026-11-04&reservation=res_1");
       const b = new URLSearchParams(
