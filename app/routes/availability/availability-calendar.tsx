@@ -17,6 +17,7 @@ import {
   type AvailabilityDay,
 } from "~/components/reservation/availability-week";
 import {
+  findOverlapping,
   startSlotMinutes,
   toBlockedSlots,
   toDefaultRange,
@@ -32,6 +33,7 @@ import type { AvailabilityReservation } from "~/query/facility/facility-availabi
 import { findDayIndex } from "./calendar-window";
 import type { CalendarDraft, CalendarSelection } from "./paths";
 import { useDraftGesture, type DraftGesture, type GestureDraft } from "./use-draft-gesture";
+import { excludeEditingReservation } from "./use-calendar-selection";
 
 /** 「9/12」の形式。日付の見出しの 2 行目に使う */
 const shortDateFormatter = new Intl.DateTimeFormat("ja-JP", {
@@ -77,7 +79,7 @@ export function AvailabilityCalendar({
   anchorKey,
   reservations,
   now,
-  canApply,
+  canPickSlot,
   selection,
   onOpenDraft,
   onOpenReservation,
@@ -91,8 +93,8 @@ export function AvailabilityCalendar({
   reservations: readonly AvailabilityReservation[];
   /** ローダーが読んだ現在時刻。今日の列に「いま」の線を引くのに使う */
   now: Date;
-  /** 空いている枠を押して申請へ進めるかどうか（COND-006） */
-  canApply: boolean;
+  /** 空いている枠を押して申請または変更へ進めるかどうか（COND-006 / ADR-014 決定 15） */
+  canPickSlot: boolean;
   /** 開いているもの。予約の帯の輪郭と仮の枠に使う */
   selection: CalendarSelection | null;
   onOpenDraft: (draft: CalendarDraft) => void;
@@ -130,7 +132,7 @@ export function AvailabilityCalendar({
             hiddenUntilReady={toHiddenUntilReady(index, anchorIndex)}
             reservations={reservations}
             now={now}
-            canApply={canApply}
+            canPickSlot={canPickSlot}
             selection={selection}
             gesture={gesture}
             onOpenDraft={onOpenDraft}
@@ -159,7 +161,7 @@ const toHiddenUntilReady = (index: number, anchorIndex: number): string | null =
 };
 
 /**
- * この日の列に描く仮の枠の時間帯。描かないなら null（時刻を選んでいない仮の枠も描かない）。
+ * この日の列に描く仮の枠（申請の枠・変更後の枠）の時間帯。描かないなら null（時刻を選んでいない仮の枠も描かない）。
  *
  * なぞる操作・丸を動かす操作の途中は、URL の仮の枠の代わりに途中の時間帯を描く（ADR-014 決定 12）。
  * 仮の枠が 2 つ見えないよう、操作中は操作している日にだけ描く。
@@ -170,7 +172,8 @@ const toShownDraftRange = (
   dateKey: string,
 ): SlotRange | null => {
   if (gestureDraft !== null) return gestureDraft.dateKey === dateKey ? gestureDraft.range : null;
-  if (selection?.kind !== "draft" || selection.draft.dateKey !== dateKey) return null;
+  if (selection === null || selection.kind === "reservation") return null;
+  if (selection.draft.dateKey !== dateKey) return null;
   return selection.draft.range;
 };
 
@@ -228,7 +231,7 @@ function DayColumn({
   hiddenUntilReady,
   reservations,
   now,
-  canApply,
+  canPickSlot,
   selection,
   gesture,
   onOpenDraft,
@@ -238,21 +241,30 @@ function DayColumn({
   hiddenUntilReady: string | null;
   reservations: readonly AvailabilityReservation[];
   now: Date;
-  canApply: boolean;
+  canPickSlot: boolean;
   selection: CalendarSelection | null;
   gesture: DraftGesture;
   onOpenDraft: (draft: CalendarDraft) => void;
   onOpenReservation: (reservationId: string) => void;
 }>) {
+  /** 変更を開いているときの、変更する予約の ID */
+  const editingReservationId = selection?.kind === "edit" ? selection.reservationId : null;
+
+  // 帯は変更する予約も含めて並べる。変更する予約の帯は薄く残して描く（ADR-014 決定 15）
   const blocks = toDayBlocks(day, reservations);
   const placements = layoutTimelineItems(blocks);
   /*
    * 承認済みの予約と重なる枠は押せなくする（COND-001）。
    * 帯を重ねて隠しているだけだと、帯の掛かっていない余白を押して、
    * 埋まっている時間から申請を始められてしまう。
+   * 変更を開いているときは、変更する予約そのものを除いて数える。除かないと自分自身と重なり、
+   * 少しずらすだけでも埋まっている扱いになってしまう。
    */
-  const blockedSlots = toBlockedSlots(blocks);
-  // 過ぎた時刻からは申請できない。今日の現在時刻より前と、過ぎた日の枠がここに入る
+  const blockedSlots = toBlockedSlots(
+    toDayBlocks(day, excludeEditingReservation(reservations, editingReservationId)),
+  );
+
+  // 過ぎた時刻からは申請・変更できない。今日の現在時刻より前と、過ぎた日の枠がここに入る
   const pastSlots = toPastSlots(day.date, now);
   // なぞる操作・丸を動かす操作で選べない枠（承認済み予約・過ぎた枠）
   const unselectableSlots = new Set([...blockedSlots, ...pastSlots]);
@@ -260,6 +272,16 @@ function DayColumn({
   const showNowLine = day.isToday && nowMinutes >= OPEN_MINUTES && nowMinutes <= CLOSE_MINUTES;
   const weekday = weekdayStyle(day);
   const draftRange = toShownDraftRange(gesture.gestureDraft, selection, day.dateKey);
+  /*
+   * 変更前の帯が変更後の枠と重なっているか。重なっている間は、変更前の帯の文字を出さない。
+   * 仮の枠は下の帯が透けるので、開いた直後（同じ時間帯）は 2 つの文字が重なって読めなくなる。
+   * ほかの予約の帯は、仮の枠と重なっても文字を残す。どの予約と重なっているかを見せるため。
+   */
+  const isEditingBlockCovered =
+    draftRange !== null &&
+    findOverlapping(blocks, draftRange).some(
+      (block) => block.reservation.id === editingReservationId,
+    );
 
   return (
     <div
@@ -307,7 +329,8 @@ function DayColumn({
             slotMinutes={slotMinutes}
             isOccupied={blockedSlots.has(slotMinutes)}
             isPast={pastSlots.has(slotMinutes)}
-            canApply={canApply}
+            canPickSlot={canPickSlot}
+            isEditing={editingReservationId !== null}
             onPointerDown={(event) =>
               gesture.onSlotPointerDown(event, day.dateKey, slotMinutes, unselectableSlots)
             }
@@ -342,6 +365,8 @@ function DayColumn({
             isOpen={
               selection?.kind === "reservation" && selection.reservationId === item.reservation.id
             }
+            isEditing={item.reservation.id === editingReservationId}
+            hidesContent={item.reservation.id === editingReservationId && isEditingBlockCovered}
             onSelect={() => onOpenReservation(item.reservation.id)}
           />
         ))}
@@ -349,6 +374,7 @@ function DayColumn({
         {draftRange !== null && (
           <DraftBlock
             range={draftRange}
+            isEditing={editingReservationId !== null}
             onHandlePointerDown={(event, edge) =>
               gesture.onHandlePointerDown(event, day.dateKey, draftRange, edge, unselectableSlots)
             }
@@ -425,7 +451,8 @@ function SlotButton({
   slotMinutes,
   isOccupied,
   isPast,
-  canApply,
+  canPickSlot,
+  isEditing,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -436,7 +463,8 @@ function SlotButton({
   slotMinutes: number;
   isOccupied: boolean;
   isPast: boolean;
-  canApply: boolean;
+  canPickSlot: boolean;
+  isEditing: boolean;
   onPointerDown: (event: React.PointerEvent) => void;
   onPointerMove: (event: React.PointerEvent) => void;
   onPointerUp: () => void;
@@ -444,17 +472,18 @@ function SlotButton({
   onClick: () => void;
 }>) {
   const at = `${formatMonthDay(day.date)} ${toTokyoTimeKey(slotMinutes)}`;
+  const actionLabel = isEditing ? "に変更" : "から申請";
   const label = isOccupied
     ? `${at} は予約済み`
     : isPast
       ? `${at} は過ぎています`
-      : `${at} から申請`;
+      : `${at} ${actionLabel}`;
 
   return (
     <button
       type="button"
       tabIndex={-1}
-      disabled={!canApply || isOccupied || isPast}
+      disabled={!canPickSlot || isOccupied || isPast}
       aria-label={label}
       className={cn(
         "transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none",
@@ -496,6 +525,8 @@ function ReservationBlock({
   column,
   columnCount,
   isOpen,
+  isEditing = false,
+  hidesContent = false,
   onSelect,
 }: Readonly<{
   block: AvailabilityBlock;
@@ -503,6 +534,10 @@ function ReservationBlock({
   columnCount: number;
   /** 欄に開いている予約か */
   isOpen: boolean;
+  /** 変更中の予約か（変更中は薄くして押せなくする） */
+  isEditing?: boolean;
+  /** 帯の中の文字を出さないか（変更前の帯に変更後の枠が重なっているとき） */
+  hidesContent?: boolean;
   onSelect: () => void;
 }>) {
   const { reservation } = block;
@@ -521,7 +556,11 @@ function ReservationBlock({
   return (
     <button
       type="button"
-      aria-label={`${timeRange} ${reservation.groupName} ${statusLabel} の詳細を見る`}
+      disabled={isEditing}
+      aria-hidden={isEditing ? true : undefined}
+      aria-label={
+        isEditing ? undefined : `${timeRange} ${reservation.groupName} ${statusLabel} の詳細を見る`
+      }
       className={cn(
         "absolute flex flex-col overflow-hidden rounded-md border py-1 pr-1.5 text-left transition-shadow gap-0.5",
         // 自団体は左端の線が太いぶん、文字の始まりも右へずらす
@@ -530,6 +569,8 @@ function ReservationBlock({
         style.box,
         // 欄に開いている帯は輪郭を強めて、どれの内容を出しているかが分かるようにする
         isOpen && "ring-2 ring-ring ring-offset-1",
+        // 変更中の予約の帯は薄くして押せなくし、下の 30 分の枠を押せるようにする（ADR-014 決定 15）
+        isEditing && "pointer-events-none opacity-50",
       )}
       style={{
         top: `${toAxisPercent(block.startMinutes - OPEN_MINUTES)}%`,
@@ -551,29 +592,35 @@ function ReservationBlock({
         )}
       />
 
-      {content.showTime && (
-        <p className="truncate text-[11px] leading-tight font-medium tabular-nums">{timeRange}</p>
-      )}
+      {!hidesContent && (
+        <>
+          {content.showTime && (
+            <p className="truncate text-[11px] leading-tight font-medium tabular-nums">
+              {timeRange}
+            </p>
+          )}
 
-      <p
-        className={cn(
-          "text-[11px] leading-tight wrap-anywhere",
-          nameClampClass[content.nameLines],
-          reservation.isOwnGroup && "font-medium",
-        )}
-      >
-        {reservation.groupName}
-      </p>
+          <p
+            className={cn(
+              "text-[11px] leading-tight wrap-anywhere",
+              nameClampClass[content.nameLines],
+              reservation.isOwnGroup && "font-medium",
+            )}
+          >
+            {reservation.groupName}
+          </p>
 
-      {content.showStatus && (
-        <p className="truncate text-[11px] leading-tight">
-          {statusLabel}
-          {reservation.isOwnGroup && "・所属団体"}
-        </p>
-      )}
+          {content.showStatus && (
+            <p className="truncate text-[11px] leading-tight">
+              {statusLabel}
+              {reservation.isOwnGroup && "・所属団体"}
+            </p>
+          )}
 
-      {content.showHeadCount && reservation.detail !== null && (
-        <p className="truncate text-[11px] leading-tight">{reservation.detail.headCount} 名</p>
+          {content.showHeadCount && reservation.detail !== null && (
+            <p className="truncate text-[11px] leading-tight">{reservation.detail.headCount} 名</p>
+          )}
+        </>
       )}
     </button>
   );
@@ -588,12 +635,14 @@ function ReservationBlock({
  */
 function DraftBlock({
   range,
+  isEditing = false,
   onHandlePointerDown,
   onHandlePointerMove,
   onHandlePointerUp,
   onHandlePointerCancel,
 }: Readonly<{
   range: SlotRange;
+  isEditing?: boolean;
   onHandlePointerDown: (event: React.PointerEvent, edge: RangeEdge) => void;
   onHandlePointerMove: (event: React.PointerEvent) => void;
   onHandlePointerUp: () => void;
@@ -614,7 +663,7 @@ function DraftBlock({
         height: `${toAxisPercent(range.endMinutes - range.startMinutes)}%`,
       }}
     >
-      <span className="font-medium">新しい予約</span>
+      <span className="font-medium">{isEditing ? "変更後" : "新しい予約"}</span>
       <span className="tabular-nums">
         {toTokyoTimeKey(range.startMinutes)}〜{toTokyoTimeKey(range.endMinutes)}
       </span>

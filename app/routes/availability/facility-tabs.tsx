@@ -13,6 +13,7 @@ import { toCalendarPath, type CalendarSelection } from "./paths";
  * 「この施設のこの週」をそのまま人に送れる。
  * 基準の日を持ち回り、仮の枠を開いているときはその仮の枠を引き継ぐ（ADR-014 決定 14）。
  * 「同じ時間に別の部屋は空いているか」を、入力し直さずに見比べられるようにするため。
+ * 変更を開いているときも、変更と変更後の仮の枠を引き継ぐ。切り替えた先の施設が変更後の施設になる（ADR-014 決定 15）。
  * 予約を開いているときは外す（予約はその施設のものなので、別の施設のカレンダーには出せない）。
  */
 export function FacilityTabs({
@@ -26,7 +27,8 @@ export function FacilityTabs({
   anchorKey: string;
   selection: CalendarSelection | null;
 }>) {
-  const draftSelection = selection?.kind === "draft" ? selection : undefined;
+  const carriedSelection =
+    selection === null || selection.kind === "reservation" ? undefined : selection;
 
   return (
     <nav
@@ -40,7 +42,7 @@ export function FacilityTabs({
           return (
             <li key={item.id}>
               <Link
-                to={toCalendarPath(item.id, anchorKey, draftSelection)}
+                to={toCalendarPath(item.id, anchorKey, carriedSelection)}
                 aria-current={isCurrent ? "page" : undefined}
                 className={cn(
                   "inline-flex items-center rounded-full border px-3.5 py-1.5 text-sm transition-colors",

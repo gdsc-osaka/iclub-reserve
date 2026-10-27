@@ -72,8 +72,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const user = requireRequestUser(context);
   const db = createDb(env.DB);
   const now = new Date();
-  const url = new URL(request.url);
-  const edited = url.searchParams.get("edited");
   const auditLogPage = parseHistoryPage(request);
 
   const result = await getReservationUseCase(
@@ -140,7 +138,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return {
     ...result.value,
     listPath,
-    edited,
   };
 }
 
@@ -275,7 +272,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function ReservationDetailRoute({ loaderData, actionData }: Route.ComponentProps) {
-  const { view, transitions, canEdit, listPath, edited } = loaderData;
+  const { view, transitions, canEdit, listPath } = loaderData;
   const { reservation } = view;
 
   return (
@@ -289,22 +286,6 @@ export default function ReservationDetailRoute({ loaderData, actionData }: Route
           予約一覧へ戻る
         </Link>
       </div>
-
-      {/*
-       * 変更画面（UC-005 / UC-017）から戻ってきたときの案内。
-       * 状態（「仮予約に戻りました」など）は書かない。URL の値は書き換えられるので、
-       * それを根拠に状態を言うと事実と食い違いうる。いまの状態は下のバッジが示している。
-       */}
-      {edited === "changed" && (
-        <Alert className="border-border bg-muted/50">
-          <AlertDescription>予約を変更しました。</AlertDescription>
-        </Alert>
-      )}
-      {edited === "unchanged" && (
-        <Alert className="border-border bg-muted/50">
-          <AlertDescription>変更された項目がなかったため、そのままにしました。</AlertDescription>
-        </Alert>
-      )}
 
       {/* 施設・日時・状態は誰にでも見せる項目（COND-008）なので、見出しにまとめる */}
       <div className="flex flex-col gap-1.5">
