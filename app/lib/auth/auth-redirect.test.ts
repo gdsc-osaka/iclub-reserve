@@ -24,6 +24,8 @@ describe("toSafeRedirectTo", () => {
     ["指定なし", null],
     ["空文字", ""],
     ["トップページ（/）", "/"],
+    ["クエリ付きのトップページ", "/?utm_source=mail"],
+    ["ハッシュ付きのトップページ", "/#top"],
   ])("%s は /start に送る", (_, value) => {
     expect(toSafeRedirectTo(value)).toBe("/start");
   });
@@ -136,8 +138,11 @@ describe("withRedirectTo", () => {
     expect(withRedirectTo(LOGIN_PATH, "/reservation")).toBe("/login?redirectTo=%2Freservation");
   });
 
-  it("戻り先がトップページ（/）ならパラメータを付けない", () => {
-    expect(withRedirectTo(LOGIN_PATH, "/")).toBe("/login");
+  it.each([
+    ["トップページ（/）", "/"],
+    ["クエリ付きのトップページ", "/?utm_source=mail"],
+  ])("戻り先が %s ならパラメータを付けない", (_, redirectTo) => {
+    expect(withRedirectTo(LOGIN_PATH, redirectTo)).toBe("/login");
   });
 
   it("戻り先が /start（既定）ならパラメータを付けない", () => {

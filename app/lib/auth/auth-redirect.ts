@@ -71,6 +71,9 @@ const PUBLIC_PATH_PREFIXES: readonly string[] = ["/api/auth/", "/calendar-feeds/
 export const isPublicPath = (pathname: string): boolean =>
   PUBLIC_PATHS.has(pathname) || PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
+/** 遷移先から、クエリパラメータとハッシュを除いたパスの部分を取り出す。 */
+const toPathPart = (path: string): string => path.split(/[?#]/)[0];
+
 /**
  * ログイン後の遷移先として安全な URL だけを通す。
  *
@@ -78,11 +81,12 @@ export const isPublicPath = (pathname: string): boolean =>
  * （オープンリダイレクト）恐れがある。そのため自サイト内のパス
  * （"/" で始まり "//" では始まらない）だけを許可し、それ以外はランディングページ（/start）に送る。
  *
- * 値がちょうど "/" のときも LANDING_PATH（/start）を返す。
+ * パスの部分が "/" のときも LANDING_PATH（/start）を返す（`/?utm_source=mail` のようにクエリが付いていても）。
  * ログインしていない人がアドレスを打って開くのは "/" なので、そこから来た人も前回の画面へ送るため（ADR-016 決定 4）。
+ * "/" のダッシュボードはクエリを読まないので、落としても表示は変わらない。
  */
 export const toSafeRedirectTo = (value: string | null): string =>
-  value && value.startsWith("/") && !value.startsWith("//") && value !== "/"
+  value && value.startsWith("/") && !value.startsWith("//") && toPathPart(value) !== "/"
     ? value
     : DEFAULT_REDIRECT_TO;
 
@@ -117,9 +121,7 @@ export const toCurrentPathname = (request: Request): string => {
 export const readRedirectTo = (request: Request): string => {
   const redirectTo = toSafeRedirectTo(new URL(request.url).searchParams.get(REDIRECT_TO_PARAM));
   // 遷移先はクエリパラメータを含むことがあるので、画面の比較はパスだけで行う。
-  const redirectToPathname = redirectTo.split("?")[0];
-
-  return redirectToPathname === toCurrentPathname(request) ? DEFAULT_REDIRECT_TO : redirectTo;
+  return toPathPart(redirectTo) === toCurrentPathname(request) ? DEFAULT_REDIRECT_TO : redirectTo;
 };
 
 /**
