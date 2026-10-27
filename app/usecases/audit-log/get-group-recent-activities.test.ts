@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { RECENT_ACTIVITIES_LIMIT } from "~/domain/audit-log";
 import { GroupStatus } from "~/domain/group";

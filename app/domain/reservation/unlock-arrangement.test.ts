@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { ReservationErrorCode, ReservationField, ReservationStatus, UnlockArrangement } from ".";
 import { ReservationEditOutcome, type ReservationContentField } from "./edit";

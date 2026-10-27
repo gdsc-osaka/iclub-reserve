@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
 import { ACCOUNT_PATH, PASSKEY_SUGGEST_PATH, WELCOME_PATH } from "~/lib/auth/auth-redirect";

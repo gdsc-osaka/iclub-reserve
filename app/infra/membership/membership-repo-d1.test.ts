@@ -7,7 +7,7 @@
  * （`guardedAuditLogInsert` を参照）。その並びと条件が本物の `db.batch()` で効いていることを、
  * 「所属していない人を削除しても記録が残らない」ことで確かめる。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";

@@ -10,7 +10,7 @@
  * 団体から外された元メンバーや、事務局権限を解除された人にも、
  * 理由（status_reason）を載せた却下・キャンセルの通知が届いていた。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { useD1TestDb } from "../d1-test-db";
 
 import { MembershipRole } from "~/domain/membership";

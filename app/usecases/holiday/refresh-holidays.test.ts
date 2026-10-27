@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { HolidayErrorCode, type HolidayError } from "~/domain/holiday";
 import { fakeHolidayRepository } from "~/testing/fakes/holiday";

@@ -1,7 +1,7 @@
 /**
  * 予約メッセージ一覧（ReservationMessageListQuery）の問い合わせを、ローカルの本物の D1 に対して実行して確かめるテスト。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { ReservationStatus } from "~/domain/reservation";
 

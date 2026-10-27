@@ -7,7 +7,7 @@
  * - 期限の切れたセッションを一覧に出さないこと
  * - パスキーを削除すると、最後に使った日時の行も消えること（ON DELETE CASCADE）
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { useD1TestDb } from "../d1-test-db";
 import { seedPasskey, seedSession, seedUser } from "../d1-test-seeds";

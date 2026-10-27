@@ -6,7 +6,7 @@
  * - 有効な施設・設備のみが取得される
  * - 承認済み・仮予約のみが取得され、終了した予約は除外される
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "~/infra/d1-test-db";

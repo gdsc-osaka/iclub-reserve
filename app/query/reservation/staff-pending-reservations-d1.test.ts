@@ -7,7 +7,7 @@
  *
  * 利用日まで 7 日を切っている数の境目は、DB の要らない `toStaffPendingReservations` のテストで確かめる。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { ReservationStatus } from "~/domain/reservation";
 import { useD1TestDb } from "~/infra/d1-test-db";

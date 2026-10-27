@@ -1,13 +1,13 @@
 /**
  * E2E テストでアプリを起動する前の準備。
  *
- * `playwright.config.ts` の webServer が、`vite preview` を起動する直前に実行する。
+ * `playwright.config.ts` の webServer が、`vp preview` を起動する直前に実行する。
  * テストのたびに同じ状態から始められるよう、次の 2 つを行う。
  *
  * 1. ビルド済みのアプリ（`build/server/`）に、E2E 用の設定（`.dev.vars`）を置く
  * 2. E2E 用の DB を消して作り直し、マイグレーションとシードを入れる
  *
- * 単体で動かすときは `pnpm exec tsx e2e/prepare.ts`。
+ * 単体で動かすときは `pnpm exec vpx e2e/prepare.ts`。
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -22,7 +22,7 @@ const BUILD_SERVER_DIR = "build/server";
 /**
  * ビルド済みのアプリに E2E 用の `.dev.vars` を置く。
  *
- * `vite preview` は、ビルドのときに `.dev.vars` を写した `build/server/.dev.vars` を読む。
+ * `vp preview` は、ビルドのときに `.dev.vars` を写した `build/server/.dev.vars` を読む。
  * ここを E2E 用の値で上書きしておくと、手元の `.dev.vars` に何が書いてあっても
  * E2E は同じ設定で動く。とくに SMTP の認証情報を空にすることで、
  * テスト中のメールが実際に送られることはなく、ターミナルに出るだけになる。

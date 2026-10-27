@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
   ALLOWED_EMAIL_ADDRESSES_HINT,
   ALLOWED_EMAIL_DOMAINS_LABEL,

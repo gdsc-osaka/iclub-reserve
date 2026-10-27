@@ -1,5 +1,5 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode } from "~/domain/group";

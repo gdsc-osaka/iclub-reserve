@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { GroupErrorCode, GroupField } from "./index";
 import { GROUP_NAME_MAX_LENGTH, validateGroupName } from "./group-name";

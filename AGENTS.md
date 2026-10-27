@@ -21,7 +21,8 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 - **Database**: Cloudflare D1 (SQLite) + Drizzle ORM
 - **Authentication**: Better Auth
 - **Infrastructure**: Cloudflare Workers (IaC managed via Terraform)
-- **Package Manager**: pnpm
+- **Toolchain**: Vite+（`vite-plus`。Vite・Vitest・Oxlint・Oxfmt を 1 つにまとめたもの。設定は `vite.config.ts` の `test`・`lint`・`fmt`・`staged`。方針は `docs/adr/015-vite-plus.md`）
+- **Package Manager**: pnpm 12（版は `package.json` の `devEngines.packageManager`）
 
 ## 4. Development Workflow & Commands
 
@@ -31,7 +32,9 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 - **Seed DB (Preview)**: `pnpm run db:seed:preview`
 - **Start development server**: `pnpm run dev`
 - **Read a sign-in code (Local)**: `pnpm -s run dev:otp [人物の名前かメールアドレス]`（ローカルの D1 からログインの認証コードを読む。引数なしならシードの人物の一覧。手順は `local-login` スキル）
-- **Run unit tests**: `pnpm test`
+- **Run unit tests**: `pnpm test`（`vp test run`）。テストの関数は `vitest` ではなく `vite-plus/test` から読み込む（`vitest` から読み込むとリントで止まる）。
+- **Lint / Format**: `pnpm lint`（`vp lint`）・`pnpm format`（`vp fmt --check .`）。直すときは `pnpm run lint:fix`・`pnpm run format:fix`。型の検査は `pnpm typecheck`。
+- **Run a TypeScript script**: `pnpm exec vpx <ファイル>`（tsx は使わない）
 - **Run E2E tests**: `pnpm run test:e2e`（ビルドしてから Playwright で、パソコンの Chromium・Firefox・WebKit とスマホの Chrome・Safari の 5 種類で動かす。1 種類だけなら `pnpm exec playwright test --project=chromium`。方針は `docs/adr/007-e2e-testing.md`）。テストは `e2e/<RDRA のコンテキスト>/uc-<番号>-*.spec.ts` に置き、`@UC-<番号>` のタグを付ける。UC を `docs/implementation-status.md` で ✅ にする PR には、その UC の E2E も含める。E2E で確かめるのは主な流れ・権限の境目・UC ごとに代表的な失敗 1 つだけで、業務ルールの分岐はユースケースの単体テスト（Vitest）に書く。
 - **Database**: We are using SQLite (D1), **NOT** PostgreSQL. Keep this in mind when writing Drizzle schema or migrations.
 

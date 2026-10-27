@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { FacilityErrorCode } from "~/domain/facility";
 import { createR2FacilityPhotoStorage } from "./r2-facility-photo-storage";
 

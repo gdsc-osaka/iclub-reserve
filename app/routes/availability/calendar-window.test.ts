@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { buildDays } from "~/components/reservation/availability-week";
 import { addDays, toTokyoDateKey } from "~/lib/date";

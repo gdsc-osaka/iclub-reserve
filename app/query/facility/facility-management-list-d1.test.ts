@@ -5,7 +5,7 @@
  * - 並び順（有効な施設が先・施設名の昇順・同名は ID の昇順）
  * - hasGoogleCalendar（カレンダー ID が null・空白だけ・値あり の 3 通り）
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { useD1TestDb } from "~/infra/d1-test-db";
 import { seedFacility } from "~/infra/d1-test-seeds";

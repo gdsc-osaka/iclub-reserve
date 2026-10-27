@@ -1,7 +1,7 @@
 /**
  * 申請元として選べる団体（`findApplicantGroups`）の読み取りを、ローカルの本物の D1 に対して実行して確かめるテスト。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";

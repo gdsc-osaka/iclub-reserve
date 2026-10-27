@@ -4,7 +4,7 @@
  * 押さえるのは、列が INFO-004 どおりに入ること、通知が outbox に積まれること、
  * 予約の updated_at を変えないこと（予約の楽観ロックをメッセージの送信で壊さない）の 3 つ。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { ReservationStatus } from "~/domain/reservation";

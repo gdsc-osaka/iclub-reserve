@@ -3,7 +3,7 @@
  *
  * 条件付き UPDATE と操作履歴の同一 batch での書き込み（COND-013）が、実際の DB で意図どおりに動くことを押さえる。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";

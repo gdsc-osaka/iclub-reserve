@@ -4,7 +4,7 @@
 /node_modules/
 *.tsbuildinfo
 
-# ローカルに置く別の git worktree。oxfmt・oxlint もこの指定を見て対象から外す
+# ローカルに置く別の git worktree。`vp fmt`・`vp lint` もこの指定を見て対象から外す
 /.worktree/
 
 # React Router
@@ -23,3 +23,6 @@ worker-configuration.d.ts
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Vitest（`vp test`）が書き出す添付・レポート
+.vitest/

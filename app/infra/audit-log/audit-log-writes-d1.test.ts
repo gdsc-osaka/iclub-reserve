@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { auditLogTable, groupTable } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";

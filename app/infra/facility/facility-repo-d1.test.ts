@@ -5,7 +5,7 @@
  * ユースケースのテストは Repository を偽物に差し替えるので、更新文の条件の誤りは素通りする。
  * ここでは、写真を条件にした更新（楽観的ロック）と、無効化を止める予約の条件（`NOT EXISTS`）を実際の DB で押さえる。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { AuditLogAction, AuditLogChanges, AuditLogDraft } from "~/domain/audit-log";
 import { FacilityErrorCode, type UpdateFacilityInput } from "~/domain/facility";

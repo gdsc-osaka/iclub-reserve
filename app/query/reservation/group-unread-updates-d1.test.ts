@@ -3,7 +3,7 @@
  *
  * COND-026 の団体側の各判定（対象者、対象の出来事、30日以内・開始日以降・既読日時との境目、1件1行集約と「ほか n 件」）を検証する。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { AvailabilityDay } from "~/components/reservation/availability-week";
 import { ReservationStatus } from "~/domain/reservation";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { isOnboardingCompleted, toPendingOnboardingSteps } from "./onboarding";
 import { hasAcceptedCurrentTerms, TERMS_OF_SERVICE } from "./terms-of-service";

@@ -6,7 +6,7 @@
  * 無いユーザーを NotFound として返すことを押さえる。
  */
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { user } from "~/db/schema";
 import { UserErrorCode } from "~/domain/user";

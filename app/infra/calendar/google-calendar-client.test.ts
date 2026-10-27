@@ -1,5 +1,5 @@
 import { okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { CalendarErrorCode, toCalendarEventId, type CalendarEvent } from "~/domain/calendar";
 import { createGoogleCalendarClient } from "./google-calendar-client";
 

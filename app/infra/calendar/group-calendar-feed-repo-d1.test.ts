@@ -1,5 +1,5 @@
 import { count, eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { groupCalendarFeedTable, groupMemberTable } from "~/db/schema";
 import { useD1TestDb } from "../d1-test-db";

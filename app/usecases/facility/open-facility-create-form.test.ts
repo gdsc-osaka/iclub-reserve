@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { FacilityErrorCode } from "~/domain/facility";
 import { openFacilityCreateFormUseCase } from "./open-facility-create-form";

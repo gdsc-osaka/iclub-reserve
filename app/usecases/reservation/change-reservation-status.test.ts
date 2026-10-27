@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";

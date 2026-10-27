@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { AuditLogTargetType } from "~/domain/audit-log";
 import { parseTokyoDateKey } from "~/lib/date";

@@ -61,15 +61,15 @@ export default defineConfig({
    *
    * 開発サーバー（`pnpm run dev`）は使わない。初めて開く画面で依存の最適化が走り、
    * 画面が勝手に読み込み直されて操作が失敗することがあるため（ADR-007）。
-   * `e2e/prepare.ts` が E2E 用の設定を置き、DB を作り直してから `vite preview` を起動する。
+   * `e2e/prepare.ts` が E2E 用の設定を置き、DB を作り直してから `vp preview`（Vite+ の `vite preview`）を起動する。
    *
-   * コマンドは `node` で直接動かす。次の 2 つを避けるため。
-   * - `pnpm exec` を挟むと、pnpm 11 では `vite preview` が Playwright の管理から外れ、
+   * コマンドは Vite+ の `vpx`・`vp` を `node` で直接動かす。次の 2 つを避けるため。
+   * - `pnpm exec` を挟むと、アプリが Playwright の管理から外れ（pnpm 11 で確かめた）、
    *   テストが終わってもアプリが止まらず、Playwright が終わらなくなる
    * - `./node_modules/.bin/…` の書き方は、Windows（コマンドプロンプト）では動かない
    */
   webServer: {
-    command: `node --import tsx e2e/prepare.ts && node node_modules/vite/bin/vite.js preview --port ${E2E_PORT} --strictPort`,
+    command: `node node_modules/vite-plus/bin/vpx e2e/prepare.ts && node node_modules/vite-plus/bin/vp preview --port ${E2E_PORT} --strictPort`,
     url: `${E2E_BASE_URL}/login`,
     env: { E2E_PERSIST_TO },
     // 前のテストのデータが残ったアプリを使わないよう、毎回起動し直す

@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";

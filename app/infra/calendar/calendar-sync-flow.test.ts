@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { calendarSyncTaskTable } from "~/db/schema";
 import { toCalendarEventId, type CalendarClient, type CalendarEvent } from "~/domain/calendar";

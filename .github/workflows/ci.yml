@@ -27,18 +27,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/setup@v2
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
+      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
+      # pnpm は package.json の devEngines.packageManager から読む
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
-          version: 11
-          runtime: node@24
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
           cache: true
+          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
+          run-install: false
 
       - name: Install node modules
-        run: pnpm i
+        run: vp install --frozen-lockfile
 
       - name: Format
-        run: pnpm format
+        run: vp run format
 
   run_lint:
     name: Lint
@@ -51,18 +56,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/setup@v2
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
+      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
+      # pnpm は package.json の devEngines.packageManager から読む
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
-          version: 11
-          runtime: node@24
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
           cache: true
+          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
+          run-install: false
 
       - name: Install node modules
-        run: pnpm i
+        run: vp install --frozen-lockfile
 
       - name: Lint
-        run: pnpm lint
+        run: vp run lint
 
   run_type_check:
     name: Type Check
@@ -75,18 +85,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/setup@v2
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
+      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
+      # pnpm は package.json の devEngines.packageManager から読む
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
-          version: 11
-          runtime: node@24
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
           cache: true
+          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
+          run-install: false
 
       - name: Install node modules
-        run: pnpm i
+        run: vp install --frozen-lockfile
 
       - name: Type Check
-        run: pnpm typecheck
+        run: vp run typecheck
 
   run_test:
     name: Test
@@ -99,18 +114,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/setup@v2
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
+      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
+      # pnpm は package.json の devEngines.packageManager から読む
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
-          version: 11
-          runtime: node@24
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
           cache: true
+          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
+          run-install: false
 
       - name: Install node modules
-        run: pnpm i
+        run: vp install --frozen-lockfile
 
       - name: Test
-        run: pnpm test
+        run: vp run test
 
   # E2E テスト (ADR-007)。ビルド済みのアプリを手元の Workers (miniflare) で動かし、Playwright で画面を操作する。
   # 全部のジョブが通ったかは、下の e2e_result (E2E) のチェックにまとめる。
@@ -144,22 +164,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
-        uses: pnpm/setup@v2
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
+      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
+      # pnpm は package.json の devEngines.packageManager から読む
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
-          version: 11
-          runtime: node@24
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
           cache: true
+          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
+          run-install: false
 
       - name: Install node modules
-        run: pnpm i
+        run: vp install --frozen-lockfile
 
       - name: Build
-        run: pnpm run build
+        run: vp run build
 
       # E2E 用の設定と DB は playwright.config.ts の webServer (e2e/prepare.ts) が用意する
       - name: E2E
-        run: pnpm exec playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }}/2
+        run: vp exec playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }}/2
 
       # 落ちたときに、操作の記録 (trace) と画面の写真を見られるようにする
       - name: Upload Playwright report
