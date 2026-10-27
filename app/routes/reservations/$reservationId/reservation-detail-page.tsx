@@ -1,7 +1,9 @@
+import { cn } from "cn";
 import {
   CalendarPlus,
   ChevronLeft,
   CircleAlert,
+  KeyRound,
   PersonStanding,
   StickyNote,
   User,
@@ -19,10 +21,16 @@ import {
   ReservationStatusReason,
 } from "~/components/reservation/reservation-notices";
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
+import { UnlockArrangementUpdateDialog } from "~/components/reservation/unlock-arrangement-update-dialog";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { UnlockArrangement } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
+import {
+  UNLOCK_ARRANGEMENT_UNDECIDED_LABEL,
+  unlockArrangementLabel,
+} from "~/domain/reservation/unlock-arrangement";
 import type { AppArea } from "~/lib/app-area";
 import { formatDateTime, formatFullDate, formatTimeRange } from "~/lib/date";
 import { toReservationEditPath } from "~/lib/reservation-paths";
@@ -78,6 +86,20 @@ export function ReservationDetailPage({
         </Alert>
       )}
 
+      {/* 団体への案内。要手配は当日施錠されているかもしれないので注意の色にし、手配済みはふつうの色にする（COND-027 (6)） */}
+      {view.canViewDetail && view.unlockArrangement?.kind === "group" && (
+        <Alert
+          className={cn(
+            view.unlockArrangement.value === UnlockArrangement.Required &&
+              "border-amber-500/30 bg-amber-500/5",
+          )}
+        >
+          <KeyRound className="size-4" />
+          <AlertTitle>解錠の手配</AlertTitle>
+          <AlertDescription>{view.unlockArrangement.notice}</AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-semibold">予約内容</CardTitle>
@@ -109,6 +131,27 @@ export function ReservationDetailPage({
                     </span>
                   )}
                 </InfoItem>
+                {view.unlockArrangement?.kind === "staff" && (
+                  <InfoItem icon={KeyRound} label="解錠の手配">
+                    <div className="flex flex-col items-start gap-2">
+                      <span>
+                        {view.unlockArrangement.value === null
+                          ? UNLOCK_ARRANGEMENT_UNDECIDED_LABEL
+                          : unlockArrangementLabel[view.unlockArrangement.value]}
+                      </span>
+                      {view.unlockArrangement.canUpdate && (
+                        <UnlockArrangementUpdateDialog
+                          currentValue={view.unlockArrangement.value}
+                          trigger={
+                            <Button type="button" size="sm" variant="outline">
+                              手配の状況を変更
+                            </Button>
+                          }
+                        />
+                      )}
+                    </div>
+                  </InfoItem>
+                )}
                 <InfoItem icon={StickyNote} label="備考" className="sm:col-span-2">
                   <span className="font-normal whitespace-pre-wrap">
                     {view.reservation.note !== null && view.reservation.note.trim() !== ""

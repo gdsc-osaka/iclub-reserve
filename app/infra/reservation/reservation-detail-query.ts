@@ -31,6 +31,7 @@ export const createReservationDetailQuery = (db: Database): ReservationDetailQue
         endAt: reservationTable.endAt,
         status: reservationTable.status,
         statusReason: reservationTable.statusReason,
+        unlockArrangement: reservationTable.unlockArrangement,
         headCount: reservationTable.headCount,
         note: reservationTable.note,
         createdByName: user.name,

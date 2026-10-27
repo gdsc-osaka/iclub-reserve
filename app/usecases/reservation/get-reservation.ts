@@ -6,6 +6,7 @@ import { ReservationErrorCode, type ReservationError } from "~/domain/reservatio
 import { canChangeReservationContent } from "~/domain/reservation/edit";
 import { toMessageSenderLabel } from "~/domain/reservation/message";
 import { allowedTransitions, type ReservationTransition } from "~/domain/reservation/transition";
+import { toUnlockArrangementView } from "~/domain/reservation/unlock-arrangement";
 import { canViewReservationDetail } from "~/domain/reservation/visibility";
 import type { ReservationAuditLogListQuery } from "~/query/audit-log/reservation-audit-log-list";
 import type {
@@ -83,6 +84,7 @@ export const toReservationMessageView = (
 export const toReservationDetailView = (
   row: ReservationDetailRow,
   actor: Actor,
+  now: Date,
   details: {
     readonly messages: readonly ReservationMessageView[];
     readonly auditLogs: ReservationAuditLogsView;
@@ -107,6 +109,7 @@ export const toReservationDetailView = (
           hasApprovedOverlap: row.hasApprovedOverlap,
           hasProvisionalOverlap: row.hasProvisionalOverlap,
         },
+        unlockArrangement: toUnlockArrangementView(row, actor, now),
         messages: details.messages,
         auditLogs: details.auditLogs,
       }
@@ -217,7 +220,7 @@ export const getReservationUseCase = (
         };
 
     return okAsync({
-      view: toReservationDetailView(row, actor, { messages, auditLogs }),
+      view: toReservationDetailView(row, actor, args.now, { messages, auditLogs }),
       // 詳細を見られない人は所属も事務局の権限も持たないので、ここは自然に空になる
       transitions: allowedTransitions(row, actor),
       // 画面が「変更」の入り口を出すかは、変更のユースケースと同じ判定で決める

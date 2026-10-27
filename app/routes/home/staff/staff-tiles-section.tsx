@@ -1,4 +1,10 @@
-import { Building2, CalendarClock, MessageSquareText, type LucideIcon } from "lucide-react";
+import {
+  Building2,
+  CalendarClock,
+  KeyRound,
+  MessageSquareText,
+  type LucideIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -9,6 +15,8 @@ import { toStaffGroupPath } from "~/routes/groups/staff/query-params";
 export interface StaffTileCounts {
   /** 承認待ちの予約。総数と、うち利用日まで 7 日を切っている数（COND-028） */
   readonly pendingReservations: { readonly total: number; readonly shortNotice: number } | null;
+  /** 解錠の手配が要る予約の数（COND-027 (4)） */
+  readonly unlockRequired: number | null;
   /** 団体からの未読メッセージがある予約の数（COND-026） */
   readonly unreadMessages: number | null;
   /** 有効化を待っている団体の数と、いちばん古い団体（UC-014） */
@@ -18,20 +26,26 @@ export interface StaffTileCounts {
   } | null;
 }
 
+/** 下の「解錠の手配が要る予約」の区画へ移るための id */
+export const STAFF_UNLOCK_REQUIRED_SECTION_ID = "staff-unlock-required-reservations";
+
 /** 下の「団体からの未読メッセージ」の区画へ移るための id */
 export const STAFF_UNREAD_SECTION_ID = "staff-unread-messages";
 
 /**
- * 事務局のダッシュボードの件数のタイル 3 つ（SCR-022）。
+ * 事務局のダッシュボードの件数のタイル 4 つ（SCR-022）。
  *
  * それぞれ押すと、その件数を片付ける画面（または下の区画）へ移る。
- * スマホでも 3 列に並べ、ひと目で全部の件数が見えるようにする。
+ * スマホでは 2 列、広い幅では 4 列に並べる。
  */
 export function StaffTilesSection({ counts }: Readonly<{ counts: StaffTileCounts }>) {
-  const { pendingReservations, unreadMessages, pendingGroups } = counts;
+  const { pendingReservations, unlockRequired, unreadMessages, pendingGroups } = counts;
 
   return (
-    <section aria-label="対応が必要な件数" className="grid grid-cols-3 gap-2 sm:gap-4">
+    <section
+      aria-label="対応が必要な件数"
+      className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4"
+    >
       <Tile
         to="/staff/reservations"
         icon={CalendarClock}
@@ -45,6 +59,14 @@ export function StaffTilesSection({ counts }: Readonly<{ counts: StaffTileCounts
           </span>
         )}
       </Tile>
+
+      <Tile
+        to={`#${STAFF_UNLOCK_REQUIRED_SECTION_ID}`}
+        icon={KeyRound}
+        label="解錠の手配が要る予約"
+        shortLabel="解錠の手配"
+        count={unlockRequired}
+      />
 
       <Tile
         to={`#${STAFF_UNREAD_SECTION_ID}`}
@@ -83,7 +105,7 @@ function Tile({
   to: string;
   icon: LucideIcon;
   label: string;
-  /** スマホ幅で出す短い見出し。3 列に並べると、長い見出しは語の途中で折り返してしまう */
+  /** スマホ幅で出す短い見出し。長い見出しは語の途中で折り返してしまう */
   shortLabel: string;
   /** null は読み込めなかったことを表す */
   count: number | null;

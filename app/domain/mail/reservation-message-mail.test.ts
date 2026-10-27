@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { formatDateTime } from "~/lib/date";
+import { UnlockArrangement } from "../reservation";
 import type { ReservationMessage } from "../reservation/message";
 import {
   createReservationMessageMailDrafts,
@@ -164,5 +165,40 @@ describe("createReservationMessageMailDrafts", () => {
     expect(draft.text).toContain("送信者: 事務局");
     expect(draft.text).toContain(`https://example.com/reservations/${reservation.id}`);
     expect(draft.text).not.toContain("秘密の事務局員名");
+    expect(draft.text).not.toContain("解錠の手配が");
+  });
+
+  it("unlockArrangement を渡したときだけ、送信者の次の空行の後に更新後の手配の状況が入る（EVT-008 / UC-038）", () => {
+    const message: ReservationMessage = {
+      id: "msg_unlock",
+      reservationId: reservation.id,
+      senderId: "usr_staff1",
+      sentAsStaff: true,
+      body: "当日は守衛所で鍵を受け取ってください。",
+      sentAt: new Date("2026-10-05T12:30:00+09:00"),
+    };
+
+    const drafts = createReservationMessageMailDrafts({
+      message,
+      reservation,
+      senderName: "事務局員",
+      recipients: [userApplicant],
+      appBaseUrl: "https://example.com",
+      unlockArrangement: UnlockArrangement.Arranged,
+    });
+
+    expect(drafts).toHaveLength(1);
+    const draft = drafts[0]!;
+    expect(draft.subject).toBe("【i-Club 予約システム】予約にメッセージが届きました");
+    expect(draft.text).toContain(
+      [
+        "送信者: 事務局",
+        "",
+        "解錠の手配が「手配済み」に更新されました。",
+        "",
+        "メッセージ:",
+        "当日は守衛所で鍵を受け取ってください。",
+      ].join("\n"),
+    );
   });
 });

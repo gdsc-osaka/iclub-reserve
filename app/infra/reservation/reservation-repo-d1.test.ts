@@ -14,16 +14,24 @@
  */
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { auditLogTable, calendarSyncTaskTable } from "~/db/schema";
+import {
+  auditLogTable,
+  calendarSyncTaskTable,
+  mailOutboxTable,
+  reservationMessageTable,
+} from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";
 import type { CalendarSyncTaskDraft } from "~/domain/calendar";
+import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationStatus,
   UnlockArrangement,
   type ApplyContentEditArgs,
   type ApplyStatusTransitionArgs,
+  type ApplyUnlockArrangementUpdateArgs,
   type Reservation,
 } from "~/domain/reservation";
+import type { ReservationMessage } from "~/domain/reservation/message";
 import { useD1TestDb } from "../d1-test-db";
 import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createReservationRepository } from "./reservation-repo";
@@ -954,5 +962,194 @@ describe("解錠の手配（unlock_arrangement）の D1 での書き込み", () 
     const saved = (await repository.findById("res_direct_unlock"))._unsafeUnwrap();
     expect(saved.unlockArrangement).toBe(UnlockArrangement.NotRequired);
     expect(saved).toEqual(reservation);
+  });
+
+  describe("applyUnlockArrangementUpdate を SQLite で実行する", () => {
+    const sampleMessage: ReservationMessage = {
+      id: "msg_unlock_01",
+      reservationId: "res_unlock_target",
+      senderId: "usr_taro",
+      sentAsStaff: true,
+      body: "守衛室に手配済みです。",
+      sentAt: EDITED_AT,
+    };
+
+    const sampleMail: MailDraft = {
+      idempotencyKey: "reservation:message:msg_unlock_01:usr_taro",
+      to: { address: "taro@ecs.osaka-u.ac.jp", name: "太郎" },
+      subject: "【i-Club 予約システム】予約に関するメッセージが届きました",
+      text: "解錠の手配が「手配済み」に更新されました。\n\n守衛室に手配済みです。",
+    };
+
+    const updateArgs = (
+      overrides?: Partial<ApplyUnlockArrangementUpdateArgs>,
+    ): ApplyUnlockArrangementUpdateArgs => ({
+      id: "res_unlock_target",
+      expectedStatus: ReservationStatus.Approved,
+      expectedUpdatedAt: READ_AT,
+      unlockArrangement: UnlockArrangement.Arranged,
+      updatedAt: EDITED_AT,
+      ...overrides,
+    });
+
+    it("条件が合うとき、unlock_arrangement・updated_at・操作履歴・reservation_message・mail_outbox が一括で書かれる", async () => {
+      const repository = createReservationRepository(testDb.db);
+      await insertReservation({
+        id: "res_unlock_target",
+        status: ReservationStatus.Approved,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+        unlockArrangement: UnlockArrangement.Required,
+        updatedAt: READ_AT,
+      });
+
+      const auditLog = dummyAuditLog({
+        action: AuditLogAction.ReservationUnlockArrangementUpdate,
+        targetId: "res_unlock_target",
+        actedAsStaff: true,
+        changes: {
+          unlock_arrangement: {
+            before: UnlockArrangement.Required,
+            after: UnlockArrangement.Arranged,
+          },
+        },
+      });
+
+      const outcome = await repository.applyUnlockArrangementUpdate(
+        updateArgs(),
+        sampleMessage,
+        [sampleMail],
+        auditLog,
+      );
+
+      const unwrapped = outcome._unsafeUnwrap();
+      expect(unwrapped.applied).toBe(true);
+      expect(unwrapped.enqueuedMailIds).toHaveLength(1);
+
+      const saved = (await repository.findById("res_unlock_target"))._unsafeUnwrap();
+      expect(saved.unlockArrangement).toBe(UnlockArrangement.Arranged);
+      expect(saved.updatedAt).toEqual(EDITED_AT);
+
+      const auditRows = await testDb.db.select().from(auditLogTable);
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]).toMatchObject({
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_unlock_target",
+        actedAsStaff: true,
+        action: AuditLogAction.ReservationUnlockArrangementUpdate,
+      });
+
+      const messageRows = await testDb.db.select().from(reservationMessageTable);
+      expect(messageRows).toHaveLength(1);
+      expect(messageRows[0]).toMatchObject({
+        id: "msg_unlock_01",
+        reservationId: "res_unlock_target",
+        senderId: "usr_taro",
+        sentAsStaff: true,
+        body: "守衛室に手配済みです。",
+        sentAt: EDITED_AT,
+      });
+
+      const outboxRows = await testDb.db.select().from(mailOutboxTable);
+      expect(outboxRows).toHaveLength(1);
+      expect(outboxRows[0]).toMatchObject({
+        idempotencyKey: sampleMail.idempotencyKey,
+        toAddress: sampleMail.to.address,
+      });
+    });
+
+    it("expectedUpdatedAt が違うときは、予約もメッセージも操作履歴も outbox も 1 行も書かれない", async () => {
+      const repository = createReservationRepository(testDb.db);
+      await insertReservation({
+        id: "res_unlock_target",
+        status: ReservationStatus.Approved,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+        unlockArrangement: UnlockArrangement.Required,
+        updatedAt: new Date("2026-09-20T09:30:00+09:00"),
+      });
+
+      const outcome = await repository.applyUnlockArrangementUpdate(
+        updateArgs(),
+        sampleMessage,
+        [sampleMail],
+        dummyAuditLog({
+          action: AuditLogAction.ReservationUnlockArrangementUpdate,
+          targetId: "res_unlock_target",
+          actedAsStaff: true,
+        }),
+      );
+
+      expect(outcome._unsafeUnwrap()).toEqual({ applied: false, enqueuedMailIds: [] });
+
+      const saved = (await repository.findById("res_unlock_target"))._unsafeUnwrap();
+      expect(saved.unlockArrangement).toBe(UnlockArrangement.Required);
+      expect(await testDb.db.select().from(auditLogTable)).toHaveLength(0);
+      expect(await testDb.db.select().from(reservationMessageTable)).toHaveLength(0);
+      expect(await testDb.db.select().from(mailOutboxTable)).toHaveLength(0);
+    });
+
+    it("承認済みでないとき（expectedStatus が合わない）は、予約もメッセージも操作履歴も outbox も 1 行も書かれない", async () => {
+      const repository = createReservationRepository(testDb.db);
+      await insertReservation({
+        id: "res_unlock_target",
+        status: ReservationStatus.CancelledByStaff,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+        unlockArrangement: UnlockArrangement.Required,
+        updatedAt: READ_AT,
+      });
+
+      const outcome = await repository.applyUnlockArrangementUpdate(
+        updateArgs(),
+        sampleMessage,
+        [sampleMail],
+        dummyAuditLog({
+          action: AuditLogAction.ReservationUnlockArrangementUpdate,
+          targetId: "res_unlock_target",
+          actedAsStaff: true,
+        }),
+      );
+
+      expect(outcome._unsafeUnwrap()).toEqual({ applied: false, enqueuedMailIds: [] });
+
+      const saved = (await repository.findById("res_unlock_target"))._unsafeUnwrap();
+      expect(saved.status).toBe(ReservationStatus.CancelledByStaff);
+      expect(saved.unlockArrangement).toBe(UnlockArrangement.Required);
+      expect(await testDb.db.select().from(auditLogTable)).toHaveLength(0);
+      expect(await testDb.db.select().from(reservationMessageTable)).toHaveLength(0);
+      expect(await testDb.db.select().from(mailOutboxTable)).toHaveLength(0);
+    });
+
+    it("message が null のときは、予約と操作履歴だけ書かれ、reservation_message と mail_outbox に 1 行も入らない", async () => {
+      const repository = createReservationRepository(testDb.db);
+      await insertReservation({
+        id: "res_unlock_target",
+        status: ReservationStatus.Approved,
+        startAt: at("10:00"),
+        endAt: at("12:00"),
+        unlockArrangement: UnlockArrangement.Required,
+        updatedAt: READ_AT,
+      });
+
+      const outcome = await repository.applyUnlockArrangementUpdate(
+        updateArgs(),
+        null,
+        [],
+        dummyAuditLog({
+          action: AuditLogAction.ReservationUnlockArrangementUpdate,
+          targetId: "res_unlock_target",
+          actedAsStaff: true,
+        }),
+      );
+
+      expect(outcome._unsafeUnwrap()).toEqual({ applied: true, enqueuedMailIds: [] });
+
+      const saved = (await repository.findById("res_unlock_target"))._unsafeUnwrap();
+      expect(saved.unlockArrangement).toBe(UnlockArrangement.Arranged);
+      expect(await testDb.db.select().from(auditLogTable)).toHaveLength(1);
+      expect(await testDb.db.select().from(reservationMessageTable)).toHaveLength(0);
+      expect(await testDb.db.select().from(mailOutboxTable)).toHaveLength(0);
+    });
   });
 });

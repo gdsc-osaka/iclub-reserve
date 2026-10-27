@@ -5,9 +5,14 @@
  */
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
+import { AuditLogAction, AuditLogTargetType, type AuditLogChanges } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";
-import { GroupUnreadEventType, ReservationStatus, unreadEventsSince } from "~/domain/reservation";
+import {
+  GroupUnreadEventType,
+  ReservationStatus,
+  UnlockArrangement,
+  unreadEventsSince,
+} from "~/domain/reservation";
 import { useD1TestDb } from "~/infra/d1-test-db";
 import {
   seedAuditLog,
@@ -104,6 +109,7 @@ async function insertAuditLog(
   actedAsStaff: boolean,
   action: AuditLogAction,
   occurredAt: Date,
+  changes: AuditLogChanges = {},
 ) {
   await testDb.seed(
     seedAuditLog({
@@ -115,7 +121,7 @@ async function insertAuditLog(
       targetType: AuditLogTargetType.Reservation,
       targetId,
       groupId: "grp_test",
-      changes: {},
+      changes,
     }),
   );
 }
@@ -383,5 +389,65 @@ describe("findGroupUnreadUpdates", () => {
     expect(res.value.allUnreadReservationIds).toHaveLength(12);
     // 最新のものが先頭（res_batch_12）
     expect(res.value.items[0]?.reservationId).toBe("res_batch_12");
+  });
+
+  it("解錠の手配の更新（ReservationUnlockArrangementUpdate）が未読に出て、changes.unlock_arrangement.after が latestEvent.unlockArrangement に入り、本人の操作は出ない", async () => {
+    await insertReservation("res_1", USER_APPLICANT.id, ReservationStatus.Approved);
+
+    await insertAuditLog(
+      "log_unlock",
+      "res_1",
+      USER_STAFF.id,
+      true,
+      AuditLogAction.ReservationUnlockArrangementUpdate,
+      new Date("2026-10-16T10:00:00+09:00"),
+      {
+        unlock_arrangement: {
+          before: UnlockArrangement.Required,
+          after: UnlockArrangement.Arranged,
+        },
+      },
+    );
+
+    // 申請者・管理者には未読に出る
+    const resApplicant = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_APPLICANT.id,
+      now: NOW,
+    });
+    expect(resApplicant.isOk()).toBe(true);
+    if (!resApplicant.isOk()) return;
+    expect(resApplicant.value.items).toHaveLength(1);
+    expect(resApplicant.value.items[0]?.latestEvent).toEqual({
+      type: GroupUnreadEventType.UnlockArrangementUpdate,
+      eventAt: new Date("2026-10-16T10:00:00+09:00"),
+      statusReason: null,
+      messageBody: null,
+      unlockArrangement: UnlockArrangement.Arranged,
+    });
+
+    // 本人（管理者自身が事務局として更新した場合）には出ない
+    await insertReservation("res_self", USER_ADMIN.id, ReservationStatus.Approved);
+    await insertAuditLog(
+      "log_unlock_self",
+      "res_self",
+      USER_ADMIN.id,
+      true,
+      AuditLogAction.ReservationUnlockArrangementUpdate,
+      new Date("2026-10-16T11:00:00+09:00"),
+      {
+        unlock_arrangement: {
+          before: UnlockArrangement.Required,
+          after: UnlockArrangement.Arranged,
+        },
+      },
+    );
+
+    const resAdmin = await findGroupUnreadUpdates(testDb.db, {
+      actorUserId: USER_ADMIN.id,
+      now: NOW,
+    });
+    expect(resAdmin.isOk()).toBe(true);
+    if (!resAdmin.isOk()) return;
+    expect(resAdmin.value.items.map((item) => item.reservationId)).toEqual(["res_1"]);
   });
 });

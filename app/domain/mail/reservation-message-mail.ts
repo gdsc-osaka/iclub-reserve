@@ -1,7 +1,9 @@
 import { AppArea } from "~/lib/app-area";
 import { formatDateTime } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
+import type { UnlockArrangement } from "../reservation";
 import { STAFF_SENDER_LABEL, type ReservationMessage } from "../reservation/message";
+import { unlockArrangementLabel } from "../reservation/unlock-arrangement";
 import type { MailDraft } from "./mail-outbox";
 import type { ReservationMailRecipient, ReservationMailRecipients } from "./reservation-mail";
 
@@ -68,6 +70,11 @@ export interface CreateReservationMessageMailDraftsArgs {
   readonly senderName: string;
   readonly recipients: ReservationMailRecipients;
   readonly appBaseUrl: string;
+  /**
+   * 解錠の手配の更新（UC-038）にメッセージを添えたときだけ渡す更新後の手配の状況（EVT-008）。
+   * 通常のメッセージ送信（UC-009）では渡さない。
+   */
+  readonly unlockArrangement?: UnlockArrangement;
 }
 
 /**
@@ -90,6 +97,9 @@ const buildMessageMailBody = (args: CreateReservationMessageMailDraftsArgs): str
     `利用終了日時: ${formatDateTime(args.reservation.endAt)}`,
     `送信者: ${senderDisplay}`,
     "",
+    ...(args.unlockArrangement !== undefined
+      ? [`解錠の手配が「${unlockArrangementLabel[args.unlockArrangement]}」に更新されました。`, ""]
+      : []),
     "メッセージ:",
     args.message.body,
     "",

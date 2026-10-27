@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
-import { ReservationErrorCode, ReservationStatus } from "~/domain/reservation";
+import { ReservationErrorCode, ReservationStatus, UnlockArrangement } from "~/domain/reservation";
+import { unlockArrangementGroupNotice } from "~/domain/reservation/unlock-arrangement";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import type { ReservationAuditLogList } from "~/query/audit-log/reservation-audit-log-list";
 import { QueryErrorCode } from "~/query/error";
@@ -28,6 +29,7 @@ const defaultRow: ReservationDetailRow = {
   note: "週次定例",
   status: ReservationStatus.Provisional,
   statusReason: null,
+  unlockArrangement: null,
   createdByName: "山田太郎",
   createdAt: new Date("2026-09-14T09:00:00+09:00"),
   requestedAt: new Date("2026-09-14T09:00:00+09:00"),
@@ -832,6 +834,155 @@ describe("getReservationUseCase", () => {
       expect(data.view.canViewDetail).toBe(true);
       if (data.view.canViewDetail) {
         expect(data.view.auditLogs.page).toBe(3);
+      }
+    });
+  });
+
+  describe("解錠の手配の表示（COND-008・COND-027）", () => {
+    it("他団体の人には unlockArrangement のキー自体が無い（view にも view.reservation にも）", async () => {
+      const { deps } = createDeps({
+        membership: null,
+        row: {
+          ...defaultRow,
+          status: ReservationStatus.Approved,
+          unlockArrangement: UnlockArrangement.Required,
+        },
+      });
+
+      const result = await getReservationUseCase(deps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_other_01",
+        isStaff: false,
+        now: defaultNow,
+        auditLogPage: 1,
+      });
+
+      const view = result._unsafeUnwrap().view;
+      expect(view.canViewDetail).toBe(false);
+      expect("unlockArrangement" in view).toBe(false);
+      expect("unlockArrangement" in view.reservation).toBe(false);
+    });
+
+    it("事務局の画面（isStaff: true）には承認済みなら kind: 'staff' が入り、終了後でも状況は出て canUpdate だけ false になる", async () => {
+      const { deps: futureDeps } = createDeps({
+        membership: null,
+        row: {
+          ...defaultRow,
+          status: ReservationStatus.Approved,
+          unlockArrangement: UnlockArrangement.Required,
+        },
+      });
+      const futureResult = await getReservationUseCase(futureDeps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        now: defaultNow,
+        auditLogPage: 1,
+      });
+      const futureView = futureResult._unsafeUnwrap().view;
+      expect(futureView.canViewDetail).toBe(true);
+      if (futureView.canViewDetail) {
+        expect(futureView.unlockArrangement).toEqual({
+          kind: "staff",
+          value: UnlockArrangement.Required,
+          canUpdate: true,
+        });
+      }
+
+      const endedNow = new Date("2026-09-16T12:00:00+09:00");
+      const endedResult = await getReservationUseCase(futureDeps, {
+        reservationId: "rsv_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        now: endedNow,
+        auditLogPage: 1,
+      });
+      const endedView = endedResult._unsafeUnwrap().view;
+      expect(endedView.canViewDetail).toBe(true);
+      if (endedView.canViewDetail) {
+        expect(endedView.unlockArrangement).toEqual({
+          kind: "staff",
+          value: UnlockArrangement.Required,
+          canUpdate: false,
+        });
+      }
+    });
+
+    it("団体メンバー（isStaff: false）には手配が要る・手配済みの未来の承認済み予約なら kind: 'group'、不要・未定・終了後・仮予約なら null が入る", async () => {
+      for (const value of [UnlockArrangement.Required, UnlockArrangement.Arranged]) {
+        const { deps } = createDeps({
+          row: {
+            ...defaultRow,
+            status: ReservationStatus.Approved,
+            unlockArrangement: value,
+          },
+        });
+        const result = await getReservationUseCase(deps, {
+          reservationId: "rsv_01",
+          actorUserId: "usr_student_01",
+          isStaff: false,
+          now: defaultNow,
+          auditLogPage: 1,
+        });
+        const view = result._unsafeUnwrap().view;
+        expect(view.canViewDetail).toBe(true);
+        if (view.canViewDetail) {
+          expect(view.unlockArrangement).toEqual({
+            kind: "group",
+            value,
+            notice: unlockArrangementGroupNotice[value],
+          });
+        }
+      }
+
+      // 不要・未定・終了後・仮予約なら null
+      for (const [row, now] of [
+        [
+          {
+            ...defaultRow,
+            status: ReservationStatus.Approved,
+            unlockArrangement: UnlockArrangement.NotRequired,
+          },
+          defaultNow,
+        ],
+        [
+          {
+            ...defaultRow,
+            status: ReservationStatus.Approved,
+            unlockArrangement: null,
+          },
+          defaultNow,
+        ],
+        [
+          {
+            ...defaultRow,
+            status: ReservationStatus.Approved,
+            unlockArrangement: UnlockArrangement.Required,
+          },
+          new Date("2026-09-16T12:00:00+09:00"),
+        ],
+        [
+          {
+            ...defaultRow,
+            status: ReservationStatus.Provisional,
+            unlockArrangement: null,
+          },
+          defaultNow,
+        ],
+      ] as const) {
+        const { deps } = createDeps({ row });
+        const result = await getReservationUseCase(deps, {
+          reservationId: "rsv_01",
+          actorUserId: "usr_student_01",
+          isStaff: false,
+          now,
+          auditLogPage: 1,
+        });
+        const view = result._unsafeUnwrap().view;
+        expect(view.canViewDetail).toBe(true);
+        if (view.canViewDetail) {
+          expect(view.unlockArrangement).toBeNull();
+        }
       }
     });
   });

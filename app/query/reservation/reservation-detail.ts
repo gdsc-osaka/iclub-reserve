@@ -1,7 +1,8 @@
 import type { ResultAsync } from "neverthrow";
 
 import type { AuditLogEntryView } from "~/domain/audit-log";
-import type { ReservationStatus } from "~/domain/reservation";
+import type { ReservationStatus, UnlockArrangement } from "~/domain/reservation";
+import type { UnlockArrangementView } from "~/domain/reservation/unlock-arrangement";
 import type { QueryError } from "../error";
 import type { ReservationMessageView } from "./reservation-message-list";
 
@@ -23,6 +24,7 @@ export interface ReservationDetailRow {
   readonly endAt: Date;
   readonly status: ReservationStatus;
   readonly statusReason: string | null;
+  readonly unlockArrangement: UnlockArrangement | null;
   readonly headCount: number;
   readonly note: string | null;
   readonly createdByName: string | null;
@@ -103,6 +105,7 @@ export type ReservationDetailView =
   | {
       readonly canViewDetail: true;
       readonly reservation: ReservationDetailFull;
+      readonly unlockArrangement: UnlockArrangementView | null;
       readonly messages: readonly ReservationMessageView[];
       readonly auditLogs: ReservationAuditLogsView;
     };

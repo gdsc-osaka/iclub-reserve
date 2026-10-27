@@ -14,6 +14,8 @@ import {
   type ApplyContentEditOutcome,
   type ApplyStatusTransitionArgs,
   type ApplyStatusTransitionOutcome,
+  type ApplyUnlockArrangementUpdateArgs,
+  type ApplyUnlockArrangementUpdateOutcome,
   type CreateApprovedReservationOutcome,
   type CreateReservationOutcome,
   type Reservation,
@@ -21,11 +23,13 @@ import {
   type ReservationOverlapArgs,
   type ReservationRepository,
 } from "~/domain/reservation";
+import type { ReservationMessage } from "~/domain/reservation/message";
 import type { CalendarSyncTaskDraft } from "~/domain/calendar";
 import { allOf, auditLogInsert, guardedAuditLogInsert } from "../audit-log/audit-log-writes";
 import { guardedCalendarSyncTaskInserts } from "../calendar/calendar-sync-task-writes";
 import type { Database } from "../db";
 import { guardedMailOutboxInserts, mailOutboxInserts } from "../mail/mail-outbox-writes";
+import { guardedReservationMessageInsert } from "./reservation-message-writes";
 
 /** 重なりを探すとき、同じ予約テーブルをもう一度読むための別名 */
 const overlapping = alias(reservationTable, "overlapping");
@@ -108,13 +112,14 @@ export const createReservationRepository = (db: Database): ReservationRepository
    * 確かめ方は 2 つで違う。
    * - 操作履歴は UPDATE の**直前**に置き、UPDATE と同じ条件（更新前の状態）を見る。
    *   仕組みは guardedAuditLogInsert の JSDoc を参照。
-   * - メールは UPDATE の**後**に置き、「直前の UPDATE が書いた行」（更新後の status と updatedAt）を見る。
+   * - メッセージ・メール・カレンダー同期タスクは UPDATE の**後**に置き、「直前の UPDATE が書いた行」（更新後の status と updatedAt）を見る。
    *   仕組みは guardedMailOutboxInserts の JSDoc を参照。
    *
    * @param updateQuery 更新した行の id を返す（`.returning({ id })` 付きの）条件付き UPDATE
    * @param condition updateQuery と同じ WHERE の条件。操作履歴の INSERT と共有する
    * @param written 更新後の行を見分ける値
    * @param auditLog 更新できたときに書く操作履歴
+   * @param message 更新できたときに書くメッセージ（添えないなら null）
    * @param subject エラーの説明に入れる、何を書き込もうとしたか
    */
   const runGuardedUpdate = (
@@ -124,6 +129,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
     calendarSync: CalendarSyncTaskDraft | null,
+    message: ReservationMessage | null,
     subject: string,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError> => {
     const auditStatement = guardedAuditLogInsert(db, auditLog, {
@@ -131,11 +137,16 @@ export const createReservationRepository = (db: Database): ReservationRepository
       where: condition,
     });
 
-    const guardCondition = and(
+    const guardCondition = allOf(
       eq(reservationTable.id, written.id),
       eq(reservationTable.status, written.status),
       eq(reservationTable.updatedAt, written.updatedAt),
     );
+
+    const messageStatements = guardedReservationMessageInsert(db, message, {
+      from: reservationTable,
+      where: guardCondition,
+    });
 
     const outbox = guardedMailOutboxInserts(db, mails, {
       from: reservationTable,
@@ -148,7 +159,13 @@ export const createReservationRepository = (db: Database): ReservationRepository
     });
 
     return ResultAsync.fromPromise(
-      db.batch([auditStatement, updateQuery, ...outbox.statements, ...calendarSyncStatements]),
+      db.batch([
+        auditStatement,
+        updateQuery,
+        ...messageStatements,
+        ...outbox.statements,
+        ...calendarSyncStatements,
+      ]),
       wrapError(
         ReservationErrorCode.DatabaseError,
         `${subject}、操作履歴、通知の outbox、カレンダー同期タスクを書き込めなかった。`,
@@ -342,6 +359,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
       mails,
       auditLog,
       calendarSync,
+      null,
       "予約のステータス",
     );
   };
@@ -384,7 +402,43 @@ export const createReservationRepository = (db: Database): ReservationRepository
       mails,
       auditLog,
       calendarSync,
+      null,
       "予約の内容",
+    );
+  };
+
+  const applyUnlockArrangementUpdate = (
+    args: ApplyUnlockArrangementUpdateArgs,
+    message: ReservationMessage | null,
+    mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
+  ): ResultAsync<ApplyUnlockArrangementUpdateOutcome, ReservationError> => {
+    const condition = allOf(
+      eq(reservationTable.id, args.id),
+      eq(reservationTable.status, args.expectedStatus),
+      eq(reservationTable.updatedAt, args.expectedUpdatedAt),
+    );
+
+    const updateQuery = db
+      .update(reservationTable)
+      .set({
+        unlockArrangement: args.unlockArrangement,
+        // この更新より前に開いた画面からのほかの操作を、楽観的ロック（expectedUpdatedAt）で弾くため updated_at も進める
+        updatedAt: args.updatedAt,
+      })
+      .where(condition)
+      // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
+      .returning({ id: reservationTable.id });
+
+    return runGuardedUpdate(
+      updateQuery,
+      condition,
+      { id: args.id, status: args.expectedStatus, updatedAt: args.updatedAt },
+      mails,
+      auditLog,
+      null,
+      message,
+      "予約の解錠の手配",
     );
   };
 
@@ -395,5 +449,6 @@ export const createReservationRepository = (db: Database): ReservationRepository
     existsApprovedOverlap,
     applyStatusTransition,
     applyContentEdit,
+    applyUnlockArrangementUpdate,
   };
 };
