@@ -30,6 +30,14 @@ export interface Reservation {
   statusReason: string | null;
   createdBy: string;
   createdAt: Date;
+  /**
+   * 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）。
+   *
+   * 作成したときは作成日時と同じで、団体が施設・日時を変えたときだけ変えた日時に置き換わる。
+   * 決め方は edit.ts の resolveRequestedAtAfterEdit にまとめてある。
+   * 事務局は、仮予約をこの日時の古い順に並べて、先に申し込んだ団体から処理する（UC-033）。
+   */
+  requestedAt: Date;
   updatedAt: Date;
 }
 
@@ -316,6 +324,8 @@ export interface ApplyContentEditArgs {
   readonly note: string | null;
   /** 変更後の予約ステータス。承認済みの予約の施設・日時を変えたときだけ仮予約に変わる（COND-005） */
   readonly status: ReservationStatus;
+  /** 変更後の申請日時。団体が施設・日時を変えたときだけ変わる（resolveRequestedAtAfterEdit） */
+  readonly requestedAt: Date;
   readonly updatedAt: Date;
   /**
    * 施設か日時を変えるときだけ true。

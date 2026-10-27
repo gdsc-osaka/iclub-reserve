@@ -40,6 +40,7 @@ const approvedReservation: Reservation = {
   statusReason: null,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-18T09:00:00+09:00"),
+  requestedAt: new Date("2026-09-18T09:00:00+09:00"),
   updatedAt: new Date("2026-09-19T09:00:00+09:00"),
 };
 
@@ -214,6 +215,8 @@ describe("editReservationUseCase", () => {
           headCount: 6,
           note: "機材を持ち込みます",
           status: ReservationStatus.Approved,
+          // 使用人数・備考は時間帯の取り合いに関わらないので、申し込み直したことにしない
+          requestedAt: approvedReservation.requestedAt,
           updatedAt: now,
           requireNoApprovedOverlap: false,
         },
@@ -273,6 +276,8 @@ describe("editReservationUseCase", () => {
         status: ReservationStatus.Provisional,
         startAt,
         endAt,
+        // 時間帯を動かしたので、申し込み直したことになる（INFO-001.requested_at）
+        requestedAt: now,
         requireNoApprovedOverlap: true,
       });
       expect(mails?.[0]).toMatchObject({
@@ -328,12 +333,31 @@ describe("editReservationUseCase", () => {
       expect(editArgs).toMatchObject({
         expectedStatus: ReservationStatus.Provisional,
         status: ReservationStatus.Provisional,
+        // ステータスは変わらなくても、時間帯を動かしたので申し込み直したことになる
+        requestedAt: now,
         requireNoApprovedOverlap: true,
       });
       expect(mails?.map((mail) => mail.idempotencyKey)).toEqual([
         "reservation:provisionalEdited:res_01:1789866000000:usr_student_01",
         "reservation:provisionalEdited:res_01:1789866000000:usr_staff_01",
       ]);
+    });
+
+    it("同じ施設で時間帯を縮めるだけなら、申請日時を引き継ぐ", async () => {
+      /*
+       * 縮めた後の時間帯は、もとの申請の時点で申し込んでいた範囲に収まる。
+       * 変える前と後を取り違えて渡すと「広げた」と見なされ、申請日時が変わってしまう。
+       */
+      const { deps, spies } = createDeps({ reservation: provisionalReservation });
+
+      const result = await editReservationUseCase(
+        deps,
+        argsWith({ endAt: new Date("2026-09-25T11:00:00+09:00") }),
+      );
+
+      expect(result._unsafeUnwrap().outcome).toBe(ReservationEditOutcome.KeepProvisional);
+      const [editArgs] = spies.applyContentEdit.mock.calls[0] ?? [];
+      expect(editArgs?.requestedAt).toEqual(provisionalReservation.requestedAt);
     });
 
     it("使用人数だけの変更では、承認済みの予約と重なっていても止めない", async () => {

@@ -248,6 +248,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
             statusReason: insertValue("statusReason", reservation.statusReason),
             createdBy: insertValue("createdBy", reservation.createdBy),
             createdAt: insertValue("createdAt", reservation.createdAt),
+            requestedAt: insertValue("requestedAt", reservation.requestedAt),
             updatedAt: insertValue("updatedAt", reservation.updatedAt),
           })
           // 値はすべてパラメーターなので、FROM には 1 行だけ返す表を置けばよい
@@ -364,6 +365,7 @@ export const createReservationRepository = (db: Database): ReservationRepository
         headCount: args.headCount,
         note: args.note,
         status: args.status,
+        requestedAt: args.requestedAt,
         updatedAt: args.updatedAt,
       })
       .where(condition)

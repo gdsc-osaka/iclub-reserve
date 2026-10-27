@@ -116,7 +116,8 @@ const toDomainStatuses = (filter: ReservationListStatusFilter): readonly Reserva
 /**
  * 条件に応じた並び順を決定する。
  *
- * - /staff/reservations の既定（承認待ち・仮予約）: 申請日時の昇順（待たせている団体から順に処理できるようにするため）
+ * - /staff/reservations の既定（承認待ち・仮予約）: 申請日時の昇順（先に申し込んだ団体から順に処理できるようにするため）。
+ *   申請日時は作成日時ではなく、いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）
  * - period=upcoming: 開始日時の昇順（近いものが上）
  * - period=past: 開始日時の降順
  */
@@ -126,7 +127,7 @@ const resolveSort = (
   period: ReservationListPeriodFilter,
 ): ReservationListSort => {
   if (scope === "all" && status === "provisional") {
-    return "created_at_asc";
+    return "requested_at_asc";
   }
   if (period === "past") {
     return "start_at_desc";

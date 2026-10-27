@@ -159,7 +159,10 @@ export async function createStaffInvitation(
   return row;
 }
 
-/** 予約を作る。既定では仮予約になる */
+/**
+ * 予約を作る。既定では仮予約になる。
+ * 申請日時は、指定しなければ作成日時と同じ（施設・日時を変えていない予約）。
+ */
 export async function createReservation(
   db: E2eDb,
   values: Pick<
@@ -168,6 +171,7 @@ export async function createReservation(
   > &
     Partial<typeof schema.reservationTable.$inferInsert>,
 ): Promise<ReservationRow> {
+  const createdAt = values.createdAt ?? new Date();
   const [row] = await db
     .insert(schema.reservationTable)
     .values({
@@ -176,6 +180,8 @@ export async function createReservation(
       note: null,
       status: ReservationStatus.Provisional,
       statusReason: null,
+      createdAt,
+      requestedAt: createdAt,
       ...values,
     })
     .returning();

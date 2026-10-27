@@ -43,6 +43,7 @@ const approvedReservation: Reservation = {
   statusReason: null,
   createdBy: "usr_student_01",
   createdAt: new Date("2026-09-18T09:00:00+09:00"),
+  requestedAt: new Date("2026-09-18T09:00:00+09:00"),
   updatedAt: new Date("2026-09-19T09:00:00+09:00"),
 };
 
@@ -396,7 +397,7 @@ describe("editReservationDirectlyUseCase", () => {
       );
     });
 
-    it("仮予約の施設・日時を変更しても仮予約のままで更新される", async () => {
+    it("仮予約の施設・日時を変更しても仮予約のまま、申請日時も引き継いで更新される", async () => {
       const { deps, spies } = createDeps({ reservation: provisionalReservation });
 
       const newStartAt = new Date("2026-09-25T14:00:00+09:00");
@@ -414,6 +415,11 @@ describe("editReservationDirectlyUseCase", () => {
       expect(spies.applyContentEdit).toHaveBeenCalledWith(
         expect.objectContaining({
           status: ReservationStatus.Provisional,
+          /*
+           * 事務局が動かした時間帯は団体が申し込み直したものではないので、
+           * 団体の変更と違って申請日時を変えない（INFO-001.requested_at）
+           */
+          requestedAt: provisionalReservation.requestedAt,
         }),
         expect.any(Array),
         expect.objectContaining({

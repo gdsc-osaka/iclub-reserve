@@ -126,11 +126,18 @@ export function ReservationListRow({
           )}
         </div>
 
-        {/* 使用人数・申請者名・申請日メタ行 */}
+        {/*
+         * 使用人数・申請者名・申請日時メタ行。
+         *
+         * 申請日時は時刻まで出す。事務局が、同じ時間帯に重なった仮予約のどちらが先に
+         * 申し込まれたかを、一覧のまま見比べられるようにするため（INFO-001.requested_at）。
+         */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <span>{item.headCount}名</span>
           <span>申請者: {item.createdByName ?? "不明"}</span>
-          <span>申請日: {formatMonthDay(item.createdAt)}</span>
+          <span>
+            申請日時: {formatMonthDay(item.requestedAt)} {formatTime(item.requestedAt)}
+          </span>
         </div>
 
         {/* 備考（1〜2 行で省略） */}

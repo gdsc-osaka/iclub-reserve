@@ -70,6 +70,15 @@ export const reservationTable = sqliteTable("reservation", {
     .notNull()
     .$defaultFn(() => new Date()),
 
+  /**
+   * 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）。
+   *
+   * 作成日時・更新日時と違って既定値を持たせていない。作成日時と別々に既定値を取ると
+   * 1 ミリ秒ずれることがあり、施設・日時を変えていないのに「申し込み直した」予約に見えてしまう。
+   * 書き込む側で必ず決めさせるため、書き忘れると型エラーになるようにしてある。
+   */
+  requestedAt: integer("requested_at", { mode: "timestamp_ms" }).notNull(),
+
   updatedAt: integer("updated_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

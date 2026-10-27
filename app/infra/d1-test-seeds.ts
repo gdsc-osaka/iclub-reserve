@@ -62,12 +62,20 @@ export const seedGroup = (
 export const seedFacility = (row: typeof schema.facilityTable.$inferInsert) =>
   toStatement(builder.insert(schema.facilityTable).values({ ...timestamps, ...row }));
 
-/** 既定では仮予約で、使用人数は 1 人 */
+/**
+ * 既定では仮予約で、使用人数は 1 人。
+ * 申請日時は、既定では作成日時と同じ（施設・日時を変えていない予約）。
+ */
 export const seedReservation = (
-  row: Seed<typeof schema.reservationTable.$inferInsert, "headCount">,
+  row: Seed<typeof schema.reservationTable.$inferInsert, "headCount" | "requestedAt">,
 ) =>
   toStatement(
-    builder.insert(schema.reservationTable).values({ headCount: 1, ...timestamps, ...row }),
+    builder.insert(schema.reservationTable).values({
+      headCount: 1,
+      ...timestamps,
+      requestedAt: row.createdAt ?? timestamps.createdAt,
+      ...row,
+    }),
   );
 
 /** 既定ではメンバー（管理者ではない） */
