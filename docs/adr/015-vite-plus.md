@@ -59,22 +59,28 @@ Issue #246 を受けて決める。
 - `package.json` の `devEngines.packageManager` に `12.15.0` を書く。版を上げるときは、ここを書き換えて `pnpm install` する。
   pnpm は使う版を `pnpm-lock.yaml` の先頭にも書き、別の版の pnpm で動かしても、その版を落として切り替える（`onFail: download`）。
   Vite+ の `vp install` もこの版を使う。
-- 範囲（`^12.15.0`）ではなく、決まった版を書く。範囲にすると、CI の `pnpm/setup` は範囲の中の最新（12.16.0）を入れる一方、
-  pnpm はロックファイルの版（12.15.0）に従うため、`pnpm/setup` の版の確認で落ちた（この PR の最初の CI）。
-- CI（`pnpm/setup@v2`）には `version` を書かず、package.json の `devEngines.packageManager` から読ませる。版を書くのは package.json の 1 か所だけにする。
+- 範囲（`^12.15.0`）ではなく、決まった版を書く。範囲にすると、CI で入れる pnpm（範囲の中の最新の 12.16.0）と、
+  pnpm が従うロックファイルの版（12.15.0）が食い違う（この PR の最初の CI は、`pnpm/setup` の版の確認で落ちた）。
+- CI にも pnpm の版は書かない（決定 6）。版を書くのは package.json の 1 か所だけにする。
 - Cloudflare の Workers Builds のビルド変数 `PNPM_VERSION` も 12 にする（README の「Workers Builds のビルド変数」）。
 
-### 6. CI の手順は今のまま
+### 6. CI は `setup-vp` で準備し、`vp` でスクリプトを動かす
 
-- Vite+ の `voidzero-dev/setup-vp` には切り替えず、今までどおり `pnpm/setup` で入れて、スクリプトを動かす。
-  ジョブの名前（Format・Lint・Type Check・Test・E2E）と、ブランチのルールで必須にしているチェックを変えずに済むため。
+- `pnpm/setup` をやめ、Vite+ の `voidzero-dev/setup-vp` で Vite+・Node.js・pnpm を入れる。
+  版は CI に書かず、Vite+ は `pnpm-workspace.yaml` の catalog（`version-file`）、Node.js は `.node-version`（`node-version-file`）、
+  pnpm は `package.json` の `devEngines.packageManager` から読む。手元と CI で同じファイルを見るので、版がずれない。
+- `setup-vp` は決まった版（`@v1.22.0`）で指す。Vite+ の手引きのとおり、`v1` は更新が止まっているため使わない。
+- 依存は `vp install --frozen-lockfile` で入れる。`setup-vp` の中でも入れられるが（`run-install`）、どこで落ちたかをログで分かりやすくするため、別の手順にする。
+- スクリプトは `vp run <スクリプト名>`、Playwright は `vp exec playwright …` で動かす。`pnpm` のコマンドが PATH に無くても動く。
+  `package.json` のスクリプトは `vp run` でもキャッシュされず、環境変数もそのまま渡る（`run.cache.scripts` の既定は `false`）。
+- ジョブの名前（Format・Lint・Type Check・Test・E2E）は変えない。ブランチのルールで必須にしているチェックを直さずに済むため。
 - E2E のアプリは `vp preview` で起動する（`playwright.config.ts` の webServer）。
   Vite+ の `vite` には `bin/vite.js` が無いため、`node node_modules/vite-plus/bin/vp preview …` と書く。
 
 ## 採らなかった案
 
 - **型の情報を使うリントをこの変更で有効にし、101 件を直す**: ツールの入れ替えとコードの書き換えが 1 つの PR に混ざり、レビューしにくい。別に行う。
-- **CI を `setup-vp` に切り替える**: Node.js と pnpm を Vite+ が入れるようになるが、今の手順でも動き、得るものが少ない。
+- **CI を `pnpm/setup` のままにする**: 動くが、Node.js の版を CI に（`runtime: node@24`）、`.node-version` とは別に書くことになる。
 - **pnpm 11 のまま、版だけを書く**: 12 で install・リント・型の検査・単体テスト・ビルド・E2E が通ったので、Vite+ が既定で選ぶ 12 にそろえた。
 
 ## 影響
