@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { formatDateTime } from "~/lib/date";
 import type { ReservationMessage } from "../reservation/message";

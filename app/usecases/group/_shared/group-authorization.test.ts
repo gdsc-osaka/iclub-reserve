@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { GroupAction, GroupErrorCode, groupPermissions } from "~/domain/group";
 import { MembershipRole, StaffRole, type Actor, type Membership } from "~/domain/membership";

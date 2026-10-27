@@ -1,5 +1,5 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { InvitationStatus } from "~/domain/invitation";
 import { StaffErrorCode, type StaffError, type StaffInvitation } from "~/domain/staff";

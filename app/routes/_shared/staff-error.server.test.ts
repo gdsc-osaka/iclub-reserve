@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { GroupErrorCode } from "~/domain/group";
 import { StaffErrorCode, StaffField, type StaffError } from "~/domain/staff";
 import { invitationErrorResponse } from "./group-error.server";

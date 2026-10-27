@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { MailOutboxErrorCode, type MailOutboxEntry } from "~/domain/mail/mail-outbox";
 import { MailSendErrorCode } from "~/domain/mail/mail-sender";
 import { fakeMailOutbox, fakeMailSender } from "~/testing/fakes/mail";

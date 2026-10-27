@@ -29,7 +29,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach } from "vitest";
+import { afterAll, beforeAll, beforeEach } from "vite-plus/test";
 import { getPlatformProxy } from "wrangler";
 
 import { createDb, type Database } from "./db";

@@ -5,7 +5,7 @@
  * - メンバーと承諾待ち招待の並び順、pending の絞り込み
  * - 期限切れの除外（期限を過ぎたもの・ちょうど now のものは出ない、now より後のものは出る）
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { InvitationStatus } from "~/domain/invitation";
 import { useD1TestDb } from "~/infra/d1-test-db";

@@ -12,7 +12,7 @@
  * - 30 日より前のメッセージは出ない
  * - 予約 1 件につき 1 行にまとめ、最大 10 件で超えた分は件数だけ返す
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
 import { MembershipRole } from "~/domain/membership";

@@ -15,7 +15,7 @@
  * `invitation-accept-d1.test.ts` がローカルの本物の D1 に対して確かめている。
  */
 import { drizzle } from "drizzle-orm/d1";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import * as schema from "~/db/schema";
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";

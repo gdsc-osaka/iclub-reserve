@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { USER_NAME_MAX_LENGTH, validatePasskeyName, validateUserName } from "./user-profile";
 

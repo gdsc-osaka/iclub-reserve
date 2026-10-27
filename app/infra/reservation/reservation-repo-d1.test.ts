@@ -12,7 +12,7 @@
  *
  * D1 の起動とマイグレーションは `useD1TestDb` が行う（`app/infra/d1-test-db.ts`）。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { auditLogTable, calendarSyncTaskTable } from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";

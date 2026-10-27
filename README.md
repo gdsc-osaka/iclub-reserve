@@ -17,7 +17,9 @@
   - アカウントを作成できるのは `osaka-u.ac.jp` ドメイン（サブドメイン含む）のメールアドレスのみ
 - **インフラ・ホスティング**: [Cloudflare Workers](https://www.cloudflare.com/products/workers/)
   - IaC: [Terraform](https://developer.hashicorp.com/terraform) を用いたインフラ定義と管理
-- **パッケージマネージャー**: [pnpm](https://pnpm.io/)
+- **開発のツール**: [Vite+](https://viteplus.dev/)
+  - 開発サーバー・ビルド（Vite）、単体テスト（Vitest）、リント（Oxlint）、フォーマット（Oxfmt）を 1 つにまとめたもの。設定は `vite.config.ts` にまとめています（[ADR-015](docs/adr/015-vite-plus.md)）
+- **パッケージマネージャー**: [pnpm](https://pnpm.io/) 12
 
 ## ドキュメント
 
@@ -56,8 +58,9 @@
 
 ### 前提条件
 
-- [Node.js](https://nodejs.org/ja/download) (v24 以上推奨)
+- [Node.js](https://nodejs.org/ja/download) (v24 以上推奨。v22 なら 22.22.1 以上)
 - [pnpm](https://pnpm.io/installation)
+  - 使う版は `package.json` の `devEngines.packageManager` で決めています（v12）。手元の pnpm が 11 以降なら、版が違っても `pnpm install` のときに自動でその版に切り替わります
 - [Terraform](https://developer.hashicorp.com/terraform/install) (インフラ変更時のみ)
 
 ### インストール
@@ -67,6 +70,9 @@
 ```bash
 pnpm install
 ```
+
+インストールすると、コミットの前に、コミットするファイルのフォーマットとリントの自動修正が走るようになります（`vp staged`）。
+1 回だけ止めるときは `VP_GIT_HOOKS=0 git commit`、ずっと止めるときは `pnpm exec vp hooks disable` を実行してください。
 
 ローカル環境の DB へのマイグレーションの適用
 
@@ -130,9 +136,14 @@ pnpm run db:seed --remote
 ### テスト
 
 ```bash
-pnpm test          # 単体テスト（Vitest）
+pnpm test          # 単体テスト（Vitest。Vite+ の vp test で動かす）
 pnpm run test:e2e  # E2E テスト（Playwright）。ビルドしてから画面を操作して確かめる
+pnpm lint          # リント（vp lint）。直せるところを直すなら pnpm run lint:fix
+pnpm format        # フォーマットの確認（vp fmt）。整えるなら pnpm run format:fix
+pnpm typecheck     # 型の検査
 ```
+
+テストでは `describe`・`it`・`expect`・`vi` などを `vitest` ではなく `vite-plus/test` から読み込みます（`vitest` から読み込むとリントで止まります）。
 
 E2E テストは、ユースケース（UC）ごとに画面の主な流れと権限の境目を確かめます。方針は [ADR-007](docs/adr/007-e2e-testing.md) を参照してください。
 
@@ -205,7 +216,7 @@ pnpm run db:migrate:prod
 Node.js と pnpm のバージョンは、リポジトリの設定だけでは決まりません。
 
 - Node.js: `.node-version` で指定（リポジトリ管理）
-- pnpm: Cloudflare ダッシュボードの **Settings > Build > Build Variables and Secrets** で `PNPM_VERSION` を設定
+- pnpm: Cloudflare ダッシュボードの **Settings > Build > Build Variables and Secrets** で `PNPM_VERSION` を設定（`package.json` の `devEngines.packageManager` と同じ 12 系）
 
 `wrangler.jsonc` の `vars` はランタイム変数であり、ビルドイメージは参照しません。pnpm を指定しないとビルドイメージ既定の 10 系が使われるので、両方の Worker に設定してください。
 

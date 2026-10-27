@@ -5,7 +5,7 @@
  * ここが崩れると、それらのテストは理由の分からない形で通ったり落ちたりするので、先に押さえておく。
  */
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { groupTable } from "~/db/schema";
 import { useD1TestDb } from "./d1-test-db";

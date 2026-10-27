@@ -4,7 +4,7 @@
  * メンバー数の数え方は、型もテストも通ったまま、どの団体も「メンバー 0 人」になっていたことがある
  * （`app/infra/group/member-count.ts`）。数と並び順は、ここで実際の DB で押さえる。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";

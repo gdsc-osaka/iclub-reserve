@@ -4,7 +4,7 @@
  *
  * 承諾は `invitation-accept-d1.test.ts` で確かめている。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode } from "~/domain/group";

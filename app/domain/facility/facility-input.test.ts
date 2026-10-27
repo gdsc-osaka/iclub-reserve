@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
   FACILITY_DESCRIPTION_MAX_LENGTH,
   FACILITY_NAME_MAX_LENGTH,

@@ -4,7 +4,7 @@
  *
  * 団体の状態の更新（updateStatus）は `group-status-d1.test.ts` で確かめている。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { GroupErrorCode, GroupStatus } from "~/domain/group";

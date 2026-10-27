@@ -13,5 +13,18 @@ minimumReleaseAgeExclude:
   - wrangler@4.103.0
 catalog:
   better-auth: ^1.7.7
+  # Vite+ の版。`vite` は Vite+ に入っている Vite（vite-plus-core）に置き換える。
+  # 2 つは必ず同じ版にそろえる（上げるときは `vp migrate` を使う）
+  vite: npm:@voidzero-dev/vite-plus-core@1.4.0
+  vite-plus: 1.4.0
 overrides:
   better-auth: "catalog:"
+  # React Router・Cloudflare・Tailwind の Vite プラグインが読む `vite` も、Vite+ の Vite にそろえる。
+  # Vite が 2 つ入ると、プラグインと Vite+ で別の Vite を見てしまうため
+  vite@*: "catalog:"
+# プラグインが求める `vite` の版の範囲に、vite-plus-core の版（1.x）は入らない。その警告を出さない
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"

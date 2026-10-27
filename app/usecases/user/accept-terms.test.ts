@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { TERMS_OF_SERVICE } from "~/domain/authn/terms-of-service";
 import { UserErrorCode, type TermsAcceptanceRepository, type UserError } from "~/domain/user";

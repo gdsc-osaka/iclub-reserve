@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { isRetryable, MailSendErrorCode } from "~/domain/mail/mail-sender";
 import { classifySmtpError } from "./smtp-error";
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { useD1TestDb } from "../d1-test-db";
 import { seedStaffInvitation, seedUser } from "../d1-test-seeds";
 

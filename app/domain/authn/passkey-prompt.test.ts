@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { parsePasskeyPromptState, recordDismissal, shouldSuggestPasskey } from "./passkey-prompt";
 
 /** テストの基準にする日時（2026-09-01 09:00 JST）。 */

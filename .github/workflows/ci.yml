@@ -30,7 +30,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/setup@v2
         with:
-          version: 11
+          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -54,7 +54,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/setup@v2
         with:
-          version: 11
+          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -78,7 +78,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/setup@v2
         with:
-          version: 11
+          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -102,7 +102,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/setup@v2
         with:
-          version: 11
+          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 
@@ -147,7 +147,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/setup@v2
         with:
-          version: 11
+          version: 12 # package.json の devEngines.packageManager とそろえる
           runtime: node@24
           cache: true
 

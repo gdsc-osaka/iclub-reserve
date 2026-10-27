@@ -9,7 +9,7 @@
  * 承諾は所属（＝権限）を与える操作なので、通る・通らないを実際の DB で押さえる。
  * 本番の `accept` と同じく、2 文を D1 の batch で流す。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { InvitationStatus, type AcceptInvitationInput } from "~/domain/invitation";

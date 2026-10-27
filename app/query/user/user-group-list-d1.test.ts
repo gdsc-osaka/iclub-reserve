@@ -8,7 +8,7 @@
  * 内側の `id` が group_member.id を指し、どの団体も「メンバー 0 人」になっていた。
  * 型もテストも通っていたので、ここで数と並び順を実際の DB で押さえる。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";

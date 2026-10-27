@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { HolidayErrorCode } from "~/domain/holiday";
 import { fetchHolidayIcal, GOOGLE_HOLIDAY_ICAL_URL } from "./google-holiday-fetcher";

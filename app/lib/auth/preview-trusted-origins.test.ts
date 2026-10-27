@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { buildPreviewTrustedOrigins } from "./preview-trusted-origins";
 
 const PREVIEW_URL = "https://iclub-preview.gdgoc-osaka.jp";

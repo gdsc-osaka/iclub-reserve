@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { ALLOWED_EMAIL_DOMAINS_LABEL } from "../authn/allowed-email-domain";
 import { GroupErrorCode, GroupField } from "../group";
 import { INVITATION_EMAIL_MAX_LENGTH, validateInvitationEmail } from "./invitation-email";

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createDiscordMailSender } from "./discord-mail-sender.server";
 import { createMailMessage } from "~/domain/mail/mail-message";
 import { MailSendErrorCode } from "~/domain/mail/mail-sender";

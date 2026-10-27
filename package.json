@@ -11,25 +11,26 @@
     "deploy": "pnpm run build:production && wrangler deploy --env production",
     "deploy:preview": "pnpm run build:preview && wrangler deploy --env preview",
     "deploy:preview-branch": "pnpm run build:preview && wrangler preview --env preview",
-    "preview": "pnpm run build && vite preview",
+    "preview": "pnpm run build && vp preview",
     "cf-typegen": "wrangler types",
     "postinstall": "wrangler types",
-    "format": "oxfmt --check .",
-    "format:fix": "oxfmt .",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "test": "vitest run",
+    "format": "vp fmt --check .",
+    "format:fix": "vp fmt .",
+    "lint": "vp lint",
+    "lint:fix": "vp lint --fix",
+    "test": "vp test run",
     "test:e2e": "pnpm run build && playwright test",
-    "db:auth:generate": "auth generate --output ./app/db/schema/auth.ts && oxfmt app/db/schema/auth.ts",
+    "db:auth:generate": "auth generate --output ./app/db/schema/auth.ts && vp fmt app/db/schema/auth.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply iclub-reserve-preview-db --local",
     "db:migrate:preview": "wrangler d1 migrations apply iclub-reserve-preview-db --remote --env preview",
     "db:migrate:prod": "wrangler d1 migrations apply iclub-reserve-db --remote --env production",
-    "db:seed": "tsx scripts/seed.ts",
-    "db:seed:preview": "tsx scripts/seed.ts --remote",
-    "db:studio": "tsx scripts/run-studio.ts",
-    "dev:otp": "tsx scripts/dev-otp.ts",
-    "icons:generate": "tsx scripts/generate-app-icons.ts"
+    "db:seed": "vpx scripts/seed.ts",
+    "db:seed:preview": "vpx scripts/seed.ts --remote",
+    "db:studio": "vpx scripts/run-studio.ts",
+    "dev:otp": "vpx scripts/dev-otp.ts",
+    "icons:generate": "vpx scripts/generate-app-icons.ts",
+    "prepare": "vp config"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.7",
@@ -66,15 +67,19 @@
     "better-sqlite3": "^13.0.3",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.11",
-    "oxfmt": "^0.72.0",
-    "oxlint": "^1.87.0",
     "shadcn": "^4.21.4",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.3",
-    "vitest": "^5.0.3",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
     "wrangler": "^4.148.0",
     "zod": "4.6.6"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^12.15.0",
+      "onFail": "download"
+    }
   }
 }

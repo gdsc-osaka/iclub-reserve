@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { fakeMailOutboxNotifier } from "~/testing/fakes/mail";
