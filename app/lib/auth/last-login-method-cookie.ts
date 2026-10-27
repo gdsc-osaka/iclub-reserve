@@ -1,4 +1,5 @@
 import { type LoginMethod, parseLoginMethod } from "~/domain/authn/login-method";
+import { findCookieValue } from "~/lib/cookie";
 
 /**
  * 前回使ったログイン方法を覚えておくための cookie の名前。
@@ -27,28 +28,6 @@ const MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
  * 中身はログイン方法の名前だけで、誰のものかは分からない。
  * 読めても書けなくてもログインには影響しない（並び順が既定に戻るだけ）。
  */
-const findCookieValue = (cookieHeader: string | null, name: string): string | null => {
-  if (!cookieHeader) return null;
-
-  for (const entry of cookieHeader.split(";")) {
-    const separator = entry.indexOf("=");
-    if (separator === -1) continue;
-    if (entry.slice(0, separator).trim() !== name) continue;
-
-    const value = entry.slice(separator + 1).trim();
-
-    try {
-      return decodeURIComponent(value);
-    } catch {
-      // 「%」だけのような壊れた値だと decodeURIComponent は例外を投げる。
-      // ここで受け止めないとローダーごと落ちて、ログイン画面が開けなくなってしまう。
-      // 並び順のためだけの記録なので、なかったことにして先へ進める。
-      return null;
-    }
-  }
-
-  return null;
-};
 
 /**
  * リクエストから、前回このブラウザで使ったログイン方法を取り出す。

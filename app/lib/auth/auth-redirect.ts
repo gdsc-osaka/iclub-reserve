@@ -7,6 +7,9 @@ export const LOGIN_PATH = "/login";
 /** 初回セットアップ（お名前の登録）の画面。 */
 export const WELCOME_PATH = "/welcome";
 
+/** ログイン後に前回使っていた領域へ送るためのランディング用パス（ADR-016 決定 4）。 */
+export const LANDING_PATH = "/start";
+
 /** 開発専用の、メール outbox を手で送信するエンドポイント（`app/routes/dev/flush-mail`）。 */
 export const DEV_FLUSH_MAIL_PATH = "/dev/flush-mail";
 
@@ -24,8 +27,8 @@ export const PASSKEY_SUGGEST_PATH = "/passkey/suggest";
 /** アカウント設定の画面。 */
 export const ACCOUNT_PATH = "/account";
 
-/** 遷移先の指定がないときに送るページ。 */
-const DEFAULT_REDIRECT_TO = "/";
+/** 遷移先の指定がないときに送るページ（ADR-016 決定 4）。 */
+const DEFAULT_REDIRECT_TO = LANDING_PATH;
 
 /**
  * ログインしていなくても開けるパス（完全一致で判定する）。
@@ -73,10 +76,15 @@ export const isPublicPath = (pathname: string): boolean =>
  *
  * クエリパラメータの値をそのまま遷移先にすると、外部サイトへ誘導される
  * （オープンリダイレクト）恐れがある。そのため自サイト内のパス
- * （"/" で始まり "//" では始まらない）だけを許可し、それ以外はトップページに送る。
+ * （"/" で始まり "//" では始まらない）だけを許可し、それ以外はランディングページ（/start）に送る。
+ *
+ * 値がちょうど "/" のときも LANDING_PATH（/start）を返す。
+ * ログインしていない人がアドレスを打って開くのは "/" なので、そこから来た人も前回の画面へ送るため（ADR-016 決定 4）。
  */
 export const toSafeRedirectTo = (value: string | null): string =>
-  value && value.startsWith("/") && !value.startsWith("//") ? value : DEFAULT_REDIRECT_TO;
+  value && value.startsWith("/") && !value.startsWith("//") && value !== "/"
+    ? value
+    : DEFAULT_REDIRECT_TO;
 
 /**
  * 今リクエストされているページのパス（クエリパラメータを除く）を返す。
@@ -97,7 +105,7 @@ export const toCurrentPathname = (request: Request): string => {
 /**
  * リクエストの `?redirectTo=...` から、ログイン後の遷移先を取り出す。
  *
- * 今いる画面そのものが指定されていたときは、代わりにトップページを返す。
+ * 今いる画面そのものが指定されていたときは、代わりにランディングページ（/start）を返す。
  * ログインの途中に挟む画面（お名前の登録・パスキーの登録）は、
  * 用が済むとこの遷移先へ進む。そこに自分自身が入っていると、
  * 何度進んでも同じ画面に戻ってくる堂々巡りになってしまう。
@@ -133,7 +141,7 @@ export const toCurrentPath = (request: Request): string => {
 /**
  * ログイン画面などへ送るときに、戻り先を引き継いだ URL を作る。
  *
- * 戻り先がトップページ（既定）のときはパラメータを付けず、URL を短く保つ。
+ * 戻り先がランディングページ（既定）のときはパラメータを付けず、URL を短く保つ。
  *
  * @param path 送り先の画面（`LOGIN_PATH` など）
  * @param redirectTo その画面を終えたあとに戻すページ

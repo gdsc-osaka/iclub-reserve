@@ -4,6 +4,8 @@ import { Link } from "react-router";
 import { ICLUB_BOLT_BOX } from "~/components/brand/iclub-bolt";
 import { ICLUB_WORDMARK_VIEW_BOX, IclubWordmark } from "~/components/brand/iclub-logo";
 
+import { type AppArea, appAreaLinks } from "./app-area";
+
 /** 開いているときのワードマークの幅（rem）。 */
 const WORDMARK_WIDTH = 9;
 
@@ -69,11 +71,14 @@ const brandStyle = {
  *
  * 動きの長さと緩急（duration-200 / ease-linear）はサイドバー本体の幅の変化に合わせている。
  * ここだけ別の値にすると、ロゴと枠が別々に動いているように見える。
+ *
+ * 押すと、開いている画面のダッシュボードへ戻る。いつも "/" にすると、
+ * 事務局の画面でロゴを押しただけで利用者の画面へ切り替わってしまう（ADR-016 決定 5）。
  */
-export function BrandHeader() {
+export function BrandHeader({ area }: Readonly<{ area: AppArea }>) {
   return (
     <Link
-      to="/"
+      to={appAreaLinks[area].to}
       style={brandStyle}
       // 畳む・開くときに幅が変わる。はみ出した分は切り落として、
       // 文字が折り返して一瞬崩れて見えるのを防ぐ

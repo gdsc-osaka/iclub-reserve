@@ -4,7 +4,9 @@ import { IclubMark } from "~/components/brand/iclub-logo";
 import { Separator } from "~/components/ui/separator";
 import { SidebarTrigger } from "~/components/ui/sidebar";
 
-import { findActiveNavItem } from "./nav-items";
+import type { AppArea } from "./app-area";
+import { AreaSwitch } from "./area-switch";
+import { findActiveNavItem, type NavCounts } from "./nav-items";
 import type { ShellUser } from "./shell-user";
 
 /** このシステムの名前。ロゴ（団体の名前）と組にして出す。 */
@@ -17,9 +19,9 @@ const SERVICE_NAME = "施設・設備 予約システム";
  * サイドバーの端（SidebarRail）でも開閉できるが、そこにボタンがあることに
  * 気づけない人が多い。
  */
-export function DesktopHeader({ user }: Readonly<{ user: ShellUser }>) {
+export function DesktopHeader({ area }: Readonly<{ area: AppArea }>) {
   const { pathname } = useLocation();
-  const activeItem = findActiveNavItem(user.isStaff, pathname);
+  const activeItem = findActiveNavItem(area, pathname);
 
   return (
     <header className="sticky top-0 z-20 hidden h-12 shrink-0 items-center gap-2 border-b bg-background px-4 md:flex">
@@ -48,14 +50,30 @@ export function DesktopHeader({ user }: Readonly<{ user: ShellUser }>) {
  * NOTE: 予約の詳細のようにボトムバーに対応するタブが無い画面を作るときは、
  * ここを「← 予約の詳細」のような戻る導線に差し替えること。
  */
-export function MobileHeader({ user }: Readonly<{ user: ShellUser }>) {
+export function MobileHeader({
+  user,
+  area,
+  counts,
+}: Readonly<{
+  user: ShellUser;
+  area: AppArea;
+  counts: NavCounts;
+}>) {
   const { pathname } = useLocation();
-  const activeItem = findActiveNavItem(user.isStaff, pathname);
+  const activeItem = findActiveNavItem(area, pathname);
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4 md:hidden">
-      <IclubMark className="h-5" />
-      <span className="text-sm font-medium">{SERVICE_NAME}</span>
+      <IclubMark className="h-5 shrink-0" />
+      <span className="min-w-0 truncate text-sm font-medium">{SERVICE_NAME}</span>
+
+      {/*
+       * スマホではボトムバーが 5 つの枠で埋まっているため、
+       * 画面領域の切り替えを上部の帯の右端に置く（ADR-016 決定 5）。
+       */}
+      <div className="ml-auto shrink-0">
+        <AreaSwitch user={user} area={area} counts={counts} variant="header" />
+      </div>
 
       {/*
        * 画面名は目には出さないが、読み上げでは今どこにいるか分かるようにしておく。

@@ -7,7 +7,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -17,14 +16,15 @@ import {
 } from "~/components/ui/sidebar";
 
 import { AccountMenu } from "./account-menu";
+import type { AppArea } from "./app-area";
+import { AreaSwitch } from "./area-switch";
 import { BrandHeader } from "./brand-header";
 import { NavCountBadge, NavCountDot, NavCountText } from "./nav-count";
 import {
-  commonNavItems,
   isNavItemActive,
   newReservationPath,
-  staffNavItems,
   toNavCount,
+  toNavItems,
   toNewReservationLabel,
   type NavCounts,
   type NavItem,
@@ -43,11 +43,20 @@ import type { ShellUser } from "./shell-user";
  * 空き状況カレンダー（SCR-001）が施設 × 時間の表を横に広げるため。
  * 幅が足りないと、表を見るためだけに横スクロールが必要になる。
  */
-export function AppSidebar({ user, counts }: Readonly<{ user: ShellUser; counts: NavCounts }>) {
+export function AppSidebar({
+  user,
+  area,
+  counts,
+}: Readonly<{
+  user: ShellUser;
+  area: AppArea;
+  counts: NavCounts;
+}>) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <BrandHeader />
+        <BrandHeader area={area} />
+        <AreaSwitch user={user} area={area} counts={counts} variant="sidebar" />
       </SidebarHeader>
 
       <SidebarContent>
@@ -58,12 +67,12 @@ export function AppSidebar({ user, counts }: Readonly<{ user: ShellUser; counts:
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  tooltip={toNewReservationLabel(user.isStaff)}
+                  tooltip={toNewReservationLabel(area)}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/80 active:text-primary-foreground"
                 >
                   <Link to={newReservationPath}>
                     <Plus aria-hidden />
-                    <span>{toNewReservationLabel(user.isStaff)}</span>
+                    <span>{toNewReservationLabel(area)}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -74,30 +83,12 @@ export function AppSidebar({ user, counts }: Readonly<{ user: ShellUser; counts:
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {commonNavItems.map((item) => (
+              {toNavItems(area).map((item) => (
                 <NavMenuItem key={item.id} item={item} count={toNavCount(counts, item)} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        {/*
-         * 事務局の項目は、共通の項目を置き換えずに下へ足す。
-         * 事務局の人も自分の団体の予約を申請するし、
-         * どの団体にも所属していない事務局の人もいるため。
-         */}
-        {user.isStaff && (
-          <SidebarGroup>
-            <SidebarGroupLabel>事務局</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {staffNavItems.map((item) => (
-                  <NavMenuItem key={item.id} item={item} count={toNavCount(counts, item)} />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
       </SidebarContent>
 
       <SidebarFooter>

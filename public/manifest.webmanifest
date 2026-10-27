@@ -5,7 +5,7 @@
   "description": "大阪大学 Innovators' Club の施設・設備の予約システム",
   "lang": "ja",
   "dir": "ltr",
-  "start_url": "/",
+  "start_url": "/start",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",

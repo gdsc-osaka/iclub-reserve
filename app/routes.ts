@@ -19,6 +19,10 @@ export default [
    */
   layout("routes/app-layout/route.tsx", [
     index("routes/home/route.tsx"),
+    /*
+     * 事務局の画面のダッシュボード（SCR-022 / ADR-016 決定 8）。
+     */
+    route("staff", "routes/home/staff/route.tsx"),
     route("availability", "routes/availability/route.tsx"),
     /*
      * 施設カレンダー一覧・購読ページ（SCR-010 / UC-018 / ADR-013 決定 7）。
@@ -95,6 +99,8 @@ export default [
   route("welcome", "routes/welcome/route.tsx"),
   // 認証コードでログインしている人に、パスキーの登録を勧める画面（ログイン後に通る）
   route("passkey/suggest", "routes/passkey/suggest/route.tsx"),
+  // 前回使っていた画面のダッシュボードへ送るだけのルート（ログインの最後に通る。ADR-016 決定 4）
+  route("start", "routes/start/route.ts"),
 
   // Better Auth のエンドポイント（/api/auth/... を全て受ける）
   route("api/auth/*", "routes/api/auth/route.ts"),

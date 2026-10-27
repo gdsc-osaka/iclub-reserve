@@ -37,19 +37,19 @@ export const loadNavCounts = async (
   ]);
 
   /*
-   * ダッシュボードの件数は、ダッシュボードに並ぶ確認が必要なことの行の数にそろえる。
+   * 利用者の画面のダッシュボードの件数は、ダッシュボードに並ぶ確認が必要なこと
+   * （団体側の未読と自分宛ての招待）の行の数にそろえる（ADR-016 決定 7）。
    * 未読は予約 1 件につき 1 行なので（COND-026 (1)）、予約の数で数える。
    * 1 つでも読めなければ出さない（少なく数えた値を出すと、確認が済んだと思わせてしまう）。
    */
   const dashboard = sumCounts([
     groupUnread?.allUnreadReservationIds.length ?? null,
     invitations?.length ?? null,
-    // 事務局でなければ、団体からの未読メッセージは無いので 0 件として足す
-    staff === null ? 0 : staff.unreadMessages,
   ]);
 
   return {
     dashboard,
+    "staff-dashboard": staff?.unreadMessages ?? null,
     "staff-approvals": staff?.pendingReservations ?? null,
     "staff-groups": staff?.pendingGroups ?? null,
   };

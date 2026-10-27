@@ -15,8 +15,10 @@ import {
 import { useSignOut } from "~/lib/auth/use-sign-out";
 
 import { UserAvatar } from "./account-menu";
+import type { AppArea } from "./app-area";
 import { NavCountBadge, NavCountDot, NavCountText } from "./nav-count";
 import {
+  hasAnyNavCount,
   isNavItemActive,
   newReservationPath,
   toBottomNavItems,
@@ -38,9 +40,17 @@ import type { ShellUser } from "./shell-user";
  * `useIsMobile()` のような JavaScript での判定は、最初の描画に間に合わず
  * サイドバーとボトムバーが一瞬両方出てしまう。
  */
-export function BottomNav({ user, counts }: Readonly<{ user: ShellUser; counts: NavCounts }>) {
-  const items = toBottomNavItems(user.isStaff);
-  const overflowItems = toOverflowNavItems(user.isStaff);
+export function BottomNav({
+  user,
+  area,
+  counts,
+}: Readonly<{
+  user: ShellUser;
+  area: AppArea;
+  counts: NavCounts;
+}>) {
+  const items = toBottomNavItems(area);
+  const overflowItems = toOverflowNavItems(area);
 
   return (
     <nav
@@ -60,7 +70,7 @@ export function BottomNav({ user, counts }: Readonly<{ user: ShellUser; counts: 
 
         {/* 入口は真ん中（2 つ目と 3 つ目の間）に置く（ADR-014 決定 9） */}
         <li>
-          <BottomNavAction isStaff={user.isStaff} />
+          <BottomNavAction area={area} />
         </li>
 
         {items.slice(2).map((item) => (
@@ -79,8 +89,8 @@ export function BottomNav({ user, counts }: Readonly<{ user: ShellUser; counts: 
 }
 
 /** ボトムバーの真ん中に置く、予約の申請（事務局は作成）の入口 */
-function BottomNavAction({ isStaff }: Readonly<{ isStaff: boolean }>) {
-  const label = toNewReservationLabel(isStaff);
+function BottomNavAction({ area }: Readonly<{ area: AppArea }>) {
+  const label = toNewReservationLabel(area);
 
   return (
     <Link to={newReservationPath} className={cn(tabClassName, "text-muted-foreground")}>
@@ -153,7 +163,7 @@ function OverflowMenu({
    * 中の項目に件数があれば、「その他」にも点を付ける。付けないと、シートを開くまで気づけない。
    * 数字にしないのは、種類の違う件数（承認待ちの予約と団体など）を足しても意味が無いため。
    */
-  const hasCountInside = items.some((item) => toNavCount(counts, item) !== undefined);
+  const hasCountInside = hasAnyNavCount(counts, items);
 
   return (
     <Sheet>

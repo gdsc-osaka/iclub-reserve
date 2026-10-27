@@ -23,7 +23,7 @@ import type {
   TodayScheduleFacility,
   TodayScheduleReservation,
 } from "~/query/reservation/staff-today-schedule";
-import { SectionUnavailableAlert } from "./section-unavailable-alert";
+import { SectionUnavailableAlert } from "../section-unavailable-alert";
 
 export interface StaffTodayScheduleSectionProps {
   readonly facilities: readonly TodayScheduleFacility[];

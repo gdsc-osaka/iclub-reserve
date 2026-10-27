@@ -1,4 +1,5 @@
 import { SIDEBAR_COOKIE_NAME } from "~/components/ui/sidebar";
+import { findCookieValue } from "~/lib/cookie";
 
 /**
  * 外枠（シェル）の見た目のうち、クッキーに残しているものを読む。
@@ -16,11 +17,6 @@ import { SIDEBAR_COOKIE_NAME } from "~/components/ui/sidebar";
  * クッキーが無い（＝一度も畳んでいない）ときは開いた状態にする。
  */
 export const readSidebarDefaultOpen = (request: Request): boolean => {
-  const cookieHeader = request.headers.get("Cookie") ?? "";
-  const sidebarState = cookieHeader
-    .split(";")
-    .map((cookie) => cookie.trim().split("="))
-    .find(([name]) => name === SIDEBAR_COOKIE_NAME)?.[1];
-
+  const sidebarState = findCookieValue(request.headers.get("Cookie"), SIDEBAR_COOKIE_NAME);
   return sidebarState !== "false";
 };

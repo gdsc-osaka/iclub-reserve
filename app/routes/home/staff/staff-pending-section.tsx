@@ -12,8 +12,8 @@ import { isShortNotice, reservationDetailPath, ReservationStatus } from "~/domai
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { formatDaysUntil, formatMonthDay, formatTimeRange, tokyoDaysUntil } from "~/lib/date";
 import type { StaffPendingReservationItem } from "~/query/reservation/staff-pending-reservations";
-import type { HomeActionData } from "./home-intent";
-import { SectionUnavailableAlert } from "./section-unavailable-alert";
+import type { HomeActionData } from "../home-intent";
+import { SectionUnavailableAlert } from "../section-unavailable-alert";
 
 export interface StaffPendingSectionProps {
   /** 開始日時の近い順に最大 5 件 */
