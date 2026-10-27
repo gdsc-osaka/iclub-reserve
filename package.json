@@ -73,7 +73,7 @@
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "wrangler": "^4.152.0",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "devEngines": {
     "packageManager": {
