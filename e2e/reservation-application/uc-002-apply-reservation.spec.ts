@@ -247,8 +247,12 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     await expect(panel).toBeVisible();
     await panel.getByLabel("使用人数").fill("4");
 
-    // スマホでは文字の欄に入ると欄が広がってカレンダーが隠れるので、縮めてから移る（ADR-014 決定 13）
-    if (isMobile) await panel.getByRole("button", { name: "縮める" }).click();
+    // スマホでは文字の欄に入ると欄が広がってカレンダーが隠れるので、縮めてから移る（ADR-014 決定 13）。
+    // 縮めたら、隠す前に見ていた日に戻る（Safari は隠すと横の位置を先頭に戻すので、合わせ直している）
+    if (isMobile) {
+      await panel.getByRole("button", { name: "縮める" }).click();
+      await expect(column).toBeInViewport();
+    }
 
     // 「今日」で、仮の枠の日を読み込んだ 4 週間の外へ移る。カレンダーから仮の枠の日は消えるが、欄は残る（ADR-014 決定 19）
     await page.getByRole("button", { name: "今日" }).click();

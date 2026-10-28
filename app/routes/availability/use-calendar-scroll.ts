@@ -230,10 +230,20 @@ export function useCalendarScroll({
     reloadIfNearEdge();
   };
 
-  /** 箱の幅が変わったとき。表示日数や列の幅が変わるので、止まっていた先頭の日を保つ位置へ合わせ直す */
+  /**
+   * 箱の幅が変わったとき。表示日数や列の幅が変わるので、止まっていた先頭の日を保つ位置へ合わせ直す。
+   *
+   * スマホで欄を広げている間は、カレンダーを隠す（ADR-014 決定 13）。Safari は隠した箱の横の位置を 0 に戻すので、
+   * 隠れた（幅が 0 になった）ことを覚えておき、また出たときに合わせ直す。覚えておかないと、出たときの幅が
+   * 隠す前と同じなので合わせ直さず、4 週間の先頭に戻ったまま、端に近づいたとみなして読み直してしまう。
+   */
   const handleResize = () => {
     const container = containerRef.current;
     if (container === null || container.clientWidth === widthRef.current) return;
+    if (container.clientWidth === 0) {
+      widthRef.current = 0;
+      return;
+    }
     scrollToIndex(targetIndexRef.current ?? settledIndexRef.current, "instant");
   };
 
