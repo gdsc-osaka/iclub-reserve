@@ -5,6 +5,7 @@
  * - 施設を指定しないとき、有効な施設が 2 件以上なら選ばずに返し、予約も読まない（ADR-014 決定 20）
  * - 有効な施設が 1 件だけなら、その施設を選んで予約を読む
  * - 有効な施設が 1 件も無い・指定した施設が無いときは NOT_FOUND
+ * - 期間を 2 つ以上渡したら、どれか 1 つと重なる予約を 1 回ずつ返す（ADR-014 決定 19）
  *
  * 予約を見せる範囲（COND-008）はユースケースのテスト（get-availability-calendar.test.ts）で確かめる。
  */
@@ -38,6 +39,18 @@ const seedReservationOf = (facilityId: string) =>
     facilityId,
     startAt: new Date("2026-11-04T10:00:00+09:00"),
     endAt: new Date("2026-11-04T12:00:00+09:00"),
+    status: ReservationStatus.Approved,
+    createdBy: "usr_applicant",
+  });
+
+/** 施設 `fac_a` に、`day`（YYYY-MM-DD）の 10:00〜12:00 の予約を 1 件入れる */
+const seedReservationOn = (id: string, day: string) =>
+  seedReservation({
+    id,
+    groupId: "grp_test",
+    facilityId: "fac_a",
+    startAt: new Date(`${day}T10:00:00+09:00`),
+    endAt: new Date(`${day}T12:00:00+09:00`),
     status: ReservationStatus.Approved,
     createdBy: "usr_applicant",
   });
@@ -114,5 +127,50 @@ describe("createFacilityAvailabilityCalendarQuery.findByFacilityAndPeriods", () 
     ).findByFacilityAndPeriods({ facilityId: "fac_closed", periods });
 
     expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.NotFound);
+  });
+
+  it("4 週間と、その外の仮の枠の日を渡したら、どちらかと重なる予約を返し、どちらにも重ならない予約は返さない", async () => {
+    await testDb.seed(
+      seedFacility({ id: "fac_a", name: "A 会議室" }),
+      seedReservationOn("rsv_in_window", "2026-11-04"),
+      seedReservationOn("rsv_between", "2026-12-01"),
+      seedReservationOn("rsv_on_draft_day", "2026-12-09"),
+    );
+
+    const result = await createFacilityAvailabilityCalendarQuery(
+      testDb.db,
+    ).findByFacilityAndPeriods({
+      facilityId: "fac_a",
+      periods: [
+        ...periods,
+        { from: new Date("2026-12-09T00:00:00+09:00"), to: new Date("2026-12-10T00:00:00+09:00") },
+      ],
+    });
+
+    expect(result._unsafeUnwrap().reservations.map((reservation) => reservation.id)).toEqual([
+      "rsv_in_window",
+      "rsv_on_draft_day",
+    ]);
+  });
+
+  it("期間どうしが重なっていても、両方と重なる予約は 1 回だけ返す", async () => {
+    await testDb.seed(
+      seedFacility({ id: "fac_a", name: "A 会議室" }),
+      seedReservationOn("rsv_in_both", "2026-11-04"),
+    );
+
+    const result = await createFacilityAvailabilityCalendarQuery(
+      testDb.db,
+    ).findByFacilityAndPeriods({
+      facilityId: "fac_a",
+      periods: [
+        ...periods,
+        { from: new Date("2026-11-04T00:00:00+09:00"), to: new Date("2026-11-05T00:00:00+09:00") },
+      ],
+    });
+
+    expect(result._unsafeUnwrap().reservations.map((reservation) => reservation.id)).toEqual([
+      "rsv_in_both",
+    ]);
   });
 });
