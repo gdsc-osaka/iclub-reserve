@@ -447,12 +447,14 @@ export interface ReservationRepository {
   existsApprovedOverlap(args: ReservationOverlapArgs): ResultAsync<boolean, ReservationError>;
   /**
    * 予約のステータス・理由・更新日時を条件付きで更新し、通知メールがあれば同じトランザクション（db.batch）で outbox に積み、操作履歴を書き込む。
-   * カレンダー同期タスクがあれば同じトランザクションで積む。
+   * カレンダー同期タスクと、操作と同時に送るメッセージがあれば、それらも同じトランザクションで書く。
    *
    * @param args ステータス更新の条件と値
    * @param mails 同時に outbox に積むメール（承認時の通知など）。不可分に書く手段として同じメソッドで受け取る。
    * @param auditLog 同じ batch で書き込む操作履歴の草稿
    * @param calendarSync 同じ batch で書き込むカレンダー同期タスクの草稿（同期不要なら null）
+   * @param message 同じ batch で書き込む、承認と同時に送るメッセージ（添えなければ null。COND-023）。
+   *   更新が 0 件（競合）なら書かない
    * @returns 更新結果と積まれたメール ID の配列。条件に合わず 0 件だったら applied: false（競合）。
    */
   applyStatusTransition(
@@ -460,6 +462,7 @@ export interface ReservationRepository {
     mails: readonly MailDraft[],
     auditLog: AuditLogDraft,
     calendarSync: CalendarSyncTaskDraft | null,
+    message: ReservationMessage | null,
   ): ResultAsync<ApplyStatusTransitionOutcome, ReservationError>;
   /**
    * 予約の内容（施設・日時・使用人数・備考）とステータス・更新日時を条件付きで更新し、

@@ -360,20 +360,20 @@ export async function handleReservationDetailAction(
   }
 
   const db = createDb(env.DB);
+  const transitionWhere = `${where}.${transition}`;
   const result = await changeReservationStatus(db, args.request, user, {
     reservationId,
     transition,
     reason,
     unlockArrangement: formData.get("unlockArrangement"),
+    message: formData.get("message"),
     now: new Date(),
     actsAsStaff,
+    where: transitionWhere,
   });
 
   if (result.isErr()) {
-    return reservationActionErrors(
-      { where: `${where}.${transition}`, userId: user.id },
-      result.error,
-    );
+    return reservationActionErrors({ where: transitionWhere, userId: user.id }, result.error);
   }
 
   return redirect(".");

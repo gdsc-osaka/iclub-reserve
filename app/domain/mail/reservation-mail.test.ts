@@ -544,4 +544,89 @@ describe("reservation-mail", () => {
       }
     });
   });
+
+  describe("承認と同時に送ったメッセージ（EVT-005 / REQ-048）", () => {
+    it("メッセージを渡すと、解錠の手配の案内の後に「事務局からのメッセージ」として載り、返信の仕方を案内する", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        { ...baseReservation, unlockArrangement: UnlockArrangement.Arranged },
+        defaultAudience,
+        APP_BASE_URL,
+        "カードキーは前日の17時までに事務局で受け取ってください。\n返却は翌朝で構いません。",
+      );
+
+      expect(drafts).toHaveLength(2);
+      for (const draft of drafts) {
+        // 件名は承認通知のまま（メッセージ通知の件名にはしない）
+        expect(draft.subject).toBe("【i-Club 予約システム】施設・設備の利用予約が承認されました");
+        expect(draft.text).toContain(
+          [
+            "利用終了日時: 2026年9月25日 12:00",
+            "",
+            "解錠の手配が済んでいます。方法はメッセージを確認してください。",
+            "",
+            "事務局からのメッセージ:",
+            "カードキーは前日の17時までに事務局で受け取ってください。",
+            "返却は翌朝で構いません。",
+            "",
+            "予約の詳細は、次のページでご確認ください。",
+            "メッセージへの返信は、このメールではなく次のページから送ってください。",
+            `${APP_BASE_URL}/reservations/res_test_123`,
+          ].join("\n"),
+        );
+      }
+    });
+
+    it("メッセージを渡しても idempotencyKey は承認だけのときと変わらない", () => {
+      const withMessage = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        baseReservation,
+        defaultAudience,
+        APP_BASE_URL,
+        "よろしくお願いします。",
+      );
+      const withoutMessage = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        baseReservation,
+        defaultAudience,
+        APP_BASE_URL,
+      );
+
+      expect(withMessage.map((draft) => draft.idempotencyKey)).toEqual(
+        withoutMessage.map((draft) => draft.idempotencyKey),
+      );
+    });
+
+    it("メッセージが null なら、メッセージの欄も返信の案内も出ない", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        baseReservation,
+        defaultAudience,
+        APP_BASE_URL,
+        null,
+      );
+      const body = drafts[0]?.text ?? "";
+      expect(body).not.toContain("メッセージ:");
+      expect(body).not.toContain("メッセージへの返信");
+    });
+
+    it("承認以外のイベントでは、メッセージを渡しても載らない", () => {
+      const nonApprovedEvents = Object.values(ReservationMailEvent).filter(
+        (event) => event !== ReservationMailEvent.Approved,
+      );
+      for (const event of nonApprovedEvents) {
+        const drafts = createReservationMailDrafts(
+          event,
+          baseReservation,
+          defaultAudience,
+          APP_BASE_URL,
+          "載せてはいけないメッセージ",
+        );
+        for (const draft of drafts) {
+          expect(draft.text).not.toContain("載せてはいけないメッセージ");
+          expect(draft.text).not.toContain("事務局からのメッセージ");
+        }
+      }
+    });
+  });
 });

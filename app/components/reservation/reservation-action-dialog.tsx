@@ -1,3 +1,4 @@
+import { CircleAlert } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Form, useNavigation, type FetcherWithComponents } from "react-router";
 
@@ -14,7 +15,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
-import type { UnlockArrangement } from "~/domain/reservation";
+import { UnlockArrangement } from "~/domain/reservation";
 import { reasonTemplates, toReasonWithTemplate } from "~/domain/reservation/reason-templates";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
@@ -56,6 +57,8 @@ interface DialogConfig {
   readonly reasonPlaceholder: string;
   /** 解錠の手配の欄を出すか。承認では必ず選ぶ（COND-027） */
   readonly hasUnlockArrangement: boolean;
+  /** 団体へのメッセージの欄を出すか。承認で任意に添える（REQ-048 / COND-023） */
+  readonly hasMessage: boolean;
 }
 
 const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
@@ -69,6 +72,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         reasonLabel: "取り消し理由",
         reasonPlaceholder: "取り消しの理由を入力してください",
         hasUnlockArrangement: false,
+        hasMessage: false,
       };
     case ReservationTransition.Cancel:
       return {
@@ -79,6 +83,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         reasonLabel: "キャンセル理由",
         reasonPlaceholder: "キャンセルの理由を入力してください",
         hasUnlockArrangement: false,
+        hasMessage: false,
       };
     case ReservationTransition.Approve:
       return {
@@ -89,6 +94,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         reasonLabel: "",
         reasonPlaceholder: "",
         hasUnlockArrangement: true,
+        hasMessage: true,
       };
     case ReservationTransition.Reject:
       return {
@@ -99,6 +105,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         reasonLabel: "却下理由",
         reasonPlaceholder: "却下の理由を入力してください",
         hasUnlockArrangement: false,
+        hasMessage: false,
       };
     case ReservationTransition.StaffCancel:
       return {
@@ -109,6 +116,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
         reasonLabel: "キャンセル理由",
         reasonPlaceholder: "キャンセルの理由を入力してください",
         hasUnlockArrangement: false,
+        hasMessage: false,
       };
   }
 };
@@ -118,6 +126,7 @@ const getDialogConfig = (transition: ReservationTransition): DialogConfig => {
  *
  * 予約の要約（日時・施設名・人数・事務局画面では団体名）と、
  * 承認以外の操作では理由の入力欄（COND-002 により必須）を表示する。
+ * 承認では、解錠の手配（COND-027 により必須）と、団体へのメッセージの欄（任意。REQ-048）を表示する。
  *
  * `<Form method="post">` による通常のフォーム送信で構成し、JavaScript が無効でも動作する。
  */
@@ -132,6 +141,7 @@ export function ReservationActionDialog({
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [unlockArrangement, setUnlockArrangement] = useState<UnlockArrangement | null>(null);
+  const [message, setMessage] = useState("");
   const navigation = useNavigation();
 
   const config = getDialogConfig(transition);
@@ -139,6 +149,13 @@ export function ReservationActionDialog({
   const isSubmitDisabled =
     (config.hasReason && reason.trim() === "") ||
     (config.hasUnlockArrangement && unlockArrangement === null);
+  /*
+   * 「手配済み」を選ぶと、団体には「方法はメッセージを確認してください」と案内する（COND-027）。
+   * 欄が空のままだと、その方法が届かないことがあるので注意を出す。前もってメッセージで
+   * 伝えてあることもあるので、承認は止めない。
+   */
+  const showsArrangedMessageHint =
+    config.hasMessage && unlockArrangement === UnlockArrangement.Arranged && message.trim() === "";
 
   // この予約のこの操作が送信中か。同じ画面に他の予約のボタンが並ぶので、
   // intent（操作）だけでなく reservationId まで見て、押したボタンだけを見分ける
@@ -186,7 +203,11 @@ export function ReservationActionDialog({
         <AlertDialogTrigger asChild disabled={disabled}>
           {trigger}
         </AlertDialogTrigger>
-        <AlertDialogContent>
+        {/*
+          高さを画面に収め、はみ出す分は中でスクロールさせる。承認は解錠の手配とメッセージの欄で縦に長く、
+          高さの低いスマホでは、画面の中央に置いたダイアログの上下（見出しと「承認する」）が画面の外に切れてしまうため。
+        */}
+        <AlertDialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto">
           <FormComponent method="post" className="flex flex-col gap-4">
             <input type="hidden" name="intent" value={transition} />
             <input type="hidden" name="reservationId" value={item.id} />
@@ -275,6 +296,51 @@ export function ReservationActionDialog({
               />
             )}
 
+            {/*
+              団体へのメッセージ（任意。REQ-048）。承認の通知メールに載せ、メッセージの通知は別に送らない。
+              文字数の上限（COND-023）は maxLength で止めない。理由はメッセージの送信欄
+              （ReservationMessageForm）と同じで、ブラウザとサーバーで数え方がずれるため。
+            */}
+            {config.hasMessage && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`message-${item.id}-${transition}`} className="text-sm">
+                  団体へのメッセージ
+                  <span className="font-normal text-muted-foreground">（任意）</span>
+                </Label>
+                <Textarea
+                  id={`message-${item.id}-${transition}`}
+                  name="message"
+                  rows={3}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="カードキーの受け取り方など、承認と一緒に伝えたいことを入力してください"
+                  aria-describedby={
+                    showsArrangedMessageHint
+                      ? `message-note-${item.id}-${transition} message-hint-${item.id}-${transition}`
+                      : `message-note-${item.id}-${transition}`
+                  }
+                  className="text-sm"
+                />
+                <p
+                  id={`message-note-${item.id}-${transition}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  承認のお知らせのメールに載せて、団体に届けます。送ったメッセージは編集も削除もできません。
+                </p>
+                {showsArrangedMessageHint && (
+                  <p
+                    id={`message-hint-${item.id}-${transition}`}
+                    className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300"
+                  >
+                    <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
+                    <span>
+                      「手配済み」では、団体に解錠の方法をメッセージで確かめるよう案内します。まだ伝えていなければ、ここに書いてください。
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
+
             <AlertDialogFooter className="mt-2">
               <AlertDialogCancel type="button">やめる</AlertDialogCancel>
               <Button type="submit" variant={config.actionVariant} disabled={isSubmitDisabled}>
@@ -324,6 +390,20 @@ export function ReservationActionDialog({
                 </label>
               ))}
             </fieldset>
+          )}
+          {/* 団体へのメッセージは任意だが、ダイアログで書けることは JavaScript が無くても書けるようにする */}
+          {config.hasMessage && (
+            <>
+              <Label htmlFor={`message-noscript-${item.id}-${transition}`} className="text-xs">
+                団体へのメッセージ（任意）
+              </Label>
+              <Textarea
+                id={`message-noscript-${item.id}-${transition}`}
+                name="message"
+                rows={2}
+                className="text-sm"
+              />
+            </>
           )}
           <Button
             type="submit"

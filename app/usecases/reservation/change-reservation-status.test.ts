@@ -2,6 +2,7 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
+import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
 import {
   ReservationErrorCode,
@@ -11,8 +12,12 @@ import {
   type ApplyStatusTransitionArgs,
   type Reservation,
 } from "~/domain/reservation";
+import type { ReservationMessage } from "~/domain/reservation/message";
 import { ReservationTransition } from "~/domain/reservation/transition";
-import type { ReservationMailAudience } from "~/query/reservation/reservation-mail-recipients";
+import type {
+  ReservationMailAudience,
+  ReservationMessageAudience,
+} from "~/query/reservation/reservation-mail-recipients";
 import {
   fakeMailOutboxNotifier,
   fakeMembershipRepository,
@@ -78,6 +83,15 @@ const defaultAudience: ReservationMailAudience = {
   ],
 };
 
+/** メッセージ通知（EVT-008）の宛先候補。承認と同時にメッセージを送ったときに引く */
+const defaultMessageAudience: ReservationMessageAudience = {
+  staff: defaultAudience.staff,
+  groupMembers: defaultAudience.groupMembers,
+  priorGroupSideSenders: [
+    { userId: "usr_member_01", address: "member@example.com", name: "問い合わせた部員" },
+  ],
+};
+
 const createMockDeps = (options?: {
   reservation?: Reservation | null;
   /** 予約の団体での所属。null は所属していないことを表す */
@@ -90,6 +104,7 @@ const createMockDeps = (options?: {
   enqueuedMailIds?: readonly string[];
   audience?: ReservationMailAudience;
   audienceError?: boolean;
+  messageAudience?: ReservationMessageAudience;
 }) => {
   const res = options?.reservation !== undefined ? options.reservation : baseProvisionalReservation;
   const membership = options?.membership === undefined ? memberMembership : options.membership;
@@ -111,9 +126,10 @@ const createMockDeps = (options?: {
   const applyStatusTransition = vi.fn(
     (
       _args: ApplyStatusTransitionArgs,
-      _mails: unknown,
+      _mails: readonly MailDraft[],
       _auditLog?: AuditLogDraft,
       _calendarSync?: unknown,
+      _message?: ReservationMessage | null,
     ) => okAsync({ applied, enqueuedMailIds }),
   );
   const create = vi.fn((_res: unknown, _mails: unknown) => okAsync({ enqueuedMailIds: [] }));
@@ -139,8 +155,12 @@ const createMockDeps = (options?: {
       ? errAsync({ code: "DATABASE_ERROR" as const, message: "DB error" })
       : okAsync(audience),
   );
+  const findForMessage = vi.fn((_reservationId: string) =>
+    okAsync(options?.messageAudience ?? defaultMessageAudience),
+  );
   const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findByReservationId,
+    findForMessage,
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);
@@ -161,6 +181,7 @@ const createMockDeps = (options?: {
       applyStatusTransition,
       findByGroupAndUser,
       findByReservationId,
+      findForMessage,
       notifyEnqueued,
     },
   };
@@ -218,6 +239,7 @@ describe("changeReservationStatusUseCase", () => {
             status_reason: { before: null, after: "都合がつかなくなったため" },
           },
         },
+        null,
         null,
       );
     });
@@ -282,6 +304,7 @@ describe("changeReservationStatusUseCase", () => {
           reservationId: "res_approved_01",
           previousFacilityId: null,
         },
+        null,
       );
     });
 
@@ -351,6 +374,7 @@ describe("changeReservationStatusUseCase", () => {
           reservationId: "res_provisional_01",
           previousFacilityId: null,
         },
+        null,
       );
     });
 
@@ -405,6 +429,7 @@ describe("changeReservationStatusUseCase", () => {
           reservationId: "res_provisional_01",
           previousFacilityId: null,
         },
+        null,
       );
       const passedMails = (spies.applyStatusTransition.mock.calls[0] as unknown[])[1] as unknown[];
       expect(passedMails).toHaveLength(3);
@@ -460,6 +485,7 @@ describe("changeReservationStatusUseCase", () => {
             status_reason: { before: null, after: "設備点検のため利用できません" },
           },
         },
+        null,
         null,
       );
     });
@@ -520,6 +546,7 @@ describe("changeReservationStatusUseCase", () => {
           reservationId: "res_approved_01",
           previousFacilityId: null,
         },
+        null,
       );
     });
   });
@@ -963,6 +990,7 @@ describe("changeReservationStatusUseCase", () => {
           reservationId: "res_provisional_01",
           previousFacilityId: null,
         },
+        null,
       );
     });
 
@@ -984,6 +1012,7 @@ describe("changeReservationStatusUseCase", () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
+        null,
         null,
       );
     });
@@ -1010,6 +1039,7 @@ describe("changeReservationStatusUseCase", () => {
           reservationId: "res_approved_01",
           previousFacilityId: null,
         },
+        null,
       );
     });
 
@@ -1035,6 +1065,7 @@ describe("changeReservationStatusUseCase", () => {
           reservationId: "res_approved_01",
           previousFacilityId: null,
         },
+        null,
       );
     });
   });
@@ -1100,6 +1131,7 @@ describe("changeReservationStatusUseCase", () => {
           }),
         }),
         expect.anything(),
+        null,
       );
     });
 
@@ -1147,6 +1179,152 @@ describe("changeReservationStatusUseCase", () => {
 
       const error = result._unsafeUnwrapErr();
       expect(error.code).toBe(ReservationErrorCode.Forbidden);
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("承認と同時に送るメッセージ（REQ-048 / COND-023）", () => {
+    const approveArgs: ChangeReservationStatusArgs = {
+      reservationId: "res_provisional_01",
+      actorUserId: "usr_staff_01",
+      isStaff: true,
+      transition: ReservationTransition.Approve,
+      unlockArrangement: UnlockArrangement.Arranged,
+      appBaseUrl: "https://reserve.example.com",
+      now: testNow,
+    };
+
+    it("添えたメッセージを承認と同じ batch に渡し、本文を載せた承認通知だけを積む（EVT-008 は積まない）", async () => {
+      const { deps, spies } = createMockDeps();
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...approveArgs,
+        message: "  カードキーは事務局で受け取ってください。\r\n返却は翌朝で構いません。  ",
+      });
+      expect(result.isOk()).toBe(true);
+
+      // 承認だけのときの宛先ではなく、メッセージの宛先候補を引く
+      expect(spies.findForMessage).toHaveBeenCalledWith("res_provisional_01");
+      expect(spies.findByReservationId).not.toHaveBeenCalled();
+
+      const [, mails, , , message] = spies.applyStatusTransition.mock.calls[0] ?? [];
+      // 本文は UC-009 と同じく正規化し、送った日時は承認と同じにする。承認は事務局の画面からなので事務局としての送信
+      expect(message).toEqual({
+        id: expect.any(String),
+        reservationId: "res_provisional_01",
+        senderId: "usr_staff_01",
+        sentAsStaff: true,
+        body: "カードキーは事務局で受け取ってください。\n返却は翌朝で構いません。",
+        sentAt: testNow,
+      });
+      expect(result._unsafeUnwrap().messageId).toBe(message?.id);
+
+      // 宛先は申請者に、過去に団体側として送った部員を加えたもの。どれも承認通知の 1 通
+      expect(mails).toEqual([
+        expect.objectContaining({
+          idempotencyKey: "reservation:approved:res_provisional_01:1789866000000:usr_student_01",
+          to: { address: "student@example.com", name: "学生代表" },
+          subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
+          text: expect.stringContaining(
+            "事務局からのメッセージ:\nカードキーは事務局で受け取ってください。\n返却は翌朝で構いません。",
+          ),
+        }),
+        expect.objectContaining({
+          idempotencyKey: "reservation:approved:res_provisional_01:1789866000000:usr_member_01",
+          to: { address: "member@example.com", name: "問い合わせた部員" },
+        }),
+      ]);
+    });
+
+    it("空白と改行だけなら添えなかったものとして扱い、承認だけのときと同じ宛先で通知する", async () => {
+      const { deps, spies } = createMockDeps();
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...approveArgs,
+        message: " \n　 ",
+      });
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().messageId).toBeNull();
+
+      expect(spies.findByReservationId).toHaveBeenCalledWith("res_provisional_01");
+      expect(spies.findForMessage).not.toHaveBeenCalled();
+      const [, mails, , , message] = spies.applyStatusTransition.mock.calls[0] ?? [];
+      expect(message).toBeNull();
+      expect(mails).toHaveLength(1);
+      expect(mails?.[0]?.text).not.toContain("事務局からのメッセージ");
+    });
+
+    it("本文が 2000 文字を超えたら InvalidInput（field: MessageBody）で、承認もしない", async () => {
+      const { deps, spies } = createMockDeps();
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...approveArgs,
+        message: "あ".repeat(2001),
+      });
+      expect(result.isErr()).toBe(true);
+
+      const error = result._unsafeUnwrapErr();
+      expect(error.code).toBe(ReservationErrorCode.InvalidInput);
+      expect(error.field).toBe(ReservationField.MessageBody);
+      expect(error.userMessage).toBe("メッセージは2000文字以内で入力してください。");
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+      expect(spies.notifyEnqueued).not.toHaveBeenCalled();
+    });
+
+    it("承認済みの予約と重なって承認できないときは、メッセージも書かない（COND-001）", async () => {
+      const { deps, spies } = createMockDeps({ hasOverlap: true });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...approveArgs,
+        message: "よろしくお願いします。",
+      });
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Conflict);
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
+    it("条件付き更新が競合で 0 件なら Conflict を返し、即時配送も依頼しない", async () => {
+      const { deps, spies } = createMockDeps({ applied: false });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...approveArgs,
+        message: "よろしくお願いします。",
+      });
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Conflict);
+      // メッセージを書かせるかどうかは、更新と同じ batch の条件で Repository が決める
+      expect(spies.applyStatusTransition).toHaveBeenCalledTimes(1);
+      expect(spies.notifyEnqueued).not.toHaveBeenCalled();
+    });
+
+    it("却下では、メッセージの値を渡しても読まない（承認のときだけ使う）", async () => {
+      const { deps, spies } = createMockDeps();
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...approveArgs,
+        transition: ReservationTransition.Reject,
+        reason: "定員超過のため",
+        message: "あ".repeat(2001), // 読まれるなら InvalidInput になる
+      });
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().messageId).toBeNull();
+
+      expect(spies.findForMessage).not.toHaveBeenCalled();
+      const [, , , , message] = spies.applyStatusTransition.mock.calls[0] ?? [];
+      expect(message).toBeNull();
+    });
+
+    it("権限の無い人には、本文の検証より先に権限のエラーが返る", async () => {
+      const { deps, spies } = createMockDeps();
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...approveArgs,
+        actorUserId: "usr_student_01",
+        isStaff: false,
+        message: "あ".repeat(2001),
+      });
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().code).toBe(ReservationErrorCode.Forbidden);
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
   });

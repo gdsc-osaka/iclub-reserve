@@ -10,18 +10,27 @@ import type { Database } from "../db";
 /**
  * reservation_message に書く 1 行ぶんの値。
  *
- * `$inferSelect` を使うことで、テーブルに列を足したときにコンパイルエラーにして漏れを防ぐ。
+ * `$inferSelect` を使っているのは、`reservation_message` に列を足したときに
+ * `toReservationMessageValues` を**コンパイルエラーにして**写し忘れを防ぐため。
  */
 type ReservationMessageValues = typeof reservationMessageTable.$inferSelect;
 
 const reservationMessageColumns = getTableColumns(reservationMessageTable);
 
+/** `ReservationMessage` を `reservation_message` の 1 行に写す */
+const toReservationMessageValues = (message: ReservationMessage): ReservationMessageValues => ({
+  id: message.id,
+  reservationId: message.reservationId,
+  senderId: message.senderId,
+  sentAsStaff: message.sentAsStaff,
+  body: message.body,
+  sentAt: message.sentAt,
+});
+
 /**
  * 値 1 つを `INSERT ... SELECT` の 1 列ぶんの式にする。
  *
- * 値は `sql.param` に列を添えて渡す。Drizzle の列マッパーを通るので、
- * 日時（timestamp_ms）や真偽値の変換をここで手計算しなくて済む。
- * 別名も列の定義から取るため、snake_case を書き写して綴りを間違える余地が無い。
+ * 列の定義を渡して Drizzle の変換を通すので、boolean や日時（timestamp_ms）の変換をここで書かなくて済む。
  */
 const param = <K extends keyof ReservationMessageValues>(
   values: ReservationMessageValues,
@@ -34,7 +43,7 @@ const param = <K extends keyof ReservationMessageValues>(
 /**
  * `INSERT ... SELECT` の SELECT 側に並べる列。
  *
- * `INSERT ... SELECT` は列が**位置で**対応するため、並びは `reservation_message` の定義順に保つこと。
+ * `INSERT ... SELECT` は列が**位置で**対応するため、並びは `reservationMessageTable` の定義順に保つこと。
  */
 const toReservationMessageProjection = (values: ReservationMessageValues) => ({
   id: param(values, "id"),
@@ -45,28 +54,26 @@ const toReservationMessageProjection = (values: ReservationMessageValues) => ({
   sentAt: param(values, "sentAt"),
 });
 
-/** 条件付きで書くときに、「予約の更新が実際に書かれたか」を確かめる条件 */
+/** 条件付きで書くときに、「業務データが実際に書かれたか」を確かめる条件 */
 export interface ReservationMessageGuard {
-  /** 確かめる先の表（予約を書いた表） */
+  /** 確かめる先の表（業務データを書いた表） */
   readonly from: SQLiteTable;
-  /**
-   * 書き込み**後**の状態と突き合わせる条件。合う行が 1 件も無ければメッセージは書かれない。
-   *
-   * 省略できない。条件が無いと `guard.from` の行の数だけメッセージが入ってしまうため（`AuditLogGuard` と同じ）。
-   */
-  readonly where: SQL;
+  /** 書き込み**後**の状態と突き合わせる条件。合う行が無ければメッセージは書かれない */
+  readonly where: SQL | undefined;
 }
 
 /**
- * 予約の条件付き更新が実際に書かれたときにだけメッセージを書く INSERT を組む（COND-023 / UC-038）。
+ * 予約の操作が実際に書かれたときにだけ、同時に送るメッセージを書く INSERT を組む（COND-023）。
  *
- * 解錠の手配の更新（UC-038）のように予約の条件付き UPDATE とメッセージ送信を同じ `db.batch()` に入れるとき、
- * 予約の更新が 0 件（競合で失敗）だったのにメッセージだけが残る（片方だけが残らないようにする。COND-023）のを防ぐため、
- * `guardedMailOutboxInserts` と同じく `INSERT ... SELECT ... FROM reservation WHERE <書き込み後の状態>` の形にする。
+ * 仮予約の承認（UC-006）や解錠の手配の更新（UC-038）と同時に送るメッセージに使う。
+ * 予約の更新は条件付きで、競合すると 0 件になる。`db.batch()` は中の文を無条件に全部実行するので、
+ * 素直に INSERT を並べると、承認されていないのにメッセージだけが残ってしまう。
+ * そこで outbox（`guardedMailOutboxInserts`）と同じく `INSERT ... SELECT ... FROM <業務の表> WHERE <書き込み後の状態>`
+ * の形にし、直前の更新が書いた行があるときだけ 1 行を書く。
  *
- * `message` が null（メッセージを添えない）のときは空配列を返す。
+ * message が null なら何も書かない（空配列を返す）。
  */
-export const guardedReservationMessageInsert = (
+export const guardedReservationMessageInserts = (
   db: Database,
   message: ReservationMessage | null,
   guard: ReservationMessageGuard,
@@ -75,18 +82,13 @@ export const guardedReservationMessageInsert = (
     return [];
   }
 
-  const values: ReservationMessageValues = {
-    id: message.id,
-    reservationId: message.reservationId,
-    senderId: message.senderId,
-    sentAsStaff: message.sentAsStaff,
-    body: message.body,
-    sentAt: message.sentAt,
-  };
+  const values = toReservationMessageValues(message);
 
-  const statement = db
-    .insert(reservationMessageTable)
-    .select(db.select(toReservationMessageProjection(values)).from(guard.from).where(guard.where));
-
-  return [statement];
+  return [
+    db
+      .insert(reservationMessageTable)
+      .select(
+        db.select(toReservationMessageProjection(values)).from(guard.from).where(guard.where),
+      ),
+  ];
 };

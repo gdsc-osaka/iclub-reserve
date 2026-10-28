@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { errAsync, ok, okAsync, safeTry, type Result, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
 
 import { AuditLogAction, isActedAsStaff, type AuditLogDraft } from "~/domain/audit-log";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
@@ -21,7 +21,7 @@ import {
 import { toReservationUnlockArrangementChanges } from "~/domain/reservation/audit-log";
 import {
   isSentAsStaff,
-  validateReservationMessageBody,
+  validateOptionalReservationMessageBody,
   type ReservationMessage,
 } from "~/domain/reservation/message";
 import { validateUnlockArrangementUpdate } from "~/domain/reservation/unlock-arrangement";
@@ -56,15 +56,6 @@ export interface UpdateUnlockArrangementReturns {
   /** メッセージを添えて送信したか（ルートが既読を進めるかの判定に使う） */
   readonly messageSent: boolean;
 }
-
-/**
- * 任意のメッセージ本文を検証・正規化する（COND-023 / UC-038）。
- *
- * 前後の空白を除いて空ならメッセージを添えない（null を返す）。
- * 空でなければ通常のメッセージ送信（UC-009）と同じ検証（validateReservationMessageBody）を通す。
- */
-const validateOptionalMessageBody = (raw: string): Result<string | null, ReservationError> =>
-  raw.trim() === "" ? ok(null) : validateReservationMessageBody(raw);
 
 /**
  * メッセージを添えるときだけ、メッセージと通知メール（EVT-008）を組み立てる。
@@ -163,7 +154,7 @@ export const updateUnlockArrangementUseCase = (
       args.now,
     );
 
-    const messageBody = yield* validateOptionalMessageBody(args.message);
+    const messageBody = yield* validateOptionalReservationMessageBody(args.message);
 
     const { message, mails } = yield* resolveUpdateMessageAndMails(deps, {
       messageBody,

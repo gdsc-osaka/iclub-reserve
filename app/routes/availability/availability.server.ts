@@ -200,20 +200,20 @@ export async function handleAvailabilityAction(
   }
 
   const db = createDb(env.DB);
+  const where = toAreaWhere(area, `availability.${transition}`);
   const result = await changeReservationStatus(db, args.request, user, {
     reservationId,
     transition,
     reason,
     unlockArrangement: formData.get("unlockArrangement"),
+    message: formData.get("message"),
     now: new Date(),
     actsAsStaff,
+    where,
   });
 
   if (result.isErr()) {
-    return reservationActionErrors(
-      { where: toAreaWhere(area, `availability.${transition}`), userId: user.id },
-      result.error,
-    );
+    return reservationActionErrors({ where, userId: user.id }, result.error);
   }
 
   /*
