@@ -237,8 +237,8 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
       worker-mailer:
-        specifier: ^1.2.1
-        version: 1.2.1
+        specifier: ^1.3.0
+        version: 1.3.0
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.65.0
@@ -5060,8 +5060,8 @@ packages:
     engines: {node: '>=20.11'}
     hasBin: true
 
-  worker-mailer@1.2.1:
-    resolution: {integrity: sha512-gS2ei/mrpRqNs+AHmqxhT6vFPwCLw2qnz5ShmyGD0ULaU0Q9hxnFAcx9jhAip/MnD6+MjgnQu6hQQgA8mlOkVA==}
+  worker-mailer@1.3.0:
+    resolution: {integrity: sha512-VGbZC7mqOFq91cJOqphqVYX1Hk/Lf61sqLyByAwlG5QDtheiTaAJsfWQzxJewTmgxrrAecd1F9uStuIXBiLg8w==}
 
   workerd@1.20261019.1:
     resolution: {integrity: sha512-UUYRUq/7DmeCl11YriNbcVbjUZVLtt8uuCXFu+nz77hGFf8d4DEVXoCYtnA+MlBatE4+wxoj47DVqzK3xGBAiw==}
@@ -9398,7 +9398,7 @@ snapshots:
 
   why-is-node-running@3.2.1: {}
 
-  worker-mailer@1.2.1: {}
+  worker-mailer@1.3.0: {}
 
   workerd@1.20261019.1:
     optionalDependencies:
