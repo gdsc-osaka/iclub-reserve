@@ -21,9 +21,11 @@ import {
  * URL で開いているものを、読み込んだデータと照らし合わせる。開けないものは null にする。
  *
  * - 予約がデータに無い（却下された・別の施設の予約・ID を書き換えた）
- * - 仮の枠の日が、読み込んだ 4 週間の中に無い
+ * - 仮の枠の日の予約を読み込んでいない
  * - 申請できない人の仮の枠（COND-006）
- * - 変更前の予約が無い・ID が違う・変更後の仮の枠の日が 4 週間の中に無い（ADR-014 決定 15）
+ * - 変更前の予約が無い・ID が違う・変更後の仮の枠の日の予約を読み込んでいない（ADR-014 決定 15）
+ *
+ * `days` は予約を読み込んだ日。カレンダーの 4 週間と、その外で読んだ仮の枠の日（ADR-014 決定 19）。
  */
 export const toOpenSelection = (
   requested: ParsedCalendarSelection | null,
@@ -118,10 +120,12 @@ export function useCalendarSelection({
   editReservation = null,
 }: Readonly<{
   area: AppArea;
-  facilityId: string;
+  /** いま見ている施設・設備の ID。まだ選んでいなければ null で、何も開かない（ADR-014 決定 20） */
+  facilityId: string | null;
   /** 基準の日（URL の `date`）。開く・閉じるときもそのまま持ち回る */
   anchorKey: string;
   reservations: readonly AvailabilityReservation[];
+  /** 予約を読み込んだ日。カレンダーの 4 週間と、その外で読んだ仮の枠の日（ADR-014 決定 19） */
   days: readonly AvailabilityDay[];
   canApply: boolean;
   /** ローダーが読んだ変更前の予約（変更を開いているときのみ） */
@@ -133,8 +137,11 @@ export function useCalendarSelection({
 
   const requested = useMemo(() => parseCalendarSelection(searchParams), [searchParams]);
   const selection = useMemo(
-    () => toOpenSelection(requested, reservations, days, canApply, editReservation),
-    [requested, reservations, days, canApply, editReservation],
+    () =>
+      facilityId === null
+        ? null
+        : toOpenSelection(requested, reservations, days, canApply, editReservation),
+    [facilityId, requested, reservations, days, canApply, editReservation],
   );
 
   /** 開いているものを外した URL へ移る。履歴には積まない */
@@ -146,12 +153,15 @@ export function useCalendarSelection({
     });
   };
 
-  // 開いていたものがデータから消えた（却下されたなど）・開けない URL のときは、URL からも外す
+  /*
+   * 開いていたものがデータから消えた（却下されたなど）・開けない URL のときは、URL からも外す。
+   * 施設を選ぶ前は外さない。URL の仮の枠は、施設を選んだ先へ引き継ぐため（ADR-014 決定 20）。
+   */
   const hasSelectionParam =
     searchParams.has("reservation") || searchParams.has("draft") || searchParams.has("edit");
   useEffect(() => {
-    if (hasSelectionParam && selection === null) replaceWithoutSelection();
-  }, [hasSelectionParam, selection]);
+    if (facilityId !== null && hasSelectionParam && selection === null) replaceWithoutSelection();
+  }, [facilityId, hasSelectionParam, selection]);
 
   /**
    * 予約か仮の枠か変更を開く。
@@ -173,8 +183,8 @@ export function useCalendarSelection({
   };
 
   /**
-   * その日を開くときの基準の日（date）。読み込んだ 4 週間（days）の中なら今の基準の日のまま、
-   * 外ならその日を基準の日にして読み直す（ADR-014 決定 11）。
+   * その日を開くときの基準の日（date）。予約を読み込んだ日（days）なら今の基準の日のまま、
+   * そうでなければその日を基準の日にして読み直す（ADR-014 決定 11）。
    */
   const anchorKeyFor = (dateKey: string): string =>
     days.some((day) => day.dateKey === dateKey) ? anchorKey : dateKey;

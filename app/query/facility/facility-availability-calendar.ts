@@ -40,9 +40,9 @@ export interface AvailabilityReservationRow {
 export interface FacilityAvailabilityCalendar {
   /** 有効な施設・設備の一覧。画面上部の切り替えに使う */
   readonly facilities: readonly AvailabilityFacility[];
-  /** いま表示している施設・設備 */
-  readonly facility: AvailabilityFacility;
-  /** 期間内の予約。開始日時の昇順 */
+  /** いま表示している施設・設備。まだ選んでいなければ null（ADR-014 決定 20） */
+  readonly facility: AvailabilityFacility | null;
+  /** 期間と重なる予約。開始日時の昇順。施設を選んでいなければ空 */
   readonly reservations: readonly AvailabilityReservationRow[];
 }
 
@@ -95,7 +95,8 @@ export interface AvailabilityReservation {
 /** 画面へ渡してよい、空き状況カレンダー 1 画面分のデータ。 */
 export interface AvailabilityCalendar {
   readonly facilities: readonly AvailabilityFacility[];
-  readonly facility: AvailabilityFacility;
+  /** いま表示している施設・設備。まだ選んでいなければ null（ADR-014 決定 20） */
+  readonly facility: AvailabilityFacility | null;
   readonly reservations: readonly AvailabilityReservation[];
   /**
    * 申請元として選べる有効な団体の一覧。
@@ -120,26 +121,40 @@ export interface AvailabilityCalendar {
    */
   readonly canCreateDirectly: boolean;
   /**
-   * 表示期間内の日本の祝日の日付キー（"YYYY-MM-DD"）一覧。
+   * 読んだ期間内の日本の祝日の日付キー（"YYYY-MM-DD"）一覧。
    *
    * カレンダーの日付見出しや列の色（日曜と同じ赤系）の判定に使用する。
    */
   readonly holidayDateKeys: readonly string[];
 }
 
-/** {@link FacilityAvailabilityCalendarQuery.findByFacilityAndPeriod} への入力。 */
+/** 予約を読む期間 1 つ分。開始の時刻を含み、終了の時刻を含まない。 */
+export interface AvailabilityPeriod {
+  readonly from: Date;
+  readonly to: Date;
+}
+
+/**
+ * 予約を読む期間の一覧。少なくとも 1 つある。
+ *
+ * カレンダーに並べる 4 週間のほかに、その外で欄に開いている仮の枠の日を読むことがあるので、
+ * 1 つの期間ではなく一覧で受け取る（ADR-014 決定 19）。
+ * 空の一覧を渡せないようにしているのは、期間の条件が無くなって施設の予約をすべて読んでしまうのを防ぐため。
+ */
+export type AvailabilityPeriods = readonly [AvailabilityPeriod, ...AvailabilityPeriod[]];
+
+/** {@link FacilityAvailabilityCalendarQuery.findByFacilityAndPeriods} への入力。 */
 export interface FacilityAvailabilityCalendarArgs {
   /**
-   * 表示する施設・設備の ID。
+   * 表示する施設・設備の ID。null は、画面を開いた直後でまだ選んでいないこと。
    *
-   * null のときは一覧の先頭を返す。画面を開いた直後はまだ施設を選んでいないので、
-   * 「どれも選ばれていない空のカレンダー」を出さずに済むようにしている。
+   * null のときは施設を選ばずに返し（`facility` が null、予約は空）、利用者に選んでもらう（ADR-014 決定 20）。
+   * 一覧の先頭を黙って出すと、ほかの施設があることや、どこで選ぶのかに気づかないまま使ってしまう。
+   * 有効な施設が 1 件だけなら、選ぶものが無いのでその施設を返す。
    */
   readonly facilityId: string | null;
-  /** 取得する期間の開始（この時刻を含む） */
-  readonly from: Date;
-  /** 取得する期間の終了（この時刻を含まない） */
-  readonly to: Date;
+  /** 取得する期間。どれか 1 つと重なる予約を返す */
+  readonly periods: AvailabilityPeriods;
 }
 
 /**
@@ -150,10 +165,11 @@ export interface FacilityAvailabilityCalendarArgs {
  */
 export interface FacilityAvailabilityCalendarQuery {
   /**
-   * 施設 1 件分の、期間内の予約を取得する。
+   * 施設 1 件分の、期間（どれか 1 つ）と重なる予約を取得する。期間どうしが重なっていても、同じ予約は 1 回だけ返す。
    *
    * - 有効な施設が 1 件も無い場合: err(NOT_FOUND)
    * - `facilityId` の施設が存在しない、または無効な場合: err(NOT_FOUND)
+   * - `facilityId` が null で、有効な施設が 2 件以上ある場合: ok（`facility` が null、`reservations` が空の配列）
    * - 期間内に予約が無い場合: ok（`reservations` が空の配列）
    *
    * 取得するのは仮予約と承認済みだけ（`calendarVisibleStatuses`）。
@@ -165,7 +181,7 @@ export interface FacilityAvailabilityCalendarQuery {
    * 並び順は開始日時の昇順で固定する。同じ時刻に始まる予約は予約 ID の昇順で並べる。
    * 順序を決めずに返すと、再読み込みのたびに重なった帯の左右が入れ替わって見える。
    */
-  findByFacilityAndPeriod(
+  findByFacilityAndPeriods(
     args: FacilityAvailabilityCalendarArgs,
   ): ResultAsync<FacilityAvailabilityCalendar, QueryError>;
 }

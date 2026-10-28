@@ -129,13 +129,62 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     await expect(panel.getByText("7 名")).toBeHidden();
     await expect(panel.getByText("他団体の備考")).toBeHidden();
 
-    // 別の施設に切り替えると、帯は並ばない
-    const facilityTabs = page.getByRole("navigation", { name: "施設・設備の切り替え" });
-    const anotherTab = facilityTabs.getByRole("link", { name: anotherFacility.name });
-    await anotherTab.click();
-    await expect(anotherTab).toHaveAttribute("aria-current", "page");
+    // カレンダーの見出しの施設名から別の施設に切り替えると、見出しの施設名が替わり、帯は並ばない
+    const facilityMenu = page.getByRole("button", { name: /施設・設備を選んで切り替え/ });
+    await facilityMenu.click();
+    await page.getByRole("menuitem", { name: anotherFacility.name }).click();
+    await expect(facilityMenu).toContainText(anotherFacility.name);
     await expect(page.getByRole("button", { name: new RegExp(ownGroup.name) })).toBeHidden();
     await expect(page.getByRole("button", { name: new RegExp(otherGroup.name) })).toBeHidden();
+  });
+
+  test("施設・設備を指定せずに開くと、選ぶまで予約を出さず、選ぶとその施設の予約が並ぶ", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const member = await createUser(db);
+    const group = await createGroup(db, {
+      members: [{ userId: member.id, role: MembershipRole.Member }],
+    });
+    const facility = await createFacility(db);
+    await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: member.id,
+      startAt: nextWeekAt(Weekday.Wednesday, 10),
+      endAt: nextWeekAt(Weekday.Wednesday, 12),
+      status: ReservationStatus.Approved,
+    });
+    await signInAs(member.id);
+
+    const wednesday = nextWeekAt(Weekday.Wednesday, 0);
+    await openPage(page, `/availability?date=${toDateKey(wednesday)}`);
+
+    // 日付と時刻は並ぶが、予約の帯は出ず、枠も押せない。施設・設備を選ぶよう案内が出る（ADR-014 決定 20）
+    await expect(
+      page.getByText("空き状況を表示するには、左上から施設・設備を選択してください"),
+    ).toBeVisible();
+    await expect(dayColumn(page, wednesday)).toBeVisible();
+    await expect(page.getByRole("button", { name: new RegExp(group.name) })).toBeHidden();
+    await expect(
+      dayColumn(page, wednesday).getByRole("button", {
+        name: `${formatMonthDay(wednesday)} 13:00 から申請`,
+      }),
+    ).toBeDisabled();
+
+    // 左上の「施設・設備を選択」から施設を選ぶと、案内が消えて、その施設の予約の帯が並ぶ
+    await page.getByRole("button", { name: "施設・設備を選択" }).click();
+    await page.getByRole("menuitem", { name: facility.name }).click();
+    await expect(page.getByRole("button", { name: /施設・設備を選んで切り替え/ })).toContainText(
+      facility.name,
+    );
+    await expect(
+      page.getByText("空き状況を表示するには、左上から施設・設備を選択してください"),
+    ).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: new RegExp(`${group.name}.*の詳細を見る`) }),
+    ).toBeVisible();
   });
 
   test("空いている時間から申請へ進むと欄に時刻が入り、戻る操作で欄が閉じる", async ({

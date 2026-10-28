@@ -114,7 +114,8 @@ export async function createReservationAction({
 
   /*
    * 成功したら、作った予約を欄に開く URL へ転送する（ADR-014 決定 10）。
-   * 基準の日は、送ってきた URL（request.url）の date が日付として読めればそれ、読めなければ申請した日。
+   * 基準の日は、送ってきた URL（request.url）の date から読む 4 週間に申請した日が入ればその date、
+   * 入らなければ申請した日（resolveAnchorDateKey）。
    */
   const anchorDateKey = resolveAnchorDateKey(request.url, values.dateKey);
 

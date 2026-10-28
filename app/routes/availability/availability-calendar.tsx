@@ -155,7 +155,7 @@ export function AvailabilityCalendar({
 const toHiddenUntilReady = (index: number, anchorIndex: number): string | null => {
   if (index < DAYS_IN_WEEK) return "group-data-[ready=false]/calendar:hidden";
   if (index < anchorIndex) {
-    return "group-data-[ready=false]/calendar:hidden @min-[52rem]:group-data-[ready=false]/calendar:flex";
+    return "group-data-[ready=false]/calendar:hidden @min-[49rem]:group-data-[ready=false]/calendar:flex";
   }
   return null;
 };
@@ -290,7 +290,11 @@ function DayColumn({
       role="group"
       aria-label={formatMonthDay(day.date)}
       className={cn(
-        "flex w-[calc((100cqw-3.5rem)/3)] shrink-0 flex-col @min-[36rem]:w-[calc((100cqw-3.5rem)/5)] @min-[52rem]:w-[calc((100cqw-3.5rem)/7)]",
+        /*
+         * 並べる日数の境目（36rem・49rem）は、どちらも 1 日の列がちょうど 6.5rem になる幅（ADR-014 決定 2）。
+         * 7 日の列が、5 日の表示でいちばん細いときの列より細くならない限り、7 日を並べる。
+         */
+        "flex w-[calc((100cqw-3.5rem)/3)] shrink-0 flex-col @min-[36rem]:w-[calc((100cqw-3.5rem)/5)] @min-[49rem]:w-[calc((100cqw-3.5rem)/7)]",
         /*
          * 7 日の表示では日曜だけで止まり、5・3 日の表示では毎日止まる（ADR-014 決定 3）。
          * 同じ要素に snap-start と snap-align-none を条件違いで付けて打ち消し合わせず、
@@ -298,7 +302,7 @@ function DayColumn({
          */
         day.weekday === 0
           ? "snap-start snap-always"
-          : "snap-start snap-always @min-[52rem]:snap-align-none",
+          : "snap-start snap-always @min-[49rem]:snap-align-none",
         hiddenUntilReady,
       )}
     >

@@ -7,9 +7,12 @@ import {
   CALENDAR_WINDOW_DAYS,
   findDayIndex,
   formatVisibleMonths,
+  isInCalendarWindow,
   needsWindowShift,
   toAlignedIndex,
+  toCalendarPeriods,
   toCalendarWindowStart,
+  toDraftDayOutsideWindow,
   toRevealIndex,
   toVisibleCount,
 } from "./calendar-window";
@@ -33,6 +36,82 @@ describe("calendar-window", () => {
       const anchorSaturday = new Date("2026-10-31T23:59:59+09:00");
       const start = toCalendarWindowStart(anchorSaturday);
       expect(toTokyoDateKey(start)).toBe("2026-10-18");
+    });
+  });
+
+  // 2026-10-18（日）から読む 4 週間は、2026-10-18（日）〜2026-11-14（土）
+  describe("isInCalendarWindow", () => {
+    const windowStart = new Date("2026-10-18T00:00:00+09:00");
+
+    it("4 週間の初日と末日は中に入る", () => {
+      expect(isInCalendarWindow(windowStart, new Date("2026-10-18T00:00:00+09:00"))).toBe(true);
+      expect(isInCalendarWindow(windowStart, new Date("2026-11-14T00:00:00+09:00"))).toBe(true);
+    });
+
+    it("初日の前の日と、末日の次の日は外になる", () => {
+      expect(isInCalendarWindow(windowStart, new Date("2026-10-17T00:00:00+09:00"))).toBe(false);
+      expect(isInCalendarWindow(windowStart, new Date("2026-11-15T00:00:00+09:00"))).toBe(false);
+    });
+  });
+
+  describe("toDraftDayOutsideWindow", () => {
+    const windowStart = new Date("2026-10-18T00:00:00+09:00");
+    const draftOn = (dateKey: string) => ({
+      dateKey,
+      range: { startMinutes: 600, endMinutes: 660 },
+    });
+
+    it("仮の枠の日が 4 週間の外なら、その日の 0 時を返す", () => {
+      expect(
+        toDraftDayOutsideWindow(windowStart, { kind: "draft", draft: draftOn("2026-12-24") }),
+      ).toEqual(new Date("2026-12-24T00:00:00+09:00"));
+      expect(
+        toDraftDayOutsideWindow(windowStart, { kind: "draft", draft: draftOn("2026-10-17") }),
+      ).toEqual(new Date("2026-10-17T00:00:00+09:00"));
+    });
+
+    it("変更後の仮の枠の日が 4 週間の外でも、その日の 0 時を返す", () => {
+      expect(
+        toDraftDayOutsideWindow(windowStart, {
+          kind: "edit",
+          reservationId: "res_1",
+          draft: draftOn("2026-12-24"),
+        }),
+      ).toEqual(new Date("2026-12-24T00:00:00+09:00"));
+    });
+
+    it("仮の枠の日が 4 週間の中なら null", () => {
+      expect(
+        toDraftDayOutsideWindow(windowStart, { kind: "draft", draft: draftOn("2026-11-14") }),
+      ).toBeNull();
+    });
+
+    it("仮の枠が無い・予約を開いている・変更後の日時が URL に無いときは null", () => {
+      expect(toDraftDayOutsideWindow(windowStart, null)).toBeNull();
+      expect(
+        toDraftDayOutsideWindow(windowStart, { kind: "reservation", reservationId: "res_1" }),
+      ).toBeNull();
+      expect(
+        toDraftDayOutsideWindow(windowStart, { kind: "edit", reservationId: "res_1", draft: null }),
+      ).toBeNull();
+    });
+  });
+
+  describe("toCalendarPeriods", () => {
+    const windowStart = new Date("2026-10-18T00:00:00+09:00");
+
+    it("仮の枠の日が 4 週間の外に無ければ、4 週間だけを読む", () => {
+      expect(toCalendarPeriods(windowStart, null)).toEqual([
+        { from: windowStart, to: new Date("2026-11-15T00:00:00+09:00") },
+      ]);
+    });
+
+    it("4 週間の外の仮の枠の日があれば、その 1 日も読む", () => {
+      const draftDay = new Date("2026-12-24T00:00:00+09:00");
+      expect(toCalendarPeriods(windowStart, draftDay)).toEqual([
+        { from: windowStart, to: new Date("2026-11-15T00:00:00+09:00") },
+        { from: draftDay, to: new Date("2026-12-25T00:00:00+09:00") },
+      ]);
     });
   });
 

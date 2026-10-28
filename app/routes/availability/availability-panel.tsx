@@ -8,7 +8,10 @@ import { Button } from "~/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import type { AppArea } from "~/lib/app-area";
-import type { AvailabilityCalendar } from "~/query/facility/facility-availability-calendar";
+import type {
+  AvailabilityCalendar,
+  AvailabilityFacility,
+} from "~/query/facility/facility-availability-calendar";
 import type { ReservationEditTarget } from "~/usecases/reservation/get-reservation-edit-form";
 
 import {
@@ -27,6 +30,7 @@ import type { CalendarSelectionOps } from "./use-calendar-selection";
  */
 export function AvailabilityPanel({
   calendar,
+  facility,
   anchorKey,
   days,
   now,
@@ -43,8 +47,11 @@ export function AvailabilityPanel({
   onExpandedChange,
 }: Readonly<{
   calendar: AvailabilityCalendar;
+  /** いま見ている施設・設備。欄は施設を選んでから開くので、必ずある */
+  facility: AvailabilityFacility;
   /** 基準の日（URL の `date`）。申請・変更の送り先に使う */
   anchorKey: string;
+  /** 予約を読み込んだ日（カレンダーの 4 週間と、その外で読んだ仮の枠の日）。仮の枠の日を探すのに使う */
   days: readonly AvailabilityDay[];
   now: Date;
   /** 開いている画面。欄の中の URL に使う（ADR-016 決定 15） */
@@ -171,7 +178,7 @@ export function AvailabilityPanel({
       {selection.kind === "draft" && (
         <AvailabilityDraftForm
           draft={selection.draft}
-          facility={calendar.facility}
+          facility={facility}
           anchorKey={anchorKey}
           days={days}
           reservations={calendar.reservations}
@@ -192,7 +199,7 @@ export function AvailabilityPanel({
           target={editReservation}
           isDirect={isDirectEdit}
           draft={selection.draft}
-          facility={calendar.facility}
+          facility={facility}
           facilities={calendar.facilities}
           anchorKey={anchorKey}
           days={days}
@@ -212,7 +219,7 @@ export function AvailabilityPanel({
           {reservation !== undefined && (
             <AvailabilityReservationCard
               reservation={reservation}
-              facilityName={calendar.facility.name}
+              facilityName={facility.name}
               area={area}
             />
           )}

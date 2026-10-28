@@ -14,7 +14,10 @@ import { fakeFacilityAvailabilityCalendarQuery } from "~/testing/fakes/facility"
 import { fakeHolidayQuery } from "~/testing/fakes/holiday";
 import { fakeApplicantGroupQuery } from "~/testing/fakes/reservation";
 import { fakeUserGroupListQuery } from "~/testing/fakes/user";
-import { getAvailabilityCalendarUseCase } from "./get-availability-calendar";
+import {
+  getAvailabilityCalendarUseCase,
+  type GetAvailabilityCalendarArgs,
+} from "./get-availability-calendar";
 
 const meetingRoomA = { id: "fac_meeting_a", name: "ミーティングルーム A", description: null };
 
@@ -78,7 +81,7 @@ const createDeps = (
   });
 
   const facilityAvailabilityCalendarQuery = fakeFacilityAvailabilityCalendarQuery({
-    findByFacilityAndPeriod: () =>
+    findByFacilityAndPeriods: () =>
       okAsync({
         facilities: [meetingRoomA],
         facility: meetingRoomA,
@@ -106,12 +109,13 @@ const createDeps = (
   };
 };
 
-const args = {
+const args: GetAvailabilityCalendarArgs = {
   actorUserId: "usr_student_01",
   isStaff: false,
   facilityId: null,
-  from: new Date("2026-09-07T00:00:00+09:00"),
-  to: new Date("2026-09-14T00:00:00+09:00"),
+  periods: [
+    { from: new Date("2026-09-07T00:00:00+09:00"), to: new Date("2026-09-14T00:00:00+09:00") },
+  ],
   now: new Date("2026-09-08T10:00:00+09:00"),
 };
 
@@ -224,7 +228,7 @@ describe("getAvailabilityCalendarUseCase", () => {
         findByUserId: () => okAsync(enabledMembership),
       }),
       facilityAvailabilityCalendarQuery: fakeFacilityAvailabilityCalendarQuery({
-        findByFacilityAndPeriod: () =>
+        findByFacilityAndPeriods: () =>
           errAsync({
             code: QueryErrorCode.NotFound,
             message: "施設・設備 fac_unknown が有効な施設の中に見つからない。",
@@ -261,6 +265,59 @@ describe("getAvailabilityCalendarUseCase", () => {
     expect(result._unsafeUnwrap().holidayDateKeys).toEqual(["2026-09-15"]);
   });
 
+  it("期間を 2 つ渡すと、どちらも読み、祝日は期間ごとに読んで 1 つにまとめる", async () => {
+    const calendarWindow = {
+      from: new Date("2026-09-07T00:00:00+09:00"),
+      to: new Date("2026-09-14T00:00:00+09:00"),
+    };
+    const draftDay = {
+      from: new Date("2026-11-03T00:00:00+09:00"),
+      to: new Date("2026-11-04T00:00:00+09:00"),
+    };
+    const holidayRanges: (readonly [string, string])[] = [];
+    const holidayQuery: HolidayQuery = {
+      findHolidaysBetween: (from, to) => {
+        holidayRanges.push([from, to]);
+        return okAsync(from === "2026-11-03" ? ["2026-11-03"] : ["2026-09-15"]);
+      },
+    };
+    const deps = createDeps(enabledMembership, { holidayQuery });
+    const requestedPeriods: unknown[] = [];
+    deps.facilityAvailabilityCalendarQuery.findByFacilityAndPeriods = (queryArgs) => {
+      requestedPeriods.push(queryArgs.periods);
+      return okAsync({ facilities: [meetingRoomA], facility: meetingRoomA, reservations: [] });
+    };
+
+    const result = await getAvailabilityCalendarUseCase(deps, {
+      ...args,
+      periods: [calendarWindow, draftDay],
+    });
+
+    expect(requestedPeriods).toEqual([[calendarWindow, draftDay]]);
+    expect(holidayRanges).toEqual([
+      ["2026-09-07", "2026-09-13"],
+      ["2026-11-03", "2026-11-03"],
+    ]);
+    expect(result._unsafeUnwrap().holidayDateKeys).toEqual(["2026-09-15", "2026-11-03"]);
+  });
+
+  it("期間が重なっていても、同じ祝日は 1 回だけ入る", async () => {
+    const holidayQuery: HolidayQuery = {
+      findHolidaysBetween: () => okAsync(["2026-09-15"]),
+    };
+    const period = {
+      from: new Date("2026-09-14T00:00:00+09:00"),
+      to: new Date("2026-09-21T00:00:00+09:00"),
+    };
+
+    const result = await getAvailabilityCalendarUseCase(
+      createDeps(enabledMembership, { holidayQuery }),
+      { ...args, periods: [period, period] },
+    );
+
+    expect(result._unsafeUnwrap().holidayDateKeys).toEqual(["2026-09-15"]);
+  });
+
   it("祝日取得がエラーの場合はそのエラーを返す", async () => {
     const holidayQuery: HolidayQuery = {
       findHolidaysBetween: () =>
@@ -286,7 +343,7 @@ describe("getAvailabilityCalendarUseCase", () => {
         status: ReservationStatus.Provisional,
       };
       const deps = createDeps(enabledMembership);
-      deps.facilityAvailabilityCalendarQuery.findByFacilityAndPeriod = () =>
+      deps.facilityAvailabilityCalendarQuery.findByFacilityAndPeriods = () =>
         okAsync({
           facilities: [meetingRoomA],
           facility: meetingRoomA,

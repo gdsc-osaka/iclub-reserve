@@ -362,19 +362,35 @@ describe("availability paths", () => {
   });
 
   describe("resolveAnchorDateKey", () => {
-    it("URL に有効な date パラメータがあればそれを返す", () => {
+    // 2026-11-15（日）を基準の日にすると、読む 4 週間は 2026-11-08（日）〜2026-12-05（土）
+    it("URL の date から読む 4 週間に予約の日が入れば、その date を返す", () => {
       expect(
-        resolveAnchorDateKey("http://localhost/availability?date=2026-11-15", "2026-11-01"),
+        resolveAnchorDateKey("http://localhost/availability?date=2026-11-15", "2026-11-18"),
+      ).toBe("2026-11-15");
+      expect(
+        resolveAnchorDateKey("http://localhost/availability?date=2026-11-15", "2026-11-08"),
+      ).toBe("2026-11-15");
+      expect(
+        resolveAnchorDateKey("http://localhost/availability?date=2026-11-15", "2026-12-05"),
       ).toBe("2026-11-15");
     });
 
-    it("URL に date パラメータが無いときはフォールバックを返す", () => {
+    it("URL の date から読む 4 週間に予約の日が入らなければ、予約の日を返す（ADR-014 決定 19）", () => {
+      expect(
+        resolveAnchorDateKey("http://localhost/availability?date=2026-11-15", "2026-11-07"),
+      ).toBe("2026-11-07");
+      expect(
+        resolveAnchorDateKey("http://localhost/availability?date=2026-11-15", "2026-12-06"),
+      ).toBe("2026-12-06");
+    });
+
+    it("URL に date パラメータが無いときは予約の日を返す", () => {
       expect(resolveAnchorDateKey("http://localhost/availability", "2026-11-01")).toBe(
         "2026-11-01",
       );
     });
 
-    it("URL の date パラメータが不正な日付のときはフォールバックを返す", () => {
+    it("URL の date パラメータが不正な日付のときは予約の日を返す", () => {
       expect(resolveAnchorDateKey("http://localhost/availability?date=invalid", "2026-11-01")).toBe(
         "2026-11-01",
       );
