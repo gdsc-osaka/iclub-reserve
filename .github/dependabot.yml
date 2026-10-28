@@ -9,3 +9,13 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    # 版をそろえないと動かないパッケージは、1 つの PR にまとめて上げる。
+    # 分けると片方だけが上がった PR ができ、そのまま取り込むとアプリが動かなくなる
+    groups:
+      # Better Auth のパッケージは同じ版で出て、どれも better-call を決まった版で求める。
+      # 1 つだけ上がると better-call の版が食い違い、`pnpm peers check` で止まる。CLI の `auth` も同じ版で出る
+      better-auth:
+        patterns:
+          - "better-auth"
+          - "@better-auth/*"
+          - "auth"
