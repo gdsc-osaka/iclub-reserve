@@ -149,11 +149,15 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     expect(await findReservationsOfFacility(db, facility.id)).toHaveLength(1);
   });
 
-  test("ナビの入口から欄を開ける", async ({ page, db, signInAs }) => {
+  test("ナビの入口から来ると、施設・設備を選んだところで欄が開く", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
-    // 施設は、このテストの中で 1 つ作っておく（施設が 1 つも無いとカレンダーが開けない）
-    await createFacility(db);
+    // 入口は施設を指定しないので、カレンダーで選ぶ施設をこのテストの中で 1 つ作っておく
+    const facility = await createFacility(db);
     await signInAs(member.id);
 
     const todayKey = toDateKey(new Date());
@@ -165,9 +169,22 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
       .filter({ visible: true })
       .click();
 
-    // 空き状況カレンダーに移り（URL は /availability?date=<今日>&draft=<今日> の形）
+    // 空き状況カレンダーに移る（URL は /availability?date=<今日>&draft=<今日> の形）
     await expect(page).toHaveURL(
       new RegExp(`/availability\\?.*date=${todayKey}.*draft=${todayKey}`),
+    );
+
+    // 施設を選ぶまでは欄が開かず、施設・設備を選ぶよう案内が出る（ADR-014 決定 20）
+    await expect(
+      page.getByText("空き状況を表示するには、左上から施設・設備を選択してください"),
+    ).toBeVisible();
+    await expect(page.getByRole("region", { name: "新しい予約" })).toBeHidden();
+
+    // 「施設・設備を選択」から施設を選ぶと、今日の仮の枠を引き継いで欄が開く
+    await page.getByRole("button", { name: "施設・設備を選択" }).click();
+    await page.getByRole("menuitem", { name: facility.name }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/availability\\?facility=${facility.id}&date=${todayKey}&draft=${todayKey}`),
     );
 
     // 欄「新しい予約」に「時刻を選んでいないとき」の文言が出て、「内容を確認する」が押せない
@@ -193,6 +210,8 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     await expect(page).toHaveURL(
       new RegExp(`/staff/availability\\?.*date=${todayKey}.*draft=${todayKey}`),
     );
+    await page.getByRole("button", { name: "施設・設備を選択" }).click();
+    await page.getByRole("menuitem", { name: facility.name }).click();
     const staffPanel = page.getByRole("region", { name: "新しい予約" });
     await expect(staffPanel).toBeVisible();
     await expect(

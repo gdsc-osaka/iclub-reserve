@@ -32,6 +32,7 @@ import {
   isEditReservationChanged,
   parseCalendarSelection,
   toDraftParam,
+  type CalendarSelection,
 } from "./paths";
 import { useCalendarScroll } from "./use-calendar-scroll";
 import { toRevealTarget, useCalendarSelection } from "./use-calendar-selection";
@@ -89,6 +90,7 @@ export function AvailabilityPage({
     | undefined;
 }>) {
   const { calendar, windowStart, draftDayOutsideWindow, anchorKey, now, edit, area } = loaderData;
+  /** まだ施設を選んでいなければ null（ADR-014 決定 20）。そのときは予約も空 */
   const { facility, facilities, reservations, canApplyReservation } = calendar;
 
   /** カレンダーに並べる 4 週間 */
@@ -117,7 +119,7 @@ export function AvailabilityPage({
   const scroll = useCalendarScroll({ days, anchorKey, todayKey: toTokyoDateKey(now) });
   const selectionOps = useCalendarSelection({
     area,
-    facilityId: facility.id,
+    facilityId: facility?.id ?? null,
     anchorKey,
     reservations,
     days: loadedDays,
@@ -126,8 +128,22 @@ export function AvailabilityPage({
   });
   const { selection, openDraft, openReservation } = selectionOps;
 
-  /** 空いている枠を押して申請または変更へ進めるか（ADR-014 決定 15） */
-  const canPickSlot = canApplyReservation || selection?.kind === "edit";
+  /** 空いている枠を押して申請または変更へ進めるか（ADR-014 決定 15）。施設を選ぶまでは押せない */
+  const canPickSlot = facility !== null && (canApplyReservation || selection?.kind === "edit");
+
+  /*
+   * 施設を切り替えるリンクに引き継ぐもの（ADR-014 決定 14・15・20）。
+   * 予約を開いているときは引き継がない（予約はその施設のものなので、別の施設のカレンダーには出せない）。
+   * 施設を選ぶ前は、URL の仮の枠を引き継ぐ。ナビの「予約を申請」から来たとき（`?draft=今日`）に、
+   * 施設を選んだら、そのまま欄が開くようにするため。
+   */
+  const [searchParams] = useSearchParams();
+  const carriedSelection =
+    facility === null
+      ? toPendingDraft(searchParams)
+      : selection === null || selection.kind === "reservation"
+        ? undefined
+        : selection;
 
   /*
    * 欄が閉じたら、広げていない状態に戻す（戻る操作で閉じたときも）。
@@ -228,6 +244,7 @@ export function AvailabilityPage({
           facility={facility}
           facilities={facilities}
           area={area}
+          carriedSelection={carriedSelection}
           reservations={reservations}
           days={days}
           anchorKey={anchorKey}
@@ -240,9 +257,10 @@ export function AvailabilityPage({
           className={isExpanded ? "max-md:hidden" : undefined}
         />
 
-        {selection !== null && (
+        {selection !== null && facility !== null && (
           <AvailabilityPanel
             calendar={calendar}
+            facility={facility}
             anchorKey={anchorKey}
             days={loadedDays}
             now={now}
@@ -267,6 +285,17 @@ export function AvailabilityPage({
     </main>
   );
 }
+
+/**
+ * 施設を選ぶ前の URL にある仮の枠（ADR-014 決定 20）。無ければ undefined。
+ *
+ * 施設を選ぶ前は欄を開かないので、仮の枠は URL に残したまま、施設を選んだ先へ引き継ぐ。
+ * 予約・変更は施設を決めて開くものなので、引き継がない。
+ */
+const toPendingDraft = (searchParams: URLSearchParams): CalendarSelection | undefined => {
+  const requested = parseCalendarSelection(searchParams);
+  return requested?.kind === "draft" ? requested : undefined;
+};
 
 /**
  * 予約を申請できない人に出す案内（COND-006）。

@@ -125,7 +125,7 @@ export const toReservationDraft = ({
 /**
  * この画面の URL を組み立てる。施設と基準の日を両方持ち回るので、リンクは必ずここを通す。
  *
- * `facilityId` が null のときは `facility=` を付けない（一覧の先頭の施設を出す）。
+ * `facilityId` が null のときは `facility=` を付けない（施設を選ぶ前の画面になる。ADR-014 決定 20）。
  * `selection` を渡すと、欄で開くもの（`reservation`・`draft`・`edit`）を後ろに付ける。
  * 仮の枠の値は数字・`-`・`T`・`:` だけなので、アドレス欄で読めるよう encodeURIComponent しない。
  */

@@ -120,7 +120,8 @@ export function useCalendarSelection({
   editReservation = null,
 }: Readonly<{
   area: AppArea;
-  facilityId: string;
+  /** いま見ている施設・設備の ID。まだ選んでいなければ null で、何も開かない（ADR-014 決定 20） */
+  facilityId: string | null;
   /** 基準の日（URL の `date`）。開く・閉じるときもそのまま持ち回る */
   anchorKey: string;
   reservations: readonly AvailabilityReservation[];
@@ -136,8 +137,11 @@ export function useCalendarSelection({
 
   const requested = useMemo(() => parseCalendarSelection(searchParams), [searchParams]);
   const selection = useMemo(
-    () => toOpenSelection(requested, reservations, days, canApply, editReservation),
-    [requested, reservations, days, canApply, editReservation],
+    () =>
+      facilityId === null
+        ? null
+        : toOpenSelection(requested, reservations, days, canApply, editReservation),
+    [facilityId, requested, reservations, days, canApply, editReservation],
   );
 
   /** 開いているものを外した URL へ移る。履歴には積まない */
@@ -149,12 +153,15 @@ export function useCalendarSelection({
     });
   };
 
-  // 開いていたものがデータから消えた（却下されたなど）・開けない URL のときは、URL からも外す
+  /*
+   * 開いていたものがデータから消えた（却下されたなど）・開けない URL のときは、URL からも外す。
+   * 施設を選ぶ前は外さない。URL の仮の枠は、施設を選んだ先へ引き継ぐため（ADR-014 決定 20）。
+   */
   const hasSelectionParam =
     searchParams.has("reservation") || searchParams.has("draft") || searchParams.has("edit");
   useEffect(() => {
-    if (hasSelectionParam && selection === null) replaceWithoutSelection();
-  }, [hasSelectionParam, selection]);
+    if (facilityId !== null && hasSelectionParam && selection === null) replaceWithoutSelection();
+  }, [facilityId, hasSelectionParam, selection]);
 
   /**
    * 予約か仮の枠か変更を開く。

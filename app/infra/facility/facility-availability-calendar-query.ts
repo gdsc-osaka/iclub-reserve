@@ -1,5 +1,5 @@
 import { and, asc, eq, gt, inArray, lt, or } from "drizzle-orm";
-import { err, ok, ResultAsync, type Result } from "neverthrow";
+import { err, ok, okAsync, ResultAsync, type Result } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable } from "~/db/schema";
 import { wrapError } from "~/domain/error";
@@ -79,26 +79,29 @@ const selectReservations = (db: Database, facilityId: string, periods: Availabil
     .orderBy(asc(reservationTable.startAt), asc(reservationTable.id));
 
 /**
- * 一覧の中から、表示する施設を 1 件選ぶ。
+ * 一覧の中から、表示する施設を 1 件選ぶ。まだ選んでいなければ null を返す。
  *
- * `facilityId` が null（＝画面を開いた直後でまだ選んでいない）のときは先頭を使う。
+ * `facilityId` が null（＝画面を開いた直後でまだ選んでいない）のときは、利用者に選んでもらうので null にする
+ * （ADR-014 決定 20）。ただし有効な施設が 1 件だけなら、選ぶものが無いのでその施設にする。
+ * 1 件も無ければ、選んでもらうこともできないので NOT_FOUND にする。
+ *
  * URL を直接書き換えて存在しない ID を渡された場合は、
- * 黙って先頭に戻さず NOT_FOUND にする。戻してしまうと、
- * 共有されたリンクが別の施設を指していても気づけない。
+ * 黙って選ぶ前の状態に戻さず NOT_FOUND にする。戻してしまうと、
+ * 共有されたリンクが無効になった施設を指していても気づけない。
  */
 const pickFacility = (
   facilities: readonly AvailabilityFacility[],
   facilityId: string | null,
-): Result<AvailabilityFacility, QueryError> => {
+): Result<AvailabilityFacility | null, QueryError> => {
   if (facilityId === null) {
-    const first = facilities.at(0);
+    if (facilities.length === 0) {
+      return err({
+        code: QueryErrorCode.NotFound,
+        message: "有効な施設・設備が 1 件も無い。",
+      });
+    }
 
-    return first === undefined
-      ? err({
-          code: QueryErrorCode.NotFound,
-          message: "有効な施設・設備が 1 件も無い。",
-        })
-      : ok(first);
+    return ok(facilities.length === 1 ? facilities[0] : null);
   }
 
   const found = facilities.find((facility) => facility.id === facilityId);
@@ -115,9 +118,10 @@ const pickFacility = (
  * Cloudflare D1 (Drizzle) を使った FacilityAvailabilityCalendarQuery の実装。
  *
  * 施設の一覧を取ってから予約を取る、という 2 回の問い合わせに分けている。
- * `facilityId` が null のときに「どの施設を表示するか」が
+ * `facilityId` が null のときに「どの施設を表示するか（まだ選んでいないか）」が
  * 一覧を見るまで決まらないため、1 回にまとめられない。
- * 予約の件数に関係なく必ず 2 回で済むので、N+1 にはならない。
+ * 予約の件数に関係なく多くても 2 回で済むので、N+1 にはならない。
+ * 施設を選んでいなければ、予約は読まない。
  */
 export const createFacilityAvailabilityCalendarQuery = (
   db: Database,
@@ -130,14 +134,18 @@ export const createFacilityAvailabilityCalendarQuery = (
       .andThen((facilities) =>
         pickFacility(facilities, args.facilityId).map((facility) => ({ facilities, facility })),
       )
-      .andThen(({ facilities, facility }) =>
-        ResultAsync.fromPromise(
+      .andThen(({ facilities, facility }) => {
+        if (facility === null) {
+          return okAsync<FacilityAvailabilityCalendar>({ facilities, facility, reservations: [] });
+        }
+
+        return ResultAsync.fromPromise(
           selectReservations(db, facility.id, args.periods),
           wrapError(QueryErrorCode.DatabaseError, "予約の取得に失敗しました。"),
         ).map((rows): FacilityAvailabilityCalendar => ({
           facilities,
           facility,
           reservations: rows,
-        })),
-      ),
+        }));
+      }),
 });

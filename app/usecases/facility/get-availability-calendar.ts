@@ -139,7 +139,8 @@ const canApplyReservation = (groups: UserGroupList, isStaff: boolean): boolean =
  * 読み取りは同時に投げる。順に待つと D1 との往復がそのまま待ち時間になる。
  *
  * NOTE: 施設を指定しない（facilityId が null）呼び出しを許しているのは、
- * 画面を開いた直後にどの施設を出すかが、施設の一覧を見るまで決まらないため。
+ * 画面を開いた直後にどの施設を出すか（まだ選んでもらうか）が、施設の一覧を見るまで決まらないため。
+ * 施設が 2 件以上あれば `facility` を null にして返し、画面で選んでもらう（ADR-014 決定 20）。
  */
 export const getAvailabilityCalendarUseCase = (
   deps: GetAvailabilityCalendarDeps,
