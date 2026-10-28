@@ -85,6 +85,7 @@ export function AvailabilityReservationCard({
               headCount: reservation.detail.headCount,
               status: reservation.status,
               hasApprovedOverlap: reservation.hasApprovedOverlap,
+              hasProvisionalOverlap: reservation.hasProvisionalOverlap,
             }}
             transitions={reservation.transitions}
             showGroupName={true}
