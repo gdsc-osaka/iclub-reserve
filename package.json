@@ -67,7 +67,7 @@
     "better-sqlite3": "^13.0.3",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.11",
-    "shadcn": "^4.21.4",
+    "shadcn": "^4.22.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "catalog:",
