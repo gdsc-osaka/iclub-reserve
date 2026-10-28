@@ -12,7 +12,9 @@ minimumReleaseAgeExclude:
   - miniflare@4.20260617.1
   - wrangler@4.103.0
 catalog:
-  better-auth: ^1.7.7
+  # Better Auth のパッケージは同じ版で出る。package.json の `@better-auth/passkey`・`auth` と同じ版にそろえる
+  # （ずれると、それぞれが求める better-call の版が食い違い、`pnpm peers check` で止まる）
+  better-auth: ^1.7.14
   # Vite+ の版。`vite` は Vite+ に入っている Vite（vite-plus-core）に置き換える。
   # 2 つは必ず同じ版にそろえる（上げるときは `vp migrate` を使う）
   vite: npm:@voidzero-dev/vite-plus-core@1.4.0
