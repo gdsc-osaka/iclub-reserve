@@ -11,8 +11,10 @@ import {
   createGroup,
   createReservation,
   createUser,
+  uniqueSuffix,
 } from "../support/factories.js";
 import { expect, personas, test } from "../support/fixtures.js";
+import { findReservationMessages } from "../support/lookups.js";
 import { findQueuedMails } from "../support/mail.js";
 import { openPage } from "../support/page.js";
 
@@ -122,6 +124,48 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     expect(approvedMails[0]?.bodyText).toContain(
       "当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
     );
+  });
+
+  test("メッセージを添えて承認すると、メッセージが予約に残り、本文を載せた承認の通知 1 通だけが積まれる", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const { applicant, reservation } = await createProvisionalReservation(db);
+
+    await signInAs(personas.staff.id);
+    await openPage(page, `/staff/reservations/${reservation.id}`);
+    await page.getByRole("button", { name: "承認" }).click();
+
+    const dialog = page.getByRole("alertdialog", { name: "仮予約の承認" });
+    const messageField = dialog.getByLabel(/団体へのメッセージ/);
+    // 「手配済み」でメッセージが空のうちは、方法を書くよう注意が出る（承認は止めない）
+    await dialog.getByLabel("手配済み").click();
+    const hint = dialog.getByText(/まだ伝えていなければ、ここに書いてください。/);
+    await expect(hint).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "承認する" })).toBeEnabled();
+
+    const messageBody = `カードキーは前日までに事務局で受け取ってください ${uniqueSuffix()}`;
+    await messageField.fill(messageBody);
+    await expect(hint).toBeHidden();
+    await dialog.getByRole("button", { name: "承認する" }).click();
+
+    // 承認済みになり、添えたメッセージが予約のメッセージの一覧に並ぶ
+    await expect(page.getByText("承認済み", { exact: true }).first()).toBeVisible();
+    const messageList = page.getByRole("list", { name: "メッセージの一覧" });
+    await expect(messageList.getByText(messageBody)).toBeVisible();
+
+    const messages = await findReservationMessages(db, reservation.id);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({ body: messageBody, sentAsStaff: true });
+
+    // 申請者には、メッセージを載せた承認の通知（EVT-005）だけが積まれ、メッセージの通知（EVT-008）は積まれない
+    const mails = (await findQueuedMails(db, applicant.email)).filter((mail) =>
+      mail.bodyText.includes(reservation.id),
+    );
+    expect(mails).toHaveLength(1);
+    expect(mails[0]?.subject).toContain("利用予約が承認されました");
+    expect(mails[0]?.bodyText).toContain(`事務局からのメッセージ:\n${messageBody}`);
   });
 
   test("事務局が書いた理由に定型文を足して却下すると、却下済みになり、理由つきの却下の通知が積まれる", async ({

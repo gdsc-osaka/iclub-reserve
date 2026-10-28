@@ -97,6 +97,24 @@ export const validateReservationMessageBody = (raw: string): Result<string, Rese
   return ok(normalized);
 };
 
+/**
+ * 操作と同時に送るメッセージの本文を検証・正規化する（COND-023）。
+ *
+ * 仮予約の承認（UC-006）のように、操作の確認の画面で任意に添えるメッセージに使う。
+ * 欄は任意なので、空欄や空白だけなら添えなかったものとして null を返す
+ * （「メッセージを入力してください」で操作を止めない）。
+ * 1 文字以上なら、UC-009 と同じ条件（validateReservationMessageBody）で確かめる。
+ */
+export const validateOptionalReservationMessageBody = (
+  raw: string | null,
+): Result<string | null, ReservationError> => {
+  if (raw === null || raw.trim() === "") {
+    return ok(null);
+  }
+
+  return validateReservationMessageBody(raw);
+};
+
 /** メッセージ作成の実行結果 */
 export interface CreateReservationMessageOutcome {
   /** この操作で outbox に積んだメールの ID。Queues への即時配送依頼に使う */

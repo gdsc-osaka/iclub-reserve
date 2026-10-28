@@ -57,6 +57,37 @@ export const selectReservationMessageRecipients = (
   return Array.from(map.values()).sort((a, b) => a.address.localeCompare(b.address));
 };
 
+/**
+ * 承認と同時にメッセージを送ったときの、承認通知（EVT-005）の宛先を選ぶ純粋関数（REQ-048）。
+ *
+ * 承認だけのときの宛先（申請者・団体の管理者全員）に、その予約に団体側としてメッセージを
+ * 送ったことのある人（priorGroupSideSenders）を加える。メッセージ通知（EVT-008）は別に送らないので、
+ * EVT-008 で事務局としての送信を受け取るはずの人にも、承認通知の 1 通で届ける。
+ *
+ * 候補（audience）は、送信の時点で予約の全項目を見られる人（COND-008 の (1)）に絞ってある前提。
+ * - 加える人からは、送信者本人（userId === senderUserId）を除く。
+ *   申請者・管理者は、承認だけのときと同じく除かない。
+ * - メールアドレス（address）の重複を取り除く。並びは申請者・管理者が先で、加える人が後。
+ */
+export const selectApprovalMailRecipients = (
+  audience: Pick<ReservationMessageAudience, "groupMembers" | "priorGroupSideSenders">,
+  senderUserId: string,
+): ReservationMailRecipients => {
+  const candidates = [
+    ...audience.groupMembers,
+    ...audience.priorGroupSideSenders.filter((recipient) => recipient.userId !== senderUserId),
+  ];
+
+  const map = new Map<string, ReservationMailRecipient>();
+  for (const recipient of candidates) {
+    if (!map.has(recipient.address)) {
+      map.set(recipient.address, recipient);
+    }
+  }
+
+  return Array.from(map.values());
+};
+
 export interface CreateReservationMessageMailDraftsArgs {
   readonly message: ReservationMessage;
   readonly reservation: {

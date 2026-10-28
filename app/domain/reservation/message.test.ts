@@ -6,6 +6,7 @@ import {
   isSentAsStaff,
   STAFF_SENDER_LABEL,
   toMessageSenderLabel,
+  validateOptionalReservationMessageBody,
   validateReservationMessageBody,
 } from "./message";
 
@@ -72,6 +73,32 @@ describe("validateReservationMessageBody", () => {
     // ログ用の message に本文そのものが埋め込まれていないこと
     expect(error.message).not.toContain(longBody);
     expect(error.message).toContain("2000");
+  });
+});
+
+describe("validateOptionalReservationMessageBody", () => {
+  it("null・空文字・空白と改行だけなら、添えなかったものとして null を返す", () => {
+    for (const input of [null, "", "  \n　\r\n"]) {
+      expect(validateOptionalReservationMessageBody(input)._unsafeUnwrap()).toBeNull();
+    }
+  });
+
+  it("1 文字以上なら、validateReservationMessageBody と同じく正規化した本文を返す", () => {
+    expect(
+      validateOptionalReservationMessageBody(
+        "  鍵は事務局で\r\n受け取ってください  ",
+      )._unsafeUnwrap(),
+    ).toBe("鍵は事務局で\n受け取ってください");
+  });
+
+  it("2000 文字を超えたら、validateReservationMessageBody と同じエラーを返す", () => {
+    const result = validateOptionalReservationMessageBody("a".repeat(2001));
+
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.InvalidInput,
+      field: ReservationField.MessageBody,
+      userMessage: "メッセージは2000文字以内で入力してください。",
+    });
   });
 });
 

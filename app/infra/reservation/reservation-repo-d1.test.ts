@@ -14,9 +14,15 @@
  */
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { auditLogTable, calendarSyncTaskTable } from "~/db/schema";
+import {
+  auditLogTable,
+  calendarSyncTaskTable,
+  mailOutboxTable,
+  reservationMessageTable,
+} from "~/db/schema";
 import { AuditLogAction, AuditLogTargetType, type AuditLogDraft } from "~/domain/audit-log";
 import type { CalendarSyncTaskDraft } from "~/domain/calendar";
+import type { MailDraft } from "~/domain/mail/mail-outbox";
 import {
   ReservationStatus,
   UnlockArrangement,
@@ -24,6 +30,7 @@ import {
   type ApplyStatusTransitionArgs,
   type Reservation,
 } from "~/domain/reservation";
+import type { ReservationMessage } from "~/domain/reservation/message";
 import { useD1TestDb } from "../d1-test-db";
 import { seedFacility, seedGroup, seedReservation, seedUser } from "../d1-test-seeds";
 import { createReservationRepository } from "./reservation-repo";
@@ -390,7 +397,7 @@ describe("applyStatusTransition を SQLite で実行する", () => {
         status_reason: { before: null, after: null },
       },
     });
-    const result = await repository.applyStatusTransition(approveArgs, [], auditLog, null);
+    const result = await repository.applyStatusTransition(approveArgs, [], auditLog, null, null);
 
     expect(result._unsafeUnwrap().applied).toBe(true);
     expect(await rowOf("res_target")).toMatchObject({
@@ -424,12 +431,127 @@ describe("applyStatusTransition を SQLite で実行する", () => {
       updatedAt: new Date("2026-09-20T09:30:00+09:00"),
     });
 
-    const result = await repository.applyStatusTransition(approveArgs, [], dummyAuditLog(), null);
+    const result = await repository.applyStatusTransition(
+      approveArgs,
+      [],
+      dummyAuditLog(),
+      null,
+      null,
+    );
 
     expect(result._unsafeUnwrap().applied).toBe(false);
     expect(await rowOf("res_target")).toMatchObject({ status: ReservationStatus.Provisional });
     const auditRows = await testDb.db.select().from(auditLogTable);
     expect(auditRows).toHaveLength(0);
+  });
+});
+
+describe("applyStatusTransition で、承認と同時に送るメッセージを同じ batch で書く（COND-023）", () => {
+  const approveArgs: ApplyStatusTransitionArgs = {
+    id: "res_target",
+    expectedStatus: ReservationStatus.Provisional,
+    expectedUpdatedAt: READ_AT,
+    status: ReservationStatus.Approved,
+    statusReason: null,
+    updatedAt: EDITED_AT,
+    requireNoApprovedOverlap: true,
+  };
+
+  const message: ReservationMessage = {
+    id: "msg_with_approval",
+    reservationId: "res_target",
+    senderId: "usr_staff",
+    sentAsStaff: true,
+    body: "カードキーは事務局で受け取ってください。\n返却は翌朝で構いません。",
+    sentAt: EDITED_AT,
+  };
+
+  const approvalMail: MailDraft = {
+    idempotencyKey: "reservation:approved:res_target:test:usr_taro",
+    to: { address: "taro@ecs.osaka-u.ac.jp" },
+    subject: "承認",
+    text: "本文",
+  };
+
+  beforeEach(async () => {
+    await testDb.seed(
+      seedUser({ id: "usr_staff", name: "事務局", email: "staff@example.com", is_staff: true }),
+    );
+  });
+
+  it("承認できたら、メッセージの行を 1 件書く", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+    });
+
+    const result = await repository.applyStatusTransition(
+      approveArgs,
+      [approvalMail],
+      dummyAuditLog({ action: AuditLogAction.ReservationApprove, actedAsStaff: true }),
+      null,
+      message,
+    );
+
+    expect(result._unsafeUnwrap()).toMatchObject({ applied: true });
+    expect(result._unsafeUnwrap().enqueuedMailIds).toHaveLength(1);
+    // INSERT ... SELECT でも、boolean と日時が Drizzle の変換を通って読み戻せる
+    expect(await testDb.db.select().from(reservationMessageTable)).toEqual([message]);
+    expect(await testDb.db.select().from(mailOutboxTable)).toHaveLength(1);
+  });
+
+  it("読んだ後に内容が変わっていて承認できなかったら、メッセージも通知も書かない", async () => {
+    const repository = createReservationRepository(testDb.db);
+    // 事務局が読んだ後に、団体のメンバーが日時を変えた
+    await insertReservation({
+      id: "res_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("14:00"),
+      endAt: at("16:00"),
+      updatedAt: new Date("2026-09-20T09:30:00+09:00"),
+    });
+
+    const result = await repository.applyStatusTransition(
+      approveArgs,
+      [approvalMail],
+      dummyAuditLog({ action: AuditLogAction.ReservationApprove, actedAsStaff: true }),
+      null,
+      message,
+    );
+
+    expect(result._unsafeUnwrap()).toEqual({ applied: false, enqueuedMailIds: [] });
+    expect(await testDb.db.select().from(reservationMessageTable)).toHaveLength(0);
+    expect(await testDb.db.select().from(mailOutboxTable)).toHaveLength(0);
+  });
+
+  it("同じ時間帯に承認済みの予約があって承認できなかったら、メッセージを書かない（COND-001）", async () => {
+    const repository = createReservationRepository(testDb.db);
+    await insertReservation({
+      id: "res_target",
+      status: ReservationStatus.Provisional,
+      startAt: at("10:00"),
+      endAt: at("12:00"),
+    });
+    await insertReservation({
+      id: "res_other_approved",
+      status: ReservationStatus.Approved,
+      startAt: at("11:00"),
+      endAt: at("13:00"),
+    });
+
+    const result = await repository.applyStatusTransition(
+      approveArgs,
+      [],
+      dummyAuditLog({ action: AuditLogAction.ReservationApprove, actedAsStaff: true }),
+      null,
+      message,
+    );
+
+    expect(result._unsafeUnwrap().applied).toBe(false);
+    expect(await testDb.db.select().from(reservationMessageTable)).toHaveLength(0);
   });
 });
 
@@ -630,6 +752,7 @@ describe("カレンダー同期タスクの書き込み", () => {
       [],
       dummyAuditLog({ targetId: "res_sync_target", action: AuditLogAction.ReservationApprove }),
       calendarSync,
+      null,
     );
 
     expect(result._unsafeUnwrap().applied).toBe(true);
@@ -673,6 +796,7 @@ describe("カレンダー同期タスクの書き込み", () => {
       [],
       dummyAuditLog({ targetId: "res_sync_target" }),
       calendarSync,
+      null,
     );
 
     expect(result._unsafeUnwrap().applied).toBe(false);
@@ -703,6 +827,7 @@ describe("カレンダー同期タスクの書き込み", () => {
       approveArgs,
       [],
       dummyAuditLog({ targetId: "res_sync_target" }),
+      null,
       null,
     );
 
@@ -831,6 +956,7 @@ describe("解錠の手配（unlock_arrangement）の D1 での書き込み", () 
       [],
       dummyAuditLog({ targetId: "res_status_unlock" }),
       null,
+      null,
     );
     expect(outcome1._unsafeUnwrap().applied).toBe(true);
 
@@ -852,6 +978,7 @@ describe("解錠の手配（unlock_arrangement）の D1 での書き込み", () 
       argsWithoutUnlock,
       [],
       dummyAuditLog({ targetId: "res_status_unlock" }),
+      null,
       null,
     );
     expect(outcome2._unsafeUnwrap().applied).toBe(true);
