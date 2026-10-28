@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test";
 import { formatFullDate, formatTimeRange } from "~/lib/date";
 import { MembershipRole } from "~/domain/membership";
+import { ReservationStatus, UnlockArrangement } from "~/domain/reservation";
+import { unlockArrangementGroupNotice } from "~/domain/reservation/unlock-arrangement";
 import { nextWeekAt, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -115,6 +117,49 @@ test.describe("UC-034 予約の詳細を確認する", { tag: "@UC-034" }, () =>
     await expect(page.getByText(applicant.name, { exact: true })).toBeHidden();
     await expect(page.getByText(note)).toBeHidden();
     await expect(page.getByText("メッセージ", { exact: true })).toBeHidden();
+  });
+
+  test("自団体のメンバーには解錠の手配の案内が出て、他団体の人には出ない", async ({
+    page,
+    db,
+    signInAs,
+  }) => {
+    const applicant = await createUser(db);
+    const group = await createGroup(db, {
+      members: [{ userId: applicant.id, role: MembershipRole.Member }],
+    });
+    const facility = await createFacility(db);
+    const reservation = await createReservation(db, {
+      groupId: group.id,
+      facilityId: facility.id,
+      createdBy: applicant.id,
+      startAt: nextWeekAt(Weekday.Thursday, 10),
+      endAt: nextWeekAt(Weekday.Thursday, 12),
+      status: ReservationStatus.Approved,
+      unlockArrangement: UnlockArrangement.Required,
+    });
+
+    const requiredNotice = unlockArrangementGroupNotice[UnlockArrangement.Required]!;
+
+    // 申請者が利用者の画面で開くと、要手配の案内が出る
+    await signInAs(applicant.id);
+    await openPage(page, `/reservations/${reservation.id}`);
+    await expect(page.getByText(requiredNotice)).toBeVisible();
+
+    // 他団体のメンバーが同じ予約を開くと、案内も「解錠の手配」の文字も出ない
+    const outsider = await createUser(db);
+    await createGroup(db, { members: [{ userId: outsider.id, role: MembershipRole.Member }] });
+    await signInAs(outsider.id);
+    await openPage(page, `/reservations/${reservation.id}`);
+
+    await expect(page.getByRole("heading", { level: 1, name: facility.name })).toBeVisible();
+    await expect(
+      page.getByText(
+        "他の団体の予約のため、公開されている項目（団体名・施設・日時・状態）だけを表示しています。",
+      ),
+    ).toBeVisible();
+    await expect(page.getByText(requiredNotice)).toBeHidden();
+    await expect(page.getByText("解錠の手配")).toBeHidden();
   });
 
   test("存在しない予約を開くと、見つからない旨が出る", async ({ page, db, signInAs }) => {

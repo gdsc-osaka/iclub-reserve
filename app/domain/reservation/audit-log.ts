@@ -146,3 +146,18 @@ export const toReservationContentEditChanges = (
     status_reason: { before: before.statusReason, after: after.statusReason },
   };
 };
+
+/**
+ * 解錠の手配の更新（UC-038）時の changes を組み立てる。
+ *
+ * unlock_arrangement の before と after だけを残す（COND-027）。
+ */
+export const toReservationUnlockArrangementChanges = (
+  before: { readonly unlockArrangement: UnlockArrangement | null },
+  after: { readonly unlockArrangement: UnlockArrangement },
+): AuditLogChanges => ({
+  unlock_arrangement: {
+    before: before.unlockArrangement,
+    after: after.unlockArrangement,
+  },
+});

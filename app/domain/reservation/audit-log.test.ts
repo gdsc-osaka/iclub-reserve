@@ -6,6 +6,7 @@ import {
   toReservationContentEditChanges,
   toReservationCreatedChanges,
   toReservationStatusChanges,
+  toReservationUnlockArrangementChanges,
   transitionAuditLogAction,
 } from "./audit-log";
 import { ReservationEditOutcome } from "./edit";
@@ -261,6 +262,34 @@ describe("reservation/audit-log", () => {
         unlock_arrangement: {
           before: "required",
           after: "arranged",
+        },
+      });
+    });
+  });
+
+  describe("toReservationUnlockArrangementChanges", () => {
+    it("unlock_arrangement の before と after だけを含める", () => {
+      expect(
+        toReservationUnlockArrangementChanges(
+          { unlockArrangement: UnlockArrangement.Required },
+          { unlockArrangement: UnlockArrangement.Arranged },
+        ),
+      ).toEqual({
+        unlock_arrangement: {
+          before: "required",
+          after: "arranged",
+        },
+      });
+
+      expect(
+        toReservationUnlockArrangementChanges(
+          { unlockArrangement: null },
+          { unlockArrangement: UnlockArrangement.NotRequired },
+        ),
+      ).toEqual({
+        unlock_arrangement: {
+          before: null,
+          after: "not_required",
         },
       });
     });

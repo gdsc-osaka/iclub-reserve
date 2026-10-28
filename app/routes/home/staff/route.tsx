@@ -9,6 +9,7 @@ import { requireAreaUser } from "~/routes/_shared/app-area.server";
 import { findGroupSearchList } from "~/query/group/group-search";
 import { findStaffPendingReservations } from "~/query/reservation/staff-pending-reservations";
 import { findStaffTodaySchedule } from "~/query/reservation/staff-today-schedule";
+import { findStaffUnlockRequiredReservations } from "~/query/reservation/staff-unlock-required-reservations";
 import { findStaffUnreadMessages } from "~/query/reservation/staff-unread-messages";
 import { reservationActionErrors } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
@@ -23,6 +24,7 @@ import { StaffPendingGroupsSection } from "./staff-pending-groups-section";
 import { StaffPendingSection } from "./staff-pending-section";
 import { StaffTilesSection } from "./staff-tiles-section";
 import { StaffTodayScheduleSection } from "./staff-today-schedule-section";
+import { StaffUnlockRequiredSection } from "./staff-unlock-required-section";
 import { StaffUnreadMessagesSection } from "./staff-unread-messages-section";
 
 export function meta() {
@@ -45,8 +47,9 @@ export async function loader({ context }: Route.LoaderArgs) {
   const ctx: LoadContext = { db, user, now, actsAsStaff };
 
   // 区画どうしは互いの結果を使わないので、D1 への問い合わせを並べて待つ
-  const [pending, unreadMessages, pendingGroups, today] = await Promise.all([
+  const [pending, unlockRequired, unreadMessages, pendingGroups, today] = await Promise.all([
     loadStaffPending(ctx),
+    loadStaffUnlockRequired(ctx),
     loadStaffUnreadMessages(ctx),
     loadPendingGroups(ctx),
     loadStaffToday(ctx),
@@ -56,6 +59,7 @@ export async function loader({ context }: Route.LoaderArgs) {
     // 相対時刻（「25 分前」など）をサーバーとブラウザで食い違わせないよう、今の時刻をここで決めて渡す
     now: now.toISOString(),
     pending,
+    unlockRequired,
     unreadMessages,
     pendingGroups,
     today,
@@ -76,6 +80,14 @@ const loadStaffPending = ({ db, user, now, actsAsStaff }: LoadContext) =>
     "staff-home.loader.staffPending",
     user,
     findStaffPendingReservations(db, { isStaff: actsAsStaff, now }),
+  );
+
+/** 解錠の手配が要る予約と、その件数（SCR-022 (4) / COND-027 (4)） */
+const loadStaffUnlockRequired = ({ db, user, now, actsAsStaff }: LoadContext) =>
+  loadSection(
+    "staff-home.loader.staffUnlockRequired",
+    user,
+    findStaffUnlockRequiredReservations(db, { isStaff: actsAsStaff, now }),
   );
 
 /** 団体からの未読メッセージ（UC-037 / COND-026 (3)） */
@@ -174,7 +186,7 @@ export async function action({ request, context }: Route.ActionArgs) {
  * 事務局が所属している団体についての区画は出さない。それは利用者の画面（`/`）で見る。
  */
 export default function StaffHome({ loaderData }: Route.ComponentProps) {
-  const { pending, unreadMessages, pendingGroups, today } = loaderData;
+  const { pending, unlockRequired, unreadMessages, pendingGroups, today } = loaderData;
   const now = new Date(loaderData.now);
 
   return (
@@ -187,6 +199,7 @@ export default function StaffHome({ loaderData }: Route.ComponentProps) {
             pending === null
               ? null
               : { total: pending.totalCount, shortNotice: pending.shortNoticeCount },
+          unlockRequired: unlockRequired?.totalCount ?? null,
           // 行と同じく、未読のある予約の数を数える（COND-026 (1)）
           unreadMessages: unreadMessages?.allUnreadReservationIds.length ?? null,
           pendingGroups:
@@ -201,6 +214,12 @@ export default function StaffHome({ loaderData }: Route.ComponentProps) {
         totalCount={pending?.totalCount ?? 0}
         isUnavailable={pending === null}
         now={now}
+      />
+
+      <StaffUnlockRequiredSection
+        reservations={unlockRequired?.items ?? []}
+        totalCount={unlockRequired?.totalCount ?? 0}
+        isUnavailable={unlockRequired === null}
       />
 
       <StaffUnreadMessagesSection

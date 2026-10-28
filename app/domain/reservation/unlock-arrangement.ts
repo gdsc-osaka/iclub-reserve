@@ -1,10 +1,14 @@
 import { err, ok, type Result } from "neverthrow";
 
+import { canAct, type Actor } from "../membership";
 import {
+  ReservationAction,
   ReservationErrorCode,
   ReservationField,
+  reservationPermissions,
   ReservationStatus,
   UnlockArrangement,
+  type Reservation,
   type ReservationError,
 } from ".";
 import {
@@ -17,7 +21,7 @@ import {
  * 施設の解錠の手配（INFO-001 / STATE-004 / COND-027）をまとめたファイル。
  *
  * 「値の解釈」「検証」「表示用文言」「直接変更で選び直しが要るかの判定」
- * 「団体の変更後に手配をどう扱うかの判定」を集めてある。
+ * 「団体の変更後に手配をどう扱うかの判定」「承認後の更新の検証と予約詳細の表示形」を集めてある。
  *
  * このファイルは index.ts を参照するが、index.ts はこのファイルを参照しない。
  * 逆向きの参照を足すと循環 import になり、どちらかのトップレベルの定数が
@@ -138,3 +142,106 @@ export const unlockArrangementAfterGroupEdit = (
   outcome: AppliedReservationEdit,
   current: UnlockArrangement | null,
 ): UnlockArrangement | null => (resetsUnlockArrangementOnGroupEdit[outcome] ? null : current);
+
+/**
+ * 予約の状態・日時から、解錠の手配を変更できるかどうかを判定する（UC-038 / COND-027 (4)）。
+ *
+ * 承認済みで、利用の終了日時より前（endAt > now）のときだけ変更できる。
+ * 操作する人の権限はここでは見ず、reservationPermissions の UpdateUnlockArrangement で判定する。
+ */
+export const canUpdateUnlockArrangement = (
+  reservation: Pick<Reservation, "status" | "endAt">,
+  now: Date,
+): boolean => reservation.status === ReservationStatus.Approved && reservation.endAt > now;
+
+/**
+ * 承認後の解錠の手配の更新（UC-038）について、予約の状態と入力値を検証する（COND-027 (4)）。
+ *
+ * 移行前に承認された予約は未定（null）のことがあるため、未定から 3 つの選択肢への更新は許す。
+ */
+export const validateUnlockArrangementUpdate = (
+  reservation: Pick<Reservation, "status" | "endAt" | "unlockArrangement">,
+  next: UnlockArrangement | null,
+  now: Date,
+): Result<UnlockArrangement, ReservationError> => {
+  if (!canUpdateUnlockArrangement(reservation, now)) {
+    if (reservation.status !== ReservationStatus.Approved) {
+      return err({
+        code: ReservationErrorCode.InvalidTransition,
+        message: `承認済みでない予約（status: ${reservation.status}）の解錠の手配は変更できない。`,
+        userMessage: "解錠の手配は、承認済みの予約のみ変更できます。",
+      });
+    }
+
+    return err({
+      code: ReservationErrorCode.InvalidTransition,
+      message: "終了日時を過ぎた予約の解錠の手配は変更できない。",
+      userMessage: "終了した予約の解錠の手配は変更できません。",
+    });
+  }
+
+  const validated = validateUnlockArrangement(next);
+  if (validated.isErr()) {
+    return validated;
+  }
+
+  if (validated.value === reservation.unlockArrangement) {
+    return err({
+      code: ReservationErrorCode.InvalidInput,
+      field: ReservationField.UnlockArrangement,
+      message: "解錠の手配が変更前と同じ値である。",
+      userMessage: "今と同じ手配の状況です。別の状況を選んでください。",
+    });
+  }
+
+  return ok(validated.value);
+};
+
+/** 予約詳細（SCR-005）に出す解錠の手配（COND-027 (4)・(6)） */
+export type UnlockArrangementView =
+  /** 事務局の画面: 手配の状況と、変えられるか */
+  | {
+      readonly kind: "staff";
+      readonly value: UnlockArrangement | null;
+      readonly canUpdate: boolean;
+    }
+  /** 団体側: 手配の状況（要手配か手配済み）と、案内の文 */
+  | { readonly kind: "group"; readonly value: UnlockArrangement; readonly notice: string };
+
+/**
+ * 予約詳細（SCR-005）に出す解錠の手配の表示形を組み立てる（COND-027 (4)・(6)）。
+ *
+ * 全項目を見られる人（自団体のメンバー・事務局）に対してだけ呼ぶ。
+ * 承認済みでない予約では表示しないため null を返す。
+ */
+export const toUnlockArrangementView = (
+  reservation: Pick<Reservation, "status" | "endAt" | "unlockArrangement">,
+  actor: Actor,
+  now: Date,
+): UnlockArrangementView | null => {
+  if (reservation.status !== ReservationStatus.Approved) {
+    return null;
+  }
+
+  const canUpdate = canUpdateUnlockArrangement(reservation, now);
+
+  if (canAct(reservationPermissions, actor, ReservationAction.UpdateUnlockArrangement)) {
+    return {
+      kind: "staff",
+      value: reservation.unlockArrangement,
+      canUpdate,
+    };
+  }
+
+  // 承認済みなので、変えられないのは終了したときだけ。終了した予約には案内を出さない
+  if (!canUpdate || reservation.unlockArrangement === null) {
+    return null;
+  }
+
+  const notice = unlockArrangementGroupNotice[reservation.unlockArrangement];
+  if (notice === null) {
+    return null;
+  }
+
+  return { kind: "group", value: reservation.unlockArrangement, notice };
+};

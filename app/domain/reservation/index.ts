@@ -105,6 +105,13 @@ export const ReservationAction = {
    * 見られる人と送れる人を表の上で別々に決められるようにするため別の操作として定義している。
    */
   SendMessage: "send_message",
+  /**
+   * 承認済みの予約の解錠の手配を更新する（UC-038）。
+   *
+   * 状態の上で更新できるか（承認済み・終了前）は unlock-arrangement.ts の canUpdateUnlockArrangement が見る。
+   * 団体メンバーには許されず、事務局だけに許される操作（COND-009）。
+   */
+  UpdateUnlockArrangement: "update_unlock_arrangement",
 } as const;
 export type ReservationAction = (typeof ReservationAction)[keyof typeof ReservationAction];
 
@@ -167,6 +174,7 @@ export const reservationPermissions: PermissionTable<ActorRole, ReservationActio
       ReservationAction.CreateDirect,
       ReservationAction.EditDirect,
       ReservationAction.SendMessage,
+      ReservationAction.UpdateUnlockArrangement,
     ],
   },
 };
@@ -382,6 +390,20 @@ export interface ApplyStatusTransitionOutcome {
 /** 内容の条件付き更新の結果。中身の意味はステータスの条件付き更新と同じ */
 export type ApplyContentEditOutcome = ApplyStatusTransitionOutcome;
 
+/** 承認済みの予約の解錠の手配を条件付きで更新するときの引数（UC-038） */
+export interface ApplyUnlockArrangementUpdateArgs {
+  readonly id: string;
+  /** 操作前の予約ステータス（承認済みでなければ更新しない） */
+  readonly expectedStatus: ReservationStatus;
+  /** 読んだときの更新日時。読んでから書くまでにほかの更新が入ったときは更新しない */
+  readonly expectedUpdatedAt: Date;
+  readonly unlockArrangement: UnlockArrangement;
+  readonly updatedAt: Date;
+}
+
+/** 解錠の手配の条件付き更新の結果。中身の意味はステータスの条件付き更新と同じ */
+export type ApplyUnlockArrangementUpdateOutcome = ApplyStatusTransitionOutcome;
+
 /**
  * 承認済みの予約の条件付き作成の結果。
  *
@@ -459,6 +481,21 @@ export interface ReservationRepository {
     auditLog: AuditLogDraft,
     calendarSync: CalendarSyncTaskDraft | null,
   ): ResultAsync<ApplyContentEditOutcome, ReservationError>;
+  /**
+   * 承認済みの予約の解錠の手配と更新日時を条件付きで更新し、操作履歴と（添えるなら）メッセージおよび通知メールを同じトランザクション（db.batch）で書き込む（UC-038）。
+   *
+   * @param args 更新の条件と値
+   * @param message 同時に書き込むメッセージ（添えないなら null）
+   * @param mails 同時に outbox に積むメール（EVT-008。メッセージを添えないなら空配列）
+   * @param auditLog 同じ batch で書き込む操作履歴の草稿
+   * @returns 更新結果と積まれたメール ID の配列。条件に合わず 0 件だったら applied: false（競合）。
+   */
+  applyUnlockArrangementUpdate(
+    args: ApplyUnlockArrangementUpdateArgs,
+    message: ReservationMessage | null,
+    mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
+  ): ResultAsync<ApplyUnlockArrangementUpdateOutcome, ReservationError>;
 }
 
 /**
@@ -530,6 +567,11 @@ export const UPCOMING_RESERVATIONS_LIMIT = 5;
  * 超えた分は事務局の予約一覧（SCR-003）で見る。
  */
 export const STAFF_PENDING_RESERVATIONS_LIMIT = 5;
+
+/**
+ * 事務局のダッシュボード「解錠の手配が要る予約」に表示する予約の最大件数（SCR-022 (4)）。
+ */
+export const STAFF_UNLOCK_REQUIRED_RESERVATIONS_LIMIT = 5;
 
 export { APPLICATION_LEAD_DAYS, isShortNotice } from "./lead-time";
 

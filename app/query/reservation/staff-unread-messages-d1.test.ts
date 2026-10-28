@@ -213,6 +213,36 @@ describe("findStaffUnreadMessages", () => {
     expect(result.value.items).toHaveLength(0);
   });
 
+  it("事務局の誰かが手配の状況を更新（ReservationUnlockArrangementUpdate・actedAsStaff: true）すると、それより前の団体側メッセージが事務局全員の未読から消える（COND-026 (3)）", async () => {
+    await insertReservation("res_1", USER_MEMBER.id, ReservationStatus.Approved);
+    await insertMessage(
+      "msg_1",
+      "res_1",
+      USER_MEMBER.id,
+      false,
+      "解錠の手配をお願いします",
+      new Date("2026-10-20T10:00:00+09:00"),
+    );
+    await insertAuditLog(
+      "log_unlock",
+      "res_1",
+      USER_STAFF_2.id,
+      true,
+      AuditLogAction.ReservationUnlockArrangementUpdate,
+      new Date("2026-10-20T11:00:00+09:00"),
+    );
+
+    const result1 = await findUnreadFor(USER_STAFF_1.id);
+    expect(result1.isOk()).toBe(true);
+    if (!result1.isOk()) return;
+    expect(result1.value.items).toHaveLength(0);
+
+    const result2 = await findUnreadFor(USER_STAFF_2.id);
+    expect(result2.isOk()).toBe(true);
+    if (!result2.isOk()) return;
+    expect(result2.value.items).toHaveLength(0);
+  });
+
   it("開いた本人の分だけが既読になる（他の事務局には残る）", async () => {
     await insertReservation("res_1");
     await insertMessage(

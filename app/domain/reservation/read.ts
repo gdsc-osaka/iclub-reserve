@@ -32,6 +32,7 @@ export const GroupUnreadEventType = {
   StaffCancel: "staff_cancel",
   DirectCreate: "direct_create",
   DirectChange: "direct_change",
+  UnlockArrangementUpdate: "unlock_arrangement_update",
 } as const;
 
 export type GroupUnreadEventType = (typeof GroupUnreadEventType)[keyof typeof GroupUnreadEventType];

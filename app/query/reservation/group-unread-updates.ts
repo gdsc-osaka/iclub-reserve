@@ -10,9 +10,14 @@ import {
   reservationReadTable,
   reservationTable,
 } from "~/db/schema";
-import { AuditLogAction, AuditLogTargetType } from "~/domain/audit-log";
+import { AuditLogAction, AuditLogTargetType, parseAuditLogChanges } from "~/domain/audit-log";
 import { wrapError } from "~/domain/error";
-import { GroupUnreadEventType, unreadEventsSince } from "~/domain/reservation";
+import {
+  GroupUnreadEventType,
+  unreadEventsSince,
+  type UnlockArrangement,
+} from "~/domain/reservation";
+import { parseUnlockArrangement } from "~/domain/reservation/unlock-arrangement";
 import type { Database } from "~/infra/db";
 import { userQualifiesForReservationGroupAudience } from "~/infra/reservation/reservation-audience-condition";
 import { toUnreadRows } from "~/infra/reservation/unread-rows";
@@ -30,6 +35,7 @@ export interface GroupUnreadLatestEvent {
   readonly eventAt: Date;
   readonly messageBody?: string | null;
   readonly statusReason?: string | null;
+  readonly unlockArrangement?: UnlockArrangement | null;
 }
 
 /**
@@ -76,6 +82,8 @@ const auditActionToUnreadEventType = (action: AuditLogAction): GroupUnreadEventT
       return GroupUnreadEventType.DirectCreate;
     case AuditLogAction.ReservationDirectChange:
       return GroupUnreadEventType.DirectChange;
+    case AuditLogAction.ReservationUnlockArrangementUpdate:
+      return GroupUnreadEventType.UnlockArrangementUpdate;
     default:
       return GroupUnreadEventType.Message;
   }
@@ -87,6 +95,7 @@ interface RawEvent extends ReservationWithNames {
   type: GroupUnreadEventType;
   eventAt: Date;
   messageBody?: string | null;
+  unlockArrangement?: UnlockArrangement | null;
 }
 
 /**
@@ -162,6 +171,7 @@ export const findGroupUnreadUpdates = (
       .select({
         ...reservationColumns,
         action: auditLogTable.action,
+        changes: auditLogTable.changes,
         eventAt: auditLogTable.occurredAt,
       })
       .from(auditLogTable)
@@ -181,6 +191,7 @@ export const findGroupUnreadUpdates = (
             AuditLogAction.ReservationStaffCancel,
             AuditLogAction.ReservationDirectCreate,
             AuditLogAction.ReservationDirectChange,
+            AuditLogAction.ReservationUnlockArrangementUpdate,
           ]),
           isUnreadEvent(auditLogTable.occurredAt),
         ),
@@ -215,19 +226,29 @@ export const findGroupUnreadUpdates = (
         eventAt: row.eventAt,
         messageBody: row.messageBody,
       })),
-      ...auditLogRows.map((row): RawEvent => ({
-        reservationId: row.reservationId,
-        groupId: row.groupId,
-        groupName: row.groupName,
-        facilityId: row.facilityId,
-        facilityName: row.facilityName,
-        startAt: row.startAt,
-        endAt: row.endAt,
-        statusReason: row.statusReason,
-        type: auditActionToUnreadEventType(row.action),
-        eventAt: row.eventAt,
-        messageBody: null,
-      })),
+      ...auditLogRows.map((row): RawEvent => {
+        const type = auditActionToUnreadEventType(row.action);
+        return {
+          reservationId: row.reservationId,
+          groupId: row.groupId,
+          groupName: row.groupName,
+          facilityId: row.facilityId,
+          facilityName: row.facilityName,
+          startAt: row.startAt,
+          endAt: row.endAt,
+          statusReason: row.statusReason,
+          type,
+          eventAt: row.eventAt,
+          messageBody: null,
+          ...(type === GroupUnreadEventType.UnlockArrangementUpdate
+            ? {
+                unlockArrangement: parseUnlockArrangement(
+                  parseAuditLogChanges(row.changes).unlock_arrangement?.after,
+                ),
+              }
+            : {}),
+        };
+      }),
     ];
 
     return ok(
@@ -244,6 +265,9 @@ export const findGroupUnreadUpdates = (
           eventAt: latest.eventAt,
           messageBody: latest.messageBody,
           statusReason: latest.statusReason,
+          ...(latest.unlockArrangement !== undefined
+            ? { unlockArrangement: latest.unlockArrangement }
+            : {}),
         },
         otherCount,
       })),

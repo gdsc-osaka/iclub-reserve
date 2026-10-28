@@ -14,6 +14,8 @@ import {
   type ApplyContentEditOutcome,
   type ApplyStatusTransitionArgs,
   type ApplyStatusTransitionOutcome,
+  type ApplyUnlockArrangementUpdateArgs,
+  type ApplyUnlockArrangementUpdateOutcome,
   type CreateApprovedReservationOutcome,
   type CreateReservationOutcome,
   type Reservation,
@@ -407,6 +409,42 @@ export const createReservationRepository = (db: Database): ReservationRepository
     );
   };
 
+  const applyUnlockArrangementUpdate = (
+    args: ApplyUnlockArrangementUpdateArgs,
+    message: ReservationMessage | null,
+    mails: readonly MailDraft[],
+    auditLog: AuditLogDraft,
+  ): ResultAsync<ApplyUnlockArrangementUpdateOutcome, ReservationError> => {
+    const condition = allOf(
+      eq(reservationTable.id, args.id),
+      eq(reservationTable.status, args.expectedStatus),
+      eq(reservationTable.updatedAt, args.expectedUpdatedAt),
+    );
+
+    const updateQuery = db
+      .update(reservationTable)
+      .set({
+        unlockArrangement: args.unlockArrangement,
+        // この更新より前に開いた画面からのほかの操作を、楽観的ロック（expectedUpdatedAt）で弾くため updated_at も進める
+        updatedAt: args.updatedAt,
+      })
+      .where(condition)
+      // 更新できたかを知るために、更新した行の id を返させる（0 件なら競合）
+      .returning({ id: reservationTable.id });
+
+    return runGuardedUpdate(
+      updateQuery,
+      condition,
+      { id: args.id, status: args.expectedStatus, updatedAt: args.updatedAt },
+      mails,
+      auditLog,
+      // 解錠の手配はカレンダーの予定に載せないので、同期は要らない
+      null,
+      message,
+      "予約の解錠の手配",
+    );
+  };
+
   return {
     findById,
     create,
@@ -414,5 +452,6 @@ export const createReservationRepository = (db: Database): ReservationRepository
     existsApprovedOverlap,
     applyStatusTransition,
     applyContentEdit,
+    applyUnlockArrangementUpdate,
   };
 };

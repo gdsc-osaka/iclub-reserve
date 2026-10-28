@@ -6,6 +6,7 @@ import {
   Check,
   CircleCheck,
   CircleX,
+  KeyRound,
   Mail,
   MessageSquareText,
   type LucideIcon,
@@ -26,6 +27,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { membershipRoleLabel } from "~/domain/membership";
 import { GroupUnreadEventType } from "~/domain/reservation";
+import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
 import { AppArea } from "~/lib/app-area";
 import { formatMonthDay, formatRelativeTime, formatTimeRange } from "~/lib/date";
 import { toFormPathForFacility, toReservationDetailPath } from "~/lib/reservation-paths";
@@ -67,6 +69,11 @@ const eventView: Record<
   [GroupUnreadEventType.DirectChange]: {
     title: "事務局が予約を変更しました",
     icon: CalendarClock,
+    tone: "primary",
+  },
+  [GroupUnreadEventType.UnlockArrangementUpdate]: {
+    title: "解錠の手配が更新されました",
+    icon: KeyRound,
     tone: "primary",
   },
 };
@@ -156,7 +163,12 @@ function UnreadReservationRow({ item, now }: Readonly<{ item: GroupUnreadUpdateI
           latestEvent.type === GroupUnreadEventType.StaffCancel
         ? (latestEvent.statusReason ?? null)
         : null;
-  const title = item.otherCount > 0 ? `${view.title}（ほか ${item.otherCount} 件）` : view.title;
+  const baseTitle =
+    latestEvent.type === GroupUnreadEventType.UnlockArrangementUpdate &&
+    latestEvent.unlockArrangement
+      ? `解錠の手配が「${unlockArrangementLabel[latestEvent.unlockArrangement]}」に更新されました`
+      : view.title;
+  const title = item.otherCount > 0 ? `${baseTitle}（ほか ${item.otherCount} 件）` : baseTitle;
   const where = `${item.groupName}・${item.facilityName}・${formatMonthDay(item.startAt)} ${formatTimeRange(item.startAt, item.endAt)}`;
 
   return (

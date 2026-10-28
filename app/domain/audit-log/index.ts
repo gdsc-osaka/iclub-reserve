@@ -52,6 +52,7 @@ export const AuditLogAction = {
   ReservationStaffCancel: "reservation.staff_cancel",
   ReservationDirectCreate: "reservation.direct_create",
   ReservationDirectChange: "reservation.direct_change",
+  ReservationUnlockArrangementUpdate: "reservation.unlock_arrangement_update",
 
   // 団体（BIZ-003）
   GroupCreate: "group.create",
@@ -98,6 +99,7 @@ export const auditLogActionLabel: Record<AuditLogAction, string> = {
   [AuditLogAction.ReservationStaffCancel]: "事務局キャンセル",
   [AuditLogAction.ReservationDirectCreate]: "直接作成",
   [AuditLogAction.ReservationDirectChange]: "直接変更",
+  [AuditLogAction.ReservationUnlockArrangementUpdate]: "解錠の手配の更新",
 
   [AuditLogAction.GroupCreate]: "作成",
   [AuditLogAction.GroupUpdate]: "団体情報の編集",
@@ -141,6 +143,7 @@ export const auditLogActionTargetType: Record<AuditLogAction, AuditLogTargetType
   [AuditLogAction.ReservationStaffCancel]: AuditLogTargetType.Reservation,
   [AuditLogAction.ReservationDirectCreate]: AuditLogTargetType.Reservation,
   [AuditLogAction.ReservationDirectChange]: AuditLogTargetType.Reservation,
+  [AuditLogAction.ReservationUnlockArrangementUpdate]: AuditLogTargetType.Reservation,
 
   [AuditLogAction.GroupCreate]: AuditLogTargetType.Group,
   [AuditLogAction.GroupUpdate]: AuditLogTargetType.Group,

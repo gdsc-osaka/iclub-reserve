@@ -5,8 +5,13 @@ import {
   SEND_MESSAGE_INTENT,
   type SendMessageActionData,
 } from "~/components/reservation/message/reservation-message-form";
+import {
+  UPDATE_UNLOCK_ARRANGEMENT_INTENT,
+  type UpdateUnlockArrangementActionData,
+} from "~/components/reservation/unlock-arrangement-update-dialog";
 import { ReservationField } from "~/domain/reservation";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
+import { parseUnlockArrangement } from "~/domain/reservation/unlock-arrangement";
 import { createReservationAuditLogListQuery } from "~/infra/audit-log/reservation-audit-log-list-query";
 import { createDb } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
@@ -35,6 +40,7 @@ import {
 import { getReservationUseCase } from "~/usecases/reservation/get-reservation";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
 import { sendReservationMessageUseCase } from "~/usecases/reservation/send-reservation-message";
+import { updateUnlockArrangementUseCase } from "~/usecases/reservation/update-unlock-arrangement";
 
 export interface LoadReservationDetailArgs {
   readonly request: Request;
@@ -205,9 +211,101 @@ async function handleSendMessageAction(
 }
 
 /**
+ * 承認済みの予約の解錠の手配を変更する（UC-038）。
+ *
+ * ダイアログは useFetcher で送るので、成功しても redirect せずに結果を返す。
+ * 事務局の画面（actsAsStaff）でだけ受け付ける（ADR-016 決定 14）。可否そのものはユースケースが決める。
+ */
+async function handleUpdateUnlockArrangementAction(
+  request: Request,
+  reservationId: string,
+  user: SessionUser,
+  formData: FormData,
+  actsAsStaff: boolean,
+  where: string,
+): Promise<UpdateUnlockArrangementActionData> {
+  if (!actsAsStaff) {
+    return {
+      intent: UPDATE_UNLOCK_ARRANGEMENT_INTENT,
+      updated: false,
+      unlockArrangement: null,
+      message: null,
+      formError: "この操作は受け付けられませんでした。画面を読み込み直してください。",
+    };
+  }
+
+  const unlockArrangement = parseUnlockArrangement(formData.get("unlockArrangement"));
+  const rawMessage = formData.get("message");
+  const message = typeof rawMessage === "string" ? rawMessage : "";
+  const db = createDb(env.DB);
+  const now = new Date();
+
+  const result = await updateUnlockArrangementUseCase(
+    {
+      reservationRepository: createReservationRepository(db),
+      membershipRepository: createMembershipRepository(db),
+      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+      mailOutboxNotifier: createQueueMailOutboxNotifier(),
+    },
+    {
+      reservationId,
+      actorUserId: user.id,
+      actorName: user.name,
+      isStaff: actsAsStaff,
+      unlockArrangement,
+      message,
+      now,
+      appBaseUrl: resolveAppBaseUrl(request),
+    },
+  );
+
+  if (result.isErr()) {
+    return {
+      intent: UPDATE_UNLOCK_ARRANGEMENT_INTENT,
+      updated: false,
+      ...reservationActionErrors({ where, userId: user.id }, result.error, {
+        [ReservationField.UnlockArrangement]: "unlockArrangement",
+        [ReservationField.MessageBody]: "message",
+      }),
+    };
+  }
+
+  /*
+   * メッセージを添えたときだけ、送った人のその予約を既読にする（COND-026 (5)）。
+   * 失敗しても解錠の手配とメッセージは書けているので、ログにだけ残して成功を返す。
+   */
+  if (result.value.messageSent) {
+    const markReadResult = await markReservationReadUseCase(
+      {
+        reservationReadRepository: createReservationReadRepository(db),
+        reservationRepository: createReservationRepository(db),
+        membershipRepository: createMembershipRepository(db),
+      },
+      {
+        reservationId,
+        actorUserId: user.id,
+        isStaff: actsAsStaff,
+        now,
+      },
+    );
+    if (markReadResult.isErr()) {
+      logReservationError({ where: `${where}.mark-read`, userId: user.id }, markReadResult.error);
+    }
+  }
+
+  return {
+    intent: UPDATE_UNLOCK_ARRANGEMENT_INTENT,
+    updated: true,
+    unlockArrangement: null,
+    message: null,
+    formError: null,
+  };
+}
+
+/**
  * 予約詳細画面からのアクション。ローダーと同じく、2 つのルートが画面を渡して呼ぶ。
  *
- * 状態変更（取り消し・キャンセル・承認・却下・事務局キャンセル）と、メッセージの送信を受ける。
+ * 状態変更（取り消し・キャンセル・承認・却下・事務局キャンセル）、解錠の手配の変更、メッセージの送信を受ける。
  */
 export async function handleReservationDetailAction(
   args: HandleReservationDetailActionArgs,
@@ -231,6 +329,17 @@ export async function handleReservationDetailAction(
       formData,
       actsAsStaff,
       `${where}.send-message`,
+    );
+  }
+
+  if (intent === UPDATE_UNLOCK_ARRANGEMENT_INTENT) {
+    return handleUpdateUnlockArrangementAction(
+      args.request,
+      reservationId,
+      user,
+      formData,
+      actsAsStaff,
+      `${where}.update-unlock-arrangement`,
     );
   }
 

@@ -203,6 +203,16 @@ describe("GroupRecentActivitiesQuery (D1 テスト)", () => {
         targetId: "res_1",
         groupId: "grp_1",
       }),
+      seedAuditLog({
+        id: "log_staff_unlock_update",
+        occurredAt: new Date(occurredAt.getTime() + 2),
+        actorId: "usr_staff",
+        actedAsStaff: true,
+        action: AuditLogAction.ReservationUnlockArrangementUpdate,
+        targetType: AuditLogTargetType.Reservation,
+        targetId: "res_1",
+        groupId: "grp_1",
+      }),
     );
 
     // 他メンバーの操作
