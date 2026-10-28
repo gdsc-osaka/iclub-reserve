@@ -10,6 +10,8 @@ import { addDays, toTokyoDateKey } from "~/lib/date";
 import type { QueryError } from "~/query/error";
 import type {
   AvailabilityCalendar,
+  AvailabilityPeriod,
+  AvailabilityPeriods,
   AvailabilityReservation,
   AvailabilityReservationRow,
   FacilityAvailabilityCalendarQuery,
@@ -37,10 +39,11 @@ export interface GetAvailabilityCalendarArgs {
   readonly isStaff: boolean;
   /** 表示する施設・設備の ID。null なら一覧の先頭 */
   readonly facilityId: string | null;
-  /** 表示する期間の開始（この時刻を含む） */
-  readonly from: Date;
-  /** 表示する期間の終了（この時刻を含まない） */
-  readonly to: Date;
+  /**
+   * 読む期間。カレンダーに並べる期間と、その外で欄に開いている仮の枠の日（ADR-014 決定 19）。
+   * どれか 1 つと重なる予約と、どれか 1 つに入る祝日を返す。
+   */
+  readonly periods: AvailabilityPeriods;
   /** 「開始日時を過ぎたか」の基準になる現在時刻 */
   readonly now: Date;
 }
@@ -100,6 +103,18 @@ const toVisibleReservation = (
 };
 
 /**
+ * 期間内の祝日を読む。
+ *
+ * period.to は終了時刻（排他、翌週日曜 0 時など）で、祝日の読み取りは両端の日を含むので、
+ * 期間内の末日（直前の日）を終端とする。
+ */
+const findHolidaysIn = (holidayQuery: HolidayQuery, period: AvailabilityPeriod) =>
+  holidayQuery.findHolidaysBetween(
+    toTokyoDateKey(period.from),
+    toTokyoDateKey(addDays(period.to, -1)),
+  );
+
+/**
  * いま予約を申請できるかどうかを判定する（COND-006 / COND-009）。
  *
  * 承認待ち・無効の団体からは申請できないので、
@@ -121,7 +136,7 @@ const canApplyReservation = (groups: UserGroupList, isStaff: boolean): boolean =
  * 「事務局かどうか」を Query に渡さずにここで絞り方へ翻訳しているのは、
  * この分岐が要件（COND-009）であって、読み取りの都合ではないため。
  *
- * 4 つの読み取りは同時に投げる。順に待つと D1 との往復がそのまま待ち時間になる。
+ * 読み取りは同時に投げる。順に待つと D1 との往復がそのまま待ち時間になる。
  *
  * NOTE: 施設を指定しない（facilityId が null）呼び出しを許しているのは、
  * 画面を開いた直後にどの施設を出すかが、施設の一覧を見るまで決まらないため。
@@ -129,23 +144,18 @@ const canApplyReservation = (groups: UserGroupList, isStaff: boolean): boolean =
 export const getAvailabilityCalendarUseCase = (
   deps: GetAvailabilityCalendarDeps,
   args: GetAvailabilityCalendarArgs,
-): ResultAsync<AvailabilityCalendar, QueryError> => {
-  const fromDateKey = toTokyoDateKey(args.from);
-  // args.to は終了時刻（排他、翌週日曜 0 時など）のため、期間内の末日（直前の日）を終端とする
-  const toDateKey = toTokyoDateKey(addDays(args.to, -1));
-
-  return ResultAsync.combine([
+): ResultAsync<AvailabilityCalendar, QueryError> =>
+  ResultAsync.combine([
     deps.userGroupListQuery.findByUserId(args.actorUserId),
-    deps.facilityAvailabilityCalendarQuery.findByFacilityAndPeriod({
+    deps.facilityAvailabilityCalendarQuery.findByFacilityAndPeriods({
       facilityId: args.facilityId,
-      from: args.from,
-      to: args.to,
+      periods: args.periods,
     }),
-    deps.holidayQuery.findHolidaysBetween(fromDateKey, toDateKey),
+    ResultAsync.combine(args.periods.map((period) => findHolidaysIn(deps.holidayQuery, period))),
     deps.applicantGroupQuery.find({
       memberUserId: args.isStaff ? null : args.actorUserId,
     }),
-  ]).map(([groups, calendar, holidayDateKeys, applicantGroups]): AvailabilityCalendar => {
+  ]).map(([groups, calendar, holidaysByPeriod, applicantGroups]): AvailabilityCalendar => {
     const viewer: CalendarViewer = {
       userId: args.actorUserId,
       isStaff: args.isStaff,
@@ -163,7 +173,7 @@ export const getAvailabilityCalendarUseCase = (
         { isStaff: args.isStaff, membership: null },
         ReservationAction.CreateDirect,
       ),
-      holidayDateKeys,
+      // 期間が重なっていると同じ祝日が 2 回入るので、1 つにまとめる
+      holidayDateKeys: [...new Set(holidaysByPeriod.flat())],
     };
   });
-};

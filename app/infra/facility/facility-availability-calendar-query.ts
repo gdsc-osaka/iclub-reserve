@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, lt } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 
 import { facilityTable, groupTable, reservationTable } from "~/db/schema";
@@ -8,6 +8,7 @@ import { hasOverlappingReservation } from "~/infra/reservation/reservation-overl
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
   AvailabilityFacility,
+  AvailabilityPeriods,
   FacilityAvailabilityCalendar,
   FacilityAvailabilityCalendarQuery,
 } from "~/query/facility/facility-availability-calendar";
@@ -37,16 +38,18 @@ const selectFacilities = (db: Database) =>
     .orderBy(asc(facilityTable.name), asc(facilityTable.id));
 
 /**
- * 指定した施設の、期間と重なる予約を取る。
+ * 指定した施設の、期間（どれか 1 つ）と重なる予約を取る。
  *
  * 重なりの条件が `開始 < 期間の終わり` かつ `終わり > 期間の始まり` なのは、
  * 期間をまたぐ予約も拾うため。「開始日時が期間の中にあるもの」だけを条件にすると、
  * 前の週から続いている予約が消えて、空いているように見えてしまう。
  *
+ * 期間ごとの条件は OR でつなぎ、1 回の問い合わせで取る。2 つの期間と重なる予約も 1 行だけ返る。
+ *
  * 団体名は結合で一緒に取る。予約の件数だけ団体を引き直すと、
  * その回数だけ D1 との往復が増える（N+1 問題）。
  */
-const selectReservations = (db: Database, facilityId: string, from: Date, to: Date) =>
+const selectReservations = (db: Database, facilityId: string, periods: AvailabilityPeriods) =>
   db
     .select({
       id: reservationTable.id,
@@ -66,8 +69,11 @@ const selectReservations = (db: Database, facilityId: string, from: Date, to: Da
         eq(reservationTable.facilityId, facilityId),
         // 終了した予約は描かない。理由は calendarVisibleStatuses の説明を参照
         inArray(reservationTable.status, [...calendarVisibleStatuses]),
-        lt(reservationTable.startAt, to),
-        gt(reservationTable.endAt, from),
+        or(
+          ...periods.map(({ from, to }) =>
+            and(lt(reservationTable.startAt, to), gt(reservationTable.endAt, from)),
+          ),
+        ),
       ),
     )
     .orderBy(asc(reservationTable.startAt), asc(reservationTable.id));
@@ -116,7 +122,7 @@ const pickFacility = (
 export const createFacilityAvailabilityCalendarQuery = (
   db: Database,
 ): FacilityAvailabilityCalendarQuery => ({
-  findByFacilityAndPeriod: (args) =>
+  findByFacilityAndPeriods: (args) =>
     ResultAsync.fromPromise(
       selectFacilities(db),
       wrapError(QueryErrorCode.DatabaseError, "施設・設備の一覧の取得に失敗しました。"),
@@ -126,7 +132,7 @@ export const createFacilityAvailabilityCalendarQuery = (
       )
       .andThen(({ facilities, facility }) =>
         ResultAsync.fromPromise(
-          selectReservations(db, facility.id, args.from, args.to),
+          selectReservations(db, facility.id, args.periods),
           wrapError(QueryErrorCode.DatabaseError, "予約の取得に失敗しました。"),
         ).map((rows): FacilityAvailabilityCalendar => ({
           facilities,

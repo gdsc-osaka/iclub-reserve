@@ -1,5 +1,8 @@
 import { DAYS_IN_WEEK, type AvailabilityDay } from "~/components/reservation/availability-week";
-import { addDays, startOfTokyoWeek, toTokyoDateKey } from "~/lib/date";
+import { addDays, parseTokyoDateKey, startOfTokyoWeek, toTokyoDateKey } from "~/lib/date";
+import type { AvailabilityPeriods } from "~/query/facility/facility-availability-calendar";
+
+import type { ParsedCalendarSelection } from "./paths";
 
 /**
  * 空き状況カレンダーで 1 度に読み込んで保持する日数（4 週間）。
@@ -16,6 +19,39 @@ export const CALENDAR_WINDOW_DAYS = 28;
  */
 export const toCalendarWindowStart = (anchor: Date): Date =>
   addDays(startOfTokyoWeek(anchor), -DAYS_IN_WEEK);
+
+/** その日（日本時間の 0 時）が、`windowStart` から読む 4 週間の中にあるか */
+export const isInCalendarWindow = (windowStart: Date, day: Date): boolean =>
+  day.getTime() >= windowStart.getTime() &&
+  day.getTime() < addDays(windowStart, CALENDAR_WINDOW_DAYS).getTime();
+
+/**
+ * 欄で開いている仮の枠（申請・変更後）の日が、読み込む 4 週間の外にあれば、その日の 0 時を返す（ADR-014 決定 19）。
+ *
+ * 4 週間の中にある・仮の枠が無い・予約を開いているときは null。
+ * 変更で仮の枠が URL に無いとき（予約の今の日時を使う）も null にする。その日は変更する予約を読むまで分からない。
+ */
+export const toDraftDayOutsideWindow = (
+  windowStart: Date,
+  selection: ParsedCalendarSelection | null,
+): Date | null => {
+  const draft = selection?.kind === "draft" || selection?.kind === "edit" ? selection.draft : null;
+  const day = draft === null ? null : parseTokyoDateKey(draft.dateKey);
+  return day === null || isInCalendarWindow(windowStart, day) ? null : day;
+};
+
+/**
+ * 予約を読む期間。4 週間と、その外にある仮の枠の日（ADR-014 決定 19）。
+ */
+export const toCalendarPeriods = (
+  windowStart: Date,
+  draftDayOutsideWindow: Date | null,
+): AvailabilityPeriods => {
+  const calendarWindow = { from: windowStart, to: addDays(windowStart, CALENDAR_WINDOW_DAYS) };
+  return draftDayOutsideWindow === null
+    ? [calendarWindow]
+    : [calendarWindow, { from: draftDayOutsideWindow, to: addDays(draftDayOutsideWindow, 1) }];
+};
 
 /**
  * 日付キー（YYYY-MM-DD）に合致する日のインデックスを返す。

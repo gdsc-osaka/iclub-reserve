@@ -9,7 +9,7 @@ import { createD1HolidayQuery } from "~/infra/holiday/d1-holiday-query";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import type { AppArea } from "~/lib/app-area";
-import { addDays, parseTokyoDateKey, toTokyoDateKey } from "~/lib/date";
+import { parseTokyoDateKey, toTokyoDateKey } from "~/lib/date";
 import { createApplicantGroupQuery } from "~/query/reservation/applicant-groups";
 import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import { requireAreaUser, toAreaWhere } from "~/routes/_shared/app-area.server";
@@ -28,7 +28,11 @@ import {
   type CreateReservationActionError,
 } from "./availability-draft-form";
 import { EDIT_RESERVATION_INTENT, type EditReservationActionError } from "./availability-edit-form";
-import { CALENDAR_WINDOW_DAYS, toCalendarWindowStart } from "./calendar-window";
+import {
+  toCalendarPeriods,
+  toCalendarWindowStart,
+  toDraftDayOutsideWindow,
+} from "./calendar-window";
 import { createReservationAction } from "./create-reservation.server";
 import { editReservationAction } from "./edit-reservation.server";
 import { parseCalendarSelection } from "./paths";
@@ -47,6 +51,8 @@ export interface LoadAvailabilityArgs {
  * クエリは利用者が自由に書き換えられるので、値はすべて確かめてから使う。
  *
  * 読むのは、基準の日の週の前の週から 4 週間（ADR-014 決定 4）。
+ * 欄で開いている仮の枠の日がその外にあれば、その日も読む（ADR-014 決定 19）。
+ * カレンダーを遠くの日へ送っても、欄の日時の判定（重なり・押せない時刻）に使う予約が手元に残る。
  *
  * URL の選択が変更（edit）のときは、変更する予約も同時に読む（ADR-014 決定 16）。
  *
@@ -73,6 +79,7 @@ export async function loadAvailability(args: LoadAvailabilityArgs, area: AppArea
   const db = createDb(env.DB);
 
   const parsedSelection = parseCalendarSelection(url.searchParams);
+  const draftDayOutsideWindow = toDraftDayOutsideWindow(windowStart, parsedSelection);
 
   // 空き状況の読み取りと、変更する予約の読み取りを同時に呼ぶ（順に待つと D1 との往復がそのまま待ち時間になるため）
   const calendarPromise = getAvailabilityCalendarUseCase(
@@ -86,9 +93,7 @@ export async function loadAvailability(args: LoadAvailabilityArgs, area: AppArea
       actorUserId: user.id,
       isStaff: actsAsStaff,
       facilityId: url.searchParams.get("facility"),
-      from: windowStart,
-      // 期間の終わり（to はその時刻を含まない）
-      to: addDays(windowStart, CALENDAR_WINDOW_DAYS),
+      periods: toCalendarPeriods(windowStart, draftDayOutsideWindow),
       now,
     },
   );
@@ -129,6 +134,7 @@ export async function loadAvailability(args: LoadAvailabilityArgs, area: AppArea
   return {
     calendar: calendarResult.value,
     windowStart,
+    draftDayOutsideWindow,
     anchorKey: toTokyoDateKey(anchorDate),
     now,
     edit,

@@ -1,6 +1,6 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
-import { formatMonthDay } from "~/lib/date";
+import { addDays, formatMonthDay } from "~/lib/date";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -201,6 +201,54 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
       ),
     ).toBeVisible();
     await expect(staffPanel.getByLabel("要手配")).toBeVisible();
+  });
+
+  test("カレンダーを遠くの日へ移しても、仮の枠と欄の入力は残る", async ({
+    page,
+    db,
+    signInAs,
+    isMobile,
+  }) => {
+    const member = await createUser(db);
+    await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
+    const facility = await createFacility(db);
+    await signInAs(member.id);
+
+    // 6 週間後の水曜を開き、「10:00 から申請」を押して使用人数を入れる
+    const farWednesday = addDays(nextWeekAt(Weekday.Wednesday, 0), 35);
+    const farDateKey = toDateKey(farWednesday);
+    await openPage(page, `/availability?facility=${facility.id}&date=${farDateKey}`);
+
+    const column = page.getByRole("group", { name: formatMonthDay(farWednesday) });
+    await column
+      .getByRole("button", { name: `${formatMonthDay(farWednesday)} 10:00 から申請` })
+      .click();
+
+    const panel = page.getByRole("region", { name: "新しい予約" });
+    await expect(panel).toBeVisible();
+    await panel.getByLabel("使用人数").fill("4");
+
+    // スマホでは文字の欄に入ると欄が広がってカレンダーが隠れるので、縮めてから移る（ADR-014 決定 13）
+    if (isMobile) await panel.getByRole("button", { name: "縮める" }).click();
+
+    // 「今日」で、仮の枠の日を読み込んだ 4 週間の外へ移る。カレンダーから仮の枠の日は消えるが、欄は残る（ADR-014 決定 19）
+    await page.getByRole("button", { name: "今日" }).click();
+    await expect(page).toHaveURL(new RegExp(`date=${toDateKey(new Date())}`));
+    await expect(column).toHaveCount(0);
+
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
+    await expect(panel.getByRole("combobox", { name: "終了時刻" })).toHaveText("11:00");
+    await expect(panel.getByLabel("使用人数")).toHaveValue("4");
+
+    // そのまま申請すると、作った予約の日のカレンダーへ戻り、欄に予約が開く
+    await panel.getByRole("button", { name: "内容を確認する" }).click();
+    const confirm = page.getByRole("alertdialog", { name: "この内容で申請しますか？" });
+    await confirm.getByRole("button", { name: "この内容で申請する" }).click();
+
+    await expect(page.getByText("仮予約を申請しました")).toBeVisible();
+    await expect(page.getByRole("region", { name: "予約の内容" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`date=${farDateKey}&reservation=`));
   });
 
   test("丸で伸び縮みでき、PC ではなぞって選べる", async ({ page, db, signInAs, isMobile }) => {

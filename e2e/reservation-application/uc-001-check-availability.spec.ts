@@ -129,11 +129,11 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     await expect(panel.getByText("7 名")).toBeHidden();
     await expect(panel.getByText("他団体の備考")).toBeHidden();
 
-    // 別の施設に切り替えると、帯は並ばない
-    const facilityTabs = page.getByRole("navigation", { name: "施設・設備の切り替え" });
-    const anotherTab = facilityTabs.getByRole("link", { name: anotherFacility.name });
-    await anotherTab.click();
-    await expect(anotherTab).toHaveAttribute("aria-current", "page");
+    // カレンダーの見出しの施設名から別の施設に切り替えると、見出しの施設名が替わり、帯は並ばない
+    const facilityMenu = page.getByRole("button", { name: /施設・設備を選んで切り替え/ });
+    await facilityMenu.click();
+    await page.getByRole("menuitem", { name: anotherFacility.name }).click();
+    await expect(facilityMenu).toContainText(anotherFacility.name);
     await expect(page.getByRole("button", { name: new RegExp(ownGroup.name) })).toBeHidden();
     await expect(page.getByRole("button", { name: new RegExp(otherGroup.name) })).toBeHidden();
   });

@@ -33,7 +33,7 @@ export function DraftScheduleFields({
   return (
     <>
       {/*
-       * 日付を変えたら、時間帯はそのままで仮の枠の日を移す。4 週間の外の日なら、
+       * 日付を変えたら、時間帯はそのままで仮の枠の日を移す。予約を読み込んでいない日なら、
        * その日を基準の日にして読み直す（ADR-014 決定 11。`openDraft` が決める）
        */}
       <DateNavigation

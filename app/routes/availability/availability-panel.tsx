@@ -45,6 +45,7 @@ export function AvailabilityPanel({
   calendar: AvailabilityCalendar;
   /** 基準の日（URL の `date`）。申請・変更の送り先に使う */
   anchorKey: string;
+  /** 予約を読み込んだ日（カレンダーの 4 週間と、その外で読んだ仮の枠の日）。仮の枠の日を探すのに使う */
   days: readonly AvailabilityDay[];
   now: Date;
   /** 開いている画面。欄の中の URL に使う（ADR-016 決定 15） */

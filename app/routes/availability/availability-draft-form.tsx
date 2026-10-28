@@ -93,6 +93,7 @@ export function AvailabilityDraftForm({
   facility: AvailabilityFacility;
   /** 基準の日（URL の `date`）。作れたあとに戻すカレンダーの基準の日になる */
   anchorKey: string;
+  /** 予約を読み込んだ日（カレンダーの 4 週間と、その外で読んだ仮の枠の日）。仮の枠の日を探すのに使う */
   days: readonly AvailabilityDay[];
   reservations: readonly AvailabilityReservation[];
   now: Date;
@@ -139,7 +140,7 @@ export function AvailabilityDraftForm({
   );
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
-  // 開いている仮の枠の日は、読み込んだ 4 週間の中にあることを確かめてある（toOpenSelection）
+  // 開いている仮の枠の日は、予約を読み込んだ日の中にあることを確かめてある（toOpenSelection）
   const day = days.find((item) => item.dateKey === draft.dateKey);
   if (day === undefined) return null;
 

@@ -27,7 +27,6 @@ import { AvailabilityPanel } from "./availability-panel";
 import type { loadAvailability } from "./availability.server";
 import { CalendarCard } from "./calendar-card";
 import { CALENDAR_WINDOW_DAYS } from "./calendar-window";
-import { FacilityTabs } from "./facility-tabs";
 import {
   differsOnlyInSelection,
   isEditReservationChanged,
@@ -89,12 +88,27 @@ export function AvailabilityPage({
     | { readonly formError?: string | null }
     | undefined;
 }>) {
-  const { calendar, windowStart, anchorKey, now, edit, area } = loaderData;
+  const { calendar, windowStart, draftDayOutsideWindow, anchorKey, now, edit, area } = loaderData;
   const { facility, facilities, reservations, canApplyReservation } = calendar;
 
+  /** カレンダーに並べる 4 週間 */
   const days = useMemo(
     () => buildDays(windowStart, CALENDAR_WINDOW_DAYS, now, calendar.holidayDateKeys),
     [windowStart, now, calendar.holidayDateKeys],
+  );
+
+  /**
+   * 予約を読み込んだ日。カレンダーの 4 週間と、その外で読んだ仮の枠の日（ADR-014 決定 19）。
+   *
+   * 欄を開けるか・欄の日時の判定にはこちらを使う。カレンダーを遠くの日へ送っても、
+   * 仮の枠の日の予約を読んであるので、仮の枠と欄の入力を残せる。
+   */
+  const loadedDays = useMemo(
+    () =>
+      draftDayOutsideWindow === null
+        ? days
+        : [...days, ...buildDays(draftDayOutsideWindow, 1, now, calendar.holidayDateKeys)],
+    [days, draftDayOutsideWindow, now, calendar.holidayDateKeys],
   );
 
   /** スマホで欄を画面いっぱいに広げているか（ADR-014 決定 13） */
@@ -106,7 +120,7 @@ export function AvailabilityPage({
     facilityId: facility.id,
     anchorKey,
     reservations,
-    days,
+    days: loadedDays,
     canApply: canApplyReservation,
     editReservation: edit?.reservation ?? null,
   });
@@ -193,8 +207,11 @@ export function AvailabilityPage({
      *
      * そのため高さを画面ぴったりに固定し（--app-content-height）、
      * あふれる部分は中の `overflow` に任せる。
+     *
+     * 幅はほかの画面（max-w-5xl・6xl）より広く取る。欄を開くとカレンダーの幅が欄のぶん狭まるので、
+     * 広い画面では、欄を開いても 7 日を並べられる幅を残す（ADR-014 決定 18）。
      */
-    <main className="mx-auto flex h-(--app-content-height) w-full max-w-6xl flex-col gap-4 overflow-hidden p-4 md:p-6">
+    <main className="mx-auto flex h-(--app-content-height) w-full max-w-7xl flex-col gap-4 overflow-hidden p-4 md:p-6">
       {staffError && (
         <Alert variant="destructive" className="shrink-0">
           <CircleAlert aria-hidden className="size-4" />
@@ -205,18 +222,12 @@ export function AvailabilityPage({
 
       {!canApplyReservation && <CannotApplyNotice />}
 
-      <FacilityTabs
-        facilities={facilities}
-        current={facility}
-        anchorKey={anchorKey}
-        selection={selection}
-        area={area}
-      />
-
       {/* カレンダーと欄を並べる。スマホは縦（欄が下）、PC は横（欄が右）（ADR-014 決定 7） */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
         <CalendarCard
           facility={facility}
+          facilities={facilities}
+          area={area}
           reservations={reservations}
           days={days}
           anchorKey={anchorKey}
@@ -233,7 +244,7 @@ export function AvailabilityPage({
           <AvailabilityPanel
             calendar={calendar}
             anchorKey={anchorKey}
-            days={days}
+            days={loadedDays}
             now={now}
             area={area}
             selection={selection}

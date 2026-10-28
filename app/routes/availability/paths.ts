@@ -12,6 +12,8 @@ import {
   toTokyoTimeKey,
 } from "~/lib/date";
 
+import { isInCalendarWindow, toCalendarWindowStart } from "./calendar-window";
+
 /**
  * 空き状況カレンダー（SCR-001）が行き来する URL。
  *
@@ -180,12 +182,27 @@ export const isEditReservationChanged = (
 };
 
 /**
- * 送信後の転送先などで使う基準の日（URL の `date`）を決める。
+ * 予約を作った・変更した後の転送先で使う基準の日（URL の `date`）を決める。
  *
- * 送ってきた URL の `date` が日付として読めればそれ、読めなければフォールバックの日を使う。
+ * 送ってきた URL の `date` が日付として読め、その日から読む 4 週間に予約の日が入るならそれを使い、
+ * カレンダーの位置を変えない。そうでなければ予約の日を使う。
+ * 4 週間の外の仮の枠から送ったとき（ADR-014 決定 19）、転送先のカレンダーに予約が無いと、
+ * 欄に予約を開けず、作れたこと・変更できたことを知らせられないため。
  */
-export const resolveAnchorDateKey = (requestUrl: string | URL, fallbackDateKey: string): string => {
+export const resolveAnchorDateKey = (
+  requestUrl: string | URL,
+  reservationDateKey: string,
+): string => {
   const url = typeof requestUrl === "string" ? new URL(requestUrl) : requestUrl;
   const dateParam = url.searchParams.get("date");
-  return dateParam !== null && parseTokyoDateKey(dateParam) !== null ? dateParam : fallbackDateKey;
+  const anchor = parseTokyoDateKey(dateParam);
+  const reservationDay = parseTokyoDateKey(reservationDateKey);
+  if (dateParam === null || anchor === null) return reservationDateKey;
+  if (
+    reservationDay !== null &&
+    !isInCalendarWindow(toCalendarWindowStart(anchor), reservationDay)
+  ) {
+    return reservationDateKey;
+  }
+  return dateParam;
 };

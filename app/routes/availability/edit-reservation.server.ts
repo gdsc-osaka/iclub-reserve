@@ -115,7 +115,8 @@ export async function editReservationAction({
 
   /*
    * 成功したら、変更した予約を欄に開く URL へ転送する（ADR-014 決定 15）。
-   * 基準の日は、送ってきた URL（request.url）の date が日付として読めればそれ、読めなければ変更後の日。
+   * 基準の日は、送ってきた URL（request.url）の date から読む 4 週間に変更後の日が入ればその date、
+   * 入らなければ変更後の日（resolveAnchorDateKey）。
    */
   const anchorDateKey = resolveAnchorDateKey(request.url, values.dateKey);
 

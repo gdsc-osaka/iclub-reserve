@@ -57,9 +57,9 @@ test.describe("UC-017 仮予約の内容を編集する", { tag: "@UC-017" }, ()
     const panel = page.getByRole("region", { name: "予約の変更" });
     await expect(panel).toBeVisible();
 
-    // 3. 施設・設備の切り替えで施設 B に替える。欄は「予約の変更」のまま、施設が替わり「変更前: <施設 A の名前>」が出る
-    const facilityTabs = page.getByRole("navigation", { name: "施設・設備の切り替え" });
-    await facilityTabs.getByRole("link", { name: facilityB.name }).click();
+    // 3. カレンダーの見出しの施設名から施設 B に替える。欄は「予約の変更」のまま、施設が替わり「変更前: <施設 A の名前>」が出る
+    await page.getByRole("button", { name: /施設・設備を選んで切り替え/ }).click();
+    await page.getByRole("menuitem", { name: facilityB.name }).click();
 
     await expect(panel).toBeVisible();
     await expect(panel.getByText(facilityB.name)).toBeVisible();
