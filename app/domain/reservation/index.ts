@@ -576,6 +576,15 @@ export const STAFF_UNLOCK_REQUIRED_RESERVATIONS_LIMIT = 5;
 export { APPLICATION_LEAD_DAYS, isShortNotice } from "./lead-time";
 
 export {
+  overlapsReservation,
+  toOverlapClusters,
+  toOverlapCluster,
+  toOverlapRejections,
+  type OverlapMember,
+  type ReservationSlot,
+} from "./overlap";
+
+export {
   GroupUnreadEventType,
   UNREAD_ITEMS_LIMIT,
   UNREAD_LOOKBACK_DAYS,

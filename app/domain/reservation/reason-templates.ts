@@ -18,6 +18,12 @@ export interface ReasonTemplate {
   readonly text: string;
 }
 
+/** 同じ施設・時間帯の別の予約を承認した・承認済みの予約がある（COND-001 の重なり / COND-031 (4)） */
+export const OVERLAP_REASON_TEMPLATE = {
+  label: "別の予約と重なる",
+  text: "同じ施設・時間帯に別の予約が入っているため、この日時ではご利用いただけません。空き状況カレンダーで空いている日時を確かめて、改めて申請してください。",
+} as const satisfies ReasonTemplate;
+
 /**
  * 事務局による却下（Reject）と事務局キャンセル（StaffCancel）で共通して使う定型文。
  *
@@ -28,10 +34,7 @@ export interface ReasonTemplate {
  */
 const staffReasonTemplates = [
   // 同じ施設・時間帯の別の予約を承認した・承認済みの予約がある（COND-001 の重なり）
-  {
-    label: "別の予約と重なる",
-    text: "同じ施設・時間帯に別の予約が入っているため、この日時ではご利用いただけません。空き状況カレンダーで空いている日時を確かめて、改めて申請してください。",
-  },
+  OVERLAP_REASON_TEMPLATE,
   // 施設の自主事業や公共的な催事を優先する（施設使用規約 第4条(5)）
   {
     label: "施設の行事",

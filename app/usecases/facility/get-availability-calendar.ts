@@ -99,6 +99,7 @@ const toVisibleReservation = (
     transitions,
     canEdit: canChangeReservationContent(row, actor, now).isOk(),
     hasApprovedOverlap: row.hasApprovedOverlap,
+    hasProvisionalOverlap: row.hasProvisionalOverlap,
   };
 };
 

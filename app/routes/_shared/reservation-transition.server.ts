@@ -1,4 +1,4 @@
-import type { ReservationTransition } from "~/domain/reservation/transition";
+import { ReservationTransition } from "~/domain/reservation/transition";
 import { parseUnlockArrangement } from "~/domain/reservation/unlock-arrangement";
 import type { Database } from "~/infra/db";
 import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
@@ -11,6 +11,7 @@ import type { SessionUser } from "~/lib/auth/auth-session.server";
 import { logReservationError } from "~/routes/_shared/reservation-error.server";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
+import { resolveProvisionalOverlapUseCase } from "~/usecases/reservation/resolve-provisional-overlap";
 
 /**
  * 予約の状態を変える操作（承認・却下・取り消し・キャンセル）を、ルートの action から実行する。
@@ -31,6 +32,11 @@ export const changeReservationStatus = async (
     readonly transition: ReservationTransition;
     /** フォームの `reason` の値。文字列でなければ理由なしとして扱う */
     readonly reason: FormDataEntryValue | null;
+    /**
+     * フォームの `rejectReservationId` の値（`formData.getAll`）。承認のときだけ使う（COND-031）。
+     * 1 件以上あれば、重なりの解決として承認し、これらの仮予約をまとめて却下する。
+     */
+    readonly rejectReservationIds: readonly FormDataEntryValue[];
     /** フォームの `unlockArrangement` の値。承認のときだけ使う（COND-027） */
     readonly unlockArrangement: FormDataEntryValue | null;
     /** フォームの `message` の値。承認のときだけ使う（REQ-048）。文字列でなければ添えなかったものとして扱う */
@@ -45,25 +51,46 @@ export const changeReservationStatus = async (
   const reservationRepository = createReservationRepository(db);
   const membershipRepository = createMembershipRepository(db);
 
-  const result = await changeReservationStatusUseCase(
-    {
-      reservationRepository,
-      membershipRepository,
-      reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
-      mailOutboxNotifier: createQueueMailOutboxNotifier(),
-    },
-    {
-      reservationId: input.reservationId,
-      actorUserId: user.id,
-      isStaff: input.actsAsStaff,
-      transition: input.transition,
-      reason: typeof input.reason === "string" ? input.reason : null,
-      unlockArrangement: parseUnlockArrangement(input.unlockArrangement),
-      message: typeof input.message === "string" ? input.message : null,
-      now: input.now,
-      appBaseUrl: resolveAppBaseUrl(request),
-    },
+  const rejectReservationIds = input.rejectReservationIds.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
   );
+
+  const deps = {
+    reservationRepository,
+    membershipRepository,
+    reservationMailRecipientsQuery: createReservationMailRecipientsQuery(db),
+    mailOutboxNotifier: createQueueMailOutboxNotifier(),
+  };
+  const args = {
+    reservationId: input.reservationId,
+    actorUserId: user.id,
+    isStaff: input.actsAsStaff,
+    reason: typeof input.reason === "string" ? input.reason : null,
+    unlockArrangement: parseUnlockArrangement(input.unlockArrangement),
+    message: typeof input.message === "string" ? input.message : null,
+    now: input.now,
+    appBaseUrl: resolveAppBaseUrl(request),
+  };
+
+  /*
+   * 承認と一緒に却下する仮予約が送られてきたら、重なりの解決（COND-031）として承認し、それらを却下する。
+   * 戻り値は承認の結果（approval）にそろえ、5 つのルートの成功・失敗の扱いを変えない。
+   * 却下しなかったものはログにだけ残す。仮予約のまま一覧に残り、承認済みと重なる旨が出るので、事務局が気付ける（COND-031 (5)）。
+   */
+  const result =
+    input.transition === ReservationTransition.Approve && rejectReservationIds.length > 0
+      ? (await resolveProvisionalOverlapUseCase(deps, { ...args, rejectReservationIds })).map(
+          ({ approval, skipped }) => {
+            for (const { error } of skipped) {
+              logReservationError(
+                { where: `${input.where}.reject-overlap`, userId: user.id },
+                error,
+              );
+            }
+            return approval;
+          },
+        )
+      : await changeReservationStatusUseCase(deps, { ...args, transition: input.transition });
 
   if (result.isOk() && result.value.messageId !== null) {
     await markReservationReadUseCase(

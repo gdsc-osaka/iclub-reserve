@@ -134,6 +134,12 @@ export default [
   // 施設写真の配信ルート（ADR-005: ログイン必須・プライベートキャッシュ）
   route("facility-photos/:photoName", "routes/facility-photos/$photoName/route.ts"),
 
+  // 仮予約の重なりの解決ダイアログで読むルート（COND-031: 事務局専用・画面なし）
+  route(
+    "staff/reservations/:reservationId/overlaps",
+    "routes/reservations/staff/$reservationId/overlaps/route.ts",
+  ),
+
   // 自団体の予約カレンダー配信ルート（ADR-013: 秘密のトークンによる配信・ログイン不要）
   route("calendar-feeds/:fileName", "routes/calendar-feeds/$fileName/route.ts"),
 
