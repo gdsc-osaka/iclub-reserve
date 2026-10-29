@@ -33,7 +33,7 @@
    * `upload_source_maps` `account_id` は継承されるので、ここに 1 度書けばよい。
    */
   "name": "iclub-reserve-local",
-  "account_id": "07ca382272f1767242dbf77d8006a5f6",
+  "account_id": "09381b15a7d3beb91294a7ce295420a4",
   "compatibility_date": "2026-06-20",
   "main": "./workers/app.ts",
   "compatibility_flags": ["nodejs_compat"],
@@ -109,7 +109,7 @@
     {
       "binding": "DB",
       "database_name": "iclub-reserve-preview-db",
-      "database_id": "e3ed30e5-b5b0-4762-9d88-dccd04ddfd8b",
+      "database_id": "0de33eb1-9e5c-4721-bda8-7dc7c201157a",
       "migrations_dir": "drizzle/migrations",
     },
   ],
@@ -180,7 +180,7 @@
         {
           "binding": "DB",
           "database_name": "iclub-reserve-db",
-          "database_id": "2b4c7d91-bf5e-4587-aaaf-11d8c48f449b",
+          "database_id": "6ae196e1-208f-4182-b421-e8f8e25fe755",
           "migrations_dir": "drizzle/migrations",
         },
       ],
@@ -262,7 +262,7 @@
         {
           "binding": "DB",
           "database_name": "iclub-reserve-preview-db",
-          "database_id": "e3ed30e5-b5b0-4762-9d88-dccd04ddfd8b",
+          "database_id": "0de33eb1-9e5c-4721-bda8-7dc7c201157a",
           "migrations_dir": "drizzle/migrations",
         },
       ],
@@ -316,7 +316,7 @@
           {
             "binding": "DB",
             "database_name": "iclub-reserve-preview-db",
-            "database_id": "e3ed30e5-b5b0-4762-9d88-dccd04ddfd8b",
+            "database_id": "0de33eb1-9e5c-4721-bda8-7dc7c201157a",
             "migrations_dir": "drizzle/migrations",
           },
         ],
