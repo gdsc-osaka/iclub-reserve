@@ -449,6 +449,13 @@ infra が構築しているエラーコードを全件数えたところ、`Data
   `JSON.stringify` では `Error` の name・message・stack が列挙されないため `{}` になる。
   そのため `log.server.ts` が `cause` をたどり、`Error` を `{ name, message, stack, cause }` に直してから渡す
   (Phase 1 で確認)。
+  さらに `level` が `error` で `cause` の中に `Error` インスタンスがあるときは、構造化したオブジェクトに加えて
+  第 2 引数に生の `Error` インスタンスも渡す。Worker の中で文字列にした `stack` だけではソースマップによる
+  TypeScript の行番号への逆引きが効かないため、Cloudflare Workers Issues に元の例外も渡るようにする。
+- **トレースのスパンにも識別子を付ける。** ドメインのエラーを通らない未捕捉の例外（SSR 中の失敗など）でも
+  誰のどの操作で起きたかを Issues で追えるよう、認証ミドルウェアと定期処理・Queue の入口で
+  `tracing.getActiveSpan()` に `user.id`・`session.id`・`cron.schedule`・`queue.name` を付ける
+  (`app/lib/trace-context.ts`)。ここにもメールアドレスやトークンなどの機密・個人情報は入れない。
 
 **入力値は残さない。** `message` にも、どの項目にも、利用者が入力した値を埋め込まない。
 とくに招待相手のメールアドレスは、まだ団体に加わっていない第三者の個人情報である。
@@ -507,8 +514,15 @@ infra が構築しているエラーコードを全件数えたところ、`Data
 - **ログだけ残して失敗を握る書き方ができるようになった (Phase 3)。** `logDomainError`・`logQueryError` を
   公開したためである。使ってよいのは、失敗しても画面を開くと決めた loader (ダッシュボード) だけで、
   応答を返す・投げる場面では 2 本のグルーを使うこと。ログは残るので、握ったことは後から追える。
-- **残すだけでは、偵察は見つからない。** `warn` を自動で知らせる仕組みは、この ADR では作らない。
-  また Workers Logs の保存期間は無料プランで 3 日、有料プランで 7 日であり、
+- **障害は Cloudflare Workers Issues で知らせ、偵察の自動検知は別途とする。**
+  `wrangler.jsonc` の `observability.issues` を有効にすると、未捕捉例外・HTTP 5xx・`console.error`
+  (および `Error` やスタックトレースを含むログ) が自動で Issue に束ねられる。
+  この ADR で想定内の差し戻しを `cause` の無い `info`・`warn`、`internal` を `error` (500) に分けたため、
+  想定内の業務エラーは原則として対象外になり、ダッシュボードの Automations（発生回数 1 回・無活動後の再発）から
+  障害通知をチャットやコーディングエージェントへ流せる
+  (ただし `info`・`warn` でも `cause` に `Error` を渡すと payload に `stack` が含まれて Issues の検出対象になりうる)。
+  一方、`warn` (`forbidden`) を数えて偵察を自動で知らせる仕組みは Issues の対象外であり、この ADR では作らない。
+  また Workers Logs の保存期間は無料プランで 3 日・有料プランで 7 日、Issues の発生詳細の保存期間は 7 日であり、
   それより長い期間の傾向を見るには別の保存先が要る。どちらも必要になったときに決める。
 
 ## 影響範囲
@@ -548,8 +562,10 @@ COND-001 (承認済み予約の重なり) の判定が `infra/reservation/reserv
 なお、ユースケース側の事前確認と UPDATE 側の条件は**意図的な二段構え**であり
 (D1 では確認と書き込みを 1 つのトランザクションに入れられない)、どちらも残すこと。
 
-メール配送 (`usecases/mail/flush-mail-outbox.server.ts` など) のログも扱わない。
-利用者の操作ではなく cron と Queue から動くので `userId` が無く、決定 9 の形に載らない。
-エラーも画面に届かない (決定 3 で `kind` を付けないとしたもの) ため、文字列の `console.error` のままである。
+メール配送 (`usecases/mail/flush-mail-outbox.server.ts` など) やカレンダー同期 (`usecases/calendar/process-calendar-sync-tasks.ts`) のログは、
+利用者の操作ではなく cron と Queue から動くので `userId` が無く、決定 9 のオブジェクトの形には載せない。
+ただし Workers Issues が `console.error` を拾うため、自動で再試行される一時的な失敗は `console.warn` にとどめ、
+再試行しても直らない恒久的な失敗や試行回数上限による断念 (`dead`) だけを `console.error` で出す基準は揃える
+(宛先メールアドレスなどの個人情報を埋め込まず ID だけを出す点も同じ)。
 
 ADR-001 の層構成、ADR-002 のメール配送、ADR-003 の団体テーブルは変更しない。

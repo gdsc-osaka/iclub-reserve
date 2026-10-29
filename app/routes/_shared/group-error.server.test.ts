@@ -115,6 +115,7 @@ describe("groupErrorResponse", () => {
         code: "DATABASE_ERROR",
         cause: expect.objectContaining({ message: "connection reset", stack: cause.stack }),
       }),
+      cause,
     );
   });
 });

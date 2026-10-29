@@ -2,6 +2,7 @@ import { createContext, redirect } from "react-router";
 import type { MiddlewareFunction, RouterContextProvider } from "react-router";
 
 import { isOnboardingCompleted } from "~/domain/authn/onboarding";
+import { attachAuthTraceContext } from "~/lib/trace-context.server";
 import {
   isPublicPath,
   LOGIN_PATH,
@@ -55,13 +56,17 @@ const getAuthSession = async (request: Request): Promise<AuthSessionData> => {
   const result = await getAuth().api.getSession({ headers: request.headers });
   if (!result) return null;
 
-  return {
+  const authData = {
     user: result.user,
     session: {
       id: result.session.id,
       createdAt: result.session.createdAt,
     },
   };
+
+  attachAuthTraceContext(authData);
+
+  return authData;
 };
 
 /**

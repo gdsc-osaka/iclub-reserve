@@ -72,6 +72,28 @@ const toLoggable = (value: unknown, depth = 0): unknown => {
 };
 
 /**
+ * cause（またはドメインエラーで包まれた内側の cause）をたどり、
+ * 最初に見つかった生の Error インスタンスを返す。
+ *
+ * Cloudflare Workers Issues がソースマップから TypeScript の行番号を逆引きするのに使う。
+ */
+const findRootError = (value: unknown, depth = 0): Error | undefined => {
+  if (depth >= MAX_CAUSE_DEPTH) {
+    return undefined;
+  }
+
+  if (value instanceof Error) {
+    return value;
+  }
+
+  if (typeof value === "object" && value !== null && "cause" in value) {
+    return findRootError((value as { cause: unknown }).cause, depth + 1);
+  }
+
+  return undefined;
+};
+
+/**
  * 失敗をサーバー側のログに残す。
  *
  * どのレベルで残すかは呼ぶ側が決める。ドメインのエラーなら
@@ -80,5 +102,21 @@ const toLoggable = (value: unknown, depth = 0): unknown => {
  */
 export const logFailure = (log: FailureLog): void => {
   const { cause, ...rest } = log;
-  console[log.level](cause === undefined ? rest : { ...rest, cause: toLoggable(cause) });
+  const payload = cause === undefined ? rest : { ...rest, cause: toLoggable(cause) };
+
+  if (log.level === "error") {
+    const rootError = findRootError(cause);
+    if (rootError !== undefined) {
+      /*
+       * Workers Logs が JSON 項目を索引できるよう第 1 引数にシリアライズした payload を渡しつつ、
+       * Worker 内で文字列化した stack だけでは Cloudflare Workers Issues による
+       * ソースマップ逆引き（TypeScript の行番号特定）が効かないため、
+       * ランタイムが解釈できるよう第 2 引数に生の Error インスタンスも渡す。
+       */
+      console.error(payload, rootError);
+      return;
+    }
+  }
+
+  console[log.level](payload);
 };

@@ -1,5 +1,5 @@
 import { errAsync, okAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { MailOutboxErrorCode, type MailOutboxEntry } from "~/domain/mail/mail-outbox";
 import { MailSendErrorCode } from "~/domain/mail/mail-sender";
 import { fakeMailOutbox, fakeMailSender } from "~/testing/fakes/mail";
@@ -12,6 +12,9 @@ import {
 } from "./flush-mail-outbox.server";
 
 describe("flush-mail-outbox", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   describe("定数とバックオフ", () => {
     it("FLUSH_BATCH_SIZE は 20、MAX_ATTEMPTS は 5", () => {
       expect(FLUSH_BATCH_SIZE).toBe(20);
@@ -67,6 +70,9 @@ describe("flush-mail-outbox", () => {
     });
 
     it("一過性のエラーかつ attemptCount < 5 の場合は markRetryable でバックオフ時刻が設定される", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
       const testNow = new Date("2026-09-20T12:00:00Z");
       const entry: MailOutboxEntry = { ...baseEntry, attemptCount: 1 };
 
@@ -75,7 +81,9 @@ describe("flush-mail-outbox", () => {
         errAsync({
           code: MailSendErrorCode.RateLimited,
           message: "SMTP サーバーが一時的に受け付けられない状態です。",
-          cause: "455 rate limit",
+          cause: new Error(
+            "Failed to send RCPT TO: 450 4.2.1 <user@example.com> Mailbox temporarily unavailable",
+          ),
         }),
       );
 
@@ -96,9 +104,22 @@ describe("flush-mail-outbox", () => {
         nextAttemptAt: new Date("2026-09-20T12:00:30Z"), // 30秒後
         error: expect.objectContaining({ code: MailSendErrorCode.RateLimited }),
       });
+      // 一過性のエラーでは console.warn が呼ばれ、console.error は呼ばれないこと
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        code: MailSendErrorCode.RateLimited,
+        message: "SMTP サーバーが一時的に受け付けられない状態です。",
+      });
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      // ADR-004 決定 9: SMTP 応答の cause に含まれる宛先メールアドレスがログに出ないこと
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("user@example.com");
     });
 
     it("一過性のエラーでも attemptCount >= 5 (MAX_ATTEMPTS) の場合は markDead になる", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
       const entry: MailOutboxEntry = { ...baseEntry, attemptCount: 5 };
 
       const markRetryable = vi.fn();
@@ -107,7 +128,7 @@ describe("flush-mail-outbox", () => {
         errAsync({
           code: MailSendErrorCode.RateLimited,
           message: "SMTP サーバーが一時的に受け付けられない状態です。",
-          cause: "455 rate limit",
+          cause: "450 4.2.1 <user@example.com> Mailbox temporarily unavailable",
         }),
       );
 
@@ -126,9 +147,20 @@ describe("flush-mail-outbox", () => {
         error: expect.objectContaining({ code: MailSendErrorCode.RateLimited }),
       });
       expect(markRetryable).not.toHaveBeenCalled();
+      // 上限到達で dead になる場合は console.error が呼ばれ、console.warn は呼ばれないこと
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        code: MailSendErrorCode.RateLimited,
+        message: "SMTP サーバーが一時的に受け付けられない状態です。",
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("user@example.com");
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it("恒久的なエラー（rejected / auth_failed）は 1 回目でも markDead になる", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
       const entry: MailOutboxEntry = { ...baseEntry, attemptCount: 1 };
 
       const markDead = vi.fn(() => okAsync(undefined));
@@ -136,7 +168,9 @@ describe("flush-mail-outbox", () => {
         errAsync({
           code: MailSendErrorCode.Rejected,
           message: "宛先が抑制リストに登録されているため送信できません。",
-          cause: "254 suppression",
+          cause: new Error(
+            "Failed to send RCPT TO: 254 4.7.1 Suppression for user user@example.com",
+          ),
         }),
       );
 
@@ -153,12 +187,23 @@ describe("flush-mail-outbox", () => {
         id: "outbox_01",
         error: expect.objectContaining({ code: MailSendErrorCode.Rejected }),
       });
+      // 恒久的な失敗は 1 回目でも console.error が呼ばれ、cause 内の宛先アドレスはログに出ないこと
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        code: MailSendErrorCode.Rejected,
+        message: "宛先が抑制リストに登録されているため送信できません。",
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("user@example.com");
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it("メールアドレス不正（createMailMessage 失敗）の行は即座に markDead になる", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
       const invalidEntry: MailOutboxEntry = {
         ...baseEntry,
-        to: { address: "invalid-email-no-at", name: "無効" },
+        to: { address: "invalid..user@osaka-u", name: "無効" },
       };
 
       const markDead = vi.fn(() => okAsync(undefined));
@@ -178,9 +223,18 @@ describe("flush-mail-outbox", () => {
         id: "outbox_01",
         error: expect.objectContaining({ code: MailSendErrorCode.SendFailed }),
       });
+      // メールアドレス不正は再試行しても直らないため console.error が呼ばれ、生の宛先入力（input）はログに出ないこと
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        type: "invalid_email_address",
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("invalid..user@osaka-u");
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it("claimDue が失敗した場合は送信を行わず件数 0 を返す", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
       const claimDue = vi.fn(() =>
         errAsync({
           code: MailOutboxErrorCode.DatabaseError,
@@ -196,9 +250,12 @@ describe("flush-mail-outbox", () => {
 
       expect(result).toEqual({ claimed: 0, sent: 0, retried: 0, dead: 0, stateUpdateFailed: 0 });
       expect(send).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
     });
 
     it("1通の送信失敗で全体の処理が中断せず、残りのメールが送信される", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+
       const entry1: MailOutboxEntry = { ...baseEntry, id: "outbox_01" };
       const entry2: MailOutboxEntry = { ...baseEntry, id: "outbox_02" };
 
@@ -308,6 +365,8 @@ describe("flush-mail-outbox", () => {
     });
 
     it("claimByIds が失敗した場合は送信を行わず件数 0 を返す", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
       const claimByIds = vi.fn(() =>
         errAsync({
           code: MailOutboxErrorCode.DatabaseError,

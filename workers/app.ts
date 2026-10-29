@@ -9,6 +9,7 @@ import { fetchHolidayIcal } from "~/infra/holiday/google-holiday-fetcher";
 import { createD1MailOutbox } from "~/infra/mail/d1-mail-outbox";
 import type { MailQueueMessage } from "~/infra/mail/mail-queue.server";
 import { createMailSender, getMailFrom } from "~/infra/mail/mail-sender-factory.server";
+import { attachQueueTraceContext, attachScheduledTraceContext } from "~/lib/trace-context.server";
 import { processCalendarSyncTasksUseCase } from "~/usecases/calendar/process-calendar-sync-tasks";
 import { reconcileCalendarsUseCase } from "~/usecases/calendar/reconcile-calendars";
 import { refreshHolidaysUseCase } from "~/usecases/holiday/refresh-holidays";
@@ -41,6 +42,7 @@ export default {
    * - `0 19 * * *`: 予約と Google Calendar の日次突き合わせ（タスクを積むのみ）
    */
   async scheduled(controller, env, _ctx) {
+    attachScheduledTraceContext(controller.cron);
     const cron = controller.cron;
     const db = createDb(env.DB);
 
@@ -143,6 +145,8 @@ export default {
    * ack しないのは、このハンドラ自体が例外等で落ちたときだけでよい。
    */
   async queue(batch, env, _ctx) {
+    attachQueueTraceContext({ name: batch.queue, batchSize: batch.messages.length });
+
     // 同じ ID が複数のメッセージに含まれうるので、flush に渡す前に重複を除く（ADR-002 決定 2.5）
     const rawIds = batch.messages.flatMap((message) => message.body.outboxIds);
     const uniqueIds = Array.from(new Set(rawIds));

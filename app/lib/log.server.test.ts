@@ -94,4 +94,52 @@ describe("logFailure", () => {
 
     expect(() => JSON.stringify(spy.mock.calls[0]?.[0])).not.toThrow();
   });
+
+  it("level が error で cause が Error インスタンスのときは、第 2 引数に生の Error を渡す", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = new Error("D1 connection lost");
+
+    logFailure({ ...baseLog, level: "error", cause: error });
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "error",
+        code: "DATABASE_ERROR",
+        cause: expect.objectContaining({ message: "D1 connection lost" }),
+      }),
+      error,
+    );
+  });
+
+  it("level が error でドメインエラーに包まれた Error のときも、内側の生の Error を第 2 引数に渡す", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const dbError = new Error("connection reset");
+
+    logFailure({
+      ...baseLog,
+      level: "error",
+      cause: { code: "DATABASE_ERROR", message: "所属を取得できなかった。", cause: dbError },
+    });
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: "error",
+        code: "DATABASE_ERROR",
+      }),
+      dbError,
+    );
+  });
+
+  it.each(["info", "warn"] as const)(
+    "level が %s のときは、cause に Error があっても第 2 引数は渡さない",
+    (level) => {
+      const spy = vi.spyOn(console, level).mockImplementation(() => {});
+      const error = new Error("temporary issue");
+
+      logFailure({ ...baseLog, level, cause: error });
+
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ level }));
+      expect(spy.mock.calls[0]).toHaveLength(1);
+    },
+  );
 });
