@@ -118,6 +118,7 @@ describe("createFinishEmailChangeUseCase", () => {
         // 事務局が手で連絡するための手がかり（EVT-016）
         details: { previousEmail: "old@osaka-u.ac.jp" },
       }),
+      expect.any(Error),
     );
     // 変更後のアドレスは入力された値なので残さない（ADR-004 決定 9）
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("new@osaka-u.ac.jp");
@@ -142,6 +143,7 @@ describe("createFinishEmailChangeUseCase", () => {
         code: FinishEmailChangeLogCode.SessionsNotRevoked,
         userId: "usr_user_1",
       }),
+      expect.any(Error),
     );
   });
 });

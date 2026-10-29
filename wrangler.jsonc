@@ -49,10 +49,19 @@
       "head_sampling_rate": 1,
       "persist": true,
     },
+    /**
+     * Workers Issues（障害の自動集約・通知）。
+     *
+     * 未捕捉例外・HTTP 5xx 応答・`console.error` を検知し、原因ごとに 1 つの Issue に束ねる。
+     * 想定内の業務エラー（400 / 403 / 404 / 409）は `info` / `warn` で出すためここには載らず、
+     * 人が対処すべき障害（`ErrorKind.Internal` や定期処理の `dead` 遷移）だけが起票される（ADR-004）。
+     * 通知先やコーディングエージェント連携（Automations）は Cloudflare ダッシュボード側で設定する。
+     */
     "issues": {
       "enabled": true,
     },
   },
+  // Issues やログのスタックトレースを元の TypeScript のファイル・行番号へ逆引きするために必須
   "upload_source_maps": true,
 
   /**

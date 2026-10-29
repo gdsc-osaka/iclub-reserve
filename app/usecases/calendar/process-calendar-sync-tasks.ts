@@ -234,7 +234,26 @@ export const processCalendarSyncTasksUseCase = async (
 
       // (c) 結果の後始末
       if (syncError) {
-        console.error(`Calendar sync failed for reservation ${group.reservationId}:`, syncError);
+        // Cloudflare Workers Issues は console.error を検知して Issue を起票するため、
+        // すべて再試行に回る一時的な失敗は warn にとどめ、
+        // 1つでも再試行不可または上限到達（dead）になる場合のみ error で記録する。
+        const isRetryable = isRetryableCalendarError(syncError);
+        const hasDeadTask =
+          !isRetryable ||
+          group.tasks.some((task) => task.attemptCount >= CALENDAR_SYNC_MAX_ATTEMPTS);
+
+        if (hasDeadTask) {
+          console.error(
+            `Calendar sync failed permanently for reservation ${group.reservationId}:`,
+            syncError,
+          );
+        } else {
+          console.warn(
+            `Calendar sync failed temporarily for reservation ${group.reservationId}, scheduling retry:`,
+            syncError,
+          );
+        }
+
         const failResult = await deps.calendarSyncTasks.fail({
           ids: group.taskIds,
           error: syncError,
@@ -245,7 +264,6 @@ export const processCalendarSyncTasksUseCase = async (
         }
 
         failed += group.tasks.length;
-        const isRetryable = isRetryableCalendarError(syncError);
         for (const task of group.tasks) {
           if (isRetryable && task.attemptCount < CALENDAR_SYNC_MAX_ATTEMPTS) {
             retried++;

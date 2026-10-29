@@ -76,6 +76,7 @@ describe("logQueryError", () => {
         userId: "usr_01",
         cause: expect.objectContaining({ message: "connection reset" }),
       }),
+      cause,
     );
   });
 });

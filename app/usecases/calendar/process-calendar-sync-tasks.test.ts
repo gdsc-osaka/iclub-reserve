@@ -1,7 +1,8 @@
 import { okAsync, errAsync } from "neverthrow";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
+  CALENDAR_SYNC_MAX_ATTEMPTS,
   CalendarErrorCode,
   toCalendarEventId,
   type CalendarClient,
@@ -90,6 +91,10 @@ describe("toDeleteCalendarIds", () => {
 });
 
 describe("processCalendarSyncTasksUseCase", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const createMockCalendarSyncTasks = (): CalendarSyncTasks =>
     fakeCalendarSyncTasks({
       claimDue: vi.fn().mockReturnValue(okAsync([])),
@@ -332,6 +337,9 @@ describe("processCalendarSyncTasksUseCase", () => {
   });
 
   it("再試行可能なエラーで失敗した場合、fail を呼び retried をインクリメントする", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     const task = createMockTask({ id: 50, reservationId: "res_fail_retry", attemptCount: 2 });
     const calendarSyncTasks = createMockCalendarSyncTasks();
     vi.mocked(calendarSyncTasks.claimDue).mockReturnValue(okAsync([task]));
@@ -370,9 +378,19 @@ describe("processCalendarSyncTasksUseCase", () => {
       now: expect.any(Date),
     });
     expect(calendarSyncTasks.complete).not.toHaveBeenCalled();
+    // 再試行可能なエラーかつ上限未満のときは console.warn が呼ばれ、console.error は呼ばれないこと
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Calendar sync failed temporarily for reservation res_fail_retry"),
+      rateLimitError,
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it("再試行不可のエラー（または上限回数到達）で失敗した場合、dead をインクリメントする", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     const task = createMockTask({ id: 60, reservationId: "res_fail_perm", attemptCount: 1 });
     const calendarSyncTasks = createMockCalendarSyncTasks();
     vi.mocked(calendarSyncTasks.claimDue).mockReturnValue(okAsync([task]));
@@ -410,9 +428,74 @@ describe("processCalendarSyncTasksUseCase", () => {
       error: authError,
       now: expect.any(Date),
     });
+    // 再試行不可のエラー（AuthFailed）は console.error が呼ばれ、console.warn は呼ばれないこと
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Calendar sync failed permanently for reservation res_fail_perm"),
+      authError,
+    );
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("再試行可能なエラーでも attemptCount が上限に達している場合は dead になり console.error を出力する", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const task = createMockTask({
+      id: 70,
+      reservationId: "res_fail_max_attempts",
+      attemptCount: CALENDAR_SYNC_MAX_ATTEMPTS,
+    });
+    const calendarSyncTasks = createMockCalendarSyncTasks();
+    vi.mocked(calendarSyncTasks.claimDue).mockReturnValue(okAsync([task]));
+
+    const query = createMockQuery();
+    vi.mocked(query.fetchReservationStates).mockReturnValue(
+      okAsync([
+        {
+          id: "res_fail_max_attempts",
+          status: ReservationStatus.Approved,
+          facilityId: "fac_1",
+          startAt,
+          endAt,
+          facility: { name: "施設1", googleCalendarId: "cal_1@example.com" },
+        },
+      ]),
+    );
+
+    const calendarClient = createMockCalendarClient();
+    const rateLimitError: CalendarError = {
+      code: CalendarErrorCode.RateLimited,
+      message: "Rate limit exceeded",
+    };
+    vi.mocked(calendarClient.upsertEvent).mockReturnValue(errAsync(rateLimitError));
+
+    const result = await processCalendarSyncTasksUseCase({
+      calendarSyncTasks,
+      query,
+      calendarClient,
+    });
+
+    expect(result).toEqual({ claimed: 1, completed: 0, failed: 1, retried: 0, dead: 1 });
+    expect(calendarSyncTasks.fail).toHaveBeenCalledWith({
+      ids: [70],
+      error: rateLimitError,
+      now: expect.any(Date),
+    });
+    // 試行回数上限到達（dead）の場合は console.error が呼ばれ、console.warn は呼ばれないこと
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Calendar sync failed permanently for reservation res_fail_max_attempts",
+      ),
+      rateLimitError,
+    );
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it("複数予約の同期で 1 つが失敗しても、他の予約の同期は継続して成功する", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
     const task1 = createMockTask({ id: 101, reservationId: "res_ok" });
     const task2 = createMockTask({ id: 102, reservationId: "res_ng" });
     const calendarSyncTasks = createMockCalendarSyncTasks();

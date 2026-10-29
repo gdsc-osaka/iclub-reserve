@@ -90,9 +90,10 @@ const executeSendLoop = async (
         },
       });
 
-      // メールアドレス不正などプログラム・入力の誤りは再試行しても直らないため dead にする
+      // メールアドレス不正などプログラム・入力の誤りは再試行しても直らず即座に dead になるため error で記録する。
+      // ADR-004 決定 9 に従い、宛先メールアドレスなどの個人情報は含めず outbox ID のみを出力する。
       if (messageResult.isErr()) {
-        console.warn(`Invalid mail message for outbox entry ${entry.id}:`, messageResult.error);
+        console.error(`Invalid mail message for outbox entry ${entry.id}:`, messageResult.error);
         await applyStateUpdate(
           entry.id,
           deps.mailOutbox.markDead({
@@ -120,8 +121,16 @@ const executeSendLoop = async (
       } else {
         const error = sendResult.error;
 
-        // 3. 一過性の失敗かつ試行回数が上限未満であれば次回へ先送り（backoff）
+        // Cloudflare Workers Issues は console.error を検知して Issue を起票するため、
+        // 自動で再試行される一時的な失敗は warn にとどめ、人が対処すべき恒久的な失敗や
+        // リトライ上限到達（dead）のみ error で記録する。
+        // また ADR-004 決定 9 に従い、宛先アドレスなどの個人情報は含めず outbox ID のみを出力する。
         if (isRetryable(error) && entry.attemptCount < MAX_ATTEMPTS) {
+          // 3. 一過性の失敗かつ試行回数が上限未満であれば次回へ先送り（backoff）
+          console.warn(
+            `Mail delivery failed temporarily for outbox entry ${entry.id} (attempt ${entry.attemptCount}/${MAX_ATTEMPTS}), scheduling retry:`,
+            error,
+          );
           const nextAttemptAt = new Date(now.getTime() + nextAttemptDelayMs(entry.attemptCount));
           await applyStateUpdate(
             entry.id,
@@ -132,6 +141,10 @@ const executeSendLoop = async (
           );
         } else {
           // 4. 恒久的な失敗（5xx / 254 / 認証不正）または最大試行回数超過
+          console.error(
+            `Mail delivery failed permanently for outbox entry ${entry.id} (attempt ${entry.attemptCount}/${MAX_ATTEMPTS}):`,
+            error,
+          );
           await applyStateUpdate(
             entry.id,
             deps.mailOutbox.markDead({ id: entry.id, error }),
