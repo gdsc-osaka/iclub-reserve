@@ -1,4 +1,3 @@
-import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { UnlockArrangement } from "~/domain/reservation";
 import {
@@ -86,18 +85,29 @@ export function UnlockArrangementField({
           const itemId = `${idPrefix}-${option}`;
 
           return (
-            <div
+            // 枠のどこを押しても選べるように、枠そのものをラベルにする。
+            // 読み上げ名は選択肢の名前だけにし、説明はラジオの説明として読ませる
+            <label
               key={option}
-              className="flex items-start gap-3 rounded-md border p-3 has-data-checked:border-primary has-data-checked:bg-primary/5"
+              htmlFor={itemId}
+              className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-data-checked:border-primary has-data-checked:bg-primary/5"
             >
-              <RadioGroupItem id={itemId} value={option} className="mt-0.5" />
+              <RadioGroupItem
+                id={itemId}
+                value={option}
+                aria-labelledby={`${itemId}-label`}
+                aria-describedby={`${itemId}-description`}
+                className="mt-0.5"
+              />
               <div className="flex flex-col gap-1">
-                <Label htmlFor={itemId}>{unlockArrangementLabel[option]}</Label>
-                <p className="text-xs text-muted-foreground">
+                <span id={`${itemId}-label`} className="text-sm leading-none font-medium">
+                  {unlockArrangementLabel[option]}
+                </span>
+                <p id={`${itemId}-description`} className="text-xs text-muted-foreground">
                   {unlockArrangementDescription[option]}
                 </p>
               </div>
-            </div>
+            </label>
           );
         })}
       </RadioGroup>

@@ -1,6 +1,7 @@
 import { CalendarClock, ChevronRight } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 
+import { ReservationApproveDialog } from "~/components/reservation/overlap-resolution-dialog";
 import { ReservationActionDialog } from "~/components/reservation/reservation-action-dialog";
 import {
   ReservationOverlapNotice,
@@ -155,9 +156,8 @@ function PendingReservationRow({
 
       {/* スマホでは行の下に 2 列・全幅で並べる */}
       <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
-        <ReservationActionDialog
+        <ReservationApproveDialog
           item={item}
-          transition={ReservationTransition.Approve}
           showGroupName
           fetcher={fetcher}
           disabled={item.hasApprovedOverlap}

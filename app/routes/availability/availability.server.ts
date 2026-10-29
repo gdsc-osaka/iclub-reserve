@@ -211,6 +211,7 @@ export async function handleAvailabilityAction(
     reservationId,
     transition,
     reason,
+    rejectReservationIds: formData.getAll("rejectReservationId"),
     unlockArrangement: formData.get("unlockArrangement"),
     message: formData.get("message"),
     now: new Date(),

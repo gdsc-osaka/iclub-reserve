@@ -2,6 +2,7 @@ import { Button } from "~/components/ui/button";
 import { ReservationStatus } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
+import { ReservationApproveDialog } from "./overlap-resolution-dialog";
 import { ReservationActionDialog, type ReservationActionTarget } from "./reservation-action-dialog";
 
 /** 取り消し・却下・キャンセルのボタンの見た目。取り返しのつかない操作なので赤で縁取る */
@@ -23,7 +24,8 @@ export function ReservationActionButtons({
   transitions,
   showGroupName,
 }: Readonly<{
-  item: ReservationActionTarget & Pick<ReservationListItem, "status" | "hasApprovedOverlap">;
+  item: ReservationActionTarget &
+    Pick<ReservationListItem, "status" | "hasApprovedOverlap" | "hasProvisionalOverlap">;
   transitions: readonly ReservationTransition[];
   showGroupName: boolean;
 }>) {
@@ -37,9 +39,8 @@ export function ReservationActionButtons({
   return (
     <>
       {transitions.includes(ReservationTransition.Approve) && (
-        <ReservationActionDialog
+        <ReservationApproveDialog
           item={item}
-          transition={ReservationTransition.Approve}
           showGroupName={showGroupName}
           disabled={isApproveBlocked}
           trigger={

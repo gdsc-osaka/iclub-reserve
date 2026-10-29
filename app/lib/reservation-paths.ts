@@ -35,3 +35,11 @@ export const toNewReservationPath = (area: AppArea): string =>
  */
 export const toFormPathForFacility = (area: AppArea, facilityId: string): string =>
   `${toNewReservationPath(area)}?facility=${encodeURIComponent(facilityId)}`;
+
+/**
+ * 重なりの解決（COND-031）の読み取り URL を組み立てる。
+ *
+ * 事務局の画面でのみ使うため、area は受け取らない。
+ */
+export const toOverlapResolutionPath = (reservationId: string): string =>
+  `/staff/reservations/${encodeURIComponent(reservationId)}/overlaps`;

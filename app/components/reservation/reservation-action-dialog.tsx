@@ -1,5 +1,4 @@
-import { CircleAlert } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Form, useNavigation, type FetcherWithComponents } from "react-router";
 
 import {
@@ -16,12 +15,15 @@ import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { UnlockArrangement } from "~/domain/reservation";
-import { reasonTemplates, toReasonWithTemplate } from "~/domain/reservation/reason-templates";
+import { reasonTemplates } from "~/domain/reservation/reason-templates";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { unlockArrangementLabel } from "~/domain/reservation/unlock-arrangement";
 import { formatMonthDayParts, formatTime, toTokyoDateKey } from "~/lib/date";
 import type { ReservationListItem } from "~/query/reservation/reservation-list";
+import { ApprovalMessageField } from "./approval-message-field";
+import { TransitionReasonField } from "./transition-reason-field";
 import { UnlockArrangementField, unlockArrangementOptions } from "./unlock-arrangement-field";
+import { useCloseAfterSubmit } from "./use-close-after-submit";
 
 /**
  * 操作ダイアログで表示に必要な予約の項目。
@@ -149,13 +151,6 @@ export function ReservationActionDialog({
   const isSubmitDisabled =
     (config.hasReason && reason.trim() === "") ||
     (config.hasUnlockArrangement && unlockArrangement === null);
-  /*
-   * 「手配済み」を選ぶと、団体には「方法はメッセージを確認してください」と案内する（COND-027）。
-   * 欄が空のままだと、その方法が届かないことがあるので注意を出す。前もってメッセージで
-   * 伝えてあることもあるので、承認は止めない。
-   */
-  const showsArrangedMessageHint =
-    config.hasMessage && unlockArrangement === UnlockArrangement.Arranged && message.trim() === "";
 
   // この予約のこの操作が送信中か。同じ画面に他の予約のボタンが並ぶので、
   // intent（操作）だけでなく reservationId まで見て、押したボタンだけを見分ける
@@ -165,29 +160,7 @@ export function ReservationActionDialog({
     submission.formData?.get("intent") === transition &&
     submission.formData?.get("reservationId") === item.id;
 
-  /*
-   * 送信が終わったら、このダイアログを自分で閉じる。
-   *
-   * 開閉は open の state だけで決まるので、閉じる処理を書かないと送信後も開いたままになる。
-   * 成功したときは予約の状態が変わって出せる操作も変わり、このダイアログごと画面から
-   * 消えるので気付きにくい。問題になるのは失敗したときで、予約の状態は変わらないため
-   * 同じダイアログが開いたまま残り、一覧の上に出したエラーがその背後に隠れて読めない。
-   *
-   * 「送信中になった」ことを覚えておき、それが終わった瞬間に閉じる。
-   * 成功・失敗のどちらでも閉じてよい（結果は画面側に反映される）。
-   */
-  const hasSubmittedRef = useRef(false);
-  useEffect(() => {
-    if (isSubmitting) {
-      hasSubmittedRef.current = true;
-      return;
-    }
-
-    if (hasSubmittedRef.current) {
-      hasSubmittedRef.current = false;
-      setOpen(false);
-    }
-  }, [isSubmitting]);
+  useCloseAfterSubmit(isSubmitting, () => setOpen(false));
 
   // 日本時間での月日と曜日
   const [_, month, day] = toTokyoDateKey(item.startAt).split("-");
@@ -230,62 +203,15 @@ export function ReservationActionDialog({
             </AlertDialogHeader>
 
             {config.hasReason && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`reason-${item.id}-${transition}`} className="text-sm">
-                  {config.reasonLabel}
-                  <span className="ml-1.5 text-xs font-semibold text-destructive">(必須)</span>
-                </Label>
-                {/* 定型文のボタン（事務局の却下・キャンセルだけ。COND-002） */}
-                {templates.length > 0 && (
-                  <div
-                    role="group"
-                    aria-labelledby={`reason-templates-${item.id}-${transition}`}
-                    className="flex flex-wrap items-center gap-1.5"
-                  >
-                    <span
-                      id={`reason-templates-${item.id}-${transition}`}
-                      className="text-xs text-muted-foreground"
-                    >
-                      定型文を入れる
-                    </span>
-                    {/*
-                      押した後にフォーカスを入力欄へ移さない。
-                      スマホでキーボードが出て、送信のボタン（「却下する」など）が隠れるため。
-                    */}
-                    {templates.map((template) => (
-                      <Button
-                        key={template.label}
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        onClick={() =>
-                          setReason((current) => toReasonWithTemplate(current, template.text))
-                        }
-                      >
-                        {template.label}
-                      </Button>
-                    ))}
-                  </div>
-                )}
-                <Textarea
-                  id={`reason-${item.id}-${transition}`}
-                  name="reason"
-                  rows={3}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder={config.reasonPlaceholder}
-                  required
-                  aria-describedby={`reason-note-${item.id}-${transition}`}
-                  className="text-sm"
-                />
-                {/* 理由の欄を出す操作（取り消し・キャンセル・却下）は、どれも予約を終わらせる */}
-                <p
-                  id={`reason-note-${item.id}-${transition}`}
-                  className="text-xs text-muted-foreground"
-                >
-                  入力した理由は、予約の詳細とお知らせのメールに載ります。この操作は元に戻せません。
-                </p>
-              </div>
+              <TransitionReasonField
+                idPrefix={`${item.id}-${transition}`}
+                label={config.reasonLabel}
+                placeholder={config.reasonPlaceholder}
+                value={reason}
+                onValueChange={setReason}
+                templates={templates}
+                note="入力した理由は、予約の詳細とお知らせのメールに載ります。この操作は元に戻せません。"
+              />
             )}
 
             {config.hasUnlockArrangement && (
@@ -296,49 +222,13 @@ export function ReservationActionDialog({
               />
             )}
 
-            {/*
-              団体へのメッセージ（任意。REQ-048）。承認の通知メールに載せ、メッセージの通知は別に送らない。
-              文字数の上限（COND-023）は maxLength で止めない。理由はメッセージの送信欄
-              （ReservationMessageForm）と同じで、ブラウザとサーバーで数え方がずれるため。
-            */}
             {config.hasMessage && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`message-${item.id}-${transition}`} className="text-sm">
-                  団体へのメッセージ
-                  <span className="font-normal text-muted-foreground">（任意）</span>
-                </Label>
-                <Textarea
-                  id={`message-${item.id}-${transition}`}
-                  name="message"
-                  rows={3}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="カードキーの受け取り方など、承認と一緒に伝えたいことを入力してください"
-                  aria-describedby={
-                    showsArrangedMessageHint
-                      ? `message-note-${item.id}-${transition} message-hint-${item.id}-${transition}`
-                      : `message-note-${item.id}-${transition}`
-                  }
-                  className="text-sm"
-                />
-                <p
-                  id={`message-note-${item.id}-${transition}`}
-                  className="text-xs text-muted-foreground"
-                >
-                  承認のお知らせのメールに載せて、団体に届けます。送ったメッセージは編集も削除もできません。
-                </p>
-                {showsArrangedMessageHint && (
-                  <p
-                    id={`message-hint-${item.id}-${transition}`}
-                    className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300"
-                  >
-                    <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
-                    <span>
-                      「手配済み」では、団体に解錠の方法をメッセージで確かめるよう案内します。まだ伝えていなければ、ここに書いてください。
-                    </span>
-                  </p>
-                )}
-              </div>
+              <ApprovalMessageField
+                idPrefix={`${item.id}-${transition}`}
+                value={message}
+                onValueChange={setMessage}
+                unlockArrangement={unlockArrangement}
+              />
             )}
 
             <AlertDialogFooter className="mt-2">
@@ -351,71 +241,89 @@ export function ReservationActionDialog({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* JavaScript が無効な環境向けのフォールバック（通常のフォーム送信で成立させる） */}
-      <noscript>
-        <Form method="post" className="flex flex-col gap-1.5">
-          <input type="hidden" name="intent" value={transition} />
-          <input type="hidden" name="reservationId" value={item.id} />
-          {/*
-            理由の欄はダイアログと同じくここにも置く。承認以外の操作は理由が必須
-            （COND-002）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
-            定型文のボタンは JavaScript が無いと動かないため、ここでは出さない。
-          */}
-          {config.hasReason && (
-            <>
-              <Label htmlFor={`reason-noscript-${item.id}-${transition}`} className="text-xs">
-                {config.reasonLabel}
-              </Label>
-              <Textarea
-                id={`reason-noscript-${item.id}-${transition}`}
-                name="reason"
-                rows={2}
-                placeholder={config.reasonPlaceholder}
-                required
-                className="text-sm"
-              />
-            </>
-          )}
-          {/*
-            解錠の手配の欄はダイアログと同じくここにも置く。承認では解錠の手配が必須
-            （COND-027）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
-          */}
-          {config.hasUnlockArrangement && (
-            <fieldset className="flex flex-col gap-1">
-              <legend className="text-xs">解錠の手配</legend>
-              {unlockArrangementOptions.map((option) => (
-                <label key={option} className="flex items-center gap-1.5 text-xs">
-                  <input type="radio" name="unlockArrangement" value={option} required />
-                  {unlockArrangementLabel[option]}
-                </label>
-              ))}
-            </fieldset>
-          )}
-          {/* 団体へのメッセージは任意だが、ダイアログで書けることは JavaScript が無くても書けるようにする */}
-          {config.hasMessage && (
-            <>
-              <Label htmlFor={`message-noscript-${item.id}-${transition}`} className="text-xs">
-                団体へのメッセージ（任意）
-              </Label>
-              <Textarea
-                id={`message-noscript-${item.id}-${transition}`}
-                name="message"
-                rows={2}
-                className="text-sm"
-              />
-            </>
-          )}
-          <Button
-            type="submit"
-            variant={config.actionVariant}
-            size="sm"
-            disabled={disabled}
-            className="text-xs"
-          >
-            {config.actionLabel}
-          </Button>
-        </Form>
-      </noscript>
+      <ReservationActionNoscriptForm itemId={item.id} transition={transition} disabled={disabled} />
     </>
+  );
+}
+
+/**
+ * JavaScript が無効な環境向けのフォールバックフォーム（通常のフォーム送信で成立させる）。
+ */
+export function ReservationActionNoscriptForm({
+  itemId,
+  transition,
+  disabled = false,
+}: Readonly<{
+  readonly itemId: string;
+  readonly transition: ReservationTransition;
+  readonly disabled?: boolean;
+}>) {
+  const config = getDialogConfig(transition);
+
+  return (
+    <noscript>
+      <Form method="post" className="flex flex-col gap-1.5">
+        <input type="hidden" name="intent" value={transition} />
+        <input type="hidden" name="reservationId" value={itemId} />
+        {/*
+          理由の欄はダイアログと同じくここにも置く。承認以外の操作は理由が必須
+          （COND-002）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
+          定型文のボタンは JavaScript が無いと動かないため、ここでは出さない。
+        */}
+        {config.hasReason && (
+          <>
+            <Label htmlFor={`reason-noscript-${itemId}-${transition}`} className="text-xs">
+              {config.reasonLabel}
+            </Label>
+            <Textarea
+              id={`reason-noscript-${itemId}-${transition}`}
+              name="reason"
+              rows={2}
+              placeholder={config.reasonPlaceholder}
+              required
+              className="text-sm"
+            />
+          </>
+        )}
+        {/*
+          解錠の手配の欄はダイアログと同じくここにも置く。承認では解錠の手配が必須
+          （COND-027）なので、欄が無いとサーバーに必ず弾かれ、操作を終えられない。
+        */}
+        {config.hasUnlockArrangement && (
+          <fieldset className="flex flex-col gap-1">
+            <legend className="text-xs">解錠の手配</legend>
+            {unlockArrangementOptions.map((option) => (
+              <label key={option} className="flex items-center gap-1.5 text-xs">
+                <input type="radio" name="unlockArrangement" value={option} required />
+                {unlockArrangementLabel[option]}
+              </label>
+            ))}
+          </fieldset>
+        )}
+        {/* 団体へのメッセージは任意だが、ダイアログで書けることは JavaScript が無くても書けるようにする */}
+        {config.hasMessage && (
+          <>
+            <Label htmlFor={`message-noscript-${itemId}-${transition}`} className="text-xs">
+              団体へのメッセージ（任意）
+            </Label>
+            <Textarea
+              id={`message-noscript-${itemId}-${transition}`}
+              name="message"
+              rows={2}
+              className="text-sm"
+            />
+          </>
+        )}
+        <Button
+          type="submit"
+          variant={config.actionVariant}
+          size="sm"
+          disabled={disabled}
+          className="text-xs"
+        >
+          {config.actionLabel}
+        </Button>
+      </Form>
+    </noscript>
   );
 }

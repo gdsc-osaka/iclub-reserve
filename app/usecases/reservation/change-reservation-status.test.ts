@@ -1328,4 +1328,98 @@ describe("changeReservationStatusUseCase", () => {
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
   });
+
+  describe("rejectOnlyIfOverlapping（COND-031 (5)）", () => {
+    const rejectBaseArgs: ChangeReservationStatusArgs = {
+      reservationId: "res_provisional_01",
+      actorUserId: "usr_staff_01",
+      isStaff: true,
+      transition: ReservationTransition.Reject,
+      reason: "別の予約と重なるため",
+      now: testNow,
+      appBaseUrl: "https://reserve.example.com",
+    };
+
+    it("却下で rejectOnlyIfOverlapping と重なる場合は正常に却下される", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...rejectBaseArgs,
+        rejectOnlyIfOverlapping: {
+          facilityId: "fac_room_a",
+          startAt: new Date("2026-09-25T11:00:00+09:00"),
+          endAt: new Date("2026-09-25T13:00:00+09:00"),
+        },
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().status).toBe(ReservationStatus.Rejected);
+      expect(spies.applyStatusTransition).toHaveBeenCalledTimes(1);
+    });
+
+    it("却下で重ならない（時間帯がずれた）場合は Conflict となり何も書かない", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...rejectBaseArgs,
+        rejectOnlyIfOverlapping: {
+          facilityId: "fac_room_a",
+          startAt: new Date("2026-09-25T12:00:00+09:00"),
+          endAt: new Date("2026-09-25T14:00:00+09:00"),
+        },
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result._unsafeUnwrapErr();
+      expect(error.code).toBe(ReservationErrorCode.Conflict);
+      expect(error.message).toBe(
+        "予約 res_provisional_01 は、承認した予約と重ならなくなっていたので、却下しなかった。",
+      );
+      expect(error.userMessage).toBe(
+        "この予約は、承認した予約と重ならなくなったため、却下しませんでした。",
+      );
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
+    it("却下で重ならない（施設が違う）場合は Conflict となり何も書かない", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        ...rejectBaseArgs,
+        rejectOnlyIfOverlapping: {
+          facilityId: "fac_room_b",
+          startAt: new Date("2026-09-25T10:00:00+09:00"),
+          endAt: new Date("2026-09-25T12:00:00+09:00"),
+        },
+      });
+
+      expect(result.isErr()).toBe(true);
+      const error = result._unsafeUnwrapErr();
+      expect(error.code).toBe(ReservationErrorCode.Conflict);
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
+    it("承認で渡されても読まない（重ならない値を渡しても承認できる）", async () => {
+      const { deps, spies } = createMockDeps({ reservation: baseProvisionalReservation });
+
+      const result = await changeReservationStatusUseCase(deps, {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.NotRequired,
+        now: testNow,
+        appBaseUrl: "https://reserve.example.com",
+        rejectOnlyIfOverlapping: {
+          facilityId: "fac_different",
+          startAt: new Date("2026-09-25T10:00:00+09:00"),
+          endAt: new Date("2026-09-25T12:00:00+09:00"),
+        },
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap().status).toBe(ReservationStatus.Approved);
+      expect(spies.applyStatusTransition).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -93,6 +93,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     reservationId,
     transition,
     reason,
+    rejectReservationIds: formData.getAll("rejectReservationId"),
     unlockArrangement: formData.get("unlockArrangement"),
     message: formData.get("message"),
     now: new Date(),
