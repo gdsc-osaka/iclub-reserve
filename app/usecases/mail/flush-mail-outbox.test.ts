@@ -81,7 +81,9 @@ describe("flush-mail-outbox", () => {
         errAsync({
           code: MailSendErrorCode.RateLimited,
           message: "SMTP サーバーが一時的に受け付けられない状態です。",
-          cause: "455 rate limit",
+          cause: new Error(
+            "Failed to send RCPT TO: 450 4.2.1 <user@example.com> Mailbox temporarily unavailable",
+          ),
         }),
       );
 
@@ -104,17 +106,14 @@ describe("flush-mail-outbox", () => {
       });
       // 一過性のエラーでは console.warn が呼ばれ、console.error は呼ばれないこと
       expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("outbox_01"),
-        expect.objectContaining({ code: MailSendErrorCode.RateLimited }),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        code: MailSendErrorCode.RateLimited,
+        message: "SMTP サーバーが一時的に受け付けられない状態です。",
+      });
       expect(errorSpy).not.toHaveBeenCalled();
 
-      // ADR-004 決定 9: 個人情報（宛先メールアドレス）がログに含まれないこと
-      const warnCallsText = warnSpy.mock.calls
-        .map((args) => args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "))
-        .join("\n");
-      expect(warnCallsText).not.toContain("user@example.com");
+      // ADR-004 決定 9: SMTP 応答の cause に含まれる宛先メールアドレスがログに出ないこと
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("user@example.com");
     });
 
     it("一過性のエラーでも attemptCount >= 5 (MAX_ATTEMPTS) の場合は markDead になる", async () => {
@@ -129,7 +128,7 @@ describe("flush-mail-outbox", () => {
         errAsync({
           code: MailSendErrorCode.RateLimited,
           message: "SMTP サーバーが一時的に受け付けられない状態です。",
-          cause: "455 rate limit",
+          cause: "450 4.2.1 <user@example.com> Mailbox temporarily unavailable",
         }),
       );
 
@@ -150,10 +149,11 @@ describe("flush-mail-outbox", () => {
       expect(markRetryable).not.toHaveBeenCalled();
       // 上限到達で dead になる場合は console.error が呼ばれ、console.warn は呼ばれないこと
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("outbox_01"),
-        expect.objectContaining({ code: MailSendErrorCode.RateLimited }),
-      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        code: MailSendErrorCode.RateLimited,
+        message: "SMTP サーバーが一時的に受け付けられない状態です。",
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("user@example.com");
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
@@ -168,7 +168,9 @@ describe("flush-mail-outbox", () => {
         errAsync({
           code: MailSendErrorCode.Rejected,
           message: "宛先が抑制リストに登録されているため送信できません。",
-          cause: "254 suppression",
+          cause: new Error(
+            "Failed to send RCPT TO: 254 4.7.1 Suppression for user user@example.com",
+          ),
         }),
       );
 
@@ -185,12 +187,13 @@ describe("flush-mail-outbox", () => {
         id: "outbox_01",
         error: expect.objectContaining({ code: MailSendErrorCode.Rejected }),
       });
-      // 恒久的な失敗は 1 回目でも console.error が呼ばれ、console.warn は呼ばれないこと
+      // 恒久的な失敗は 1 回目でも console.error が呼ばれ、cause 内の宛先アドレスはログに出ないこと
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("outbox_01"),
-        expect.objectContaining({ code: MailSendErrorCode.Rejected }),
-      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        code: MailSendErrorCode.Rejected,
+        message: "宛先が抑制リストに登録されているため送信できません。",
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("user@example.com");
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
@@ -200,7 +203,7 @@ describe("flush-mail-outbox", () => {
 
       const invalidEntry: MailOutboxEntry = {
         ...baseEntry,
-        to: { address: "invalid-email-no-at", name: "無効" },
+        to: { address: "invalid..user@osaka-u", name: "無効" },
       };
 
       const markDead = vi.fn(() => okAsync(undefined));
@@ -220,12 +223,12 @@ describe("flush-mail-outbox", () => {
         id: "outbox_01",
         error: expect.objectContaining({ code: MailSendErrorCode.SendFailed }),
       });
-      // メールアドレス不正は再試行しても直らないため console.error が呼ばれ、console.warn は呼ばれないこと
+      // メールアドレス不正は再試行しても直らないため console.error が呼ばれ、生の宛先入力（input）はログに出ないこと
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("outbox_01"),
-        expect.anything(),
-      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("outbox_01"), {
+        type: "invalid_email_address",
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("invalid..user@osaka-u");
       expect(warnSpy).not.toHaveBeenCalled();
     });
 

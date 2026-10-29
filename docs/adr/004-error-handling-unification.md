@@ -515,12 +515,14 @@ infra が構築しているエラーコードを全件数えたところ、`Data
   公開したためである。使ってよいのは、失敗しても画面を開くと決めた loader (ダッシュボード) だけで、
   応答を返す・投げる場面では 2 本のグルーを使うこと。ログは残るので、握ったことは後から追える。
 - **障害は Cloudflare Workers Issues で知らせ、偵察の自動検知は別途とする。**
-  `wrangler.jsonc` の `observability.issues` を有効にすると、未捕捉例外・HTTP 5xx・`console.error` が自動で
-  Issue に束ねられる。この ADR で想定内の差し戻しを `info`・`warn`、`internal` だけを `error` (500) に分けたため、
-  障害だけがノイズ無く Issue になり、ダッシュボードの Automations（発生回数 1 回・無活動後の再発）から
-  チャット通知やコーディングエージェントへ流せる。
+  `wrangler.jsonc` の `observability.issues` を有効にすると、未捕捉例外・HTTP 5xx・`console.error`
+  (および `Error` やスタックトレースを含むログ) が自動で Issue に束ねられる。
+  この ADR で想定内の差し戻しを `cause` の無い `info`・`warn`、`internal` を `error` (500) に分けたため、
+  想定内の業務エラーは原則として対象外になり、ダッシュボードの Automations（発生回数 1 回・無活動後の再発）から
+  障害通知をチャットやコーディングエージェントへ流せる
+  (ただし `info`・`warn` でも `cause` に `Error` を渡すと payload に `stack` が含まれて Issues の検出対象になりうる)。
   一方、`warn` (`forbidden`) を数えて偵察を自動で知らせる仕組みは Issues の対象外であり、この ADR では作らない。
-  また Workers Logs と Issues の発生詳細の保存期間は 7 日であり、
+  また Workers Logs の保存期間は無料プランで 3 日・有料プランで 7 日、Issues の発生詳細の保存期間は 7 日であり、
   それより長い期間の傾向を見るには別の保存先が要る。どちらも必要になったときに決める。
 
 ## 影響範囲

@@ -52,9 +52,12 @@
     /**
      * Workers Issues（障害の自動集約・通知）。
      *
-     * 未捕捉例外・HTTP 5xx 応答・`console.error` を検知し、原因ごとに 1 つの Issue に束ねる。
-     * 想定内の業務エラー（400 / 403 / 404 / 409）は `info` / `warn` で出すためここには載らず、
-     * 人が対処すべき障害（`ErrorKind.Internal` や定期処理の `dead` 遷移）だけが起票される（ADR-004）。
+     * 未捕捉例外・HTTP 5xx 応答・`console.error`（および `Error` やスタックトレースを含むログ）を検知し、
+     * 原因ごとに 1 つの Issue に束ねる。
+     * 想定内の業務エラー（400 / 403 / 404 / 409）は `cause` を持たない `info` / `warn` で出すため原則として対象外になり、
+     * 主に `ErrorKind.Internal`（500）や定期処理の `dead` 遷移などの `console.error` が検出対象になる（ADR-004）。
+     * ただし `logFailure` は `info` / `warn` でも `cause` が `Error` の場合は `stack` を含む payload を出すため、
+     * それらに `Error` を渡すと Issues の検出対象になりうる点に注意。
      * 通知先やコーディングエージェント連携（Automations）は Cloudflare ダッシュボード側で設定する。
      */
     "issues": {
