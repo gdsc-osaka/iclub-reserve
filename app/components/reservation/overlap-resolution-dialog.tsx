@@ -14,7 +14,6 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { cn } from "cn";
 import { UnlockArrangement } from "~/domain/reservation";
@@ -237,32 +236,36 @@ export function OverlapResolutionDialog({
                       const isRemaining = !isWinner && !isRejected;
                       const bar = timeline.bars.get(candidate.id);
                       const isFirst = index === 0;
+                      const itemId = `candidate-${candidate.id}`;
 
                       return (
-                        <div
+                        // 枠のどこを押しても選べるように、枠そのものをラベルにする。
+                        // 同じ団体の予約が並んでも聞き分けられるよう、読み上げ名は団体名と時間帯にする
+                        <label
                           key={candidate.id}
+                          htmlFor={itemId}
                           className={cn(
                             "flex flex-col gap-2 rounded-md border p-3 transition-colors",
                             "has-data-checked:border-primary has-data-checked:bg-primary/5",
-                            candidate.hasApprovedOverlap && "opacity-60",
+                            candidate.hasApprovedOverlap
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer",
                           )}
                         >
                           <div className="flex items-start gap-3">
                             <RadioGroupItem
-                              id={`candidate-${candidate.id}`}
+                              id={itemId}
                               value={candidate.id}
                               disabled={candidate.hasApprovedOverlap}
+                              aria-labelledby={`${itemId}-group ${itemId}-time`}
                               className="mt-1 shrink-0"
                             />
                             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                               <div className="flex flex-wrap items-center justify-between gap-1.5">
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  <Label
-                                    htmlFor={`candidate-${candidate.id}`}
-                                    className="font-semibold text-sm cursor-pointer"
-                                  >
+                                  <span id={`${itemId}-group`} className="text-sm font-semibold">
                                     {candidate.groupName}
-                                  </Label>
+                                  </span>
                                   {isFirst && (
                                     <Badge variant="outline" className="text-[10px] py-0 px-1.5">
                                       先着
@@ -277,7 +280,7 @@ export function OverlapResolutionDialog({
                               </div>
 
                               <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                                <span>
+                                <span id={`${itemId}-time`}>
                                   {formatTime(candidate.startAt)} – {formatTime(candidate.endAt)} ·{" "}
                                   {candidate.headCount}名
                                 </span>
@@ -336,7 +339,7 @@ export function OverlapResolutionDialog({
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </label>
                       );
                     })}
                   </RadioGroup>

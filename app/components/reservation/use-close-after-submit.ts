@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 /**
  * 送信が終わったら、ダイアログを自分で閉じるためのフック。
@@ -13,8 +13,8 @@ import { useEffect, useRef } from "react";
  */
 export function useCloseAfterSubmit(isSubmitting: boolean, onClose: () => void) {
   const hasSubmittedRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  // 呼び出し側は描くたびに新しい関数を渡すので、依存に入れずに最新の onClose を呼ぶ
+  const close = useEffectEvent(onClose);
 
   useEffect(() => {
     if (isSubmitting) {
@@ -24,7 +24,7 @@ export function useCloseAfterSubmit(isSubmitting: boolean, onClose: () => void) 
 
     if (hasSubmittedRef.current) {
       hasSubmittedRef.current = false;
-      onCloseRef.current();
+      close();
     }
   }, [isSubmitting]);
 }
