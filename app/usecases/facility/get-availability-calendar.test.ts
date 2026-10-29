@@ -32,6 +32,7 @@ const ownReservation: AvailabilityReservationRow = {
   headCount: 4,
   note: "週次定例",
   hasApprovedOverlap: false,
+  hasProvisionalOverlap: false,
 };
 
 /** 所属していない団体の予約 */
@@ -45,6 +46,7 @@ const otherReservation: AvailabilityReservationRow = {
   headCount: 20,
   note: "ハッカソンのキックオフ",
   hasApprovedOverlap: false,
+  hasProvisionalOverlap: false,
 };
 
 /** 有効な団体に所属している状態 */

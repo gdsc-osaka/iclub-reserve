@@ -34,6 +34,8 @@ export interface AvailabilityReservationRow {
   readonly note: string | null;
   /** 同一施設・同一時間帯にほかの承認済み予約があるか（COND-001） */
   readonly hasApprovedOverlap: boolean;
+  /** 同一施設・同一時間帯にほかの仮予約があるか（COND-031） */
+  readonly hasProvisionalOverlap: boolean;
 }
 
 /** Query が返す、マスク前の画面 1 つ分のデータ。 */
@@ -90,6 +92,12 @@ export interface AvailabilityReservation {
    * 承認ボタンを押せるかどうかの判定に使う。
    */
   readonly hasApprovedOverlap: boolean;
+  /**
+   * 同一施設・同一時間帯に、ほかの仮予約があるかどうか（COND-031）。
+   *
+   * 重なりの解決ダイアログを開くかどうかの判定に使う。
+   */
+  readonly hasProvisionalOverlap: boolean;
 }
 
 /** 画面へ渡してよい、空き状況カレンダー 1 画面分のデータ。 */

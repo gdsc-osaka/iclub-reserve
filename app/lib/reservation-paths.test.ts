@@ -5,6 +5,7 @@ import { AppArea } from "~/lib/app-area";
 import {
   toFormPathForFacility,
   toNewReservationPath,
+  toOverlapResolutionPath,
   toReservationDetailPath,
   toReservationEditPath,
 } from "./reservation-paths";
@@ -49,6 +50,15 @@ describe("reservation-paths", () => {
       [AppArea.Staff, "fac/1", "/staff/reservations/new?facility=fac%2F1"],
     ])("%s で %s のときは %s を返す", (area, facilityId, expected) => {
       expect(toFormPathForFacility(area, facilityId)).toBe(expected);
+    });
+  });
+
+  describe("toOverlapResolutionPath", () => {
+    it.each([
+      ["res_123", "/staff/reservations/res_123/overlaps"],
+      ["res/123", "/staff/reservations/res%2F123/overlaps"],
+    ])("%s のときは %s を返す", (id, expected) => {
+      expect(toOverlapResolutionPath(id)).toBe(expected);
     });
   });
 });

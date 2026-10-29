@@ -10,7 +10,9 @@ import {
 } from "~/routes/reservations/list/query-params";
 import type { ReservationListResult } from "~/usecases/reservation/get-reservation-list";
 import { ReservationListEmpty } from "./reservation-list-empty";
+import { toReservationListEntries } from "./reservation-list-entries";
 import { ReservationListFilters, ReservationListGroupSwitcher } from "./reservation-list-filters";
+import { ReservationOverlapGroup } from "./reservation-overlap-group";
 import { ReservationListRow } from "./reservation-list-row";
 
 interface ReservationListProps {
@@ -123,16 +125,30 @@ export function ReservationList({
         />
       ) : (
         <ul className="flex flex-col gap-3" role="list">
-          {items.map((item) => (
-            <ReservationListRow
-              key={item.id}
-              item={item}
-              showGroupName={isStaffArea}
-              actor={actor}
-              now={now}
-              area={area}
-            />
-          ))}
+          {toReservationListEntries(items, isStaffArea).map((entry) => {
+            if (entry.kind === "overlap") {
+              const first = entry.items[0];
+              return (
+                <ReservationOverlapGroup
+                  key={`overlap-${first?.id ?? ""}`}
+                  items={entry.items}
+                  actor={actor}
+                  area={area}
+                />
+              );
+            }
+
+            return (
+              <ReservationListRow
+                key={entry.item.id}
+                item={entry.item}
+                showGroupName={isStaffArea}
+                actor={actor}
+                now={now}
+                area={area}
+              />
+            );
+          })}
         </ul>
       )}
     </main>

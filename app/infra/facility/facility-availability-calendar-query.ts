@@ -61,6 +61,7 @@ const selectReservations = (db: Database, facilityId: string, periods: Availabil
       headCount: reservationTable.headCount,
       note: reservationTable.note,
       hasApprovedOverlap: hasOverlappingReservation(db, ReservationStatus.Approved),
+      hasProvisionalOverlap: hasOverlappingReservation(db, ReservationStatus.Provisional),
     })
     .from(reservationTable)
     .innerJoin(groupTable, eq(reservationTable.groupId, groupTable.id))

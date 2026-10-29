@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
+import { err, errAsync, ok, okAsync, ResultAsync, safeTry, type Result } from "neverthrow";
 
 import type { AuditLogDraft } from "~/domain/audit-log";
 import { toCalendarSyncDraft } from "~/domain/calendar";
@@ -12,10 +12,13 @@ import {
 import { selectApprovalMailRecipients } from "~/domain/mail/reservation-message-mail";
 import type { MembershipRepository } from "~/domain/membership";
 import {
+  overlapsReservation,
   ReservationErrorCode,
   ReservationStatus,
+  type Reservation,
   type ReservationError,
   type ReservationRepository,
+  type ReservationSlot,
   type UnlockArrangement,
 } from "~/domain/reservation";
 import {
@@ -81,6 +84,15 @@ export interface ChangeReservationStatusArgs {
    * 欄は任意なので、空欄や空白だけなら添えなかったものとして扱う。
    */
   readonly message?: string | null;
+  /**
+   * 却下（Reject）のときだけ使う。渡したときは、予約がこの施設・時間帯と重なるときだけ却下する（COND-031 (5)）。
+   *
+   * 重なりの解決で、承認した予約と重なる仮予約を却下するときに、承認した予約を渡す。
+   * 画面を開いた後に団体が施設・日時を変えて重ならなくなった予約を、巻き込んで却下しないためである。
+   * 確かめるのは、このユースケースが findById で読んだ予約である。その予約の updatedAt を最後の UPDATE の
+   * 条件に入れているので、確かめた後に団体が変えても却下は書かれない。
+   */
+  readonly rejectOnlyIfOverlapping?: ReservationSlot | null;
   /** 更新日時の基準となる日時（テスト容易化のため任意指定可能） */
   readonly now?: Date;
   /** 通知メールに載せる予約詳細へのリンクの起点（`resolveAppBaseUrl` の値） */
@@ -125,6 +137,23 @@ const resolveTransitionMailAudience = (
 };
 
 /**
+ * 重なりの解決での却下で、予約が承認した予約とまだ重なっているかを確かめる門番（COND-031 (5)）。
+ *
+ * 画面を開いた後に日時や施設が変わって重ならなくなった予約を、巻き込んで却下しないようにする。
+ */
+const ensureStillOverlapping = (
+  reservation: Reservation,
+  approved: ReservationSlot,
+): Result<null, ReservationError> =>
+  overlapsReservation(reservation, approved)
+    ? ok(null)
+    : err({
+        code: ReservationErrorCode.Conflict,
+        message: `予約 ${reservation.id} は、承認した予約と重ならなくなっていたので、却下しなかった。`,
+        userMessage: "この予約は、承認した予約と重ならなくなったため、却下しませんでした。",
+      });
+
+/**
  * 予約のステータスを変更するユースケース（UC-003 / UC-004 / UC-006 / UC-007）。
  *
  * 【確かめる順序の理由】
@@ -134,6 +163,8 @@ const resolveTransitionMailAudience = (
  * 同じ理由で理由の検証の後に確かめる。承認と同時に送るメッセージの本文（COND-023）は、その後に確かめる。
  * 事務局だけの操作では、事務局かどうかをさらに前、予約を引くより前に確かめる
  * （予約の有無を事務局でない人に伝えないため。本文のコメントを参照）。
+ * 重なりの解決での却下（rejectOnlyIfOverlapping・COND-031 (5)）では、承認した予約との重なりも
+ * canTransition の直後（理由の検証の前）に確かめ、重ならなくなった予約を理由の不備で止めることなく Conflict で弾く。
  *
  * 重複の確認と通知先の取得は同時に投げる。どちらも D1 への往復なので、
  * 順に待つとそのぶん利用者の待ち時間になる。
@@ -182,6 +213,10 @@ export const changeReservationStatusUseCase = (
 
     // 誰が・いまの状態から動かせるか（COND-009 / STATE-001）
     yield* canTransition(reservation, args.transition, actor);
+    // 却下のときだけ、指定があれば承認した予約との重なりを確かめる（COND-031 (5)）
+    if (args.transition === ReservationTransition.Reject && args.rejectOnlyIfOverlapping) {
+      yield* ensureStillOverlapping(reservation, args.rejectOnlyIfOverlapping);
+    }
     // 理由の検証（COND-002）。正規化した値をそのまま保存する
     const statusReason = yield* validateTransitionReason(args.transition, args.reason);
     // 解錠の手配の検証（COND-027）。承認のときだけ必須で検証し、それ以外の操作では読まない
