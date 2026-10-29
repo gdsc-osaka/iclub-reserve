@@ -58,7 +58,7 @@
 
 ### 前提条件
 
-- [Node.js](https://nodejs.org/ja/download) (v24 以上推奨。v22 なら 22.22.1 以上)
+- [Node.js](https://nodejs.org/ja/download) (v26 以上推奨。v22 なら 22.22.1 以上)
 - [pnpm](https://pnpm.io/installation)
   - 使う版は `package.json` の `devEngines.packageManager` で決めています（v12）。手元の pnpm が 11 以降なら、版が違っても `pnpm install` のときに自動でその版に切り替わります
 - [Terraform](https://developer.hashicorp.com/terraform/install) (インフラ変更時のみ)
