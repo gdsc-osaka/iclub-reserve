@@ -49,6 +49,9 @@
       "head_sampling_rate": 1,
       "persist": true,
     },
+    "issues": {
+      "enabled": true,
+    },
   },
   "upload_source_maps": true,
 
