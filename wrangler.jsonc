@@ -29,7 +29,7 @@
    * `wrangler types` は `--env` なし（＝トップレベル）で走るので、
    * トップレベルにないキーは `Env` の型に現れない。
    *
-   * 一方 `main` `compatibility_date` `compatibility_flags` `observability`
+   * 一方 `main` `compatibility_date` `compatibility_flags` `cache` `observability`
    * `upload_source_maps` `account_id` は継承されるので、ここに 1 度書けばよい。
    */
   "name": "iclub-reserve-local",
@@ -37,6 +37,16 @@
   "compatibility_date": "2026-06-20",
   "main": "./workers/app.ts",
   "compatibility_flags": ["nodejs_compat"],
+  /**
+   * Workers Cache（エッジキャッシュ）の設定。
+   * 有効にすることで、Worker の手前にあるエッジキャッシュが評価され、
+   * キャッシュヒット時は Worker を起動せずに直接応答を返す（CPU 時間を消費しない）。
+   * キャッシュの制御は Cache-Control や CDN-Cache-Control 等の HTTP ヘッダーで行う。
+   * https://developers.cloudflare.com/workers/cache/configuration/#enable-caching
+   */
+  "cache": {
+    "enabled": true,
+  },
   "observability": {
     "logs": {
       "enabled": true,
