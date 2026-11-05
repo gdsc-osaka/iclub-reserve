@@ -13,6 +13,13 @@ describe("toSafeRedirectTo", () => {
   it.each([
     ["サイト内のパス", "/reservation", "/reservation"],
     ["クエリ付きのパス", "/reservation?date=2026-08-23", "/reservation?date=2026-08-23"],
+    ["ハッシュ付きのパス", "/reservation#today", "/reservation#today"],
+    ["日本語のクエリ付きのパス", "/reservation?keyword=会議室", "/reservation?keyword=会議室"],
+    [
+      "エンコード済みの日本語のクエリ付きのパス",
+      "/reservation?keyword=%E4%BC%9A%E8%AD%B0%E5%AE%A4",
+      "/reservation?keyword=%E4%BC%9A%E8%AD%B0%E5%AE%A4",
+    ],
   ])("%s はそのまま通す", (_, value, expected) => {
     expect(toSafeRedirectTo(value)).toBe(expected);
   });
@@ -26,6 +33,17 @@ describe("toSafeRedirectTo", () => {
     ["トップページ（/）", "/"],
     ["クエリ付きのトップページ", "/?utm_source=mail"],
     ["ハッシュ付きのトップページ", "/#top"],
+    // ブラウザは "\" を "/" と同じに扱い、タブと改行を取り除くので、どれも "//evil.example" として開かれる
+    ["バックスラッシュで始まる外部サイト", "/\\evil.example"],
+    ["タブを挟んだ外部サイト", "/\t/evil.example"],
+    ["LF を挟んだ外部サイト", "/\n/evil.example"],
+    ["CR を挟んだ外部サイト", "/\r/evil.example"],
+    ["タブとバックスラッシュを挟んだ外部サイト", "/\t\\evil.example"],
+    // React Router が "./" や "x/../" を解決すると、途中のタブが先頭に来る
+    ["「./」の後ろにタブを挟んだ外部サイト", "/./\t/evil.example"],
+    ["「x/../」の後ろにタブを挟んだ外部サイト", "/x/../\t/evil.example"],
+    ["「./」の後ろにタブとバックスラッシュを挟んだ外部サイト", "/./\t\\evil.example"],
+    ["途中にバックスラッシュを含むパス", "/reservation\\evil.example"],
   ])("%s は /start に送る", (_, value) => {
     expect(toSafeRedirectTo(value)).toBe("/start");
   });
@@ -42,6 +60,22 @@ describe("readRedirectTo", () => {
     const request = new Request("https://example.com/login?redirectTo=https%3A%2F%2Fevil.example");
 
     expect(readRedirectTo(request)).toBe("/start");
+  });
+
+  it.each([
+    ["バックスラッシュ", "%2F%5Cevil.example%2Flogin"],
+    ["「./」の後ろのタブ", "%2F.%2F%09%2Fevil.example%2Flogin"],
+  ])("%s で外部サイトへ向けられていても /start に送る", (_, encoded) => {
+    const request = new Request(`https://example.com/login?redirectTo=${encoded}`);
+
+    expect(readRedirectTo(request)).toBe("/start");
+  });
+
+  it("withRedirectTo で引き継いだ遷移先は、そのまま取り出せる", () => {
+    const redirectTo = "/reservation?keyword=会議室#today";
+    const request = new Request(`https://example.com${withRedirectTo(LOGIN_PATH, redirectTo)}`);
+
+    expect(readRedirectTo(request)).toBe(redirectTo);
   });
 
   it.each([
