@@ -74,6 +74,9 @@ export const isPublicPath = (pathname: string): boolean =>
 /** 遷移先から、クエリパラメータとハッシュを除いたパスの部分を取り出す。 */
 const toPathPart = (path: string): string => path.split(/[?#]/)[0];
 
+/** 遷移先に含まれていたら、位置を問わず通さない文字（"\"・タブ・LF・CR）。理由は `toSafeRedirectTo` を参照。 */
+const UNSAFE_REDIRECT_TO_CHARS = /[\\\t\n\r]/;
+
 /**
  * ログイン後の遷移先として安全な URL だけを通す。
  *
@@ -81,12 +84,24 @@ const toPathPart = (path: string): string => path.split(/[?#]/)[0];
  * （オープンリダイレクト）恐れがある。そのため自サイト内のパス
  * （"/" で始まり "//" では始まらない）だけを許可し、それ以外はランディングページ（/start）に送る。
  *
+ * "\"・タブ・改行（LF・CR）を含む値も、位置を問わず /start に送る。
+ * ブラウザは URL を読むときに "\" を "/" と同じに扱い、タブと改行を取り除くので、
+ * "/\evil.example" や "/\t/evil.example" は "//evil.example"（外部サイト）として開かれてしまう。
+ * 先頭だけを調べても足りない。React Router はリダイレクト先の "./" や "x/../" を解決してから送るので、
+ * "/./\t/evil.example" は "/\t/evil.example" に変わる。
+ * このアプリが作る遷移先（`toCurrentPath`・`withRedirectTo`）は、解析済みの URL のパスと
+ * エンコード済みのクエリからできているので、これらの文字を含まない。
+ *
  * パスの部分が "/" のときも LANDING_PATH（/start）を返す（`/?utm_source=mail` のようにクエリが付いていても）。
  * ログインしていない人がアドレスを打って開くのは "/" なので、そこから来た人も前回の画面へ送るため（ADR-016 決定 4）。
  * "/" のダッシュボードはクエリを読まないので、落としても表示は変わらない。
  */
 export const toSafeRedirectTo = (value: string | null): string =>
-  value && value.startsWith("/") && !value.startsWith("//") && toPathPart(value) !== "/"
+  value &&
+  value.startsWith("/") &&
+  !value.startsWith("//") &&
+  !UNSAFE_REDIRECT_TO_CHARS.test(value) &&
+  toPathPart(value) !== "/"
     ? value
     : DEFAULT_REDIRECT_TO;
 
