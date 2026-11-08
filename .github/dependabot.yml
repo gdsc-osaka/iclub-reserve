@@ -32,3 +32,8 @@ updates:
           - "better-auth"
           - "@better-auth/*"
           - "auth"
+      # Vite と Vite+ をバージョンを揃えて更新
+      vite-plus:
+        patterns:
+          - "vite-plus"
+          - "@voidzero-dev/vite-plus-core"

@@ -75,10 +75,8 @@ const toOrigin = (baseURL: string | undefined): string | undefined =>
  * さらにブラウザは rpID（代表 URL のホスト名）の配下の origin にしかパスキーを使わせないので、
  * 信頼できる範囲は代表 URL のサブドメインに限られる。
  */
-const toPasskeyOrigin = (
-  appEnv: Env["APP_ENV"],
-  baseURL: string | undefined,
-): string | undefined => (appEnv === "preview" ? undefined : toOrigin(baseURL));
+const toPasskeyOrigin = (appEnv: Env["APP_ENV"], baseURL: string | undefined): string | undefined =>
+  appEnv === "preview" ? undefined : toOrigin(baseURL);
 
 /**
  * Better Auth の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
