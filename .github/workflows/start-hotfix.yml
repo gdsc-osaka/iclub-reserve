@@ -1,0 +1,105 @@
+name: Start Hotfix
+
+# 本番の緊急の修正を始める (ADR-017 決定 3)。
+# main の先頭から hotfix/v<版> を作り、版を上げるコミットを積む。修正のコミットと main 向きの PR は人が作る。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "出す版（1.0.1 の形。先頭に v は付けない）"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  start:
+    name: Start Hotfix
+    # develop の上で動いたときだけ。ほかのブランチで書き換えたワークフローから動かさない
+    if: github.ref == 'refs/heads/develop'
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    # GitHub App の鍵を置く Environment。対象のブランチを develop に絞り、ほかのブランチの実行には鍵を渡さない
+    environment:
+      name: release-bot
+      deployment: false
+
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      BRANCH: hotfix/v${{ inputs.version }}
+      REPO: ${{ github.repository }}
+
+    steps:
+      # 版を書き換えるのは main の package.json なので、main を取り出す
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
+          cache: true
+          run-install: false
+
+      - name: Install node modules
+        run: vp install --frozen-lockfile
+
+      # GITHUB_TOKEN で作ったブランチでは、ワークフローが起動しない。そのため GitHub App のトークンで作る
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
+      # 決定 2 と同じ検査。ブランチはまだ無いので、ブランチ名は見ない
+      - name: Check version
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          BASE_VERSION=$(jq -r '.version // empty' package.json)
+          TAG_EXISTS=false
+          if [[ "$RELEASE_VERSION" =~ ^[0-9A-Za-z.-]+$ ]] && gh api "repos/$REPO/git/ref/tags/v$RELEASE_VERSION" --silent 2>/dev/null; then
+            TAG_EXISTS=true
+          fi
+          export BASE_VERSION TAG_EXISTS
+          vp run release:check-version
+          if gh api "repos/$REPO/git/ref/heads/$BRANCH" --silent 2>/dev/null; then
+            echo "::error::ブランチ $BRANCH はもうあります。"
+            exit 1
+          fi
+
+      # 版を上げるコミットを API で作ってから、そのコミットを指すブランチを作る
+      - name: Create hotfix branch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          BASE_SHA=$(git rev-parse HEAD)
+          vp run release:set-version
+          BASE_TREE=$(gh api "repos/$REPO/git/commits/$BASE_SHA" --jq .tree.sha)
+          TREE=$(jq -n --arg base "$BASE_TREE" --rawfile content package.json \
+            '{base_tree: $base, tree: [{path: "package.json", mode: "100644", type: "blob", content: $content}]}' \
+            | gh api -X POST "repos/$REPO/git/trees" --input - --jq .sha)
+          COMMIT=$(jq -n --arg tree "$TREE" --arg parent "$BASE_SHA" --arg message "chore(release): 版を $RELEASE_VERSION にする" \
+            '{message: $message, tree: $tree, parents: [$parent]}' \
+            | gh api -X POST "repos/$REPO/git/commits" --input - --jq .sha)
+          gh api -X POST "repos/$REPO/git/refs" -f "ref=refs/heads/$BRANCH" -f "sha=$COMMIT" --silent
+          {
+            echo "ブランチ \`$BRANCH\` を作りました。次の手順で修正を進めてください。"
+            echo ""
+            echo "1. \`git fetch origin\` して \`$BRANCH\` を取り出し、修正をコミットして push する"
+            echo "2. \`main\` 向きの PR を作る（本文は .github/pull_request_template.md に沿う）"
+            echo "3. コードレビューの承認と、Release Approval の本番への承認を行う"
+          } >> "$GITHUB_STEP_SUMMARY"

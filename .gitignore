@@ -26,3 +26,6 @@ worker-configuration.d.ts
 
 # Vitest（`vp test`）が書き出す添付・レポート
 .vitest/
+
+# 手元で `pnpm run release:migration-plan` を動かしたときの結果
+/migration-plan.md

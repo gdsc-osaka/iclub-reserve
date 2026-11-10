@@ -1,5 +1,6 @@
 {
   "name": "iclub-reserve",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -30,7 +31,11 @@
     "db:studio": "vpx scripts/run-studio.ts",
     "dev:otp": "vpx scripts/dev-otp.ts",
     "icons:generate": "vpx scripts/generate-app-icons.ts",
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "release:check-version": "vpx scripts/release/check-version.ts",
+    "release:set-version": "vpx scripts/release/set-version.ts",
+    "release:migration-plan": "vpx scripts/release/migration-plan.ts",
+    "release:unapplied-migrations": "vpx scripts/release/unapplied-migrations.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.15",
@@ -63,10 +68,12 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/semver": "^7.8.0",
     "auth": "1.7.15",
     "better-sqlite3": "^13.0.3",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.11",
+    "semver": "^7.8.6",
     "shadcn": "^4.23.0",
     "tailwindcss": "^4.3.4",
     "typescript": "^7.0.2",
