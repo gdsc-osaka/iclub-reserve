@@ -105,6 +105,12 @@ const createMockDeps = (options?: {
         staff: [],
       }),
     ),
+    findNames: vi.fn(() =>
+      okAsync({
+        facilityName: "会議室 A",
+        groupName: "ロボット部",
+      }),
+    ),
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);

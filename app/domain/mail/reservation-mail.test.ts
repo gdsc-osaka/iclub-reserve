@@ -17,6 +17,8 @@ describe("reservation-mail", () => {
 
   const baseReservation = {
     id: "res_test_123",
+    facilityName: "会議室 A",
+    groupName: "ロボット部",
     startAt: new Date("2026-09-25T10:00:00+09:00"),
     endAt: new Date("2026-09-25T12:00:00+09:00"),
     statusReason: null,
@@ -57,16 +59,16 @@ describe("reservation-mail", () => {
       const body = drafts[0]?.text ?? "";
       expect(body).not.toContain("予約ID:");
       expect(body).toContain("https://reserve.example.com/reservations/res_test_123");
-      expect(body).toContain("2026年9月25日 10:00");
-      expect(body).toContain("2026年9月25日 12:00");
+      expect(body).toContain("2026年9月25日(金) 10:00〜12:00");
       expect(body).toBe(
         [
           "i-Club 予約システムをご利用いただきありがとうございます。",
           "",
           "申請されていた利用予約が承認されました。",
           "",
-          "利用開始日時: 2026年9月25日 10:00",
-          "利用終了日時: 2026年9月25日 12:00",
+          "施設・設備: 会議室 A",
+          "団体: ロボット部",
+          "利用日時: 2026年9月25日(金) 10:00〜12:00",
           "",
           "予約の詳細は、次のページでご確認ください。",
           "https://reserve.example.com/reservations/res_test_123",
@@ -435,7 +437,7 @@ describe("reservation-mail", () => {
         APP_BASE_URL,
       );
 
-      expect(drafts[0]?.text).toContain("利用開始日時: 2026年9月25日 10:00");
+      expect(drafts[0]?.text).toContain("利用日時: 2026年9月25日(金) 10:00〜12:00");
       expect(drafts[0]?.text).not.toContain("理由:");
     });
   });
@@ -486,7 +488,7 @@ describe("reservation-mail", () => {
       );
       expect(body).toContain(
         [
-          "利用終了日時: 2026年9月25日 12:00",
+          "利用日時: 2026年9月25日(金) 10:00〜12:00",
           "",
           "解錠の手配: 当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
           "",
@@ -566,7 +568,7 @@ describe("reservation-mail", () => {
         expect(draft.subject).toBe("【i-Club 予約システム】施設・設備の利用予約が承認されました");
         expect(draft.text).toContain(
           [
-            "利用終了日時: 2026年9月25日 12:00",
+            "利用日時: 2026年9月25日(金) 10:00〜12:00",
             "",
             "解錠の手配: 解錠の手配が済んでいます。方法はメッセージを確認してください。",
             "",
@@ -665,6 +667,56 @@ describe("reservation-mail", () => {
       expect(draft?.html).toBeDefined();
       expect(draft?.html).not.toContain("<b>");
       expect(draft?.html).toContain("&lt;b&gt;注意事項&lt;/b&gt; &amp; 改行<br>テスト");
+    });
+  });
+
+  describe("通知に載せる施設・設備名・団体名・利用日時（Issue #276）", () => {
+    it("テキスト版に「施設・設備」「団体」「利用日時」が載り、「利用開始日時」「利用終了日時」が載らない", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Applied,
+        baseReservation,
+        defaultAudience,
+        APP_BASE_URL,
+      );
+      const text = drafts[0]?.text ?? "";
+      expect(text).toContain("施設・設備: 会議室 A");
+      expect(text).toContain("団体: ロボット部");
+      expect(text).toContain("利用日時: 2026年9月25日(金) 10:00〜12:00");
+      expect(text).not.toContain("利用開始日時");
+      expect(text).not.toContain("利用終了日時");
+    });
+
+    it("HTML 版で施設名・団体名がエスケープされる（名前に < を入れる）", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Applied,
+        {
+          ...baseReservation,
+          facilityName: "実験室 <Lab A>",
+          groupName: "ロボット部 <Team B>",
+        },
+        defaultAudience,
+        APP_BASE_URL,
+      );
+      const html = drafts[0]?.html ?? "";
+      expect(html).toContain("実験室 &lt;Lab A&gt;");
+      expect(html).toContain("ロボット部 &lt;Team B&gt;");
+      expect(html).not.toContain("<Lab A>");
+      expect(html).not.toContain("<Team B>");
+    });
+
+    it("日をまたぐ予約の利用日時に「翌」が載る", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Applied,
+        {
+          ...baseReservation,
+          startAt: new Date("2026-09-25T20:00:00+09:00"),
+          endAt: new Date("2026-09-26T10:00:00+09:00"),
+        },
+        defaultAudience,
+        APP_BASE_URL,
+      );
+      const text = drafts[0]?.text ?? "";
+      expect(text).toContain("利用日時: 2026年9月25日(金) 20:00〜翌10:00");
     });
   });
 });

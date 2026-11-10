@@ -40,6 +40,8 @@ const staff: ReservationMailRecipient = {
 
 const sampleReservation: ReservationMailSubject = {
   id: "tz4a98xxat96iws9zmbrgj3a",
+  facilityName: "イノベーションルーム A",
+  groupName: "ロボット研究会 <R&D>",
   startAt: new Date("2026-11-15T13:00:00+09:00"),
   endAt: new Date("2026-11-15T15:00:00+09:00"),
   statusReason: null,

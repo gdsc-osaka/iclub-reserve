@@ -5,7 +5,7 @@ import { AuditLogAction, type AuditLogDraft } from "~/domain/audit-log";
 import { FacilityErrorCode, type Facility } from "~/domain/facility";
 import { GroupErrorCode, GroupStatus, type Group } from "~/domain/group";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
-import type { ReservationMailAudience } from "~/domain/mail/reservation-mail";
+import type { ReservationMailAudience, ReservationMailNames } from "~/domain/mail/reservation-mail";
 import { MembershipRole, type StoredMembership } from "~/domain/membership";
 import {
   ReservationErrorCode,
@@ -87,6 +87,8 @@ const createDeps = (
     hasApprovedOverlap?: boolean;
     audience?: ReservationMailAudience;
     recipientsQueryError?: QueryError;
+    namesQueryError?: QueryError;
+    names?: ReservationMailNames;
     enqueuedMailIds?: readonly string[];
   } = {},
 ) => {
@@ -130,8 +132,20 @@ const createDeps = (
       : okAsync(overrides.audience ?? defaultAudience),
   );
 
+  const findNames = vi.fn((_ids: { facilityId: string; groupId: string }) =>
+    overrides.namesQueryError
+      ? errAsync(overrides.namesQueryError)
+      : okAsync(
+          overrides.names ?? {
+            facilityName: "会議室 A",
+            groupName: "ロボティクス開発プロジェクト",
+          },
+        ),
+  );
+
   const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findForNewReservation,
+    findNames,
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
@@ -148,13 +162,14 @@ const createDeps = (
     },
     create,
     findForNewReservation,
+    findNames,
     notifyEnqueued,
   };
 };
 
 describe("createProvisionalReservationUseCase", () => {
   it("必ず仮予約として作り、EVT-001 の MailDraft が渡り、積んだ ID が配送に依頼される", async () => {
-    const { deps, create, findForNewReservation, notifyEnqueued } = createDeps();
+    const { deps, create, findForNewReservation, findNames, notifyEnqueued } = createDeps();
 
     const result = await createProvisionalReservationUseCase(deps, args);
 
@@ -180,6 +195,12 @@ describe("createProvisionalReservationUseCase", () => {
       applicantUserId: "usr_student_01",
     });
 
+    // 施設・団体の名前クエリが正しく呼ばれていること
+    expect(findNames).toHaveBeenCalledWith({
+      facilityId: "fac_meeting_a",
+      groupId: "grp_robotics",
+    });
+
     // EVT-001 の MailDraft が生成されて渡されていること（申請者・管理者・事務局の 3 通）
     const mails = create.mock.calls[0]?.[1];
     expect(mails).toHaveLength(3);
@@ -191,6 +212,8 @@ describe("createProvisionalReservationUseCase", () => {
     expect(mails?.[2]?.idempotencyKey).toMatch(keyOf("usr_staff_01"));
     expect(mails?.[0]?.subject).toBe("【i-Club 予約システム】施設・設備の利用予約が申請されました");
     expect(mails?.[0]?.text).toContain("施設・設備の利用予約が申請されました。");
+    expect(mails?.[0]?.text).toContain("施設・設備: 会議室 A");
+    expect(mails?.[0]?.text).toContain("団体: ロボティクス開発プロジェクト");
 
     // COND-013: 操作履歴の草稿が渡ること
     const auditLog = create.mock.calls[0]?.[2];
@@ -424,6 +447,28 @@ describe("createProvisionalReservationUseCase", () => {
     expect(findForNewReservation).toHaveBeenCalledWith({
       groupId: "grp_robotics",
       applicantUserId: "usr_student_01",
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("名前クエリが失敗したら予約を作らず DatabaseError を返すこと", async () => {
+    const { deps, create, findNames } = createDeps({
+      namesQueryError: {
+        code: QueryErrorCode.NotFound,
+        message: "not found",
+      },
+    });
+
+    const result = await createProvisionalReservationUseCase(deps, args);
+
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      code: ReservationErrorCode.DatabaseError,
+      message: "通知に載せる施設・団体の名前を読み取れなかった。",
+    });
+    expect(findNames).toHaveBeenCalledWith({
+      facilityId: "fac_meeting_a",
+      groupId: "grp_robotics",
     });
     expect(create).not.toHaveBeenCalled();
   });

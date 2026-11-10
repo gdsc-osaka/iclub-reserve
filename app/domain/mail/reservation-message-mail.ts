@@ -1,5 +1,4 @@
 import { AppArea } from "~/lib/app-area";
-import { formatDateTime } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { UnlockArrangement } from "../reservation";
 import { STAFF_SENDER_LABEL, type ReservationMessage } from "../reservation/message";
@@ -7,7 +6,11 @@ import { unlockArrangementLabel } from "../reservation/unlock-arrangement";
 import { toMailBodies } from "./mail-bodies";
 import type { MailBlock, MailContent } from "./mail-content";
 import type { MailDraft } from "./mail-outbox";
-import type { ReservationMailRecipient, ReservationMailRecipients } from "./reservation-mail";
+import {
+  toReservationMailDetailRows,
+  type ReservationMailRecipient,
+  type ReservationMailRecipients,
+} from "./reservation-mail";
 
 /**
  * 予約メッセージ通知の宛先候補（EVT-008）。
@@ -96,6 +99,8 @@ export interface CreateReservationMessageMailDraftsArgs {
   readonly message: ReservationMessage;
   readonly reservation: {
     readonly id: string;
+    readonly facilityName: string;
+    readonly groupName: string;
     readonly startAt: Date;
     readonly endAt: Date;
   };
@@ -124,8 +129,7 @@ const buildMessageMailContent = (args: CreateReservationMessageMailDraftsArgs): 
     {
       type: "details",
       rows: [
-        { label: "利用開始日時", value: formatDateTime(args.reservation.startAt) },
-        { label: "利用終了日時", value: formatDateTime(args.reservation.endAt) },
+        ...toReservationMailDetailRows(args.reservation),
         { label: "送信者", value: senderDisplay },
       ],
     },

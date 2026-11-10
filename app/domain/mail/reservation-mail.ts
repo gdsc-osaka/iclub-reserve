@@ -8,10 +8,10 @@ import { STAFF_SENDER_LABEL } from "~/domain/reservation/message";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { unlockArrangementGroupNotice } from "~/domain/reservation/unlock-arrangement";
 import { AppArea } from "~/lib/app-area";
-import { formatDateTime } from "~/lib/date";
+import { formatFullDate, formatTimeRange } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
 import { toMailBodies } from "./mail-bodies";
-import type { MailBlock, MailContent } from "./mail-content";
+import type { MailBlock, MailContent, MailDetailRow } from "./mail-content";
 import type { MailDraft } from "./mail-outbox";
 
 /** 予約に関する通知メールの種別。値は idempotencyKey にそのまま入るので変えないこと */
@@ -193,9 +193,19 @@ const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
   },
 };
 
+/** 通知に載せる、施設・設備と団体の名前 */
+export interface ReservationMailNames {
+  readonly facilityName: string;
+  readonly groupName: string;
+}
+
 /** 通知に載せる予約の情報 */
 export interface ReservationMailSubject {
   readonly id: string;
+  /** 通知に載せる施設・設備の名前 */
+  readonly facilityName: string;
+  /** 通知に載せる団体の名前 */
+  readonly groupName: string;
   readonly startAt: Date;
   readonly endAt: Date;
   readonly statusReason: string | null;
@@ -212,6 +222,21 @@ export interface ReservationMailSubject {
    */
   readonly updatedAt: Date;
 }
+
+/** 通知に載せる、どの予約かを表す行（施設・設備、団体、利用日時） */
+export const toReservationMailDetailRows = (reservation: {
+  readonly facilityName: string;
+  readonly groupName: string;
+  readonly startAt: Date;
+  readonly endAt: Date;
+}): readonly MailDetailRow[] => [
+  { label: "施設・設備", value: reservation.facilityName },
+  { label: "団体", value: reservation.groupName },
+  {
+    label: "利用日時",
+    value: `${formatFullDate(reservation.startAt)} ${formatTimeRange(reservation.startAt, reservation.endAt)}`,
+  },
+];
 
 /**
  * イベント種別と予約情報から本文（MailContent）を組み立てる純粋関数。
@@ -236,10 +261,7 @@ const buildContent = (
 
   blocks.push({
     type: "details",
-    rows: [
-      { label: "利用開始日時", value: formatDateTime(reservation.startAt) },
-      { label: "利用終了日時", value: formatDateTime(reservation.endAt) },
-    ],
+    rows: toReservationMailDetailRows(reservation),
   });
 
   if (copy.allowsReason && reservation.statusReason !== null) {

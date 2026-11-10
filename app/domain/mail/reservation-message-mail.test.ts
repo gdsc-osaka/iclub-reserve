@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { formatDateTime } from "~/lib/date";
 import { UnlockArrangement } from "../reservation";
 import type { ReservationMessage } from "../reservation/message";
 import {
@@ -124,6 +123,8 @@ describe("selectApprovalMailRecipients", () => {
 describe("createReservationMessageMailDrafts", () => {
   const reservation = {
     id: "res_test_123",
+    facilityName: "会議室 A",
+    groupName: "ロボット部",
     startAt: new Date("2026-10-15T10:00:00+09:00"),
     endAt: new Date("2026-10-15T12:00:00+09:00"),
   };
@@ -163,8 +164,11 @@ describe("createReservationMessageMailDrafts", () => {
     // 本文の検証（予約ID の行は載らない）
     expect(draft.text).toContain("予約にメッセージが届きました。");
     expect(draft.text).not.toContain("予約ID:");
-    expect(draft.text).toContain(`利用開始日時: ${formatDateTime(reservation.startAt)}`);
-    expect(draft.text).toContain(`利用終了日時: ${formatDateTime(reservation.endAt)}`);
+    expect(draft.text).toContain("施設・設備: 会議室 A");
+    expect(draft.text).toContain("団体: ロボット部");
+    expect(draft.text).toContain("利用日時: 2026年10月15日(木) 10:00〜12:00");
+    expect(draft.text).not.toContain("利用開始日時");
+    expect(draft.text).not.toContain("利用終了日時");
     expect(draft.text).toContain("送信者: 山田太郎");
     expect(draft.text).toContain(
       "メッセージ:\n利用人数の変更をお願いできますでしょうか。<script>alert(1)</script>",
@@ -233,5 +237,60 @@ describe("createReservationMessageMailDrafts", () => {
         "当日は守衛所で鍵を受け取ってください。",
       ].join("\n"),
     );
+  });
+
+  it("HTML 版で施設名・団体名がエスケープされる（名前に < を入れる）", () => {
+    const message: ReservationMessage = {
+      id: "msg_escape",
+      reservationId: reservation.id,
+      senderId: "usr_member",
+      sentAsStaff: false,
+      body: "本文テスト",
+      sentAt: new Date("2026-10-05T12:00:00+09:00"),
+    };
+
+    const drafts = createReservationMessageMailDrafts({
+      message,
+      reservation: {
+        ...reservation,
+        facilityName: "会議室 <Room A>",
+        groupName: "ロボット部 <Team B>",
+      },
+      senderName: "山田太郎",
+      recipients: [userStaff1],
+      appBaseUrl: "https://example.com",
+    });
+
+    const html = drafts[0]?.html ?? "";
+    expect(html).toContain("会議室 &lt;Room A&gt;");
+    expect(html).toContain("ロボット部 &lt;Team B&gt;");
+    expect(html).not.toContain("<Room A>");
+    expect(html).not.toContain("<Team B>");
+  });
+
+  it("日をまたぐ予約の利用日時に「翌」が載る", () => {
+    const message: ReservationMessage = {
+      id: "msg_overnight",
+      reservationId: reservation.id,
+      senderId: "usr_member",
+      sentAsStaff: false,
+      body: "本文テスト",
+      sentAt: new Date("2026-10-05T12:00:00+09:00"),
+    };
+
+    const drafts = createReservationMessageMailDrafts({
+      message,
+      reservation: {
+        ...reservation,
+        startAt: new Date("2026-10-15T20:00:00+09:00"),
+        endAt: new Date("2026-10-16T10:00:00+09:00"),
+      },
+      senderName: "山田太郎",
+      recipients: [userStaff1],
+      appBaseUrl: "https://example.com",
+    });
+
+    const text = drafts[0]?.text ?? "";
+    expect(text).toContain("利用日時: 2026年10月15日(木) 20:00〜翌10:00");
   });
 });

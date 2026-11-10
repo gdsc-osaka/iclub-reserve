@@ -1,11 +1,19 @@
 import { and, eq, isNotNull, or } from "drizzle-orm";
 import { err, ok, ResultAsync } from "neverthrow";
-import { groupMemberTable, reservationMessageTable, reservationTable, user } from "~/db/schema";
+import {
+  facilityTable,
+  groupMemberTable,
+  groupTable,
+  reservationMessageTable,
+  reservationTable,
+  user,
+} from "~/db/schema";
 import { wrapError } from "~/domain/error";
 import { MembershipRole } from "~/domain/membership";
 import { QueryErrorCode, type QueryError } from "~/query/error";
 import type {
   ReservationMailAudience,
+  ReservationMailNames,
   ReservationMailRecipient,
   ReservationMailRecipients,
   ReservationMailRecipientsQuery,
@@ -309,6 +317,44 @@ export const createReservationMailRecipientsQuery = (
           staff: toUniqueSortedRecipients(staffRows),
           groupMembers,
           priorGroupSideSenders: toUniqueSortedRecipients(priorSenderRows),
+        });
+      });
+    },
+
+    findNames: (args) => {
+      const facilityQuery = db
+        .select({ name: facilityTable.name })
+        .from(facilityTable)
+        .where(eq(facilityTable.id, args.facilityId));
+
+      const groupQuery = db
+        .select({ name: groupTable.name })
+        .from(groupTable)
+        .where(eq(groupTable.id, args.groupId));
+
+      return ResultAsync.fromPromise(
+        db.batch([facilityQuery, groupQuery]),
+        wrapError(QueryErrorCode.DatabaseError, "通知用の施設・団体名の取得に失敗しました。"),
+      ).andThen(([facilityRows, groupRows]) => {
+        const facility = facilityRows.at(0);
+        if (!facility) {
+          return err<ReservationMailNames, QueryError>({
+            code: QueryErrorCode.NotFound,
+            message: `ID が ${args.facilityId} の施設・設備は見つかりませんでした。`,
+          });
+        }
+
+        const group = groupRows.at(0);
+        if (!group) {
+          return err<ReservationMailNames, QueryError>({
+            code: QueryErrorCode.NotFound,
+            message: `ID が ${args.groupId} の団体は見つかりませんでした。`,
+          });
+        }
+
+        return ok<ReservationMailNames, QueryError>({
+          facilityName: facility.name,
+          groupName: group.name,
         });
       });
     },

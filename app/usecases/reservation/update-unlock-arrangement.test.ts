@@ -124,8 +124,12 @@ const createMockDeps = (options?: {
   });
 
   const findForMessage = vi.fn((_reservationId: string) => okAsync(audience));
+  const findNames = vi.fn((_ids: { facilityId: string; groupId: string }) =>
+    okAsync({ facilityName: "会議室 A", groupName: "ロボット部" }),
+  );
   const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findForMessage,
+    findNames,
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);
@@ -145,6 +149,7 @@ const createMockDeps = (options?: {
       applyUnlockArrangementUpdate,
       findByGroupAndUser,
       findForMessage,
+      findNames,
       notifyEnqueued,
     },
   };
@@ -244,7 +249,7 @@ describe("updateUnlockArrangementUseCase", () => {
     expect(spies.applyUnlockArrangementUpdate).not.toHaveBeenCalled();
   });
 
-  it("メッセージなし（空文字・空白だけ）のときは予約と操作履歴だけ書き、findForMessage・notifyEnqueued は呼ばない", async () => {
+  it("メッセージなし（空文字・空白だけ）のときは予約と操作履歴だけ書き、findForMessage・findNames・notifyEnqueued は呼ばない", async () => {
     for (const rawMessage of ["", "   \n\u3000 "]) {
       const { deps, spies } = createMockDeps({ enqueuedMailIds: [] });
 
@@ -259,6 +264,7 @@ describe("updateUnlockArrangementUseCase", () => {
       });
 
       expect(spies.findForMessage).not.toHaveBeenCalled();
+      expect(spies.findNames).not.toHaveBeenCalled();
       expect(spies.notifyEnqueued).not.toHaveBeenCalled();
       expect(spies.applyUnlockArrangementUpdate).toHaveBeenCalledWith(
         {
@@ -311,6 +317,10 @@ describe("updateUnlockArrangementUseCase", () => {
 
     expect(spies.findByGroupAndUser).not.toHaveBeenCalled();
     expect(spies.findForMessage).toHaveBeenCalledWith("res_approved_01");
+    expect(spies.findNames).toHaveBeenCalledWith({
+      facilityId: "fac_room_a",
+      groupId: "grp_robotics",
+    });
     expect(spies.applyUnlockArrangementUpdate).toHaveBeenCalledTimes(1);
 
     const [, savedMessage, savedMails, savedAuditLog] =
@@ -328,6 +338,8 @@ describe("updateUnlockArrangementUseCase", () => {
     });
 
     expect(savedMails).toHaveLength(3);
+    expect(savedMails[0]!.text).toContain("施設・設備: 会議室 A");
+    expect(savedMails[0]!.text).toContain("団体: ロボット部");
     expect(savedMails.map((m) => m.to.address)).toEqual([
       userAdmin.address,
       userApplicant.address,

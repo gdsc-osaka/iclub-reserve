@@ -2,6 +2,7 @@ import { errAsync, okAsync } from "neverthrow";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { MailDraft } from "~/domain/mail/mail-outbox";
+import type { ReservationMailNames } from "~/domain/mail/reservation-mail";
 import type { ReservationMessageAudience } from "~/domain/mail/reservation-message-mail";
 import { MembershipErrorCode, MembershipRole, type StoredMembership } from "~/domain/membership";
 import {
@@ -84,6 +85,7 @@ const createDeps = (
     membership?: StoredMembership | null;
     membershipError?: boolean;
     audience?: ReservationMessageAudience;
+    names?: ReservationMailNames;
     recipientsQueryError?: QueryError;
     messageCreateError?: boolean;
     enqueuedMailIds?: readonly string[];
@@ -163,8 +165,13 @@ const createDeps = (
     return okAsync(overrides.audience ?? defaultAudience);
   });
 
+  const findNames = vi.fn((_ids: { facilityId: string; groupId: string }) =>
+    okAsync(overrides.names ?? { facilityName: "会議室 A", groupName: "ロボット部" }),
+  );
+
   const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findForMessage,
+    findNames,
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
@@ -182,6 +189,7 @@ const createDeps = (
     deps,
     createMessage,
     findForMessage,
+    findNames,
     findByGroupAndUser,
     notifyEnqueued,
     applyStatusTransition,
@@ -202,7 +210,7 @@ const defaultArgs: SendReservationMessageArgs = {
 
 describe("sendReservationMessageUseCase", () => {
   it("一般メンバー（管理者でない）が送る場合、sentAsStaff: false で保存され、宛先は事務局のみ、送信者本人に届かず、配送依頼が呼ばれて messageId が返る", async () => {
-    const { deps, createMessage, findForMessage, notifyEnqueued } = createDeps({
+    const { deps, createMessage, findForMessage, findNames, notifyEnqueued } = createDeps({
       membership: {
         id: "gm_test",
         groupId: "grp_robotics",
@@ -218,6 +226,10 @@ describe("sendReservationMessageUseCase", () => {
     expect(value.messageId).toBeDefined();
 
     expect(findForMessage).toHaveBeenCalledWith("res_target");
+    expect(findNames).toHaveBeenCalledWith({
+      facilityId: sampleReservation.facilityId,
+      groupId: sampleReservation.groupId,
+    });
     expect(createMessage).toHaveBeenCalledTimes(1);
     const [savedMessage, savedMails] = createMessage.mock.calls[0]!;
 
@@ -233,6 +245,9 @@ describe("sendReservationMessageUseCase", () => {
     // 宛先は事務局（userStaff1, userStaff2）のみ
     expect(savedMails).toHaveLength(2);
     expect(savedMails.map((m) => m.to.address)).toEqual([userStaff1.address, userStaff2.address]);
+    // 本文に施設・設備名と団体名が載ること
+    expect(savedMails[0]!.text).toContain("施設・設備: 会議室 A");
+    expect(savedMails[0]!.text).toContain("団体: ロボット部");
 
     expect(notifyEnqueued).toHaveBeenCalledWith(["mail_msg_01"]);
   });

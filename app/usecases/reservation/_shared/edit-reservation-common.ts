@@ -13,7 +13,7 @@ import {
 import type { ReservationContent } from "~/domain/reservation/edit";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { ensureNoApprovedOverlap, type ApprovedOverlapDeps } from "./approved-overlap";
-import { toRecipientsError } from "./mail-recipients";
+import { resolveReservationMailNames, toRecipientsError } from "./mail-recipients";
 
 /*
  * 予約の内容の変更のうち、団体の変更（UC-005 / UC-017）と事務局の直接変更（UC-008）で
@@ -29,6 +29,7 @@ export interface ResolveEditOverlapAndMailsDeps extends ApprovedOverlapDeps {
 /** 重なりの確認と変更通知の組み立ての引数 */
 export interface ResolveEditOverlapAndMailsArgs {
   readonly reservationId: string;
+  readonly groupId: string;
   /** 変更後の内容。通知には変更後の日時を載せる */
   readonly content: ReservationContent;
   /** 予約に入れる更新日時。通知の idempotencyKey にも使う */
@@ -63,26 +64,32 @@ export const resolveEditOverlapAndMails = (
       )
     : okAsync<null, ReservationError>(null);
 
-  const mailDraftsCheck = deps.reservationMailRecipientsQuery
+  const audienceCheck = deps.reservationMailRecipientsQuery
     .findByReservationId(args.reservationId)
-    .mapErr(toRecipientsError)
-    .map((audience) =>
-      createReservationMailDrafts(
-        args.mailEvent,
-        {
-          id: args.reservationId,
-          startAt: args.content.startAt,
-          endAt: args.content.endAt,
-          statusReason: null,
-          unlockArrangement: args.unlockArrangement,
-          updatedAt: args.now,
-        },
-        audience,
-        args.appBaseUrl,
-      ),
-    );
+    .mapErr(toRecipientsError);
 
-  return ResultAsync.combine([overlapCheck, mailDraftsCheck]).map(([, mailDrafts]) => mailDrafts);
+  const namesCheck = resolveReservationMailNames(deps, {
+    facilityId: args.content.facilityId,
+    groupId: args.groupId,
+  });
+
+  return ResultAsync.combine([overlapCheck, audienceCheck, namesCheck]).map(([, audience, names]) =>
+    createReservationMailDrafts(
+      args.mailEvent,
+      {
+        id: args.reservationId,
+        facilityName: names.facilityName,
+        groupName: names.groupName,
+        startAt: args.content.startAt,
+        endAt: args.content.endAt,
+        statusReason: null,
+        unlockArrangement: args.unlockArrangement,
+        updatedAt: args.now,
+      },
+      audience,
+      args.appBaseUrl,
+    ),
+  );
 };
 
 /**

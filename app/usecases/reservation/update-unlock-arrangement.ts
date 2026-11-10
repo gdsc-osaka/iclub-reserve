@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { errAsync, okAsync, safeTry, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import { AuditLogAction, isActedAsStaff, type AuditLogDraft } from "~/domain/audit-log";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
@@ -27,7 +27,7 @@ import {
 import { validateUnlockArrangementUpdate } from "~/domain/reservation/unlock-arrangement";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
-import { toRecipientsError } from "./_shared/mail-recipients";
+import { resolveReservationMailNames, toRecipientsError } from "./_shared/mail-recipients";
 import { ensureActorCan, resolveReservationActor } from "./_shared/reservation-authorization";
 
 export interface UpdateUnlockArrangementDeps {
@@ -69,7 +69,7 @@ const resolveUpdateMessageAndMails = (
     readonly actor: Actor;
     readonly actorUserId: string;
     readonly actorName: string;
-    readonly reservation: Pick<Reservation, "id" | "startAt" | "endAt">;
+    readonly reservation: Pick<Reservation, "id" | "facilityId" | "groupId" | "startAt" | "endAt">;
     readonly unlockArrangement: UnlockArrangement;
     readonly now: Date;
     readonly appBaseUrl: string;
@@ -92,28 +92,36 @@ const resolveUpdateMessageAndMails = (
     sentAt: args.now,
   };
 
-  return deps.reservationMailRecipientsQuery
+  const audienceCheck = deps.reservationMailRecipientsQuery
     .findForMessage(args.reservation.id)
-    .mapErr(toRecipientsError)
-    .map((audience) => {
-      const recipients = selectReservationMessageRecipients(audience, {
-        sentAsStaff,
-        senderUserId: args.actorUserId,
-      });
-      const mails = createReservationMessageMailDrafts({
-        message,
-        reservation: {
-          id: args.reservation.id,
-          startAt: args.reservation.startAt,
-          endAt: args.reservation.endAt,
-        },
-        senderName: args.actorName,
-        recipients,
-        appBaseUrl: args.appBaseUrl,
-        unlockArrangement: args.unlockArrangement,
-      });
-      return { message, mails };
+    .mapErr(toRecipientsError);
+
+  const namesCheck = resolveReservationMailNames(deps, {
+    facilityId: args.reservation.facilityId,
+    groupId: args.reservation.groupId,
+  });
+
+  return ResultAsync.combine([audienceCheck, namesCheck]).map(([audience, names]) => {
+    const recipients = selectReservationMessageRecipients(audience, {
+      sentAsStaff,
+      senderUserId: args.actorUserId,
     });
+    const mails = createReservationMessageMailDrafts({
+      message,
+      reservation: {
+        id: args.reservation.id,
+        facilityName: names.facilityName,
+        groupName: names.groupName,
+        startAt: args.reservation.startAt,
+        endAt: args.reservation.endAt,
+      },
+      senderName: args.actorName,
+      recipients,
+      appBaseUrl: args.appBaseUrl,
+      unlockArrangement: args.unlockArrangement,
+    });
+    return { message, mails };
+  });
 };
 
 /**
