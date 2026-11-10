@@ -1,3 +1,5 @@
+import { toMailBodies } from "~/domain/mail/mail-bodies";
+import type { MailContent } from "~/domain/mail/mail-content";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { staffInvitationAcceptPath } from "~/domain/staff";
 import { formatDateTime } from "~/lib/date";
@@ -21,30 +23,41 @@ export const createStaffInvitationMailDraft = (args: StaffInvitationMailArgs): M
   const acceptUrl = `${args.appBaseUrl}${staffInvitationAcceptPath(args.invitationId)}`;
   const formattedExpiresAt = formatDateTime(args.expiresAt);
 
-  const lines = [
-    "i-Club 予約システムをご利用いただきありがとうございます。",
-    "",
-    "事務局への招待が届いています。",
-    "",
-    "事務局になると、所属に関わらず全団体・全予約を操作できるようになります。",
-    `有効期限: ${formattedExpiresAt}`,
-    "",
-    "下のリンクを開いて、招待を承諾してください。",
-    acceptUrl,
-    "",
-    "※ 招待を承諾するには、この宛先のメールアドレスでログインして開く必要があります。",
-    "※ 有効期限を過ぎるとこのリンクは使えなくなります。",
-    "※ 心当たりが無い場合は、このメールを破棄してください。",
-    "",
-    "----------------------------------------",
-    "大阪大学 Innovators' Club (i-Club) 予約システム",
-    "※このメールは送信専用です。返信はできません。",
-  ];
+  const content: MailContent = {
+    lead: "事務局への招待が届いています。",
+    blocks: [
+      {
+        type: "paragraph",
+        text: "事務局になると、所属に関わらず全団体・全予約を操作できるようになります。",
+      },
+      {
+        type: "details",
+        rows: [{ label: "有効期限", value: formattedExpiresAt }],
+      },
+      {
+        type: "action",
+        prompt: "下のリンクを開いて、招待を承諾してください。",
+        label: "招待を承諾する",
+        url: acceptUrl,
+      },
+      {
+        type: "footnotes",
+        items: [
+          "招待を承諾するには、この宛先のメールアドレスでログインして開く必要があります。",
+          "有効期限を過ぎるとこのリンクは使えなくなります。",
+          "心当たりが無い場合は、このメールを破棄してください。",
+        ],
+      },
+    ],
+  };
+
+  const { text, html } = toMailBodies(content);
 
   return {
     idempotencyKey: `staff-invitation:created:${args.invitationId}:${args.email}`,
     to: { address: args.email },
     subject: "【i-Club 予約システム】事務局への招待が届いています",
-    text: lines.join("\n"),
+    text,
+    html,
   };
 };

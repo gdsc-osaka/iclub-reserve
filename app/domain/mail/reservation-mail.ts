@@ -3,13 +3,15 @@ import {
   type AppliedReservationEdit,
   type DirectReservationEditOutcome,
 } from "~/domain/reservation/edit";
-import type { UnlockArrangement } from "~/domain/reservation";
+import { UnlockArrangement } from "~/domain/reservation";
 import { STAFF_SENDER_LABEL } from "~/domain/reservation/message";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { unlockArrangementGroupNotice } from "~/domain/reservation/unlock-arrangement";
 import { AppArea } from "~/lib/app-area";
-import { formatDateTime } from "~/lib/date";
+import { formatFullDate, formatTimeRange } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
+import { toMailBodies } from "./mail-bodies";
+import type { MailBlock, MailContent, MailDetailRow } from "./mail-content";
 import type { MailDraft } from "./mail-outbox";
 
 /** 予約に関する通知メールの種別。値は idempotencyKey にそのまま入るので変えないこと */
@@ -99,7 +101,8 @@ export const directEditMailEvent: Record<
 
 interface EventMailCopy {
   readonly subject: string;
-  readonly opening: string;
+  readonly lead: string;
+  readonly note: string | null;
   readonly allowsReason: boolean;
   /** 解錠の手配の案内を載せるか（EVT-005） */
   readonly includesUnlockNotice: boolean;
@@ -110,81 +113,99 @@ interface EventMailCopy {
 const eventMailCopy: Record<ReservationMailEvent, EventMailCopy> = {
   [ReservationMailEvent.Applied]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が申請されました",
-    opening: "施設・設備の利用予約が申請されました。",
+    lead: "施設・設備の利用予約が申請されました。",
+    note: null,
     allowsReason: false,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.Withdrawn]: {
     subject: "【i-Club 予約システム】施設・設備の仮予約が取り消されました",
-    opening: "申請されていた仮予約が取り消されました。",
+    lead: "申請されていた仮予約が取り消されました。",
+    note: null,
     allowsReason: true,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.Cancelled]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約がキャンセルされました",
-    opening: "承認済みの利用予約がキャンセルされました。",
+    lead: "承認済みの利用予約がキャンセルされました。",
+    note: null,
     allowsReason: true,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.Approved]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
-    opening: "申請されていた利用予約が承認されました。",
+    lead: "申請されていた利用予約が承認されました。",
+    note: null,
     allowsReason: false,
     includesUnlockNotice: true,
     includesMessage: true,
   },
   [ReservationMailEvent.Rejected]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が却下されました",
-    opening: "申請されていた利用予約が却下されました。",
+    lead: "申請されていた利用予約が却下されました。",
+    note: null,
     allowsReason: true,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.CancelledByStaff]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が事務局によりキャンセルされました",
-    opening: "承認済みの利用予約が事務局によりキャンセルされました。",
+    lead: "承認済みの利用予約が事務局によりキャンセルされました。",
+    note: null,
     allowsReason: true,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.ApprovedEdited]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約の内容が変更されました",
-    opening:
-      "承認済みの利用予約の内容（使用人数・備考）が変更されました。承認済みのまま変わりません。",
+    lead: "承認済みの利用予約の内容（使用人数・備考）が変更されました。",
+    note: "承認済みのまま変わりません。",
     allowsReason: false,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.ReapprovalRequested]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
-    opening:
-      "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。事務局が改めて承認するまで、施設・設備は利用できません。",
+    lead: "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。",
+    note: "事務局が改めて承認するまで、施設・設備は利用できません。",
     allowsReason: false,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.ProvisionalEdited]: {
     subject: "【i-Club 予約システム】施設・設備の仮予約の内容が変更されました",
-    opening: "申請されていた仮予約の内容が変更されました。",
+    lead: "申請されていた仮予約の内容が変更されました。",
+    note: null,
     allowsReason: false,
     includesUnlockNotice: false,
     includesMessage: false,
   },
   [ReservationMailEvent.EditedByStaff]: {
     subject: "【i-Club 予約システム】施設・設備の利用予約が事務局により変更されました",
-    opening: "利用予約の内容が事務局により変更されました。予約の状態は変わりません。",
+    lead: "利用予約の内容が事務局により変更されました。",
+    note: "予約の状態は変わりません。",
     allowsReason: false,
     includesUnlockNotice: false,
     includesMessage: false,
   },
 };
 
+/** 通知に載せる、施設・設備と団体の名前 */
+export interface ReservationMailNames {
+  readonly facilityName: string;
+  readonly groupName: string;
+}
+
 /** 通知に載せる予約の情報 */
 export interface ReservationMailSubject {
   readonly id: string;
+  /** 通知に載せる施設・設備の名前 */
+  readonly facilityName: string;
+  /** 通知に載せる団体の名前 */
+  readonly groupName: string;
   readonly startAt: Date;
   readonly endAt: Date;
   readonly statusReason: string | null;
@@ -202,39 +223,65 @@ export interface ReservationMailSubject {
   readonly updatedAt: Date;
 }
 
+/** 通知に載せる、どの予約かを表す行（施設・設備、団体、利用日時） */
+export const toReservationMailDetailRows = (reservation: {
+  readonly facilityName: string;
+  readonly groupName: string;
+  readonly startAt: Date;
+  readonly endAt: Date;
+}): readonly MailDetailRow[] => [
+  { label: "施設・設備", value: reservation.facilityName },
+  { label: "団体", value: reservation.groupName },
+  {
+    label: "利用日時",
+    value: `${formatFullDate(reservation.startAt)} ${formatTimeRange(reservation.startAt, reservation.endAt)}`,
+  },
+];
+
 /**
- * イベント種別と予約情報から本文を組み立てる純粋関数。
+ * イベント種別と予約情報から本文（MailContent）を組み立てる純粋関数。
  * 署名と冒頭以外の骨組みは全イベント共通で、理由・解錠の手配の案内・メッセージの有無だけがイベントと入力値により分岐する。
  * 末尾には、どのイベントでも予約詳細（SCR-005）へのリンクを載せる（EVT-001〜007・EVT-012・EVT-017）。
  * リンクは `area` の画面の予約詳細にする（団体側の宛先は利用者の画面、事務局の宛先は事務局の画面。COND-030 の (5)）。
  */
-const buildBody = (
+const buildContent = (
   event: ReservationMailEvent,
   reservation: ReservationMailSubject,
   appBaseUrl: string,
   area: AppArea,
   message: string | null,
-): string => {
+): MailContent => {
   const copy = eventMailCopy[event];
   const detailUrl = `${appBaseUrl}${toReservationDetailPath(area, reservation.id)}`;
-  const lines = [
-    "i-Club 予約システムをご利用いただきありがとうございます。",
-    "",
-    copy.opening,
-    "",
-    `予約ID: ${reservation.id}`,
-    `利用開始日時: ${formatDateTime(reservation.startAt)}`,
-    `利用終了日時: ${formatDateTime(reservation.endAt)}`,
-  ];
+  const blocks: MailBlock[] = [];
+
+  if (copy.note !== null) {
+    blocks.push({ type: "paragraph", text: copy.note });
+  }
+
+  blocks.push({
+    type: "details",
+    rows: toReservationMailDetailRows(reservation),
+  });
 
   if (copy.allowsReason && reservation.statusReason !== null) {
-    lines.push("", `理由: ${reservation.statusReason}`);
+    blocks.push({
+      type: "notice",
+      tone: "default",
+      title: "理由",
+      text: reservation.statusReason,
+    });
   }
 
   if (copy.includesUnlockNotice && reservation.unlockArrangement !== null) {
     const notice = unlockArrangementGroupNotice[reservation.unlockArrangement];
     if (notice !== null) {
-      lines.push("", notice);
+      blocks.push({
+        type: "notice",
+        tone: reservation.unlockArrangement === UnlockArrangement.Required ? "warning" : "default",
+        title: "解錠の手配",
+        text: notice,
+      });
     }
   }
 
@@ -245,24 +292,29 @@ const buildBody = (
    */
   const includesMessage = copy.includesMessage && message !== null;
   if (includesMessage) {
-    lines.push("", `${STAFF_SENDER_LABEL}からのメッセージ:`, message);
+    blocks.push({
+      type: "quote",
+      title: `${STAFF_SENDER_LABEL}からのメッセージ`,
+      text: message,
+    });
   }
 
-  lines.push(
-    "",
-    "予約の詳細は、次のページでご確認ください。",
-    // 返信の仕方は、メッセージ通知（EVT-008）と同じく案内する
-    ...(includesMessage
-      ? ["メッセージへの返信は、このメールではなく次のページから送ってください。"]
-      : []),
-    detailUrl,
-    "",
-    "----------------------------------------",
-    "大阪大学 Innovators' Club (i-Club) 予約システム",
-    "※このメールは送信専用です。返信はできません。",
-  );
+  // 返信の仕方は、メッセージ通知（EVT-008）と同じく案内する
+  const prompt = includesMessage
+    ? "予約の詳細は、次のページでご確認ください。\nメッセージへの返信は、このメールではなく次のページから送ってください。"
+    : "予約の詳細は、次のページでご確認ください。";
 
-  return lines.join("\n");
+  blocks.push({
+    type: "action",
+    prompt,
+    label: "予約の詳細を開く",
+    url: detailUrl,
+  });
+
+  return {
+    lead: copy.lead,
+    blocks,
+  };
 };
 
 /**
@@ -271,7 +323,7 @@ const buildBody = (
  * - 宛先ごとに 1 通ずつ MailDraft を生成する。notifiesStaff が真のイベントのみ事務局にも送信する。
  * - 団体の宛先には利用者の画面、事務局宛てには事務局の画面の予約詳細 URL を載せる（COND-030 の (5)）。
  * - idempotencyKey は `reservation:<event>:<reservationId>:<updatedAt のミリ秒>:<userId ?? address>` の形式とする。
- * - 本文は送信時に DB を読み直さずに済むよう、レンダリング済みテキストとして埋め込む。
+ * - 本文は送信時に DB を読み直さずに済むよう、テキストと HTML として埋め込む。
  *
  * 【idempotencyKey に更新日時を入れる理由】
  * `mail-outbox.ts` は「idempotencyKey に時刻を混ぜない」と定めているが、予約の通知は例外とする。
@@ -305,7 +357,8 @@ export const createReservationMailDrafts = (
    * 団体側には利用者の画面、事務局には事務局の画面を載せる（COND-030 の (5)・ADR-016 決定 17）。
    */
   const toDrafts = (recipients: ReservationMailRecipients, area: AppArea): MailDraft[] => {
-    const text = buildBody(event, reservation, appBaseUrl, area, message);
+    const content = buildContent(event, reservation, appBaseUrl, area, message);
+    const { text, html } = toMailBodies(content);
     return recipients.map((recipient) => {
       const targetId = recipient.userId ?? recipient.address;
       return {
@@ -316,6 +369,7 @@ export const createReservationMailDrafts = (
         },
         subject: copy.subject,
         text,
+        html,
       };
     });
   };

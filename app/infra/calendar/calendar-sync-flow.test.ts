@@ -79,6 +79,7 @@ const reservationMailRecipientsQuery: ReservationMailRecipientsQuery = {
   findByReservationId: () => okAsync({ groupMembers: [], staff: [] }),
   findForNewReservation: () => errAsync({ code: QueryErrorCode.DatabaseError, ...notUsed }),
   findForMessage: () => errAsync({ code: QueryErrorCode.DatabaseError, ...notUsed }),
+  findNames: () => okAsync({ facilityName: "第1会議室", groupName: "ロボット部" }),
 };
 
 const mailOutboxNotifier: MailOutboxNotifier = { notifyEnqueued: () => {} };

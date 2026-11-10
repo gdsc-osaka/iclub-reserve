@@ -1,3 +1,5 @@
+import { toMailBodies } from "~/domain/mail/mail-bodies";
+import type { MailContent } from "~/domain/mail/mail-content";
 import {
   createSendEmailUseCase,
   type SendEmailDeps,
@@ -49,27 +51,40 @@ const TEMPLATES: Record<VerificationOtpType, { subject: string; purpose: string 
   },
 };
 
-const buildBody = (purpose: string, otp: string): string =>
-  [
-    "i-Club 予約システムをご利用いただきありがとうございます。",
-    "",
-    `${purpose}用の認証コードは次のとおりです。`,
-    "",
-    `    ${otp}`,
-    "",
-    `このコードの有効期限は ${OTP_EXPIRES_IN_SECONDS / 60} 分です。`,
-    "心当たりのない場合は、このメールを破棄してください。",
-    "",
-    "----------------------------------------",
-    "大阪大学 Innovators' Club (i-Club) 予約システム",
-    "※このメールは送信専用です。返信はできません。",
-  ].join("\n");
+const buildContent = (purpose: string, otp: string): MailContent => ({
+  lead: `${purpose}用の認証コードは次のとおりです。`,
+  blocks: [
+    { type: "code", value: otp },
+    {
+      type: "paragraph",
+      text: `このコードの有効期限は ${OTP_EXPIRES_IN_SECONDS / 60} 分です。\n心当たりのない場合は、このメールを破棄してください。`,
+    },
+  ],
+});
+
+/**
+ * 認証コード（OTP）通知メールの件名、テキスト本文、HTML 本文を生成する純粋関数。
+ */
+export const toVerificationOtpMail = (input: {
+  readonly otp: string;
+  readonly type: VerificationOtpType;
+}): { readonly subject: string; readonly text: string; readonly html: string } => {
+  const template = TEMPLATES[input.type];
+  const content = buildContent(template.purpose, input.otp);
+  const { text, html } = toMailBodies(content);
+
+  return {
+    subject: template.subject,
+    text,
+    html,
+  };
+};
 
 /**
  * 認証コード（OTP）をメールで送信するユースケース。
  *
  * 用途ごとの文面をここに集約し、送信そのものは SendEmailUseCase に委譲する。
- * 文面を変えたい場合は TEMPLATES と buildBody だけを編集すればよい。
+ * 文面を変えたい場合は TEMPLATES と buildContent だけを編集すればよい。
  */
 export const createSendVerificationOtpUseCase = (
   deps: SendEmailDeps,
@@ -77,12 +92,13 @@ export const createSendVerificationOtpUseCase = (
   const sendEmail = createSendEmailUseCase(deps);
 
   return ({ email, otp, type }) => {
-    const template = TEMPLATES[type];
+    const mail = toVerificationOtpMail({ otp, type });
 
     return sendEmail({
       to: email,
-      subject: template.subject,
-      text: buildBody(template.purpose, otp),
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     });
   };
 };

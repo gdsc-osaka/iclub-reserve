@@ -35,4 +35,11 @@ describe("createEmailChangedMailDraft (EVT-016)", () => {
     const expectedKey = `user:email-changed:${input.userId}:${input.changedAt.getTime()}`;
     expect(draft.idempotencyKey).toBe(expectedKey);
   });
+
+  it("html が生成されること", () => {
+    const draft = createEmailChangedMailDraft(input);
+    expect(draft.html).toBeDefined();
+    expect(draft.html).toContain("<!doctype html>");
+    expect(draft.html).toContain("メールアドレスの変更が完了しました。");
+  });
 });

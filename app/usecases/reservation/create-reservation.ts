@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { okAsync, safeTry, type ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import { AuditLogAction, isActedAsStaff, type AuditLogDraft } from "~/domain/audit-log";
 import type { FacilityRepository } from "~/domain/facility";
@@ -22,7 +22,7 @@ import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
 import { ensureFacilityIsAvailable } from "./_shared/facility-availability";
 import { ensureGroupIsEnabled } from "./_shared/group-enabled";
-import { toRecipientsError } from "./_shared/mail-recipients";
+import { resolveReservationMailNames, toRecipientsError } from "./_shared/mail-recipients";
 import { ensureActorCan, resolveReservationActor } from "./_shared/reservation-authorization";
 
 export interface CreateProvisionalReservationDeps {
@@ -124,17 +124,25 @@ export const createProvisionalReservationUseCase = (
       "選んだ時間帯には、すでに承認済みの予約が入っています。別の時間帯を選んでください。",
     );
 
-    const audience = yield* deps.reservationMailRecipientsQuery
-      .findForNewReservation({
+    const [audience, names] = yield* ResultAsync.combine([
+      deps.reservationMailRecipientsQuery
+        .findForNewReservation({
+          groupId: args.reservation.groupId,
+          applicantUserId: args.actorUserId,
+        })
+        .mapErr(toRecipientsError),
+      resolveReservationMailNames(deps, {
+        facilityId: args.reservation.facilityId,
         groupId: args.reservation.groupId,
-        applicantUserId: args.actorUserId,
-      })
-      .mapErr(toRecipientsError);
+      }),
+    ]);
 
     const mails = createReservationMailDrafts(
       ReservationMailEvent.Applied,
       {
         id,
+        facilityName: names.facilityName,
+        groupName: names.groupName,
         startAt: args.reservation.startAt,
         endAt: args.reservation.endAt,
         statusReason: null,

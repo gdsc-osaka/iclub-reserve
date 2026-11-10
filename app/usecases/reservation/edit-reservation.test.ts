@@ -163,8 +163,12 @@ const createDeps = (
       ? errAsync({ code: QueryErrorCode.DatabaseError, message: "db down" })
       : okAsync(defaultAudience),
   );
+  const findNames = vi.fn((_ids: { facilityId: string; groupId: string }) =>
+    okAsync({ facilityName: "会議室 A", groupName: "ロボット部" }),
+  );
   const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findByReservationId,
+    findNames,
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
@@ -185,6 +189,7 @@ const createDeps = (
       findByGroupAndUser,
       findFacility,
       findByReservationId,
+      findNames,
       notifyEnqueued,
     },
   };
@@ -289,7 +294,7 @@ describe("editReservationUseCase", () => {
         subject: "【i-Club 予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
       });
       // 通知には変更後の日時を載せる
-      expect(mails?.[0]?.text).toContain("利用開始日時: 2026年9月25日 11:00");
+      expect(mails?.[0]?.text).toContain("利用日時: 2026年9月25日(金) 11:00〜13:00");
       expect(auditLog).toEqual({
         occurredAt: now,
         actorId: "usr_member_01",
@@ -317,6 +322,10 @@ describe("editReservationUseCase", () => {
       expect(spies.existsApprovedOverlap).toHaveBeenCalledWith(
         expect.objectContaining({ facilityId: "fac_room_b", excludeReservationId: "res_01" }),
       );
+      expect(spies.findNames).toHaveBeenCalledWith({
+        facilityId: "fac_room_b",
+        groupId: "grp_robotics",
+      });
     });
   });
 

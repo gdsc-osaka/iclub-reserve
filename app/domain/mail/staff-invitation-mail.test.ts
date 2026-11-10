@@ -52,4 +52,11 @@ describe("createStaffInvitationMailDraft", () => {
     const draft = createStaffInvitationMailDraft(baseArgs);
     expect(draft.to).toEqual({ address: "staff-new@osaka-u.ac.jp" });
   });
+
+  it("html が生成されること", () => {
+    const draft = createStaffInvitationMailDraft(baseArgs);
+    expect(draft.html).toBeDefined();
+    expect(draft.html).toContain("<!doctype html>");
+    expect(draft.html).toContain("事務局への招待が届いています。");
+  });
 });

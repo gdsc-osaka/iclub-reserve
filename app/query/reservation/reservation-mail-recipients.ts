@@ -1,6 +1,7 @@
 import type { ResultAsync } from "neverthrow";
 import type {
   ReservationMailAudience,
+  ReservationMailNames,
   ReservationMailRecipient,
   ReservationMailRecipients,
 } from "~/domain/mail/reservation-mail";
@@ -9,13 +10,14 @@ import type { QueryError } from "../error";
 
 export type {
   ReservationMailAudience,
+  ReservationMailNames,
   ReservationMailRecipient,
   ReservationMailRecipients,
   ReservationMessageAudience,
 };
 
 /**
- * 予約通知の宛先を取得する読み取り専用の窓口（ポート）。
+ * 予約通知の宛先を取得する読み取り専用の窓口（ポート）。通知に載せる施設・設備と団体の名前も引く。
  *
  * 返る型はドメインの不変条件を持たないので、
  * この結果を使って更新してはいけない。
@@ -41,4 +43,14 @@ export interface ReservationMailRecipientsQuery {
    * 予約が存在しない場合は NotFound。
    */
   findForMessage(reservationId: string): ResultAsync<ReservationMessageAudience, QueryError>;
+
+  /**
+   * 通知に載せる、施設・設備と団体の名前。
+   * 予約の行からではなく ID で引くのは、施設を変える変更（UC-005 / UC-008 / UC-017）では変更後の施設の名前を、
+   * 申請（UC-002）ではまだ行の無い予約の名前を載せるため。どちらかが無ければ NotFound。
+   */
+  findNames(args: {
+    readonly facilityId: string;
+    readonly groupId: string;
+  }): ResultAsync<ReservationMailNames, QueryError>;
 }

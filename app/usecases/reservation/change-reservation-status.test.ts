@@ -16,6 +16,7 @@ import type { ReservationMessage } from "~/domain/reservation/message";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import type {
   ReservationMailAudience,
+  ReservationMailNames,
   ReservationMessageAudience,
 } from "~/query/reservation/reservation-mail-recipients";
 import {
@@ -104,6 +105,8 @@ const createMockDeps = (options?: {
   enqueuedMailIds?: readonly string[];
   audience?: ReservationMailAudience;
   audienceError?: boolean;
+  names?: ReservationMailNames;
+  namesError?: boolean;
   messageAudience?: ReservationMessageAudience;
 }) => {
   const res = options?.reservation !== undefined ? options.reservation : baseProvisionalReservation;
@@ -158,9 +161,15 @@ const createMockDeps = (options?: {
   const findForMessage = vi.fn((_reservationId: string) =>
     okAsync(options?.messageAudience ?? defaultMessageAudience),
   );
+  const findNames = vi.fn((_ids: { facilityId: string; groupId: string }) =>
+    options?.namesError === true
+      ? errAsync({ code: "DATABASE_ERROR" as const, message: "DB error" })
+      : okAsync(options?.names ?? { facilityName: "会議室 A", groupName: "ロボット部" }),
+  );
   const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findByReservationId,
     findForMessage,
+    findNames,
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => undefined);
@@ -182,6 +191,7 @@ const createMockDeps = (options?: {
       findByGroupAndUser,
       findByReservationId,
       findForMessage,
+      findNames,
       notifyEnqueued,
     },
   };
@@ -337,6 +347,10 @@ describe("changeReservationStatusUseCase", () => {
         endAt: baseProvisionalReservation.endAt,
       });
       expect(spies.findByReservationId).toHaveBeenCalledWith("res_provisional_01");
+      expect(spies.findNames).toHaveBeenCalledWith({
+        facilityId: "fac_room_a",
+        groupId: "grp_robotics",
+      });
 
       // 承認は重なりの確認（COND-001）と通知メール（EVT-005）も更新に含める
       expect(spies.applyStatusTransition).toHaveBeenCalledWith(
@@ -917,6 +931,35 @@ describe("changeReservationStatusUseCase", () => {
       expect(spies.applyStatusTransition).not.toHaveBeenCalled();
     });
 
+    it("施設・団体名の取得に失敗した場合は DatabaseError となり applyStatusTransition は呼ばれない", async () => {
+      const { deps, spies } = createMockDeps({
+        reservation: baseProvisionalReservation,
+        namesError: true,
+      });
+
+      const args: ChangeReservationStatusArgs = {
+        reservationId: "res_provisional_01",
+        actorUserId: "usr_staff_01",
+        isStaff: true,
+        transition: ReservationTransition.Approve,
+        unlockArrangement: UnlockArrangement.Required,
+        appBaseUrl: "https://reserve.example.com",
+        now: testNow,
+      };
+
+      const result = await changeReservationStatusUseCase(deps, args);
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr()).toMatchObject({
+        code: ReservationErrorCode.DatabaseError,
+        message: "通知に載せる施設・団体の名前を読み取れなかった。",
+      });
+      expect(spies.findNames).toHaveBeenCalledWith({
+        facilityId: "fac_room_a",
+        groupId: "grp_robotics",
+      });
+      expect(spies.applyStatusTransition).not.toHaveBeenCalled();
+    });
+
     it("状態更新に成功したとき、積まれたメールの ID で即時配送が依頼される（ADR-002 決定 1 / 決定 2.1）", async () => {
       const expectedIds = ["mail_outbox_01", "mail_outbox_02"];
       const { deps, spies } = createMockDeps({
@@ -1247,6 +1290,10 @@ describe("changeReservationStatusUseCase", () => {
       expect(result._unsafeUnwrap().messageId).toBeNull();
 
       expect(spies.findByReservationId).toHaveBeenCalledWith("res_provisional_01");
+      expect(spies.findNames).toHaveBeenCalledWith({
+        facilityId: "fac_room_a",
+        groupId: "grp_robotics",
+      });
       expect(spies.findForMessage).not.toHaveBeenCalled();
       const [, mails, , , message] = spies.applyStatusTransition.mock.calls[0] ?? [];
       expect(message).toBeNull();
