@@ -13,7 +13,7 @@ import {
   type StatementInfo,
 } from "./migration-sql.js";
 
-/** 比べる相手の D1。`main` 向きの PR は本番、`develop` 向きの PR は preview */
+/** 比べる相手の D1。`develop` 向きの PR は preview、`main`・`release/*`・`hotfix/*` 向きの PR は本番 */
 export type PlanTarget = "production" | "preview";
 
 export const TARGET_LABEL: Record<PlanTarget, string> = {

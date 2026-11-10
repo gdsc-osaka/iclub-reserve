@@ -15,16 +15,18 @@
 
 ## 決定
 
-### 1. ブランチは 4 種類にし、マージは merge commit だけにする
+### 1. ブランチは 5 種類にし、マージは merge commit だけにする
 
-| ブランチ                        | 切る元    | PR の向き | 使い道                                        |
-| ------------------------------- | --------- | --------- | --------------------------------------------- |
-| 機能のブランチ（`feat/*` など） | `develop` | `develop` | 機能の追加・修正                              |
-| `release/v<版>`                 | `develop` | `main`    | 本番に出す                                    |
-| `hotfix/v<版>`                  | `main`    | `main`    | 本番の緊急の修正                              |
-| `sync/v<版>`                    | `main`    | `develop` | 本番に出したものを `develop` に戻す（決定 9） |
+| ブランチ                        | 切る元                          | PR の向き | 使い道                                        |
+| ------------------------------- | ------------------------------- | --------- | --------------------------------------------- |
+| 機能のブランチ（`feat/*` など） | `develop`                       | `develop` | 機能の追加・修正                              |
+| `release/v<版>`                 | `develop`                       | `main`    | 本番に出す                                    |
+| `hotfix/v<版>`                  | `main`                          | `main`    | 本番の緊急の修正                              |
+| 修正のブランチ（`fix/*` など）  | `release/v<版>`・`hotfix/v<版>` | 切った元  | 出す前の release・hotfix の修正               |
+| `sync/v<版>`                    | `main`                          | `develop` | 本番に出したものを `develop` に戻す（決定 9） |
 
-- `develop`・`main` の Ruleset とも、マージの方法は merge commit だけにする（設定済み）。squash すると `main` のコミットが `develop` の祖先にならず、次の release の PR に、出したはずの差分がまた並ぶためである。
+- `release/v<版>`・`hotfix/v<版>` を直すときも PR を通す。この PR でも CI と `Migration Plan`（本番の D1 と比べる。決定 8）が動き、`release` の Ruleset はこれらを必須にしている（設定済み）。修正のブランチは `release/`・`hotfix/` で始めない。Ruleset に作るのを止められ、`iclub-reserve` が本番の設定でビルドしてしまうためである。
+- `develop`・`main`・`release` の Ruleset とも、マージの方法は merge commit だけにする（設定済み）。squash すると `main` のコミットが `develop` の祖先にならず、次の release の PR に、出したはずの差分がまた並ぶためである。
 - `main` の Ruleset は、PR のブランチが最新の `main` を含むことを求めている。release の PR を出している間に hotfix を `main` に入れたら、release の PR で「Update branch」を押して取り込めば済む。
 - `main` にマージした後に、`main` で CI を回し直すことはしない。最新の `main` を含むことと merge commit を Ruleset が求めるので、マージした後の `main` のツリーは、PR で確かめたものと同じになるためである。
 
@@ -46,7 +48,7 @@
 - 緊急の修正の開始は「hotfix を始める」ワークフロー（`Start Hotfix`。[`.github/workflows/start-hotfix.yml`](../../.github/workflows/start-hotfix.yml)、入力は版）で行う。`main` から `hotfix/v<版>` を作り、`version` を上げるコミットを積む。修正のコミットと PR は人が作る。
 - ブランチ・コミット・PR は、GitHub App のトークン（`actions/create-github-app-token`）で作る。`GITHUB_TOKEN` で push したブランチや作った PR では Actions のワークフローが起動せず、必須のチェックが報告されないためである。
 - GitHub App の鍵（secret `RELEASE_BOT_PRIVATE_KEY`）と Client ID（変数 `RELEASE_BOT_CLIENT_ID`）は、Environment `release-bot` に置き、対象のブランチを `develop` に絞る。ほかのブランチで書き換えたワークフローに、鍵を渡さないためである。`workflow_dispatch` と `check_run` の実行は、どちらも `develop` で動く。
-- Ruleset `release` は、`release/**`・`hotfix/**` のブランチを作る・更新する操作を、maintain・admin のロールに限っている。GitHub App をこの Ruleset のバイパスに足す。
+- Ruleset `release` は、`release/**`・`hotfix/**` のブランチを作る操作を止め、更新は PR のマージだけにしている。バイパスは、GitHub App（常に）と、maintain・admin のロール（PR を通すときだけ）にする。App は、版を上げるコミットを指すブランチを作るためにバイパスする。
 - 版を上げるコミットを API で作ってから、そのコミットを指すブランチを作る。ブランチを先に作ると、Workers Builds が版を上げる前のコミットもビルドするためである。
 - Bot が作った PR は、作った直後に `gh pr merge --auto --merge` で auto-merge を予約する（リポジトリの「Allow auto-merge」は有効にした）。予約しても、レビューの承認・必須のチェック・本番への承認（決定 5）がそろうまではマージされない。
 
@@ -93,6 +95,7 @@
 - 取り消しが、本番の D1 に当てている途中に重なることもある。wrangler は 1 つのファイルの SQL と適用の記録（`d1_migrations` への INSERT）を 1 つのクエリで送る。ローカルの D1 では、1 つのクエリの途中で落ちると前の文も残らないことを確かめた。そのため、ファイルの途中まで当たった状態は残らず、残りのファイルは次の承認で当たる。
 - wrangler は、適用済みかどうかをファイル名でしか見ない。本番に当て済みのマイグレーションのファイル（`main` にあるものと、その PR で当てたもの）を書き換えたら、`Migration Plan`（決定 8）を失敗にする。`main` にあるものは `main` と、その PR で当てたものは当てたときのコミットと、中身を比べる。
 - 当てたときの中身は、`Release Approval` が PR のコメントに残す。当てたファイルの名前と中身の SHA-256 を、コメントの中の `<!-- migration-applied … -->` に書き、戻すときの bookmark と一緒に人にも見せる。`Migration Plan` はこれと比べる。PR には誰でもコメントできるので、github-actions のコメントだけを読む。
+- `release/*`・`hotfix/*` 向きの PR（決定 1）には、当てた記録が無い。当てるのは `main` 向きの PR だからである。当てた後のファイルはベース（`release/v<版>`・`hotfix/v<版>`）にあるので、書き換えれば記録が無くても失敗にできる。
 - 当ててからデプロイが終わるまで、本番では古いコードが新しいスキーマの上で動く。また、Workers をロールバックしても D1 は戻らない。そのため、マイグレーションは 1 つ前の版のコードでも動く形にする。列や表を消すなど、古いコードを壊す変更は 2 回のリリースに分ける（expand → contract。先に新しい形を足して出し、古い形を使わなくなってから消す）。
 
 ### 7. `develop` 向きの PR では当てず、`develop` にマージしたときに当てる
@@ -104,8 +107,8 @@
 
 ### 8. PR にマイグレーションの概要をコメントする
 
-- `main` 向き・`develop` 向きの両方の PR で、マイグレーションの概要を 1 つのコメントに書き、push のたびに同じコメントを書き直す（`Migration Plan` のジョブ）。
-- 比べる相手は、`main` 向きなら本番の D1（`iclub-reserve-db`）、`develop` 向きなら preview の D1（`iclub-reserve-preview-db`）とする。
+- すべての PR（`develop`・`main`・`release/*`・`hotfix/*` 向き）で、マイグレーションの概要を 1 つのコメントに書き、push のたびに同じコメントを書き直す（`Migration Plan` のジョブ）。
+- 比べる相手は、`develop` 向きなら preview の D1（`iclub-reserve-preview-db`）、それ以外なら本番の D1（`iclub-reserve-db`）とする。`release/*`・`hotfix/*` は本番に出すブランチで、preview の D1 には `develop` の先のマイグレーションまで当たっているためである。
 
 | 項目                   | 中身                                                                                                       |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -124,9 +127,9 @@
   - 読み取れなかった文（`WITH` で始まる文など）。SQL を人が確かめる。
 - 行が減ったときにチェックを失敗にしないのは、意図して消すマイグレーションのための印や、改名の扱いを、いつも運用で守るのは大変なためである。
 - 公開リポジトリなので、行数と行の中身は出さない。読んだ行と行数はスクリプトの中だけで扱い、ログにもコメントにも出さない。写すときのエラーには行の中身が混じることがあるので、エラーの文も出さない。写した D1 は artifact に上げない。
-- Dependabot やフォークからの PR には secret が渡らない。`develop` 向きの PR で、マイグレーションのファイルを触っていないものは、Cloudflare に触れずにチェックを通す。`main` 向きの PR は、触っていなくても本番の D1 を読む。`main` に未適用のものが残っていないかも見るためである。
+- Dependabot やフォークからの PR には secret が渡らない。`develop` 向きの PR で、マイグレーションのファイルを触っていないものは、Cloudflare に触れずにチェックを通す。本番と比べる PR は、触っていなくても本番の D1 を読む。ベースに未適用のものが残っていないかも見るためである。
 - 概要を作るスクリプトは [`scripts/release/migration-plan.ts`](../../scripts/release/migration-plan.ts)（`pnpm run release:migration-plan`）に置く。相手の D1 の代わりにローカルの SQLite のファイルを読めるので（`PLAN_SOURCE_SQLITE`）、手元でも試せる。
-- `Migration Plan` を、`develop`・`main` の両方の Ruleset で必須にする。
+- `Migration Plan` を、`develop`・`main`・`release` の Ruleset で必須にする。
 
 ### 9. 本番に出せたら、GitHub Release と、`develop` への戻しの PR を作る
 
@@ -159,7 +162,7 @@
 - 新しい表や列を使うブランチは、`develop` にマージするまで Preview で動かない（決定 7）。
 - `release/*`・`hotfix/*` は、2 つの Worker でビルドされる。`iclub-reserve` のほうは dry-run なので、Preview は 1 つだけできる。
 - dry-run は Cloudflare に問い合わせないので、本番の D1・R2・Queue が本当にあるかまでは確かめない。確かめるのは、本番の設定でビルドでき、設定とコードを組み立てられることまでである。
-- `main` 向きの PR に未適用のマイグレーションがあると、push のたびに本番の D1 の行をすべて読む（決定 8）。D1 の読み取りの行数に数えられる。
+- 本番と比べる PR（`main`・`release/*`・`hotfix/*` 向き）に未適用のマイグレーションがあると、push のたびに本番の D1 の行をすべて読む（決定 8）。D1 の読み取りの行数に数えられる。
 - D1 Read のトークンはリポジトリの secret なので、書き込みの権限がある人は、PR でワークフローを書き換えれば本番の行を読める。D1 の権限はアカウント単位なので、preview の D1 だけに絞ることもできない。
 - `iclub-reserve-preview` のビルドのトークンは、D1 を編集できる。D1 の権限はアカウント単位なので、本番の D1 も書き換えられる。今の既定のトークンも、アカウントのすべての Worker を編集できるので、危うさの大きさは今と大きくは変わらない。
 - `check_run` のワークフローが、ほかのチェックのたびにも起動する（決定 9）。
@@ -174,7 +177,7 @@
 - 作業の一覧:
   - Cloudflare: D1 Read のトークン（`Migration Plan` 用）と、D1 Edit のトークン（`Release Approval` 用）を作る。`iclub-reserve` の本番以外のブランチのビルドを `release/*`・`hotfix/*` に絞り（`branch_includes`）、デプロイコマンドを dry-run にし、プレビューのベースにビルドの変数を置く。`iclub-reserve-preview` の `branch_excludes` に `main` を入れる。D1 の編集を足したビルドのトークンを作り、`develop` のデプロイコマンドを変える。
   - GitHub: GitHub App（Contents・Pull requests・Workflows の読み書き）を作ってリポジトリに入れ、Ruleset `release` のバイパスに足す。Environment `release-bot`（対象のブランチは `develop`。変数 `RELEASE_BOT_CLIENT_ID`・secret `RELEASE_BOT_PRIVATE_KEY`）と、Environment `production`（対象のブランチは `refs/pull/*/merge`。必須のレビュアーと自己承認の禁止。secret `CLOUDFLARE_D1_MIGRATE_TOKEN`）を作る。リポジトリの secret に `CLOUDFLARE_ACCOUNT_ID`・`CLOUDFLARE_D1_READ_TOKEN` を置く。`main` の Ruleset の必須のチェックに `Version`・`Migration Plan`・`Release Approval` を足し（`Workers Builds: iclub-reserve` は足した）、`develop` の Ruleset に `Migration Plan` を足す。
-  - リポジトリ: 済んだ（`package.json` の `version`、`ci.yml` の `main`、決定 2・3・5・8・9 のワークフローと `scripts/release/`、README の「マイグレーションの適用」）。
+  - リポジトリ: 済んだ（`package.json` の `version`、`ci.yml` の `main`・`release/**`・`hotfix/**`、決定 2・3・5・8・9 のワークフローと `scripts/release/`、README の「マイグレーションの適用」）。
 
 ## 関連
 

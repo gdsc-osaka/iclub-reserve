@@ -200,14 +200,16 @@ pnpm exec wrangler preview base-config secret put BETTER_AUTH_SECRET --env previ
 注意:
 
 - 版は semver で書きます。正式に出すまでは `1.0.0-rc.1`・`1.0.0-rc.2`…、出した後は `1.0.0`・`1.0.1`… にします。`main` の版より大きくないと、`Version` のチェックが落ちます。
-- 承認の後に push したり `main` を取り込んだりしたら、本番への承認をし直します。
+- 途中で直すときは、`release/v<版>` から作業のブランチ（`fix/…` など。`release/`・`hotfix/` で始めない）を切り、`release/v<版>` 向きの PR を出します。`release/**`・`hotfix/**` には直接 push できません。この PR でも CI が動き、Migration Plan は本番の D1 と比べます。
+- 承認の後に修正をマージしたり `main` を取り込んだりしたら、本番への承認をし直します。
 - release と hotfix の PR を同時に承認しないでください。
 
 緊急の修正（hotfix）の手順:
 
 1. 「Start Hotfix」を `develop` で動かし、版（`1.0.1` など）を入れます。`main` から `hotfix/v<版>` のブランチができ、版を上げるコミットが積まれます。
-2. そのブランチに修正をコミットして push し、`main` 向きの PR を作ります（本文は `.github/pull_request_template.md` に沿います）。`release/**`・`hotfix/**` のブランチに push できるのは、maintain 以上のロールの人だけです。
-3. 後はリリースの手順の 2〜5 と同じです。
+2. そのブランチから作業のブランチを切り、`hotfix/v<版>` 向きの PR で修正を入れます（リリースの注意と同じです）。
+3. `hotfix/v<版>` から `main` 向きの PR を作ります（本文は `.github/pull_request_template.md` に沿います）。
+4. 後はリリースの手順の 2〜5 と同じです。
 
 ### マイグレーションの適用
 
@@ -221,7 +223,7 @@ pnpm exec wrangler preview base-config secret put BETTER_AUTH_SECRET --env previ
 
 PR のコメント（Migration Plan）:
 
-`develop` 向き・`main` 向きの PR に、相手の D1（`develop` 向きなら preview、`main` 向きなら本番）に当てるマイグレーション・触る表と操作・予行演習の結果を書きます。予行演習で当てるのに失敗したら、チェックが落ちます。行や表が減る・`DROP TABLE`（外部キーで参照している表も）・`DROP COLUMN`・`UPDATE`・`DELETE` は警告として出すだけで、チェックは落としません。行数と行の中身は出しません。
+すべての PR に、相手の D1（`develop` 向きなら preview、`main`・`release/*`・`hotfix/*` 向きなら本番）に当てるマイグレーション・触る表と操作・予行演習の結果を書きます。予行演習で当てるのに失敗したら、チェックが落ちます。行や表が減る・`DROP TABLE`（外部キーで参照している表も）・`DROP COLUMN`・`UPDATE`・`DELETE` は警告として出すだけで、チェックは落としません。行数と行の中身は出しません。
 
 マイグレーションを書くときの決まり:
 

@@ -1,7 +1,8 @@
 name: Start Hotfix
 
 # 本番の緊急の修正を始める (ADR-017 決定 3)。
-# main の先頭から hotfix/v<版> を作り、版を上げるコミットを積む。修正のコミットと main 向きの PR は人が作る。
+# main の先頭から hotfix/v<版> を作り、版を上げるコミットを積む。
+# 修正は人が hotfix/v<版> 向きの PR で入れ (hotfix/v<版> には直接 push できない)、main 向きの PR も人が作る。
 on:
   workflow_dispatch:
     inputs:
@@ -99,7 +100,8 @@ jobs:
           {
             echo "ブランチ \`$BRANCH\` を作りました。次の手順で修正を進めてください。"
             echo ""
-            echo "1. \`git fetch origin\` して \`$BRANCH\` を取り出し、修正をコミットして push する"
-            echo "2. \`main\` 向きの PR を作る（本文は .github/pull_request_template.md に沿う）"
-            echo "3. コードレビューの承認と、Release Approval の本番への承認を行う"
+            echo "1. \`git fetch origin\` して \`$BRANCH\` から作業のブランチ（\`fix/…\` など。\`hotfix/\`・\`release/\` で始めない）を切り、修正をコミットして push する"
+            echo "2. \`$BRANCH\` 向きの PR を作り、レビューを受けてマージする（\`$BRANCH\` には直接 push できない）"
+            echo "3. \`$BRANCH\` から \`main\` 向きの PR を作る（本文は .github/pull_request_template.md に沿う）"
+            echo "4. コードレビューの承認と、Release Approval の本番への承認を行う"
           } >> "$GITHUB_STEP_SUMMARY"

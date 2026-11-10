@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
   push:
     branches: ["develop"]
-  # main 向きの PR（release/*・hotfix/*）でも、main の Ruleset が必須にしているチェックを報告する (ADR-017)。
+  # main 向きの PR（release/*・hotfix/*）と、release/*・hotfix/* に修正を入れる PR でも、
+  # Ruleset が必須にしているチェックを報告する (ADR-017)。
   # main にマージした後は動かさない。最新の main を含むことと merge commit を Ruleset が求めるので、
   # マージした後のツリーは PR で確かめたものと同じになる
   pull_request:
-    branches: ["develop", "main"]
+    branches: ["develop", "main", "release/**", "hotfix/**"]
 
 # GITHUB_TOKEN はリポジトリの読み取りのみ許可する (checkout に必要な最小権限)
 permissions:
