@@ -94,13 +94,6 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           BRANCH="sync/v$VERSION"
-          if [ -n "$(gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number --jq '.[].number')" ]; then
-            echo "$BRANCH の PR はもうあります。"
-            exit 0
-          fi
-          if ! gh api "repos/$REPO/git/ref/heads/$BRANCH" --silent 2>/dev/null; then
-            gh api -X POST "repos/$REPO/git/refs" -f "ref=refs/heads/$BRANCH" -f "sha=$SHA" --silent
-          fi
           cat > "$RUNNER_TEMP/body.md" <<EOF
           ## 変更内容
 
@@ -132,9 +125,24 @@ jobs:
           - [ ] ドキュメントを更新したか (必要な場合)
           - [ ] セルフレビューを行ったか
           EOF
-          URL=$(gh pr create --repo "$REPO" --base develop --head "$BRANCH" \
-            --title "chore(release): v$VERSION を develop に戻す" --body-file "$RUNNER_TEMP/body.md")
-          gh pr merge --repo "$REPO" --auto --merge "$URL"
+
+          # 前の実行が PR を作った後に落ちていれば、PR を作るのだけを飛ばし、auto-merge の予約と develop の取り込みはやり直す。
+          # 閉じた PR しか無ければ (マージ済みか、人が閉じた)、何もしない
+          URL=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json url --jq '.[0].url // empty')
+          if [ -z "$URL" ]; then
+            if [ -n "$(gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number --jq '.[].number')" ]; then
+              echo "$BRANCH の PR はもう閉じています。"
+              exit 0
+            fi
+            if ! gh api "repos/$REPO/git/ref/heads/$BRANCH" --silent 2>/dev/null; then
+              gh api -X POST "repos/$REPO/git/refs" -f "ref=refs/heads/$BRANCH" -f "sha=$SHA" --silent
+            fi
+            URL=$(gh pr create --repo "$REPO" --base develop --head "$BRANCH" \
+              --title "chore(release): v$VERSION を develop に戻す" --body-file "$RUNNER_TEMP/body.md")
+          fi
+          if [ "$(gh pr view "$URL" --repo "$REPO" --json autoMergeRequest --jq '.autoMergeRequest != null')" != true ]; then
+            gh pr merge --repo "$REPO" --auto --merge "$URL"
+          fi
 
           # develop に、戻しのブランチに無いコミットがあれば取り込む (update-branch は develop をマージする)
           BEHIND=$(gh api "repos/$REPO/compare/$BRANCH...develop" --jq .ahead_by)

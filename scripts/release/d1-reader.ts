@@ -103,7 +103,10 @@ export async function readAppliedMigrations(reader: SqlReader): Promise<string[]
 }
 
 /** 1 回に読む行の数。D1 の 1 回の応答が大きくなりすぎないようにする */
-const PAGE_SIZE = 500;
+export const PAGE_SIZE = 500;
+
+/** 行を読むときに rowid に付ける別名。表の列と重ならない名前にする */
+const ROWID_ALIAS = "__copy_rowid";
 
 /** API の JSON の値を、SQLite に入れる値に直す。整数は BigInt にして INTEGER のまま入れる */
 function toSqliteValue(value: unknown): unknown {
@@ -127,13 +130,19 @@ export async function copyDatabase(reader: SqlReader, targetPath: string): Promi
 
     for (const table of schema.filter((o) => o.type === "table")) {
       db.exec(table.sql);
-      for (let offset = 0; ; offset += PAGE_SIZE) {
+      // 前のページの最後の rowid より後を読む。OFFSET で読むと、読み飛ばす行も D1 が毎回読む（読んだ行の数で課金される）うえ、
+      // 読んでいる間に前の範囲の行が消えると、位置がずれて行を取りこぼす
+      let lastRowid: unknown;
+      for (;;) {
         const rows = await reader.all(
-          `SELECT * FROM ${quoteIdent(table.name)} ORDER BY rowid LIMIT ? OFFSET ?`,
-          [PAGE_SIZE, offset],
+          `SELECT rowid AS ${quoteIdent(ROWID_ALIAS)}, * FROM ${quoteIdent(table.name)}` +
+            (lastRowid === undefined ? "" : " WHERE rowid > ?") +
+            " ORDER BY rowid LIMIT ?",
+          lastRowid === undefined ? [PAGE_SIZE] : [lastRowid, PAGE_SIZE],
         );
         if (rows.length === 0) break;
-        const columns = Object.keys(rows[0]);
+        lastRowid = rows[rows.length - 1][ROWID_ALIAS];
+        const columns = Object.keys(rows[0]).filter((c) => c !== ROWID_ALIAS);
         const insert = db.prepare(
           `INSERT INTO ${quoteIdent(table.name)} (${columns.map(quoteIdent).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
         );

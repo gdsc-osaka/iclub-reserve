@@ -115,9 +115,10 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           # 見出しの深さを、テンプレートの見出しより下げる。
-          # 「by @名前 in」の @ は外す (PR の本文に書くと、並んだ PR を作った人全員に通知が届くため)
+          # 名前の前の @ は外す (PR の本文に書くと、PR を作った人・初めて参加した人・PR のタイトルで名前を挙げた人に通知が届くため)。
+          # 直前が英数字の @ (メールアドレス) は残す
           NOTES=$(gh api -X POST "repos/$REPO/releases/generate-notes" -f "tag_name=v$RELEASE_VERSION" -f "target_commitish=$BRANCH" --jq .body \
-            | sed -E 's/^(#+) /\1## /; s/ by @([A-Za-z0-9-]+(\[bot\])?) in / by \1 in /')
+            | sed -E 's/^(#+) /\1## /; s/(^|[^A-Za-z0-9_])@([A-Za-z0-9])/\1\2/g')
           cat > "$RUNNER_TEMP/body.md" <<EOF
           ## 変更内容
 

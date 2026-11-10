@@ -256,9 +256,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATE_TOKEN }}
         run: vp exec wrangler d1 migrations apply iclub-reserve-db --remote --env production
 
+      # 次の push でこの実行が取り消されても (concurrency の cancel-in-progress)、当たった分を記録するため always() にする。
+      # wrangler はファイルを 1 つずつ当てるので、取り消す前に当たったファイルは本番の D1 に残る
       - name: List unapplied migrations after applying
         id: after
-        if: ${{ !cancelled() && steps.before.outputs.count != '0' }}
+        if: ${{ always() && steps.before.outcome == 'success' && steps.before.outputs.count != '0' }}
         env:
           UNAPPLIED_OUTPUT: ${{ runner.temp }}/unapplied-after.json
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -267,9 +269,9 @@ jobs:
 
       # 当てたファイルと中身の SHA-256 を、PR のコメントに残す。
       # Migration Plan は、これと比べて、当てた後に書き換えていないかを確かめる (決定 6)。
-      # 途中で失敗しても、当たった分は記録する
+      # 途中で失敗しても、取り消されても、当たった分は記録する
       - name: Record applied migrations
-        if: ${{ !cancelled() && steps.after.outcome == 'success' }}
+        if: ${{ always() && steps.after.outcome == 'success' }}
         env:
           BOOKMARK: ${{ steps.bookmark.outputs.bookmark }}
         run: |
