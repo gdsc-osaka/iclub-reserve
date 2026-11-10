@@ -1,0 +1,309 @@
+name: Release Gate
+
+# PR で、版とマイグレーションを確かめ、本番への承認を待つ (ADR-017)。
+#
+# - Version (main 向き): 出す版が正しいかを確かめる (決定 2)
+# - Migration Plan (develop・main 向き): 相手の D1 に当てるマイグレーションの概要を PR にコメントする (決定 6・8)
+# - Release Approval (main 向き): 本番への承認を待ち、承認されたら本番の D1 にマイグレーションを当てる (決定 5・6)
+#
+# どれも Ruleset で必須にする (develop は Migration Plan だけ)。
+on:
+  pull_request:
+    branches: ["develop", "main"]
+    # edited は入れない。タイトルや本文を直すたびに動き直し、本番への承認の待ちが取り消されるため
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+# PR ごとに 1 つだけ動かす。push したら、前の実行 (本番への承認の待ちを含む) を取り消す。
+# 承認はその実行のコミットに結び付くので、push した後は承認し直す (決定 5)。
+# 取り消しが本番の D1 に当てている途中に重なっても、D1 はファイルを 1 つずつまとめて当てるので、
+# 途中まで当たったファイルは残らない。残りは次の承認で当たる。
+# release と hotfix の PR をまたいでは 1 つずつにしない。承認の待ちが枠を握ると、
+# release の PR が承認を待っている間、hotfix の PR の承認の待ちが始まらないため。同時に承認しないことは運用で守る
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Version
+    if: github.base_ref == 'main'
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # ベースの main の package.json を読むため、履歴をすべて取る
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
+          cache: true
+          run-install: false
+
+      - name: Install node modules
+        run: vp install --frozen-lockfile
+
+      # ブランチ名は式でシェルに埋め込まず、環境変数で渡す (ブランチ名にシェルの記号を入れられるため)
+      - name: Check version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          RELEASE_VERSION=$(jq -r '.version // empty' package.json)
+          # main に version が無ければ空にする (0.0.0 とみなす)。
+          # 最初のリリースの前は、main に package.json も無い
+          BASE_VERSION=
+          if git cat-file -e "$BASE_SHA:package.json" 2>/dev/null; then
+            BASE_VERSION=$(git show "$BASE_SHA:package.json" | jq -r '.version // empty')
+          fi
+          TAG_EXISTS=false
+          if [[ "$RELEASE_VERSION" =~ ^[0-9A-Za-z.-]+$ ]] && gh api "repos/$REPO/git/ref/tags/v$RELEASE_VERSION" --silent 2>/dev/null; then
+            TAG_EXISTS=true
+          fi
+          export RELEASE_VERSION BASE_VERSION TAG_EXISTS
+          vp run release:check-version
+
+  migration_plan:
+    name: Migration Plan
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # 概要を PR にコメントするため
+      pull-requests: write
+
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PLAN_TARGET: ${{ github.base_ref == 'main' && 'production' || 'preview' }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # ベースのブランチと比べるため、履歴をすべて取る
+          fetch-depth: 0
+          persist-credentials: false
+
+      # 本番は、PR がマイグレーションを触っていなくても読む (main に未適用のものが残っていないかも見る)。
+      # preview は、触っていない PR では Cloudflare に触れずに通す (Dependabot やフォークの PR には secret が渡らない)
+      - name: Find changed migrations
+        id: changes
+        run: |
+          if [ "$PLAN_TARGET" = "production" ] || ! git diff --quiet "$BASE_SHA...$HEAD_SHA" -- drizzle/migrations; then
+            echo "needs_plan=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_plan=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Vite+
+        if: steps.changes.outputs.needs_plan == 'true'
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
+          cache: true
+          run-install: false
+
+      - name: Install node modules
+        if: steps.changes.outputs.needs_plan == 'true'
+        run: vp install --frozen-lockfile
+
+      # 本番への承認で当てたときの記録 (Release Approval のコメント)。当てた後に書き換えていないかを比べる (決定 6)。
+      # 誰でもコメントできるので、github-actions のコメントだけを読む
+      - name: Read approval records
+        if: steps.changes.outputs.needs_plan == 'true' && env.PLAN_TARGET == 'production'
+        run: |
+          gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | .body | capture("<!-- migration-applied (?<json>\\{.*\\}) -->") | .json' \
+            | jq -s 'map(fromjson)' > "$RUNNER_TEMP/applied-records.json"
+
+      # 相手の D1 は D1 Read のトークンで読む。書き込めるトークンは本番への承認の後にだけ渡す
+      - name: Plan migrations
+        id: plan
+        if: steps.changes.outputs.needs_plan == 'true'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_READ_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN }}
+          APPLIED_RECORDS: ${{ runner.temp }}/applied-records.json
+          PLAN_OUTPUT: ${{ runner.temp }}/migration-plan.md
+        run: vp run release:migration-plan
+
+      - name: Write empty plan
+        id: empty
+        if: steps.changes.outputs.needs_plan == 'false'
+        run: |
+          printf '%s\n' '<!-- migration-plan -->' '## マイグレーションの概要' '' 'この PR はマイグレーションを足していません。' > "$RUNNER_TEMP/migration-plan.md"
+          echo "has_plan=false" >> "$GITHUB_OUTPUT"
+
+      # 前に書いたコメントがあれば書き直し、無ければ概要があるときだけ書く。
+      # チェックを落としたときも、理由をコメントに残す
+      - name: Comment on pull request
+        if: ${{ !cancelled() }}
+        env:
+          HAS_PLAN: ${{ steps.plan.outputs.has_plan || steps.empty.outputs.has_plan }}
+        run: |
+          PLAN_OUTPUT="$RUNNER_TEMP/migration-plan.md"
+          # 概要を書く前に落ちたときは、コメントしない
+          [ -f "$PLAN_OUTPUT" ] || exit 0
+          cat "$PLAN_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+          COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- migration-plan -->"))) | .id' | head -n 1)
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$COMMENT_ID" -F "body=@$PLAN_OUTPUT" --silent
+          elif [ "$HAS_PLAN" = "true" ]; then
+            gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$PLAN_OUTPUT" --silent
+          fi
+
+  release_approval:
+    name: Release Approval
+    needs: [version, migration_plan]
+    # フォークからの PR でも飛ばさない (飛ばすと、必須のチェックが通った扱いになる)。
+    # フォークの PR には secret が渡らず、最初の手順でも止める
+    if: github.base_ref == 'main'
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    # 必須のレビュアー (リリースの担当) が承認するまで、ジョブは待ちになる (決定 5)。
+    # pull_request の実行は refs/pull/<番号>/merge で判定されるので、Environment の対象のブランチでは絞れない
+    # (対象のブランチは refs/pull/*/merge にしておく)。release/*・hotfix/* に絞るのは Version のチェックが行う。
+    # デプロイはしないので、Environment のデプロイの記録は作らない
+    environment:
+      name: production
+      deployment: false
+    permissions:
+      contents: read
+      # 当てた記録を PR にコメントするため
+      pull-requests: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+    steps:
+      - name: Reject pull requests from forks
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::フォークからの PR は本番に出せません。"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
+          cache: true
+          run-install: false
+
+      - name: Install node modules
+        run: vp install --frozen-lockfile
+
+      - name: List unapplied migrations
+        id: before
+        env:
+          UNAPPLIED_OUTPUT: ${{ runner.temp }}/unapplied-before.json
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # 本番の D1 を編集できるトークン。Environment の secret なので、承認されるまでジョブに渡らない。
+          # 依存を入れる手順などには渡さず、D1 を触る手順にだけ渡す
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATE_TOKEN }}
+        run: |
+          vp run release:unapplied-migrations
+          echo "count=$(jq length "$UNAPPLIED_OUTPUT")" >> "$GITHUB_OUTPUT"
+
+      # 壊したときに戻せるよう、当てる前の bookmark を取ってログに残す (決定 6)
+      - name: Take a Time Travel bookmark
+        id: bookmark
+        if: steps.before.outputs.count != '0'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATE_TOKEN }}
+        run: |
+          vp exec wrangler d1 time-travel info iclub-reserve-db --env production --json > "$RUNNER_TEMP/bookmark.json"
+          cat "$RUNNER_TEMP/bookmark.json"
+          echo "bookmark=$(jq -r .bookmark "$RUNNER_TEMP/bookmark.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Apply migrations
+        if: steps.before.outputs.count != '0'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATE_TOKEN }}
+        run: vp exec wrangler d1 migrations apply iclub-reserve-db --remote --env production
+
+      - name: List unapplied migrations after applying
+        id: after
+        if: ${{ !cancelled() && steps.before.outputs.count != '0' }}
+        env:
+          UNAPPLIED_OUTPUT: ${{ runner.temp }}/unapplied-after.json
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATE_TOKEN }}
+        run: vp run release:unapplied-migrations
+
+      # 当てたファイルと中身の SHA-256 を、PR のコメントに残す。
+      # Migration Plan は、これと比べて、当てた後に書き換えていないかを確かめる (決定 6)。
+      # 途中で失敗しても、当たった分は記録する
+      - name: Record applied migrations
+        if: ${{ !cancelled() && steps.after.outcome == 'success' }}
+        env:
+          BOOKMARK: ${{ steps.bookmark.outputs.bookmark }}
+        run: |
+          APPLIED=$(jq -c --slurpfile after "$RUNNER_TEMP/unapplied-after.json" \
+            '[.[] | select(.name as $n | $after[0] | map(.name) | index($n) | not)]' \
+            "$RUNNER_TEMP/unapplied-before.json")
+          if [ "$(jq length <<< "$APPLIED")" -eq 0 ]; then
+            echo "当てたものはありません。"
+            exit 0
+          fi
+          RECORD=$(jq -c --arg sha "$HEAD_SHA" '{sha: $sha, files: (map({(.name): .sha256}) | add)}' <<< "$APPLIED")
+          {
+            echo "<!-- migration-applied $RECORD -->"
+            echo "## 本番の D1 にマイグレーションを当てました"
+            echo ""
+            echo "コミット \`${HEAD_SHA:0:7}\` の次のファイルを、本番の D1（\`iclub-reserve-db\`）に当てました。"
+            echo ""
+            jq -r '.[] | "- `\(.name)`"' <<< "$APPLIED"
+            echo ""
+            echo "当てる前の bookmark は \`$BOOKMARK\` です。戻すときは次を実行します（戻すと、その後の書き込みも消えます）。"
+            echo ""
+            echo '```sh'
+            echo "pnpm exec wrangler d1 time-travel restore iclub-reserve-db --env production --bookmark=$BOOKMARK"
+            echo '```'
+            echo ""
+            echo "当てた後にこれらのファイルを書き換えると、Migration Plan のチェックが落ちます。"
+          } > "$RUNNER_TEMP/applied.md"
+          cat "$RUNNER_TEMP/applied.md" >> "$GITHUB_STEP_SUMMARY"
+          gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$RUNNER_TEMP/applied.md" --silent
+
+      - name: Check all migrations applied
+        if: steps.before.outputs.count != '0'
+        run: |
+          if [ "$(jq length "$RUNNER_TEMP/unapplied-after.json")" -ne 0 ]; then
+            echo "::error::本番の D1 に当たっていないマイグレーションが残っています。"
+            exit 1
+          fi

@@ -1,0 +1,145 @@
+name: After Release
+
+# 本番に出せたら、GitHub Release と、develop への戻しの PR を作る (ADR-017 決定 9)。
+#
+# Workers Builds のチェック (Workers Builds: iclub-reserve) が main で通ったときに動く。
+# check_run で動くワークフローは、既定のブランチ (develop) にあるものだけが使われる。
+# ほかのチェックが終わるたびにも起動し、下の if で飛ばされる (Actions の一覧に、飛ばした実行が並ぶ)
+on:
+  check_run:
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish Release
+    # release/*・hotfix/* の dry-run のビルドも同じ名前のチェックを出すので、ブランチで絞る
+    if: >-
+      github.event.check_run.name == 'Workers Builds: iclub-reserve' &&
+      github.event.check_run.app.slug == 'cloudflare-workers-and-pages' &&
+      github.event.check_run.conclusion == 'success' &&
+      github.event.check_run.check_suite.head_branch == 'main'
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}
+      cancel-in-progress: false
+    # GitHub App の鍵を置く Environment。check_run の実行は既定のブランチ (develop) で動く
+    environment:
+      name: release-bot
+      deployment: false
+
+    env:
+      SHA: ${{ github.event.check_run.head_sha }}
+      REPO: ${{ github.repository }}
+
+    steps:
+      # GITHUB_TOKEN で作った PR では、ワークフローが起動せず、必須のチェックが報告されない。
+      # そのため GitHub App のトークンで作る
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          # main のワークフローのファイルを含む戻しのブランチに、develop を取り込むため
+          permission-workflows: write
+
+      - name: Read version
+        id: version
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # main の先頭か、その祖先のコミットだけを扱う
+          STATUS=$(gh api "repos/$REPO/compare/$SHA...main" --jq .status)
+          if [ "$STATUS" != "identical" ] && [ "$STATUS" != "ahead" ]; then
+            echo "::error::コミット $SHA は main にありません（$STATUS）。"
+            exit 1
+          fi
+          VERSION=$(gh api "repos/$REPO/contents/package.json?ref=$SHA" --jq .content | base64 -d | jq -r '.version // empty')
+          if [[ ! "$VERSION" =~ ^[0-9A-Za-z.-]+$ ]]; then
+            echo "::error::package.json の version「$VERSION」を読めません。"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # ビルドをやり直したときなど、もう出した版なら何もしない
+          if gh api "repos/$REPO/git/ref/tags/v$VERSION" --silent 2>/dev/null; then
+            echo "v$VERSION はもう出しています。"
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # タグ v<版> を付けて GitHub Release を作る。版に - が入っていれば pre-release にする
+      - name: Create GitHub Release
+        if: steps.version.outputs.released == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          PRERELEASE=()
+          if [[ "$VERSION" == *-* ]]; then PRERELEASE=(--prerelease); fi
+          gh release create "v$VERSION" --repo "$REPO" --target "$SHA" --title "v$VERSION" --generate-notes "${PRERELEASE[@]}"
+
+      # main から sync/v<版> を作り、develop 向きの PR を作って auto-merge を予約する。
+      # develop の Ruleset は最新の develop を含むことを求めるので、衝突しなければ develop を取り込んでおく。
+      # GitHub Release を作った後に落ちたときも、やり直せば PR を作れるよう、タグの有無では飛ばさない
+      - name: Open sync pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          BRANCH="sync/v$VERSION"
+          if [ -n "$(gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number --jq '.[].number')" ]; then
+            echo "$BRANCH の PR はもうあります。"
+            exit 0
+          fi
+          if ! gh api "repos/$REPO/git/ref/heads/$BRANCH" --silent 2>/dev/null; then
+            gh api -X POST "repos/$REPO/git/refs" -f "ref=refs/heads/$BRANCH" -f "sha=$SHA" --silent
+          fi
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          ## 変更内容
+
+          - 本番に出した v$VERSION を、\`develop\` に戻します（\`$BRANCH\` → \`develop\`）。
+          - \`package.json\` の \`version\` と、\`main\` にだけ入った修正（hotfix）が \`develop\` に入ります。
+
+          ## 変更の検証方法
+
+          1. 差分が、版を上げたコミットと、\`main\` にだけ入った修正だけであることを確かめる
+
+          ## スクリーンショット/デモ
+
+          なし
+
+          ## レビュアーへの特記事項
+
+          - この PR は「After Release」のワークフローが作り、auto-merge を予約してあります。承認するとマージされます。
+          - 衝突したときは、この PR にコメントがあります。手で \`develop\` を取り込んで解いてください。
+
+          ## 関連する Issue
+
+          - なし
+
+          ## チェックリスト
+
+          - [ ] 関連する Issue へのリンクが記述されているか
+          - [ ] コードがプロジェクトのコーディング規約に従っているか
+          - [ ] 新しいテストを追加したか (必要な場合)
+          - [ ] ドキュメントを更新したか (必要な場合)
+          - [ ] セルフレビューを行ったか
+          EOF
+          URL=$(gh pr create --repo "$REPO" --base develop --head "$BRANCH" \
+            --title "chore(release): v$VERSION を develop に戻す" --body-file "$RUNNER_TEMP/body.md")
+          gh pr merge --repo "$REPO" --auto --merge "$URL"
+
+          # develop に、戻しのブランチに無いコミットがあれば取り込む (update-branch は develop をマージする)
+          BEHIND=$(gh api "repos/$REPO/compare/$BRANCH...develop" --jq .ahead_by)
+          if [ "$BEHIND" -gt 0 ] && ! gh api -X PUT "repos/$REPO/pulls/${URL##*/}/update-branch" --silent; then
+            gh pr comment "$URL" --repo "$REPO" \
+              --body "\`develop\` を自動で取り込めませんでした（衝突しているかもしれません）。手で \`develop\` を取り込み、衝突を解いてから push してください。"
+          fi
+          echo "GitHub Release v$VERSION と、戻しの PR を作りました: $URL" >> "$GITHUB_STEP_SUMMARY"

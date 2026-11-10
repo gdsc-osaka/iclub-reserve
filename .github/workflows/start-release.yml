@@ -1,0 +1,161 @@
+name: Start Release
+
+# リリースを始める (ADR-017 決定 3)。
+# develop の先頭から release/v<版> を作り、版を上げるコミットを積み、main 向きの PR を作って auto-merge を予約する。
+# いつ・どの版で出すかは人が決めるので、手で動かす (Actions のタブの「Run workflow」)。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "出す版（1.0.0-rc.1・1.0.0 の形。先頭に v は付けない）"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  start:
+    name: Start Release
+    # develop の上で動いたときだけ。ほかのブランチで書き換えたワークフローから動かさない
+    if: github.ref == 'refs/heads/develop'
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    # GitHub App の鍵を置く Environment。対象のブランチを develop に絞り、ほかのブランチの実行には鍵を渡さない
+    environment:
+      name: release-bot
+      deployment: false
+
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      BRANCH: release/v${{ inputs.version }}
+      REPO: ${{ github.repository }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
+          cache: true
+          run-install: false
+
+      - name: Install node modules
+        run: vp install --frozen-lockfile
+
+      # GITHUB_TOKEN で作ったブランチや PR では、ワークフローが起動せず、必須のチェックが報告されない。
+      # そのため GitHub App のトークンで作る
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          # develop のワークフローのファイルを含むブランチを作るため
+          permission-workflows: write
+
+      # 決定 2 と同じ検査。ブランチはまだ無いので、ブランチ名は見ない
+      - name: Check version
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # main に version が無ければ空にする (0.0.0 とみなす)。
+          # 最初のリリースの前は、main に package.json も無い (404)。それ以外の失敗では止める
+          if ! CONTENT=$(gh api "repos/$REPO/contents/package.json?ref=main" --jq .content 2> "$RUNNER_TEMP/gh-error.txt"); then
+            if ! grep -q 'HTTP 404' "$RUNNER_TEMP/gh-error.txt"; then
+              cat "$RUNNER_TEMP/gh-error.txt"
+              exit 1
+            fi
+            CONTENT=
+          fi
+          BASE_VERSION=$(printf '%s' "$CONTENT" | base64 -d | jq -r '.version // empty')
+          TAG_EXISTS=false
+          if [[ "$RELEASE_VERSION" =~ ^[0-9A-Za-z.-]+$ ]] && gh api "repos/$REPO/git/ref/tags/v$RELEASE_VERSION" --silent 2>/dev/null; then
+            TAG_EXISTS=true
+          fi
+          export BASE_VERSION TAG_EXISTS
+          vp run release:check-version
+          if gh api "repos/$REPO/git/ref/heads/$BRANCH" --silent 2>/dev/null; then
+            echo "::error::ブランチ $BRANCH はもうあります。"
+            exit 1
+          fi
+
+      # 版を上げるコミットを API で作ってから、そのコミットを指すブランチを作る。
+      # ブランチを先に作ると、Workers Builds が版を上げる前のコミットもビルドするため
+      - name: Create release branch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BASE_SHA: ${{ github.sha }}
+        run: |
+          vp run release:set-version
+          BASE_TREE=$(gh api "repos/$REPO/git/commits/$BASE_SHA" --jq .tree.sha)
+          TREE=$(jq -n --arg base "$BASE_TREE" --rawfile content package.json \
+            '{base_tree: $base, tree: [{path: "package.json", mode: "100644", type: "blob", content: $content}]}' \
+            | gh api -X POST "repos/$REPO/git/trees" --input - --jq .sha)
+          COMMIT=$(jq -n --arg tree "$TREE" --arg parent "$BASE_SHA" --arg message "chore(release): 版を $RELEASE_VERSION にする" \
+            '{message: $message, tree: $tree, parents: [$parent]}' \
+            | gh api -X POST "repos/$REPO/git/commits" --input - --jq .sha)
+          gh api -X POST "repos/$REPO/git/refs" -f "ref=refs/heads/$BRANCH" -f "sha=$COMMIT" --silent
+
+      # PR の本文は .github/pull_request_template.md に沿う。前のタグより後にマージした PR を並べる
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # 見出しの深さを、テンプレートの見出しより下げる。
+          # 「by @名前 in」の @ は外す (PR の本文に書くと、並んだ PR を作った人全員に通知が届くため)
+          NOTES=$(gh api -X POST "repos/$REPO/releases/generate-notes" -f "tag_name=v$RELEASE_VERSION" -f "target_commitish=$BRANCH" --jq .body \
+            | sed -E 's/^(#+) /\1## /; s/ by @([A-Za-z0-9-]+(\[bot\])?) in / by \1 in /')
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          ## 変更内容
+
+          - v$RELEASE_VERSION を本番に出します（\`$BRANCH\` → \`main\`）。
+          - 前の版から後にマージした PR は次のとおりです。
+
+          $NOTES
+
+          ## 変更の検証方法
+
+          1. Migration Plan のコメントで、本番の D1 に当てるマイグレーションと警告を確かめる
+          2. Preview（\`iclub-reserve-preview\`）で、主な流れが動くことを確かめる
+          3. コードレビューで承認する
+          4. Release Approval のジョブで、本番への承認をする（承認するとマイグレーションが本番の D1 に当たり、auto-merge でマージされ、本番にデプロイされる）
+
+          ## スクリーンショット/デモ
+
+          なし
+
+          ## レビュアーへの特記事項
+
+          - この PR は「Start Release」のワークフローが作り、auto-merge を予約してあります。
+          - コードレビューの承認とは別に、本番への承認が要ります（ADR-017 決定 5）。push したり main を取り込んだりしたら、承認し直します。
+          - main に hotfix が入って \`package.json\` の \`version\` の行が衝突したら、この PR の版を残します。
+
+          ## 関連する Issue
+
+          - なし
+
+          ## チェックリスト
+
+          - [ ] 関連する Issue へのリンクが記述されているか
+          - [ ] コードがプロジェクトのコーディング規約に従っているか
+          - [ ] 新しいテストを追加したか (必要な場合)
+          - [ ] ドキュメントを更新したか (必要な場合)
+          - [ ] セルフレビューを行ったか
+          EOF
+          URL=$(gh pr create --repo "$REPO" --base main --head "$BRANCH" \
+            --title "chore(release): v$RELEASE_VERSION を出す" --body-file "$RUNNER_TEMP/body.md")
+          gh pr merge --repo "$REPO" --auto --merge "$URL"
+          echo "PR を作り、auto-merge を予約しました: $URL" >> "$GITHUB_STEP_SUMMARY"

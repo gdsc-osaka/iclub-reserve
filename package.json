@@ -1,5 +1,6 @@
 {
   "name": "iclub-reserve",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -30,7 +31,11 @@
     "db:studio": "vpx scripts/run-studio.ts",
     "dev:otp": "vpx scripts/dev-otp.ts",
     "icons:generate": "vpx scripts/generate-app-icons.ts",
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "release:check-version": "vpx scripts/release/check-version.ts",
+    "release:set-version": "vpx scripts/release/set-version.ts",
+    "release:migration-plan": "vpx scripts/release/migration-plan.ts",
+    "release:unapplied-migrations": "vpx scripts/release/unapplied-migrations.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.15",
