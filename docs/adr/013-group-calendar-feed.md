@@ -2,7 +2,7 @@
 
 ## ステータス
 
-提案 (2026-10-26)
+承認 (2026-11-10)
 
 ADR-008（Google Calendar との予定同期）は施設ごとのカレンダーについての決定で、本 ADR はそれを変えない。
 
@@ -163,12 +163,6 @@ AGENTS.md・ADR-007・ADR-012 決定 5 に従う。
 | `e2e/calendar-integration/uc-018-*.spec.ts`（`@UC-018`） | 事務局でない利用者は施設のカレンダーの画面を開けない（権限の境目）                                                                 |
 
 E2E では、URL を Playwright の `request` で読み、返った iCal の中身を確かめる。Google カレンダーへの追加のリンクは、Google から `localhost` を読めないので、プレビュー環境に出してから Google カレンダーと Apple カレンダーに登録して確かめる。0 件のカレンダーを返したときに手元の予定が消えるかも、そこで確かめる。
-
-### 10. 実装の進め方
-
-1. **要件と本 ADR**（この PR）: RDRA・PRD・change-log・implementation-status の更新と、本 ADR。
-2. **配信**: テーブルとマイグレーション、`app/lib/ical.ts`、予約から予定への詰め替え、`findGroupCalendarFeed`、配信のルートとログインの免除。発行の画面が無くても、D1 のテストで動きを確かめられる。
-3. **発行と画面**: Repository・発行と作り直しのユースケース、団体管理画面のカード（発行・Google カレンダーへの追加・カレンダーアプリで開く・コピー・作り直しの確認）、`get-group-management` の変更、施設のカレンダーの画面を事務局だけにする変更、E2E、implementation-status の ✅。
 
 ## 結果
 

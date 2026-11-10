@@ -20,7 +20,7 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Database**: Cloudflare D1 (SQLite) + Drizzle ORM
 - **Authentication**: Better Auth
-- **Infrastructure**: Cloudflare Workers (IaC managed via Terraform)
+- **Infrastructure**: Cloudflare Workers (configured in `wrangler.jsonc`)
 - **Toolchain**: Vite+（`vite-plus`。Vite・Vitest・Oxlint・Oxfmt を 1 つにまとめたもの。設定は `vite.config.ts` の `test`・`lint`・`fmt`・`staged`。方針は `docs/adr/015-vite-plus.md`）
 - **Package Manager**: pnpm 12（版は `package.json` の `devEngines.packageManager`）
 
@@ -40,20 +40,13 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 
 ### Cloudflare environments
 
-There are two named environments in `wrangler.jsonc`, with separate Workers **and** separate D1 databases:
+For details, see README.md ("環境とデプロイ") and `docs/adr/006-preview-environments.md`.
 
-| Environment  | Branch                     | Worker                  | D1                         |
-| ------------ | -------------------------- | ----------------------- | -------------------------- |
-| `production` | `main`                     | `iclub-reserve`         | `iclub-reserve-db`         |
-| `preview`    | `develop` and its branches | `iclub-reserve-preview` | `iclub-reserve-preview-db` |
-
-Branches of `develop` are deployed as [Worker Previews](https://developers.cloudflare.com/workers/previews/) under `iclub-reserve-preview` (`pnpm run deploy:preview-branch`, i.e. `wrangler preview --env preview`), served at `https://<branch>.iclub-preview.gdgoc-osaka.jp`. `develop` itself is served at `https://iclub-preview.gdgoc-osaka.jp`, so every preview shares the passkey rpID `iclub-preview.gdgoc-osaka.jp`. Previews do not inherit `env.preview`; their settings live in `env.preview.previews`. Queue consumers and Cron Triggers never run in a Preview, so they must stay out of that block (see `docs/adr/006-preview-environments.md`).
-
-The top level of `wrangler.jsonc` is for local development only. It is deliberately named `iclub-reserve-local` and points at the preview D1, so that a `wrangler deploy` without `--env` cannot overwrite production.
-
-Because `@cloudflare/vite-plugin` resolves the environment **at build time**, adding `--env` to `wrangler deploy` afterwards does _not_ switch environments — the already-built configuration wins. Always use the provided scripts (`pnpm run deploy` / `pnpm run deploy:preview`), which set `CLOUDFLARE_ENV` for the build and pass a matching `--env` to the deploy. Wrangler errors out if the two disagree.
-
-`vars` and bindings are **not** inherited by named environments or by Previews. When adding a variable, add it to all four places (top level, `env.production`, `env.preview`, `env.preview.previews`) and keep the key sets identical — `wrangler types` runs without `--env`, so a key missing from the top level will not appear in the `Env` type.
+- There are two named environments with separate Workers and separate D1 databases: `production` (`main`, Worker `iclub-reserve`, D1 `iclub-reserve-db`) and `preview` (`develop` and branches, Worker `iclub-reserve-preview`, D1 `iclub-reserve-preview-db`).
+- Branches of `develop` run as Worker Previews; their settings live in `env.preview.previews` and do not inherit `env.preview`. Queue consumers and Cron Triggers never run in a Preview, so keep them out of that block.
+- The top level of `wrangler.jsonc` (`iclub-reserve-local`) is for local development only and points to the preview D1, so that `wrangler deploy` without `--env` cannot overwrite production.
+- `@cloudflare/vite-plugin` resolves the environment at build time, so adding `--env` to `wrangler deploy` afterwards does not switch environments. Always use `pnpm run deploy` / `pnpm run deploy:preview`.
+- `vars` and bindings are not inherited by named environments or by Previews. When adding a variable, add it to all four places (top level, `env.production`, `env.preview`, `env.preview.previews`) and keep the key sets identical — `wrangler types` runs without `--env`, so a key missing from the top level will not appear in the `Env` type.
 
 ## 5. Coding Guidelines & Constraints
 
@@ -98,5 +91,7 @@ Because `@cloudflare/vite-plugin` resolves the environment **at build time**, ad
 
 ## 6. Bundled Skills
 
-- **`rdra`** — a requirement-analysis skill based on RDRA 3.0. The skill itself lives in `.agents/skills/rdra/`; `.claude/skills/rdra` is a symlink to it so that Claude Code picks it up. Use it for requirement analysis, PRD/ADR generation, requirement review, and requirement updates. Its outputs belong in `rdra/` and `docs/`.
-- **`local-login`** — ローカルの開発サーバーに、シードの利用者としてログインする手順。ブラウザで画面を確かめる途中でログインが要るときに使う。本体は `.agents/skills/local-login/`、`.claude/skills/local-login` はそこへのシンボリックリンク（`rdra` と同じ形）。アプリに開発用のログインの入口は足さず、本物の認証コードの流れを通る。ログイン画面が開いただけで出す Windows のパスキーのダイアログは、開発サーバーでだけ効く印（`app/lib/auth/dev-passkey-autofill-switch.ts`）をエージェントのブラウザに入れて止める。
+スキルの実体は `.agents/skills/<名前>/` にあり、`.claude/skills/<名前>` はそこへのシンボリックリンク（Claude Code 用）。
+
+- **`rdra`**: RDRA 3.0 に基づく要求分析（分析・PRD/ADR の生成・レビュー・更新）。成果物は `rdra/` と `docs/` に置く。
+- **`local-login`**: ローカルの開発サーバーにシードの利用者としてログインする手順。アプリに開発用のログインの入口は足さず、本物の認証コードの流れを通る。

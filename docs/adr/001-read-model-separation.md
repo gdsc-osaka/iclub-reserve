@@ -114,6 +114,8 @@ app/query/group/group-member-list.ts
 | SCR-003 予約一覧 (事務局・全団体)   | ID なし (絞り込み)  | `query/reservation/` | `reservation-search.ts`             |
 | SCR-008 団体一覧 (事務局・全団体)   | ID なし (絞り込み)  | `query/group/`       | `group-search.ts`                   |
 
+なお、実装では団体の予約一覧と事務局の予約一覧を `app/query/reservation/reservation-list.ts` の 1 本にまとめた。
+
 判断の手順:
 
 1. **引数の ID がある → その集約のフォルダ。**
@@ -222,210 +224,13 @@ Query は認可を判定しない。SCR-003 や SCR-007 は
 
 ## 実装ガイド
 
-SCR-007 (団体管理画面のメンバー一覧) を例に、4 ファイルの実装例を示す。
+読み取りの実装は [ADR-012](./012-query-functions.md) に従う。
 
-### 1. 共通のエラー型 — `app/query/error.ts`
-
-```ts
-import type { BaseError } from "~/domain/error";
-
-export const QueryErrorCode = {
-  NotFound: "NOT_FOUND",
-  Forbidden: "FORBIDDEN",
-  DatabaseError: "DATABASE_ERROR",
-} as const;
-export type QueryErrorCode = (typeof QueryErrorCode)[keyof typeof QueryErrorCode];
-
-export interface QueryError extends BaseError {
-  readonly code: QueryErrorCode;
-}
-```
-
-### 2. ポートと読み取りモデル — `app/query/group/group-member-list.ts`
-
-```ts
-import type { ResultAsync } from "neverthrow";
-import type { MembershipRole } from "~/domain/membership";
-import type { QueryError } from "../error";
-
-/** 一覧に並ぶメンバー 1 人分。画面に出す項目だけを持つ */
-export interface GroupMemberListItem {
-  readonly userId: string;
-  readonly name: string;
-  readonly email: string;
-  readonly roles: readonly MembershipRole[];
-  readonly joinedAt: Date;
-}
-
-/** 「グループのメンバー一覧」画面 1 つ分のデータ */
-export interface GroupMemberList {
-  readonly groupId: string;
-  readonly groupName: string;
-  readonly memberCount: number;
-  readonly members: readonly GroupMemberListItem[];
-}
-
-/**
- * 読み取り専用の窓口 (ポート)。
- *
- * Repository が「集約 1 件」を返すのに対し、Query は「画面 1 つ分」を返す。
- * 返る型はドメインの不変条件を持たないので、
- * **この結果を使って更新してはいけない**。更新は必ず Repository を通すこと。
- */
-export interface GroupMemberListQuery {
-  findByGroupId(groupId: string): ResultAsync<GroupMemberList, QueryError>;
-}
-```
-
-### 3. 実装 — `app/infra/group/group-member-list-query.ts`
-
-```ts
-import { asc, eq } from "drizzle-orm";
-import { err, ok, ResultAsync, type Result } from "neverthrow";
-import { member, organization, user } from "~/db/schema";
-import { QueryErrorCode, type QueryError } from "~/query/error";
-import type { GroupMemberList, GroupMemberListQuery } from "~/query/group/group-member-list";
-import type { Database } from "../db";
-import { toMembershipRoles } from "../membership/membership-converter";
-
-export const createGroupMemberListQuery = (db: Database): GroupMemberListQuery => ({
-  findByGroupId: (groupId) =>
-    ResultAsync.fromPromise(
-      // メンバーが 0 人のグループも「存在する」と分かるように leftJoin にする。
-      // innerJoin だと 0 件になり、「グループが無い」と区別できず誤って 404 になる。
-      db
-        .select({
-          groupName: organization.name,
-          userId: user.id,
-          userName: user.name,
-          email: user.email,
-          role: member.role,
-          joinedAt: member.createdAt,
-        })
-        .from(organization)
-        .leftJoin(member, eq(member.organizationId, organization.id))
-        .leftJoin(user, eq(user.id, member.userId))
-        .where(eq(organization.id, groupId))
-        .orderBy(asc(member.createdAt)),
-      (error): QueryError => ({
-        code: QueryErrorCode.DatabaseError,
-        message: "グループのメンバー一覧の取得に失敗しました。",
-        cause: error,
-      }),
-    ).andThen((rows) => toGroupMemberList(groupId, rows)),
-});
-
-/** JOIN で横に並んだ行を、画面が扱いやすい入れ子の形に組み直す */
-const toGroupMemberList = (
-  groupId: string,
-  rows: readonly {
-    groupName: string;
-    userId: string | null;
-    userName: string | null;
-    email: string | null;
-    role: string | null;
-    joinedAt: Date | null;
-  }[],
-): Result<GroupMemberList, QueryError> => {
-  const head = rows.at(0);
-
-  // 1 行も返らない = そもそもグループが存在しない
-  if (head === undefined) {
-    return err({
-      code: QueryErrorCode.NotFound,
-      message: `ID が ${groupId} のグループは見つかりませんでした。`,
-    });
-  }
-
-  // leftJoin なので、メンバー 0 人のときは user 側が null の行が 1 本だけ返る。
-  // flatMap なら「null の行を捨てつつ変換する」が 1 回で書け、型も同時に絞れる。
-  const members = rows.flatMap((row) =>
-    row.userId === null ||
-    row.userName === null ||
-    row.email === null ||
-    row.role === null ||
-    row.joinedAt === null
-      ? []
-      : [
-          {
-            userId: row.userId,
-            name: row.userName,
-            email: row.email,
-            roles: toMembershipRoles(row.role),
-            joinedAt: row.joinedAt,
-          },
-        ],
-  );
-
-  return ok({ groupId, groupName: head.groupName, memberCount: members.length, members });
-};
-```
-
-### 4. ユースケース (認可あり) — `app/usecases/group/get-group-member-list.ts`
-
-```ts
-import { errAsync, type ResultAsync } from "neverthrow";
-import { GroupAction, groupPermissions } from "~/domain/group";
-import { canPerform, type MembershipRepository } from "~/domain/membership";
-import { QueryErrorCode, type QueryError } from "~/query/error";
-import type { GroupMemberList, GroupMemberListQuery } from "~/query/group/group-member-list";
-
-export interface GetGroupMemberListDeps {
-  readonly groupMemberListQuery: GroupMemberListQuery;
-  readonly membershipRepository: MembershipRepository;
-}
-
-export interface GetGroupMemberListArgs {
-  readonly groupId: string;
-  /** 閲覧しようとしているユーザー */
-  readonly userId: string;
-}
-
-/**
- * グループの所属メンバー一覧を取得するユースケース (SCR-007)。
- *
- * 読み取りであっても認可は必要なので、所属と役割を確かめてから Query を実行する。
- * Query 自体は認可を知らない。
- */
-export const getGroupMemberListUseCase = (
-  deps: GetGroupMemberListDeps,
-  args: GetGroupMemberListArgs,
-): ResultAsync<GroupMemberList, QueryError> => {
-  const groupId = args.groupId.trim();
-
-  if (groupId === "") {
-    return errAsync<GroupMemberList, QueryError>({
-      code: QueryErrorCode.NotFound,
-      message: "グループ ID が指定されていません。",
-    });
-  }
-
-  return deps.membershipRepository
-    .findByGroupAndUser(groupId, args.userId)
-    .mapErr((error): QueryError => ({
-      code: QueryErrorCode.DatabaseError,
-      message: "所属情報の取得に失敗しました。",
-      cause: error,
-    }))
-    .andThen((membership) =>
-      // 所属していない場合 membership は null で、canPerform は必ず false を返す
-      canPerform(groupPermissions, membership, GroupAction.View)
-        ? deps.groupMemberListQuery.findByGroupId(groupId)
-        : errAsync<GroupMemberList, QueryError>({
-            code: QueryErrorCode.Forbidden,
-            message: "このグループを閲覧する権限がありません。",
-          }),
-    );
-};
-```
-
-テストは既存の usecase と同じく、フェイクを渡すだけで書ける。
-
-```ts
-const fakeQuery: GroupMemberListQuery = {
-  findByGroupId: () => okAsync({ groupId: "g1", groupName: "テスト", memberCount: 0, members: [] }),
-};
-```
+- 共通のエラー型は `app/query/error.ts` を使う。
+- 素通しの読み取りは `app/query/<入口>/<出口>.ts` の `find*` 関数 1 本で書く（手本: `app/query/reservation/staff-today-schedule.ts`）。
+- 判断を持つ読み取りはポートの interface と `app/infra/` の実装を使う（実在例: `app/query/group/group-member-list.ts`・`app/infra/group/group-member-list-query.ts`）。
+- Query が返す型はドメインの不変条件を持たないため、更新に使ってはならない。
+- 親データが存在しても子が 0 件のときに 404 と誤判定しないよう、必要に応じて外部結合を使う。
 
 ## Cloudflare D1 での注意
 

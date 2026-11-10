@@ -15,8 +15,7 @@
 - **認証**: [Better Auth](https://better-auth.com/)
   - メールの認証コード（OTP）とパスキー（WebAuthn）によるログイン。パスワードは扱いません
   - アカウントを作成できるのは `osaka-u.ac.jp` ドメイン（サブドメイン含む）のメールアドレスのみ
-- **インフラ・ホスティング**: [Cloudflare Workers](https://www.cloudflare.com/products/workers/)
-  - IaC: [Terraform](https://developer.hashicorp.com/terraform) を用いたインフラ定義と管理
+- **インフラ・ホスティング**: [Cloudflare Workers](https://www.cloudflare.com/products/workers/)（設定は `wrangler.jsonc`）
 - **開発のツール**: [Vite+](https://viteplus.dev/)
   - 開発サーバー・ビルド（Vite）、単体テスト（Vitest）、リント（Oxlint）、フォーマット（Oxfmt）を 1 つにまとめたもの。設定は `vite.config.ts` にまとめています（[ADR-015](docs/adr/015-vite-plus.md)）
 - **パッケージマネージャー**: [pnpm](https://pnpm.io/) 12
@@ -31,24 +30,18 @@
 
 ## AI エージェント向けスキル
 
-要求分析手法 RDRA 3.0 に基づく `rdra` スキルを同梱しています。要件定義・PRD の作成・要求のレビュー・要件の更新などを AI エージェントに依頼すると自動的に読み込まれ、`rdra/` および `docs/prd.md` と同じ形式で成果物を出力します。
+- `rdra`: 要求分析手法 RDRA 3.0 に基づき、要件定義・PRD の作成・要求のレビュー・要件の更新を行います。成果物は `rdra/` と `docs/prd.md` の形式で出します
+- `local-login`: ローカルの開発サーバーに、シードの利用者としてログインする手順です
 
-| パス                   | 役割                                                         |
-| ---------------------- | ------------------------------------------------------------ |
-| `.agents/skills/rdra/` | スキルの実体。Antigravity (agy) はこちらを直接読み込みます   |
-| `.claude/skills/rdra`  | `.agents/skills/rdra` へのシンボリックリンク。Claude Code 用 |
+スキルの実体は `.agents/skills/<名前>/` にあり、Antigravity (agy) はここを読みます。Claude Code は `.claude/skills/<名前>`（実体へのシンボリックリンク）を読みます。
 
 > [!IMPORTANT]
-> Windows で clone した場合、Git がシンボリックリンクを展開せず、リンク先のパスが書かれただけの
-> テキストファイルとしてチェックアウトすることがあります。この状態になるとスキルはエラーも出さず、
-> 単に読み込まれません。
->
-> `.claude/skills/rdra` がディレクトリではなくファイルになっていたら、次を実行してください。
-> 未コミットの変更には影響しません。
+> Windows で clone すると、Git がシンボリックリンクを、リンク先のパスが書かれただけのテキストファイルとしてチェックアウトすることがあります。この状態ではスキルはエラーも出さずに読み込まれません。
+> `.claude/skills/` の中がディレクトリではなくファイルになっていたら、次を実行してください（`.claude/skills/` の中の未コミットの変更は消えます。外の変更には影響しません）。
 >
 > ```bash
 > git config core.symlinks true
-> git checkout -- .claude/skills/rdra
+> git checkout -- .claude/skills
 > ```
 >
 > シンボリックリンクの展開には Windows の「開発者モード」（設定 → システム → 開発者向け）を
@@ -61,7 +54,6 @@
 - [Node.js](https://nodejs.org/ja/download) (v26 以上推奨。v22 なら 22.22.1 以上)
 - [pnpm](https://pnpm.io/installation)
   - 使う版は `package.json` の `devEngines.packageManager` で決めています（v12）。手元の pnpm が 11 以降なら、版が違っても `pnpm install` のときに自動でその版に切り替わります
-- [Terraform](https://developer.hashicorp.com/terraform/install) (インフラ変更時のみ)
 
 ### インストール
 
@@ -80,16 +72,6 @@ pnpm install
 ```bash
 pnpm run db:migrate:local
 ```
-
-> [!IMPORTANT]
-> ローカルの DB ファイルは、参照先の D1 データベースごとに別々に作られます。
-> 環境分離の対応でローカルの参照先が `iclub-reserve-preview-db` に変わったため、
-> それ以前から開発していた場合はマイグレーションの再適用が必要です。
->
-> また、古い DB ファイルが残っていると `pnpm run db:studio` が
-> 「対象の .sqlite ファイルを一意に特定できません」というエラーで止まります。
-> その場合は `.wrangler/state/v3/d1/miniflare-D1DatabaseObject` から
-> エラーメッセージに出た古いファイルを削除してください。
 
 ### エディタ（VS Code）
 
@@ -270,14 +252,14 @@ pnpm run db:migrate:prod
 
 ### Workers Builds のビルド変数
 
-Node.js と pnpm のバージョンは、リポジトリの設定だけでは決まりません。
+Node.js と pnpm のバージョンは、リポジトリの設定で決まります。
 
-- Node.js: `.node-version` で指定（リポジトリ管理）
-- pnpm: Cloudflare ダッシュボードの **Settings > Build > Build Variables and Secrets** で `PNPM_VERSION` を設定（`package.json` の `devEngines.packageManager` と同じ 12 系）
+- Node.js: `.node-version`
+- pnpm: `package.json` の `devEngines.packageManager`。Workers Builds は pnpm を Corepack で動かし、この指定をビルド変数 `PNPM_VERSION` やビルドイメージ既定の版（9 系）より優先します
 
-`wrangler.jsonc` の `vars` はランタイム変数であり、ビルドイメージは参照しません。pnpm を指定しないとビルドイメージ既定の 10 系が使われるので、両方の Worker に設定してください。
+`wrangler.jsonc` の `vars` はランタイム変数であり、ビルドイメージは参照しません。ビルドログの「Detected the following tools from environment」に出る pnpm の版は Corepack が切り替える前のものなので、実際の版はインストールの出力で確かめてください。
 
-`iclub-reserve` は、`release/*`・`hotfix/*` を本番の設定でビルドし、dry-run で確かめます（ADR-017 決定 4）。本番以外のブランチのビルド変数は、本番のブランチとは別の「プレビューのベース」に置くので、`CLOUDFLARE_ENV=production` と `PNPM_VERSION` をそこにも設定してください。ベースの設定はブランチを最初にビルドしたときに写されるので、後からベースを直しても、すでにあるブランチのビルドには届きません。
+`iclub-reserve` は、`release/*`・`hotfix/*` を本番の設定でビルドし、dry-run で確かめます（ADR-017 決定 4）。本番以外のブランチのビルド変数は、本番のブランチとは別の「プレビューのベース」に置くので、`CLOUDFLARE_ENV=production` をそこにも設定してください。ベースの設定はブランチを最初にビルドしたときに写されるので、後からベースを直しても、すでにあるブランチのビルドには届きません。
 
 ### 認証コード（OTP）の届け先
 
@@ -309,6 +291,6 @@ pnpm exec wrangler secret put DISCORD_OTP_WEBHOOK_URL --env preview
 pnpm exec wrangler secret put DISCORD_OTP_THREAD_ID --env preview
 ```
 
-ウェブフックの URL は、知っていれば誰でもそのスレッドに投稿できてしまうため `vars` ではなく secret で渡します。スレッドの ID 自体は秘密ではありませんが、プレビューでしか使わない値なので、`vars`（3 か所すべてに書く必要がある）を増やさずに済むよう同じく secret にしています。
+ウェブフックの URL は、知っていれば誰でもそのスレッドに投稿できてしまうため `vars` ではなく secret で渡します。スレッドの ID 自体は秘密ではありませんが、プレビューでしか使わない値なので、`vars`（4 か所すべてに書く必要がある）を増やさずに済むよう同じく secret にしています。
 
 手元で Discord への投稿を試したいときは、`wrangler.jsonc` のトップレベルの `APP_ENV` を一時的に `"preview"` に変え、`.dev.vars` に上の 2 つを書いてください（どちらもコミットしないこと）。
