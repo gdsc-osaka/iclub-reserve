@@ -4,7 +4,7 @@
  * `main` 向きの PR のチェック（`Version`）と、「リリースを始める」「hotfix を始める」ワークフローが使う。
  * 版は `package.json` の `version` を正とし、タグ・GitHub Release・ブランチ名をそれに合わせる。
  */
-import { compareSemver, parseSemver } from "./semver.js";
+import semver from "semver";
 
 export interface VersionCheckInput {
   /** 出す版（PR のブランチの `package.json`、またはワークフローの入力） */
@@ -24,24 +24,37 @@ export const INITIAL_VERSION = "0.0.0";
 export const releaseBranches = (version: string) =>
   [`release/v${version}`, `hotfix/v${version}`] as const;
 
+/**
+ * 版として読めれば読んだ結果を、読めなければ `null` を返す。
+ *
+ * npm の semver は、先頭の `v` や前後の空白があっても読んでしまう。
+ * 版はそのままタグ（`v<版>`）とブランチ名に入るので、書いたとおりの形でないものは通さない。
+ * ビルドの情報（`+` から後）もタグに入れたくないので通さない（`version` には `+` から後が入らない）。
+ */
+export function parseReleaseVersion(text: string): semver.SemVer | null {
+  const version = semver.parse(text);
+  return version?.version === text ? version : null;
+}
+
 /** 見つけた問題を、利用者に見せる文で返す。問題が無ければ空の配列 */
 export function checkReleaseVersion(input: VersionCheckInput): string[] {
   const errors: string[] = [];
 
-  const version = parseSemver(input.version);
+  const version = parseReleaseVersion(input.version);
   if (!version) {
     errors.push(
-      `版「${input.version}」は semver の形ではありません。1.0.0-rc.1 や 1.0.1 の形にしてください（+ から後は付けません）。`,
+      `版「${input.version}」は semver の形ではありません。1.0.0-rc.1 や 1.0.1 の形にしてください（先頭の v と、+ から後は付けません）。`,
     );
   }
 
   const baseText = input.baseVersion ?? INITIAL_VERSION;
-  const base = parseSemver(baseText);
+  const base = parseReleaseVersion(baseText);
   if (!base) {
     errors.push(`main の版「${baseText}」が semver の形ではありません。`);
   }
 
-  if (version && base && compareSemver(version, base) <= 0) {
+  // 比べ方は semver 2.0.0 の 11 節のとおり（1.0.0-rc.2 < 1.0.0-rc.10 < 1.0.0）
+  if (version && base && semver.lte(version, base)) {
     errors.push(`版「${input.version}」は、main の版「${baseText}」より大きくしてください。`);
   }
 

@@ -6,10 +6,10 @@
  */
 import fs from "node:fs";
 import { setPackageVersion } from "./package-version.js";
-import { parseSemver } from "./semver.js";
+import { parseReleaseVersion } from "./version-check.js";
 
 const version = process.argv[2] || process.env.RELEASE_VERSION;
-if (!version || !parseSemver(version)) {
+if (!version || !parseReleaseVersion(version)) {
   console.error(`版「${version ?? ""}」は semver の形ではありません。`);
   process.exit(1);
 }

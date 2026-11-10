@@ -1,7 +1,29 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { setPackageVersion } from "./package-version.js";
-import { checkReleaseVersion } from "./version-check.js";
+import { checkReleaseVersion, parseReleaseVersion } from "./version-check.js";
+
+describe("parseReleaseVersion", () => {
+  it.each(["0.0.0", "1.0.0-rc.1", "1.0.0-alpha.beta", "10.20.30"])("%s を読む", (text) => {
+    expect(parseReleaseVersion(text)?.version).toBe(text);
+  });
+
+  // 先頭の v・前後の空白・+ から後は、npm の semver なら読めるが、タグやブランチ名に入れたくないので通さない
+  it.each([
+    "1.0",
+    "v1.0.0",
+    " 1.0.0",
+    "1.0.0 ",
+    "01.0.0",
+    "1.0.0-",
+    "1.0.0-rc.01",
+    "1.0.0+build.1",
+    "1.0.0-rc.1+build.1",
+    "99999999999999999.0.0",
+  ])("「%s」は null にする", (text) => {
+    expect(parseReleaseVersion(text)).toBeNull();
+  });
+});
 
 describe("checkReleaseVersion", () => {
   it("main に version が無ければ 0.0.0 と比べ、最初の RC を通す", () => {
@@ -24,6 +46,20 @@ describe("checkReleaseVersion", () => {
         tagExists: false,
       }),
     ).toEqual([]);
+  });
+
+  it("RC の番号は文字でなく数として比べる", () => {
+    const check = (version: string, baseVersion: string) =>
+      checkReleaseVersion({ version, baseVersion, tagExists: false });
+
+    expect(check("1.0.0-rc.10", "1.0.0-rc.2")).toEqual([]);
+    expect(check("1.0.0-rc.9", "1.0.0-rc.10")).toHaveLength(1);
+  });
+
+  it("main の版が semver の形でなければ止める", () => {
+    expect(
+      checkReleaseVersion({ version: "1.0.1", baseVersion: "v1.0.0", tagExists: false }),
+    ).toEqual([expect.stringContaining("main の版「v1.0.0」が semver の形ではありません")]);
   });
 
   it("hotfix のブランチ名も通す", () => {
