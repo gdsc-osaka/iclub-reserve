@@ -3,13 +3,14 @@ name: Release Gate
 # PR で、版とマイグレーションを確かめ、本番への承認を待つ (ADR-017)。
 #
 # - Version (main 向き): 出す版が正しいかを確かめる (決定 2)
-# - Migration Plan (develop・main 向き): 相手の D1 に当てるマイグレーションの概要を PR にコメントする (決定 6・8)
+# - Migration Plan (すべての向き): 相手の D1 に当てるマイグレーションの概要を PR にコメントする (決定 6・8)
 # - Release Approval (main 向き): 本番への承認を待ち、承認されたら本番の D1 にマイグレーションを当てる (決定 5・6)
 #
-# どれも Ruleset で必須にする (develop は Migration Plan だけ)。
+# main の Ruleset ではどれも必須にし、develop と release の Ruleset では Migration Plan だけを必須にする。
+# release/*・hotfix/* 向きの PR は、出す前の release・hotfix に修正を入れるためのもの (決定 1)
 on:
   pull_request:
-    branches: ["develop", "main"]
+    branches: ["develop", "main", "release/**", "hotfix/**"]
     # edited は入れない。タイトルや本文を直すたびに動き直し、本番への承認の待ちが取り消されるため
     types: [opened, synchronize, reopened]
 
@@ -88,7 +89,9 @@ jobs:
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      PLAN_TARGET: ${{ github.base_ref == 'main' && 'production' || 'preview' }}
+      # develop 向きだけ preview と比べ、main・release/*・hotfix/* 向きは本番と比べる。
+      # release/*・hotfix/* は本番に出すブランチで、preview の D1 には develop の先のマイグレーションまで当たっているため
+      PLAN_TARGET: ${{ github.base_ref == 'develop' && 'preview' || 'production' }}
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -102,7 +105,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # 本番は、PR がマイグレーションを触っていなくても読む (main に未適用のものが残っていないかも見る)。
+      # 本番は、PR がマイグレーションを触っていなくても読む (ベースに未適用のものが残っていないかも見る)。
       # preview は、触っていない PR では Cloudflare に触れずに通す (Dependabot やフォークの PR には secret が渡らない)
       - name: Find changed migrations
         id: changes
@@ -127,7 +130,9 @@ jobs:
         run: vp install --frozen-lockfile
 
       # 本番への承認で当てたときの記録 (Release Approval のコメント)。当てた後に書き換えていないかを比べる (決定 6)。
-      # 誰でもコメントできるので、github-actions のコメントだけを読む
+      # 誰でもコメントできるので、github-actions のコメントだけを読む。
+      # release/*・hotfix/* 向きの PR には記録が無い (承認は main 向きの PR で行う)。
+      # 記録と比べるのはその PR で足したファイルだけで、ベースにあるファイルを書き換えれば、記録が無くてもチェックが落ちる
       - name: Read approval records
         if: steps.changes.outputs.needs_plan == 'true' && env.PLAN_TARGET == 'production'
         run: |
