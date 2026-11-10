@@ -16,7 +16,7 @@ export interface QueuedMail {
  * 送信済みかどうか（`status`）は見ない。E2E のアプリでも Queue が動くので、
  * すぐに `sent` に変わることがある（送り先はターミナルへの出力）。送る仕組みは単体テストで確かめている。
  *
- * 予約の通知の本文には予約 ID が入るので、どの予約の通知かは ID で見分ける。
+ * 本文の予約詳細のリンクに予約 ID が入るので、どの予約の通知かは ID で見分ける。
  */
 export async function findQueuedMails(db: E2eDb, to: string): Promise<QueuedMail[]> {
   return db

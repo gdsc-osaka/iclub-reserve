@@ -128,13 +128,13 @@ describe("createReservationMessageMailDrafts", () => {
     endAt: new Date("2026-10-15T12:00:00+09:00"),
   };
 
-  it("メールの件名、本文、リンク、返信案内、idempotencyKey が正しく設定され、html は含まれない", () => {
+  it("メールの件名、本文、リンク、返信案内、idempotencyKey が正しく設定され、html が入り、本文がエスケープされる", () => {
     const message: ReservationMessage = {
       id: "msg_abc",
       reservationId: reservation.id,
       senderId: "usr_member",
       sentAsStaff: false,
-      body: "利用人数の変更をお願いできますでしょうか。",
+      body: "利用人数の変更をお願いできますでしょうか。<script>alert(1)</script>",
       sentAt: new Date("2026-10-05T12:00:00+09:00"),
     };
 
@@ -155,15 +155,20 @@ describe("createReservationMessageMailDrafts", () => {
       name: userStaff1.name,
     });
     expect(draft.idempotencyKey).toBe(`reservation-message:${message.id}:${userStaff1.userId}`);
-    expect((draft as { html?: string }).html).toBeUndefined();
+    expect(draft.html).toBeDefined();
+    expect(draft.html).toContain("<!doctype html>");
+    expect(draft.html).not.toContain("<script>");
+    expect(draft.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
 
-    // 本文の検証
+    // 本文の検証（予約ID の行は載らない）
     expect(draft.text).toContain("予約にメッセージが届きました。");
-    expect(draft.text).toContain(`予約ID: ${reservation.id}`);
+    expect(draft.text).not.toContain("予約ID:");
     expect(draft.text).toContain(`利用開始日時: ${formatDateTime(reservation.startAt)}`);
     expect(draft.text).toContain(`利用終了日時: ${formatDateTime(reservation.endAt)}`);
     expect(draft.text).toContain("送信者: 山田太郎");
-    expect(draft.text).toContain("メッセージ:\n利用人数の変更をお願いできますでしょうか。");
+    expect(draft.text).toContain(
+      "メッセージ:\n利用人数の変更をお願いできますでしょうか。<script>alert(1)</script>",
+    );
     expect(draft.text).toContain("返信は、このメールではなく予約詳細ページから送ってください。");
     expect(draft.text).toContain(`https://example.com/staff/reservations/${reservation.id}`);
     expect(draft.text).toContain("※このメールは送信専用です。返信はできません。");

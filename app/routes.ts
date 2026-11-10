@@ -151,4 +151,7 @@ export default [
 
   // 開発専用ルート（ローカルでの祝日同期手動実行確認用 / ADR-010）
   route("dev/refresh-holidays", "routes/dev/refresh-holidays/route.ts"),
+
+  // 開発専用ルート（ローカルでのメール HTML/テキスト文面確認用 / ADR-018）
+  route("dev/mail-preview", "routes/dev/mail-preview/route.ts"),
 ] satisfies RouteConfig;

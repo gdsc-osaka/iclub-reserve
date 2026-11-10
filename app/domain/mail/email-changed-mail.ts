@@ -1,3 +1,5 @@
+import { toMailBodies } from "~/domain/mail/mail-bodies";
+import type { MailContent } from "~/domain/mail/mail-content";
 import type { MailDraft } from "~/domain/mail/mail-outbox";
 import { formatDateTime } from "~/lib/date";
 
@@ -22,21 +24,29 @@ export interface EmailChangedMailArgs {
 export const createEmailChangedMailDraft = (args: EmailChangedMailArgs): MailDraft => {
   const formattedChangedAt = formatDateTime(args.changedAt);
 
-  const lines = [
-    "i-Club 予約システムをご利用いただきありがとうございます。",
-    "",
-    "メールアドレスの変更が完了しました。",
-    "",
-    `変更後のメールアドレス: ${args.newEmail}`,
-    `変更日時: ${formattedChangedAt}`,
-    "",
-    "※ この変更にお心当たりがない場合は、第三者によってアカウントが不正に操作された可能性があります。至急、下記の事務局窓口までご連絡ください。",
-    `事務局窓口: ${args.staffContactEmail}`,
-    "",
-    "----------------------------------------",
-    "大阪大学 Innovators' Club (i-Club) 予約システム",
-    "※このメールは送信専用です。返信はできません。",
-  ];
+  const content: MailContent = {
+    lead: "メールアドレスの変更が完了しました。",
+    blocks: [
+      {
+        type: "details",
+        rows: [
+          { label: "変更後のメールアドレス", value: args.newEmail },
+          { label: "変更日時", value: formattedChangedAt },
+        ],
+      },
+      {
+        type: "notice",
+        tone: "warning",
+        text: "この変更にお心当たりがない場合は、第三者によってアカウントが不正に操作された可能性があります。至急、下記の事務局窓口までご連絡ください。",
+      },
+      {
+        type: "details",
+        rows: [{ label: "事務局窓口", value: args.staffContactEmail }],
+      },
+    ],
+  };
+
+  const { text, html } = toMailBodies(content);
 
   return {
     idempotencyKey: `user:email-changed:${args.userId}:${args.changedAt.getTime()}`,
@@ -46,6 +56,7 @@ export const createEmailChangedMailDraft = (args: EmailChangedMailArgs): MailDra
         ? { address: args.previousEmail }
         : { address: args.previousEmail, name: args.userName },
     subject: "【i-Club 予約システム】メールアドレス変更完了のお知らせ",
-    text: lines.join("\n"),
+    text,
+    html,
   };
 };

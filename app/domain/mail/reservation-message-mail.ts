@@ -4,6 +4,8 @@ import { toReservationDetailPath } from "~/lib/reservation-paths";
 import type { UnlockArrangement } from "../reservation";
 import { STAFF_SENDER_LABEL, type ReservationMessage } from "../reservation/message";
 import { unlockArrangementLabel } from "../reservation/unlock-arrangement";
+import { toMailBodies } from "./mail-bodies";
+import type { MailBlock, MailContent } from "./mail-content";
 import type { MailDraft } from "./mail-outbox";
 import type { ReservationMailRecipient, ReservationMailRecipients } from "./reservation-mail";
 
@@ -109,47 +111,57 @@ export interface CreateReservationMessageMailDraftsArgs {
 }
 
 /**
- * 予約メッセージ通知メールの本文を組み立てる純粋関数。
+ * 予約メッセージ通知メールの本文（MailContent）を組み立てる純粋関数。
  * 宛先に応じた予約詳細の URL を載せる（COND-030 の (5)）。
  * 団体側からの送信（事務局宛て）は事務局の画面、事務局としての送信（団体宛て）は利用者の画面。
  */
-const buildMessageMailBody = (args: CreateReservationMessageMailDraftsArgs): string => {
+const buildMessageMailContent = (args: CreateReservationMessageMailDraftsArgs): MailContent => {
   const senderDisplay = args.message.sentAsStaff ? STAFF_SENDER_LABEL : args.senderName;
   const area = args.message.sentAsStaff ? AppArea.User : AppArea.Staff;
   const detailUrl = `${args.appBaseUrl}${toReservationDetailPath(area, args.reservation.id)}`;
 
-  const lines = [
-    "i-Club 予約システムをご利用いただきありがとうございます。",
-    "",
-    "予約にメッセージが届きました。",
-    "",
-    `予約ID: ${args.reservation.id}`,
-    `利用開始日時: ${formatDateTime(args.reservation.startAt)}`,
-    `利用終了日時: ${formatDateTime(args.reservation.endAt)}`,
-    `送信者: ${senderDisplay}`,
-    "",
-    ...(args.unlockArrangement !== undefined
-      ? [`解錠の手配が「${unlockArrangementLabel[args.unlockArrangement]}」に更新されました。`, ""]
-      : []),
-    "メッセージ:",
-    args.message.body,
-    "",
-    "返信は、このメールではなく予約詳細ページから送ってください。",
-    detailUrl,
-    "",
-    "----------------------------------------",
-    "大阪大学 Innovators' Club (i-Club) 予約システム",
-    "※このメールは送信専用です。返信はできません。",
+  const blocks: MailBlock[] = [
+    {
+      type: "details",
+      rows: [
+        { label: "利用開始日時", value: formatDateTime(args.reservation.startAt) },
+        { label: "利用終了日時", value: formatDateTime(args.reservation.endAt) },
+        { label: "送信者", value: senderDisplay },
+      ],
+    },
   ];
 
-  return lines.join("\n");
+  if (args.unlockArrangement !== undefined) {
+    blocks.push({
+      type: "paragraph",
+      text: `解錠の手配が「${unlockArrangementLabel[args.unlockArrangement]}」に更新されました。`,
+    });
+  }
+
+  blocks.push({
+    type: "quote",
+    title: "メッセージ",
+    text: args.message.body,
+  });
+
+  blocks.push({
+    type: "action",
+    prompt: "返信は、このメールではなく予約詳細ページから送ってください。",
+    label: "予約の詳細を開く",
+    url: detailUrl,
+  });
+
+  return {
+    lead: "予約にメッセージが届きました。",
+    blocks,
+  };
 };
 
 /**
  * 予約メッセージ通知の MailDraft 配列を生成する純粋関数。
  *
  * - 件名: 「【i-Club 予約システム】予約にメッセージが届きました」
- * - 本文: text のみ（html は作らない。利用者の入力をそのまま載せるため）。
+ * - 本文: テキストと HTML（利用者の入力は toMailHtml がエスケープする）。
  * - 送信者表示: sentAsStaff が true なら「事務局」と表示し senderName は出さない（COND-008）。
  *   false なら senderName を表示する。
  * - idempotencyKey: `reservation-message:<messageId>:<userId ?? address>`。
@@ -158,7 +170,8 @@ const buildMessageMailBody = (args: CreateReservationMessageMailDraftsArgs): str
 export const createReservationMessageMailDrafts = (
   args: CreateReservationMessageMailDraftsArgs,
 ): readonly MailDraft[] => {
-  const text = buildMessageMailBody(args);
+  const content = buildMessageMailContent(args);
+  const { text, html } = toMailBodies(content);
 
   return args.recipients.map((recipient) => {
     const targetId = recipient.userId ?? recipient.address;
@@ -170,6 +183,7 @@ export const createReservationMessageMailDrafts = (
       },
       subject: "【i-Club 予約システム】予約にメッセージが届きました",
       text,
+      html,
     };
   });
 };

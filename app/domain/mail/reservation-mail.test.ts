@@ -47,7 +47,7 @@ describe("reservation-mail", () => {
       );
     });
 
-    it("本文に予約IDと日時が含まれる", () => {
+    it("本文に予約詳細のリンク（予約IDを含む）と日時が含まれ、予約ID単体の行は載らない", () => {
       const drafts = createReservationMailDrafts(
         ReservationMailEvent.Approved,
         baseReservation,
@@ -55,7 +55,8 @@ describe("reservation-mail", () => {
         APP_BASE_URL,
       );
       const body = drafts[0]?.text ?? "";
-      expect(body).toContain("res_test_123");
+      expect(body).not.toContain("予約ID:");
+      expect(body).toContain("https://reserve.example.com/reservations/res_test_123");
       expect(body).toContain("2026年9月25日 10:00");
       expect(body).toContain("2026年9月25日 12:00");
       expect(body).toBe(
@@ -64,7 +65,6 @@ describe("reservation-mail", () => {
           "",
           "申請されていた利用予約が承認されました。",
           "",
-          "予約ID: res_test_123",
           "利用開始日時: 2026年9月25日 10:00",
           "利用終了日時: 2026年9月25日 12:00",
           "",
@@ -97,6 +97,7 @@ describe("reservation-mail", () => {
         },
         subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
         text: expect.stringContaining("res_test_123"),
+        html: expect.stringContaining("<!doctype html>"),
       });
 
       expect(drafts[1]).toEqual({
@@ -107,6 +108,7 @@ describe("reservation-mail", () => {
         },
         subject: "【i-Club 予約システム】施設・設備の利用予約が承認されました",
         text: expect.stringContaining("res_test_123"),
+        html: expect.stringContaining("<!doctype html>"),
       });
     });
 
@@ -212,7 +214,7 @@ describe("reservation-mail", () => {
         event: ReservationMailEvent.ApprovedEdited,
         expectedSubject: "【i-Club 予約システム】施設・設備の利用予約の内容が変更されました",
         expectedOpening:
-          "承認済みの利用予約の内容（使用人数・備考）が変更されました。承認済みのまま変わりません。",
+          "承認済みの利用予約の内容（使用人数・備考）が変更されました。\n\n承認済みのまま変わりません。",
         prefix: "reservation:approvedEdited:res_test_123:1789866000000:",
       },
       {
@@ -220,7 +222,7 @@ describe("reservation-mail", () => {
         expectedSubject:
           "【i-Club 予約システム】施設・設備の利用予約が変更され、再承認待ちになりました",
         expectedOpening:
-          "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。事務局が改めて承認するまで、施設・設備は利用できません。",
+          "承認済みの利用予約の施設・日時が変更されたため、仮予約に戻りました。\n\n事務局が改めて承認するまで、施設・設備は利用できません。",
         prefix: "reservation:reapprovalRequested:res_test_123:1789866000000:",
       },
       {
@@ -232,7 +234,8 @@ describe("reservation-mail", () => {
       {
         event: ReservationMailEvent.EditedByStaff,
         expectedSubject: "【i-Club 予約システム】施設・設備の利用予約が事務局により変更されました",
-        expectedOpening: "利用予約の内容が事務局により変更されました。予約の状態は変わりません。",
+        expectedOpening:
+          "利用予約の内容が事務局により変更されました。\n\n予約の状態は変わりません。",
         prefix: "reservation:editedByStaff:res_test_123:1789866000000:",
       },
     ] as const;
@@ -479,13 +482,13 @@ describe("reservation-mail", () => {
       );
       const body = drafts[0]?.text ?? "";
       expect(body).toContain(
-        "当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
+        "解錠の手配: 当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
       );
       expect(body).toContain(
         [
           "利用終了日時: 2026年9月25日 12:00",
           "",
-          "当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
+          "解錠の手配: 当日施設が施錠されている可能性があります。事務局とメッセージで調整してください。",
           "",
           "予約の詳細は、次のページでご確認ください。",
         ].join("\n"),
@@ -500,7 +503,9 @@ describe("reservation-mail", () => {
         APP_BASE_URL,
       );
       const body = drafts[0]?.text ?? "";
-      expect(body).toContain("解錠の手配が済んでいます。方法はメッセージを確認してください。");
+      expect(body).toContain(
+        "解錠の手配: 解錠の手配が済んでいます。方法はメッセージを確認してください。",
+      );
     });
 
     it("承認で不要のとき、案内は入らない", () => {
@@ -563,7 +568,7 @@ describe("reservation-mail", () => {
           [
             "利用終了日時: 2026年9月25日 12:00",
             "",
-            "解錠の手配が済んでいます。方法はメッセージを確認してください。",
+            "解錠の手配: 解錠の手配が済んでいます。方法はメッセージを確認してください。",
             "",
             "事務局からのメッセージ:",
             "カードキーは前日の17時までに事務局で受け取ってください。",
@@ -627,6 +632,39 @@ describe("reservation-mail", () => {
           expect(draft.text).not.toContain("事務局からのメッセージ");
         }
       }
+    });
+  });
+
+  describe("HTML の生成と利用者の入力のエスケープ", () => {
+    it("html が生成され、理由に含まれる特殊文字が生で出力されないこと", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Rejected,
+        { ...baseReservation, statusReason: "<script>alert('reject')</script> & 理由" },
+        defaultAudience,
+        APP_BASE_URL,
+      );
+
+      const draft = drafts[0];
+      expect(draft?.html).toBeDefined();
+      expect(draft?.html).not.toContain("<script>");
+      expect(draft?.html).toContain(
+        "&lt;script&gt;alert(&#39;reject&#39;)&lt;/script&gt; &amp; 理由",
+      );
+    });
+
+    it("html が生成され、メッセージに含まれる特殊文字が生で出力されないこと", () => {
+      const drafts = createReservationMailDrafts(
+        ReservationMailEvent.Approved,
+        baseReservation,
+        defaultAudience,
+        APP_BASE_URL,
+        "<b>注意事項</b> & 改行\nテスト",
+      );
+
+      const draft = drafts[0];
+      expect(draft?.html).toBeDefined();
+      expect(draft?.html).not.toContain("<b>");
+      expect(draft?.html).toContain("&lt;b&gt;注意事項&lt;/b&gt; &amp; 改行<br>テスト");
     });
   });
 });
