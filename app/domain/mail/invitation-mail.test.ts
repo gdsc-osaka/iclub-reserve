@@ -53,4 +53,15 @@ describe("createInvitationMailDraft", () => {
     const draft = createInvitationMailDraft(baseArgs);
     expect(draft.to).toEqual({ address: "taro@osaka-u.ac.jp" });
   });
+
+  it("html が生成され、団体名に含まれる特殊文字が生で出力されないこと", () => {
+    const draft = createInvitationMailDraft({
+      ...baseArgs,
+      groupName: "<ロボット> & '研究会'",
+    });
+    expect(draft.html).toBeDefined();
+    expect(draft.html).toContain("<!doctype html>");
+    expect(draft.html).not.toContain("<ロボット>");
+    expect(draft.html).toContain("&lt;ロボット&gt; &amp; &#39;研究会&#39;");
+  });
 });

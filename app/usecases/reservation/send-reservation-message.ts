@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { okAsync, safeTry, type ResultAsync } from "neverthrow";
+import { okAsync, ResultAsync, safeTry } from "neverthrow";
 
 import type { MailOutboxNotifier } from "~/domain/mail/mail-outbox-notifier";
 import {
@@ -20,7 +20,7 @@ import {
 } from "~/domain/reservation/message";
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
-import { toRecipientsError } from "./_shared/mail-recipients";
+import { resolveReservationMailNames, toRecipientsError } from "./_shared/mail-recipients";
 import {
   ensureActorCan,
   ensureCanViewReservation,
@@ -101,10 +101,14 @@ export const sendReservationMessageUseCase = (
     // 6. 事務局としての送信か判定（その団体に所属しない事務局のみ true）
     const sentAsStaff = isSentAsStaff(actor);
 
-    // 7. 通知先の候補を引く（EVT-008）
-    const audience = yield* deps.reservationMailRecipientsQuery
-      .findForMessage(reservation.id)
-      .mapErr(toRecipientsError);
+    // 7. 通知先の候補と名前を引く（EVT-008）
+    const [audience, names] = yield* ResultAsync.combine([
+      deps.reservationMailRecipientsQuery.findForMessage(reservation.id).mapErr(toRecipientsError),
+      resolveReservationMailNames(deps, {
+        facilityId: reservation.facilityId,
+        groupId: reservation.groupId,
+      }),
+    ]);
 
     // 8. 宛先を選定（送信者本人の除外、重複除去、ソート）
     const recipients = selectReservationMessageRecipients(audience, {
@@ -128,6 +132,8 @@ export const sendReservationMessageUseCase = (
       message,
       reservation: {
         id: reservation.id,
+        facilityName: names.facilityName,
+        groupName: names.groupName,
         startAt: reservation.startAt,
         endAt: reservation.endAt,
       },

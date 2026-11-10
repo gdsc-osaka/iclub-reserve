@@ -163,8 +163,12 @@ const createDeps = (
       ? errAsync({ code: QueryErrorCode.DatabaseError, message: "query error" })
       : okAsync(defaultAudience),
   );
+  const findNames = vi.fn((_ids: { facilityId: string; groupId: string }) =>
+    okAsync({ facilityName: "会議室 A", groupName: "ロボット部" }),
+  );
   const reservationMailRecipientsQuery = fakeReservationMailRecipientsQuery({
     findByReservationId,
+    findNames,
   });
 
   const notifyEnqueued = vi.fn((_outboxIds: readonly string[]) => {});
@@ -185,6 +189,7 @@ const createDeps = (
       findByGroupAndUser,
       findFacility,
       findByReservationId,
+      findNames,
       notifyEnqueued,
     },
   };

@@ -45,7 +45,7 @@ import { validateUnlockArrangement } from "~/domain/reservation/unlock-arrangeme
 import type { ReservationMailRecipientsQuery } from "~/query/reservation/reservation-mail-recipients";
 import { requestImmediateDelivery } from "~/usecases/_shared/mail-delivery";
 import { ensureNoApprovedOverlap } from "./_shared/approved-overlap";
-import { toRecipientsError } from "./_shared/mail-recipients";
+import { resolveReservationMailNames, toRecipientsError } from "./_shared/mail-recipients";
 import { resolveReservationActor } from "./_shared/reservation-authorization";
 
 /** 予約ステータス変更ユースケースの依存 */
@@ -256,27 +256,36 @@ export const changeReservationStatusUseCase = (
           )
         : okAsync<null, ReservationError>(null);
 
-    // 状態変更通知メール（EVT-002/003/005/006/007）を組み立てる
-    const mailDraftsCheck = resolveTransitionMailAudience(deps, reservation.id, message).map(
-      (audience) =>
-        createReservationMailDrafts(
-          transitionMailEvent[args.transition],
-          {
-            id: reservation.id,
-            startAt: reservation.startAt,
-            endAt: reservation.endAt,
-            statusReason,
-            unlockArrangement: unlockArrangement ?? reservation.unlockArrangement,
-            updatedAt: now,
-          },
-          audience,
-          args.appBaseUrl,
-          message?.body ?? null,
-        ),
-    );
+    // 状態変更通知メール（EVT-002/003/005/006/007）の宛先と名前を引く
+    const audienceCheck = resolveTransitionMailAudience(deps, reservation.id, message);
+    const namesCheck = resolveReservationMailNames(deps, {
+      facilityId: reservation.facilityId,
+      groupId: reservation.groupId,
+    });
 
-    // この 2 つは同時に投げる。どちらも D1 への往復なので、順に待つとそのまま待ち時間になる
-    const [, mailDrafts] = yield* ResultAsync.combine([overlapCheck, mailDraftsCheck]);
+    // この 3 つは同時に投げる。どれも D1 への往復なので、順に待つとそのまま待ち時間になる
+    const [, audience, names] = yield* ResultAsync.combine([
+      overlapCheck,
+      audienceCheck,
+      namesCheck,
+    ]);
+
+    const mailDrafts = createReservationMailDrafts(
+      transitionMailEvent[args.transition],
+      {
+        id: reservation.id,
+        facilityName: names.facilityName,
+        groupName: names.groupName,
+        startAt: reservation.startAt,
+        endAt: reservation.endAt,
+        statusReason,
+        unlockArrangement: unlockArrangement ?? reservation.unlockArrangement,
+        updatedAt: now,
+      },
+      audience,
+      args.appBaseUrl,
+      message?.body ?? null,
+    );
 
     const targetStatus = transitionTargetStatus[args.transition];
     const auditLog: AuditLogDraft = {

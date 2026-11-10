@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   createSendVerificationOtpUseCase,
   OTP_EXPIRES_IN_SECONDS,
+  toVerificationOtpMail,
   type VerificationOtpType,
 } from "./send-verification-otp.server";
 import { MailSendErrorCode } from "~/domain/mail/mail-sender";
@@ -28,6 +29,9 @@ describe("createSendVerificationOtpUseCase", () => {
     expect(message.to.address.value).toBe("taro@osaka-u.ac.jp");
     expect(message.from.address.value).toBe("noreply@osaka-u.ac.jp");
     expect(message.text).toContain("123456");
+    expect(message.html).toBeDefined();
+    expect(message.html).toContain("123456");
+    expect(message.html).toContain("<!doctype html>");
   });
 
   it("本文に有効期限（分）を記載する", async () => {
@@ -87,5 +91,16 @@ describe("createSendVerificationOtpUseCase", () => {
     expect(result.isErr()).toBe(true);
     if (result.isErr())
       expect(formatSendEmailError(result.error)).toBe(MailSendErrorCode.AuthFailed);
+  });
+
+  describe("toVerificationOtpMail", () => {
+    it("件名、テキスト本文、HTML 本文を生成すること", () => {
+      const mail = toVerificationOtpMail({ otp: "654321", type: "sign-in" });
+      expect(mail.subject).toBe("【i-Club 予約システム】ログイン用の認証コード");
+      expect(mail.text).toContain("654321");
+      expect(mail.text).toContain("ログイン用の認証コードは次のとおりです。");
+      expect(mail.html).toContain("654321");
+      expect(mail.html).toContain("<!doctype html>");
+    });
   });
 });

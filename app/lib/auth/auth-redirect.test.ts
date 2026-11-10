@@ -104,6 +104,7 @@ describe("isPublicPath", () => {
     ["自団体の予約カレンダー配信", "/calendar-feeds/sample_token_123.ics"],
     ["開発専用ルート（メールの送信）", "/dev/flush-mail"],
     ["開発専用ルート（カレンダーの同期）", "/dev/sync-calendar"],
+    ["開発専用ルート（メールの文面の見本）", "/dev/mail-preview"],
   ])("%s はログインなしで開ける", (_, pathname) => {
     expect(isPublicPath(pathname)).toBe(true);
   });

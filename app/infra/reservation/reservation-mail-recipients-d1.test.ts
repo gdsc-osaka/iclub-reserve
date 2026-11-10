@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { useD1TestDb } from "../d1-test-db";
 
+import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { QueryErrorCode } from "~/query/error";
@@ -309,5 +310,66 @@ describe("findForMessage を D1 で実行する（メッセージ通知先の取
 
     expect(result.isErr()).toBe(true);
     expect(result._unsafeUnwrapErr().code).toBe(QueryErrorCode.NotFound);
+  });
+});
+
+describe("findNames", () => {
+  it("施設と団体の両方が存在する場合、名前を返す", async () => {
+    const query = createReservationMailRecipientsQuery(testDb.db);
+    const result = await query.findNames({
+      facilityId: "fac_a",
+      groupId: "grp_robotics",
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual({
+      facilityName: "会議室 A",
+      groupName: "ロボット部",
+    });
+  });
+
+  it("施設が存在しない場合、NotFound エラーを返す", async () => {
+    const query = createReservationMailRecipientsQuery(testDb.db);
+    const result = await query.findNames({
+      facilityId: "fac_nonexistent",
+      groupId: "grp_robotics",
+    });
+
+    expect(result.isErr()).toBe(true);
+    const error = result._unsafeUnwrapErr();
+    expect(error.code).toBe(QueryErrorCode.NotFound);
+    expect(error.message).toContain("fac_nonexistent");
+  });
+
+  it("団体が存在しない場合、NotFound エラーを返す", async () => {
+    const query = createReservationMailRecipientsQuery(testDb.db);
+    const result = await query.findNames({
+      facilityId: "fac_a",
+      groupId: "grp_nonexistent",
+    });
+
+    expect(result.isErr()).toBe(true);
+    const error = result._unsafeUnwrapErr();
+    expect(error.code).toBe(QueryErrorCode.NotFound);
+    expect(error.message).toContain("grp_nonexistent");
+  });
+
+  it("無効な施設・無効な団体でも名前が返る", async () => {
+    await testDb.seed(
+      seedFacility({ id: "fac_disabled", name: "休止中会議室", isActive: false }),
+      seedGroup({ id: "grp_disabled", name: "解散した部", status: GroupStatus.Disabled }),
+    );
+
+    const query = createReservationMailRecipientsQuery(testDb.db);
+    const result = await query.findNames({
+      facilityId: "fac_disabled",
+      groupId: "grp_disabled",
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toEqual({
+      facilityName: "休止中会議室",
+      groupName: "解散した部",
+    });
   });
 });

@@ -16,6 +16,9 @@ export const DEV_FLUSH_MAIL_PATH = "/dev/flush-mail";
 /** 開発専用の、カレンダー同期タスクを手で処理するエンドポイント（`app/routes/dev/sync-calendar`）。 */
 export const DEV_SYNC_CALENDAR_PATH = "/dev/sync-calendar";
 
+/** 開発専用の、メールの文面の見本を表示するエンドポイント（`app/routes/dev/mail-preview`）。 */
+export const DEV_MAIL_PREVIEW_PATH = "/dev/mail-preview";
+
 /**
  * パスキーの登録を勧める画面。
  *
@@ -44,12 +47,14 @@ const DEFAULT_REDIRECT_TO = LANDING_PATH;
  * curl から叩けるようログインを免除するが、ローカル以外ではルート自身が
  * `APP_ENV` を見て 404 を返す（ADR-002 実装ガイド 5）。
  * `DEV_SYNC_CALENDAR_PATH`（カレンダー同期を手で起動する。ADR-008）も同じ扱い。
+ * `DEV_MAIL_PREVIEW_PATH`（メールの文面の見本を表示する。ADR-018）も同じ扱いで、返すのは見本の値で組み立てた文面だけ。
  */
 const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   LOGIN_PATH,
   WELCOME_PATH,
   DEV_FLUSH_MAIL_PATH,
   DEV_SYNC_CALENDAR_PATH,
+  DEV_MAIL_PREVIEW_PATH,
 ]);
 
 /**

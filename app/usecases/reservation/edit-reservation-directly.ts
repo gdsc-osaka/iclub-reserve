@@ -120,6 +120,7 @@ export const editReservationDirectlyUseCase = (
     // 変更通知（EVT-017）の組み立てと重なりの確認を同時に投げる
     const mailDrafts = yield* resolveEditOverlapAndMails(deps, {
       reservationId: reservation.id,
+      groupId: reservation.groupId,
       content,
       now,
       checksOverlap,
