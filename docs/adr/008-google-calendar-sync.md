@@ -161,17 +161,6 @@ Free プランの上限（サブリクエスト 50 件。D1 の問い合わせ�
 
 残りの 20 回強を、同じ実行の中で動くメールの回収に残す。毎分 5 件なので 1 時間に 300 件まで反映でき、施設の名称の変更で数十件をまとめて積んでも数分で片付く。Paid プランに移ったら上限を上げてよい。
 
-### 8. 今後の PR での実装方針
-
-- **PR 2（予約 1 件の同期）**:
-  予約の状態遷移（承認・キャンセル・差し戻し）および内容変更の各ユースケースで、`toCalendarSyncDraft` を用いて同期タスクを `db.batch()` に積む。毎分の cron（`workers/app.ts` の `scheduled`）から呼び出される `processCalendarSyncTasksUseCase` を実装する。
-- **PR 3（施設の変更）**:
-  施設編集画面で Google Calendar ID を変更した際、保存前に `checkWriteAccess` で書き込み権限を検証（COND-025）。保存時は施設の更新と同じ batch で、範囲内（`calendarSyncRangeStart`）の承認済み予約のタスクを `INSERT ... SELECT` で積む。
-- **PR 4（日次の突き合わせ）**:
-  毎朝 4:00（JST）の Cron（`0 19 * * *`）で、施設ごとに `listManagedEvents` と DB 内の承認済み予約を突き合わせ、差異がある予約のタスクを `calendar_sync_task` に積む。実際の反映は毎分の Cron に委ねる。Cron Trigger は本番とプレビューの Worker でそれぞれ 2 個（毎分と日次）になり、アカウント全体で 4 個と Free プランの上限（5 個）に収まる。
-- **PR 5（カレンダー購読画面）**:
-  ログインユーザー向けにカレンダー購読 URL（Google Calendar 追加ボタン / iCal URL）を一覧表示する画面（SCR-010 / UC-018）を実装する。
-
 ## 運用手順（Google カレンダーと Service Account の準備）
 
 カレンダー連携を有効化する際のインフラ・Google Cloud の設定手順：
