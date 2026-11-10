@@ -13,9 +13,13 @@ export const otpIdentifier = {
   signIn: (email: string) => `sign-in-otp-${email}`,
   /** メールアドレスの変更の 1 通目（UC-023）。今のアドレスに送る */
   emailVerification: (email: string) => `email-verification-otp-${email}`,
-  /** メールアドレスの変更の 2 通目（UC-023）。新しいアドレスに送るが、名前には今のアドレスも入る */
-  changeEmail: (currentEmail: string, newEmail: string) =>
-    `change-email-otp-${currentEmail}-${newEmail}`,
+  /**
+   * メールアドレスの変更の 2 通目（UC-023）。新しいアドレスに送るが、名前には変える人の ID も入る。
+   *
+   * NOTE: Better Auth 1.7.16 から、今のアドレスではなく利用者の ID で作るようになった（better-auth/better-auth#12198）。
+   * Better Auth を上げてこの行が読めなくなったら、email-otp プラグインの `requestEmailChangeEmailOTP` を見る。
+   */
+  changeEmail: (userId: string, newEmail: string) => `change-email-otp-${userId}:${newEmail}`,
 } as const;
 
 /**
