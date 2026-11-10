@@ -516,7 +516,7 @@ Google Calendar 連携のような**多段で外部 API を叩く処理**が出�
 
 ### 1. ポートと型 — `app/domain/mail/mail-outbox.ts`
 
-`app/domain/mail/mail-outbox.ts` は、outbox の状態（`MailOutboxStatus`）や型（`MailDraft` / `MailOutboxEntry`）、および outbox 操作のポート（`MailOutbox`）を定義する。`MailDraft` の差出人は環境変数から解決するため持たせず、`idempotencyKey` には時刻や乱数を混ぜずにイベント・対象 ID・宛先から一意に決まる文字列を指定する。
+`app/domain/mail/mail-outbox.ts` は、outbox の状態（`MailOutboxStatus`）や型（`MailDraft` / `MailOutboxEntry`）、および outbox 操作のポート（`MailOutbox`）を定義する。`MailDraft` の差出人は環境変数から解決するため持たせず、`idempotencyKey` には時刻や乱数を混ぜずにイベント・対象 ID・宛先から一意に決まる文字列を指定する。例外は、同じイベントが同じ対象に何度も起き（メールアドレスを A→B→A と変えるなど）、時刻を除くと後の通知が先の通知と同じキーになって捨てられる場合だけで、同じ操作が 2 度通らないことを業務データの書き込みの側で保証できるときに限り時刻を含める。いまは予約の通知（`app/domain/mail/reservation-mail.ts`）とメールアドレス変更の通知（`app/domain/mail/email-changed-mail.ts`）が当たる。
 
 ### 2. 取り出し — `app/infra/mail/d1-mail-outbox.ts`
 

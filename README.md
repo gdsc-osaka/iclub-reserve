@@ -37,7 +37,7 @@
 
 > [!IMPORTANT]
 > Windows で clone すると、Git がシンボリックリンクを、リンク先のパスが書かれただけのテキストファイルとしてチェックアウトすることがあります。この状態ではスキルはエラーも出さずに読み込まれません。
-> `.claude/skills/` の中がディレクトリではなくファイルになっていたら、次を実行してください（未コミットの変更には影響しません）。
+> `.claude/skills/` の中がディレクトリではなくファイルになっていたら、次を実行してください（`.claude/skills/` の中の未コミットの変更は消えます。外の変更には影響しません）。
 >
 > ```bash
 > git config core.symlinks true
@@ -252,14 +252,14 @@ pnpm run db:migrate:prod
 
 ### Workers Builds のビルド変数
 
-Node.js と pnpm のバージョンは、リポジトリの設定だけでは決まりません。
+Node.js と pnpm のバージョンは、リポジトリの設定で決まります。
 
-- Node.js: `.node-version` で指定（リポジトリ管理）
-- pnpm: Cloudflare ダッシュボードの **Settings > Build > Build Variables and Secrets** で `PNPM_VERSION` を設定（`package.json` の `devEngines.packageManager` と同じ 12 系）
+- Node.js: `.node-version`
+- pnpm: `package.json` の `devEngines.packageManager`。Workers Builds は pnpm を Corepack で動かし、この指定をビルド変数 `PNPM_VERSION` やビルドイメージ既定の版（9 系）より優先します
 
-`wrangler.jsonc` の `vars` はランタイム変数であり、ビルドイメージは参照しません。pnpm を指定しないとビルドイメージ既定の古い版（2026-10 には 9 系）が使われてインストールで落ちるので、両方の Worker に設定してください。
+`wrangler.jsonc` の `vars` はランタイム変数であり、ビルドイメージは参照しません。ビルドログの「Detected the following tools from environment」に出る pnpm の版は Corepack が切り替える前のものなので、実際の版はインストールの出力で確かめてください。
 
-`iclub-reserve` は、`release/*`・`hotfix/*` を本番の設定でビルドし、dry-run で確かめます（ADR-017 決定 4）。本番以外のブランチのビルド変数は、本番のブランチとは別の「プレビューのベース」に置くので、`CLOUDFLARE_ENV=production` と `PNPM_VERSION` をそこにも設定してください。ベースの設定はブランチを最初にビルドしたときに写されるので、後からベースを直しても、すでにあるブランチのビルドには届きません。
+`iclub-reserve` は、`release/*`・`hotfix/*` を本番の設定でビルドし、dry-run で確かめます（ADR-017 決定 4）。本番以外のブランチのビルド変数は、本番のブランチとは別の「プレビューのベース」に置くので、`CLOUDFLARE_ENV=production` をそこにも設定してください。ベースの設定はブランチを最初にビルドしたときに写されるので、後からベースを直しても、すでにあるブランチのビルドには届きません。
 
 ### 認証コード（OTP）の届け先
 
