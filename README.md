@@ -203,7 +203,59 @@ pnpm exec wrangler preview base-config secret put BETTER_AUTH_SECRET --env previ
 
 `BETTER_AUTH_URL`（`https://iclub-preview.gdgoc-osaka.jp`）、`DISCORD_OTP_WEBHOOK_URL`、`DISCORD_OTP_THREAD_ID` も同じように登録します。不要になった Preview は `pnpm exec wrangler preview delete --env preview --name <ブランチ名>` で消せます。
 
+### 本番に出す（リリース）
+
+流れは [ADR-017](docs/adr/017-release-flow-and-migrations.md) で決めています。
+
+リリースの手順:
+
+1. GitHub の Actions のタブで「Start Release」を選び、`develop` で「Run workflow」を押して、出す版（`1.0.0-rc.1` や `1.0.0`。先頭に `v` は付けない）を入れます。`release/v<版>` のブランチと `main` 向きの PR ができ、auto-merge が予約されます。
+2. PR の Migration Plan のコメントで、本番の D1 に当てるマイグレーションと警告を確かめます。Preview でも動きを確かめます。
+3. コードレビューで承認します。
+4. Release Approval のジョブで、本番への承認をします（Environment `production` の必須のレビュアーが行います。PR を出した人は承認できません）。承認すると、本番の D1 にマイグレーションが当たり、auto-merge でマージされ、Workers Builds が本番にデプロイします。
+5. デプロイが通ると、「After Release」のワークフローが、タグ `v<版>` と GitHub Release を作り、`sync/v<版>` から `develop` 向きの PR を作ります。承認するとマージされます。
+
+注意:
+
+- 版は semver で書きます。正式に出すまでは `1.0.0-rc.1`・`1.0.0-rc.2`…、出した後は `1.0.0`・`1.0.1`… にします。`main` の版より大きくないと、`Version` のチェックが落ちます。
+- 承認の後に push したり `main` を取り込んだりしたら、本番への承認をし直します。
+- release と hotfix の PR を同時に承認しないでください。
+
+緊急の修正（hotfix）の手順:
+
+1. 「Start Hotfix」を `develop` で動かし、版（`1.0.1` など）を入れます。`main` から `hotfix/v<版>` のブランチができ、版を上げるコミットが積まれます。
+2. そのブランチに修正をコミットして push し、`main` 向きの PR を作ります（本文は `.github/pull_request_template.md` に沿います）。`release/**`・`hotfix/**` のブランチに push できるのは、maintain 以上のロールの人だけです。
+3. 後はリリースの手順の 2〜5 と同じです。
+
 ### マイグレーションの適用
+
+いつ当たるか:
+
+| タイミング                 | 当て方                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `develop` にマージしたとき | Workers Builds が、preview の D1 に当ててからデプロイします（デプロイコマンド `pnpm run db:migrate:preview && npx wrangler deploy --env preview`）。                |
+| `main` に出すとき          | 本番への承認（Release Approval）の後、マージの前に、本番の D1 に当てます。                                                                                          |
+| ブランチの Preview         | 当てません。preview の D1 を `develop` とすべての Preview が共有しているためです。新しい表や列を使うブランチは、`develop` にマージするまで Preview では動きません。 |
+
+PR のコメント（Migration Plan）:
+
+`develop` 向き・`main` 向きの PR に、相手の D1（`develop` 向きなら preview、`main` 向きなら本番）に当てるマイグレーション・触る表と操作・予行演習の結果を書きます。予行演習で当てるのに失敗したら、チェックが落ちます。行や表が減る・`DROP TABLE`（外部キーで参照している表も）・`DROP COLUMN`・`UPDATE`・`DELETE` は警告として出すだけで、チェックは落としません。行数と行の中身は出しません。
+
+マイグレーションを書くときの決まり:
+
+- ベースのブランチにあるマイグレーションのファイル（当て済みのもの）は、書き換えたり消したりしないでください。直すときは新しいファイルを足します（書き換えると `Migration Plan` が落ちます）。
+- 1 つ前の版のコードでも動く形にします。当ててからデプロイが終わるまで、本番では古いコードが新しいスキーマの上で動くためです。列や表を消すなど、古いコードを壊す変更は 2 回のリリースに分けます（先に新しい形を足して出し、古い形を使わなくなってから消す）。
+- D1 では外部キーの確認を止められません。表を作り直す（`DROP TABLE` する）と、`ON DELETE CASCADE` で参照している行も消えます（[`drizzle/migrations/0024_fine_celestials.sql`](drizzle/migrations/0024_fine_celestials.sql) の先頭のコメント）。
+
+手元で予行演習を試す:
+
+マイグレーションをコミットしてから、次のコマンドを動かします。`PLAN_SOURCE_SQLITE` には、相手の D1 の代わりに読む SQLite のファイル（たとえばローカルの D1 の `.wrangler/state/v3/d1/miniflare-D1DatabaseObject/<ハッシュ>.sqlite`）を渡します。結果は `migration-plan.md` に書かれます。
+
+```bash
+PLAN_TARGET=preview BASE_SHA=origin/develop PLAN_SOURCE_SQLITE=<SQLite のファイル> pnpm run release:migration-plan
+```
+
+手で当てる（非常時だけ）:
 
 ```bash
 pnpm run db:migrate:preview
@@ -214,7 +266,7 @@ pnpm run db:migrate:prod
 ```
 
 > [!CAUTION]
-> `db:migrate:prod` は本番の DB を直接書き換えます。実行前に必ず内容を確認してください。
+> `db:migrate:prod` は本番の D1 を直接書き換えます。本番への承認も、当てたときの記録（ADR-017 決定 6）も通りません。非常時だけ使い、使う前に `pnpm exec wrangler d1 time-travel info iclub-reserve-db --env production` で bookmark を控えてください。
 
 ### Workers Builds のビルド変数
 
@@ -224,6 +276,8 @@ Node.js と pnpm のバージョンは、リポジトリの設定だけでは決
 - pnpm: Cloudflare ダッシュボードの **Settings > Build > Build Variables and Secrets** で `PNPM_VERSION` を設定（`package.json` の `devEngines.packageManager` と同じ 12 系）
 
 `wrangler.jsonc` の `vars` はランタイム変数であり、ビルドイメージは参照しません。pnpm を指定しないとビルドイメージ既定の 10 系が使われるので、両方の Worker に設定してください。
+
+`iclub-reserve` は、`release/*`・`hotfix/*` を本番の設定でビルドし、dry-run で確かめます（ADR-017 決定 4）。本番以外のブランチのビルド変数は、本番のブランチとは別の「プレビューのベース」に置くので、`CLOUDFLARE_ENV=production` と `PNPM_VERSION` をそこにも設定してください。ベースの設定はブランチを最初にビルドしたときに写されるので、後からベースを直しても、すでにあるブランチのビルドには届きません。
 
 ### 認証コード（OTP）の届け先
 

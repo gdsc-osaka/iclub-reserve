@@ -2,7 +2,7 @@
 
 ## ステータス
 
-提案 (2026-11-10)
+承認 (2026-11-10)
 
 ## コンテキスト
 
@@ -42,9 +42,12 @@
 ### 3. いつ・どの版で出すかは人が決め、ブランチと PR は Actions が作る
 
 - push や定期の実行で、release のブランチを自動で切ることはしない。いつ出すか・どの版にするかは人が決めることだからである。手作業の部分だけを `workflow_dispatch` のワークフローにする。
-- リリースの開始は「リリースを始める」ワークフロー（入力: 版）で行う。版を検査し（決定 2 と同じ検査）、`develop` の先頭から `release/v<版>` を作り、`version` を上げるコミットを積み、`main` 向きの PR を作る。PR の本文は [`.github/pull_request_template.md`](../../.github/pull_request_template.md) に沿い、前のタグより後にマージした PR を並べる。
-- 緊急の修正の開始は「hotfix を始める」ワークフロー（入力: 版）で行う。`main` から `hotfix/v<版>` を作り、`version` を上げるコミットを積む。修正のコミットと PR は人が作る。
+- リリースの開始は「リリースを始める」ワークフロー（`Start Release`。[`.github/workflows/start-release.yml`](../../.github/workflows/start-release.yml)、入力は版）で行う。版を検査し（決定 2 と同じ検査）、`develop` の先頭から `release/v<版>` を作り、`version` を上げるコミットを積み、`main` 向きの PR を作る。PR の本文は [`.github/pull_request_template.md`](../../.github/pull_request_template.md) に沿い、前のタグより後にマージした PR を並べる。
+- 緊急の修正の開始は「hotfix を始める」ワークフロー（`Start Hotfix`。[`.github/workflows/start-hotfix.yml`](../../.github/workflows/start-hotfix.yml)、入力は版）で行う。`main` から `hotfix/v<版>` を作り、`version` を上げるコミットを積む。修正のコミットと PR は人が作る。
 - ブランチ・コミット・PR は、GitHub App のトークン（`actions/create-github-app-token`）で作る。`GITHUB_TOKEN` で push したブランチや作った PR では Actions のワークフローが起動せず、必須のチェックが報告されないためである。
+- GitHub App の鍵（secret `RELEASE_BOT_PRIVATE_KEY`）と Client ID（変数 `RELEASE_BOT_CLIENT_ID`）は、Environment `release-bot` に置き、対象のブランチを `develop` に絞る。ほかのブランチで書き換えたワークフローに、鍵を渡さないためである。`workflow_dispatch` と `check_run` の実行は、どちらも `develop` で動く。
+- Ruleset `release` は、`release/**`・`hotfix/**` のブランチを作る・更新する操作を、maintain・admin のロールに限っている。GitHub App をこの Ruleset のバイパスに足す。
+- 版を上げるコミットを API で作ってから、そのコミットを指すブランチを作る。ブランチを先に作ると、Workers Builds が版を上げる前のコミットもビルドするためである。
 - Bot が作った PR は、作った直後に `gh pr merge --auto --merge` で auto-merge を予約する（リポジトリの「Allow auto-merge」は有効にした）。予約しても、レビューの承認・必須のチェック・本番への承認（決定 5）がそろうまではマージされない。
 
 ### 4. Workers Builds は、Worker ごとにビルドするブランチを分ける
@@ -70,20 +73,26 @@
 
 ### 5. `main` 向きの PR では、毎回「本番への承認」を通す
 
-- CI に、`main` 向きの PR でだけ動く承認のジョブ（`Release Approval`）を置き、GitHub の Environment（`production`）を付ける。
+- `main` 向きの PR でだけ動く承認のジョブ（`Release Approval`）を置き、GitHub の Environment（`production`）を付ける。ジョブは `Version`・`Migration Plan` と同じワークフロー（[`.github/workflows/release-gate.yml`](../../.github/workflows/release-gate.yml)）に置き、その 2 つが通ってから承認の待ちになる。
 - Environment には必須のレビュアー（リリースの担当）を置き、PR を出した人が自分で承認できないようにする（prevent self-review）。公開リポジトリなので、GitHub Free でも使える。
 - 承認されるまでジョブは待ち（Waiting）になり、チェックは実行中のまま残るのでマージできない。このジョブを `main` の Ruleset で必須にする。
 - 承認されたら、本番の D1 に未適用のマイグレーションがあれば当て（決定 6）、ジョブを通す。auto-merge を予約していれば、そのままマージされ、Workers Builds が本番にデプロイする。
 - マイグレーションが無くても、承認は省かない。省くと、コードレビューの承認がそのまま本番に出す操作になり、中身を確かめたつもりで承認した時点で本番に出てしまうためである。コードレビューの承認は「中身の確認」、本番への承認は「本番に出す判断」と、役割を分ける。
 - 承認は、その実行のコミットに結び付く。承認の後に push したり `main` を取り込んだりしたら、承認し直す。
-- 本番の D1 に書き込める Cloudflare の API トークンは、この Environment の secret に置く。承認されるまで、ジョブには渡らない。
+- 本番の D1 を編集できる Cloudflare の API トークン（D1 Edit）は、この Environment の secret（`CLOUDFLARE_D1_MIGRATE_TOKEN`）に置く。承認されるまで、ジョブには渡らない。渡すのも D1 を触る手順だけにし、依存を入れる手順などには渡さない。
+- Environment は `deployment: false` で使う。デプロイはしないので、Environment のデプロイの記録を作らない。
+- Environment の対象のブランチでは、`release/*`・`hotfix/*` に絞れない。`pull_request` で動いたジョブは、`refs/pull/<番号>/merge` で判定されるためである。対象のブランチは `refs/pull/*/merge` にする（`main`・`release/*` などを並べると、このジョブが弾かれる）。`release/*`・`hotfix/*` に絞るのは `Version` のチェックが行う。
+- フォークからの PR でも、ジョブを飛ばさずに最初の手順で止める。飛ばすと、必須のチェックが通った扱いになるためである。フォークの PR には secret も渡らない。
 
 ### 6. 本番のマイグレーションは、承認の後・マージの前に当てる
 
 - 順番は「承認 → マイグレーション → マージ → デプロイ」にする。マージより先に当てるので、Workers Builds でデプロイしても、デプロイの前にマイグレーションが当たっている。
 - 当てる前に `wrangler d1 time-travel info` で D1 の bookmark を取り、ログに残す。失敗したときや壊したときは、Time Travel でその時点に戻す（戻せるのは、Workers Free なら 7 日、Workers Paid なら 30 日前まで）。
-- 当てるジョブは concurrency で 1 つずつ動かす。release と hotfix の PR が同時に当てないようにするためである。
+- 当てるジョブは PR ごとに 1 つだけ動かし（concurrency）、push したら前の実行を取り消す。承認の待ちも取り消されるので、承認し直す（決定 5）。
+- release と hotfix の PR をまたいでは、1 つずつにしない。承認を待っているジョブが concurrency の枠を握ったままになるかが GitHub の文書では分からず、握るなら、release の PR が承認を待っている間、hotfix の PR の承認の待ちが始まらないためである。release と hotfix の PR を同時に承認しないことは、運用で守る。
+- 取り消しが、本番の D1 に当てている途中に重なることもある。wrangler は 1 つのファイルの SQL と適用の記録（`d1_migrations` への INSERT）を 1 つのクエリで送る。ローカルの D1 では、1 つのクエリの途中で落ちると前の文も残らないことを確かめた。そのため、ファイルの途中まで当たった状態は残らず、残りのファイルは次の承認で当たる。
 - wrangler は、適用済みかどうかをファイル名でしか見ない。本番に当て済みのマイグレーションのファイル（`main` にあるものと、その PR で当てたもの）を書き換えたら、`Migration Plan`（決定 8）を失敗にする。`main` にあるものは `main` と、その PR で当てたものは当てたときのコミットと、中身を比べる。
+- 当てたときの中身は、`Release Approval` が PR のコメントに残す。当てたファイルの名前と中身の SHA-256 を、コメントの中の `<!-- migration-applied … -->` に書き、戻すときの bookmark と一緒に人にも見せる。`Migration Plan` はこれと比べる。PR には誰でもコメントできるので、github-actions のコメントだけを読む。
 - 当ててからデプロイが終わるまで、本番では古いコードが新しいスキーマの上で動く。また、Workers をロールバックしても D1 は戻らない。そのため、マイグレーションは 1 つ前の版のコードでも動く形にする。列や表を消すなど、古いコードを壊す変更は 2 回のリリースに分ける（expand → contract。先に新しい形を足して出し、古い形を使わなくなってから消す）。
 
 ### 7. `develop` 向きの PR では当てず、`develop` にマージしたときに当てる
@@ -98,28 +107,33 @@
 - `main` 向き・`develop` 向きの両方の PR で、マイグレーションの概要を 1 つのコメントに書き、push のたびに同じコメントを書き直す（`Migration Plan` のジョブ）。
 - 比べる相手は、`main` 向きなら本番の D1（`iclub-reserve-db`）、`develop` 向きなら preview の D1（`iclub-reserve-preview-db`）とする。
 
-| 項目                   | 中身                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 当てるマイグレーション | 相手の D1 に未適用のもの（`wrangler d1 migrations list <D1> --remote`）と、その SQL                          |
-| 触る表と操作           | SQL を `--> statement-breakpoint` で区切り、表ごとに CREATE・ALTER・DROP・UPDATE・DELETE などを並べる        |
-| 予行演習の結果         | 相手の D1 を書き出し（`wrangler d1 export`）、ランナーのローカルの D1 に読み込んで、未適用のものを当てた結果 |
+| 項目                   | 中身                                                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 当てるマイグレーション | 相手の D1 に未適用のもの（wrangler が適用済みのものを記録する `d1_migrations` の表に無いもの）と、その SQL |
+| 触る表と操作           | SQL を `--> statement-breakpoint` で区切り、表ごとに CREATE・ALTER・DROP・UPDATE・DELETE などを並べる      |
+| 予行演習の結果         | 相手の D1 を SELECT で読んでランナーのローカルの D1 に写し、未適用のものを当てた結果                       |
 
+- 相手の D1 は、D1 Read のトークン（リポジトリの secret `CLOUDFLARE_D1_READ_TOKEN`）で、SELECT だけで読む。表の定義（`sqlite_master`）と各表の行を読み、ランナーのローカルの D1 に組み立て直してから、`wrangler d1 migrations apply --local` で当てる。
+- D1 の書き出し（`wrangler d1 export`）は使わない。書き出しには D1 Edit が要るようで、D1 Read のトークンでは 401 になるという報告が複数ある（Cloudflare の文書には、要る権限が書かれていない）。`Migration Plan` は承認の前に PR のワークフローで動き、PR でワークフローを書き換えればトークンを使える。D1 Edit を渡すと、本番への承認を通さずに本番の D1 を書き換えられてしまう。SELECT で読むので、書き出しと違い、読んでいる間も相手の D1 は止まらない。
+- ローカルの D1（miniflare）でも、`PRAGMA foreign_keys=OFF` を付けた `DROP TABLE` で、`ON DELETE CASCADE` の子の行が消えることを確かめた（本番と同じ）。そのため、予行演習で行が減ったことの警告は当てにできる。
 - 予行演習で当てるのに失敗したら、チェックを失敗にする。どのファイルで落ちたかと、SQLite のエラーを出す。SQLite のエラーは `UNIQUE constraint failed: user.email` のように表と列の名前だけで、値は含まない。
 - 次のものは、警告としてコメントに出すだけにし、チェックは失敗にしない。読んで判断するのは、本番への承認（決定 5）をする人である。
   - 予行演習で行が減った表・無くなった表（表の名前だけを出す。`RENAME TO` で改名した表は、改名後の表と比べる）
-  - `DROP TABLE`（Drizzle の表の作り直しも含む）。その表を `ON DELETE CASCADE` の外部キーで参照している表があれば、それも並べる。D1 では外部キーの確認を止められず、参照している行も消えるためである（[`drizzle/migrations/0024_fine_celestials.sql`](../../drizzle/migrations/0024_fine_celestials.sql) のコメント）。
+  - `DROP TABLE`（Drizzle の表の作り直しも含む）。その表を外部キーで参照している表があれば、`ON DELETE CASCADE`（行が消える）・`ON DELETE SET NULL`・`ON DELETE SET DEFAULT`（列の値が変わる）ごとに並べる。D1 では外部キーの確認を止められず、参照している行も消えるためである（[`drizzle/migrations/0024_fine_celestials.sql`](../../drizzle/migrations/0024_fine_celestials.sql) のコメント）。
   - `DROP COLUMN`・`UPDATE`・`DELETE`（行が減らなくても、値が消えたり変わったりする）
+  - 読み取れなかった文（`WITH` で始まる文など）。SQL を人が確かめる。
 - 行が減ったときにチェックを失敗にしないのは、意図して消すマイグレーションのための印や、改名の扱いを、いつも運用で守るのは大変なためである。
-- 公開リポジトリなので、行数と行の中身は出さない。`wrangler d1 execute` は結果を表にして出力するので、比べるための数は `--json` で受け取ってスクリプトの中で比べ、ログに出さない。書き出したファイルは artifact に上げない。
-- D1 の書き出しは、その間ほかのリクエストを止める（D1 の制限）。そのため、相手の D1 に未適用のマイグレーションがあるときだけ書き出す。
-- Dependabot やフォークからの PR には secret が渡らない。ベースのブランチと比べてマイグレーションのファイルが増えていない PR では、Cloudflare に触れずにチェックを通す。
+- 公開リポジトリなので、行数と行の中身は出さない。読んだ行と行数はスクリプトの中だけで扱い、ログにもコメントにも出さない。写すときのエラーには行の中身が混じることがあるので、エラーの文も出さない。写した D1 は artifact に上げない。
+- Dependabot やフォークからの PR には secret が渡らない。`develop` 向きの PR で、マイグレーションのファイルを触っていないものは、Cloudflare に触れずにチェックを通す。`main` 向きの PR は、触っていなくても本番の D1 を読む。`main` に未適用のものが残っていないかも見るためである。
+- 概要を作るスクリプトは [`scripts/release/migration-plan.ts`](../../scripts/release/migration-plan.ts)（`pnpm run release:migration-plan`）に置く。相手の D1 の代わりにローカルの SQLite のファイルを読めるので（`PLAN_SOURCE_SQLITE`）、手元でも試せる。
 - `Migration Plan` を、`develop`・`main` の両方の Ruleset で必須にする。
 
 ### 9. 本番に出せたら、GitHub Release と、`develop` への戻しの PR を作る
 
-- Workers Builds のチェック（`Workers Builds: iclub-reserve`）が `main` で終わったときに動くワークフローを置く（`check_run` の `completed`）。チェックの名前・ブランチ・結果（success）で絞る。`check_run` で動くワークフローは既定のブランチ（`develop`）に置く必要がある。ほかのチェックが終わるたびにも起動して飛ばされるので、Actions の一覧が少し増える。
+- Workers Builds のチェック（`Workers Builds: iclub-reserve`）が `main` で終わったときに動くワークフローを置く（`check_run` の `completed`）。チェックの名前・ブランチ・結果（success）で絞る。`check_run` で動くワークフローは既定のブランチ（`develop`）に置く必要がある。ほかのチェックが終わるたびにも起動して飛ばされるので、Actions の一覧が少し増える。ワークフローは `After Release`（[`.github/workflows/after-release.yml`](../../.github/workflows/after-release.yml)）とする。
 - タグ `v<版>` を付け、GitHub Release を作る（`gh release create --generate-notes`）。版に `-` が入っていれば pre-release にする。
 - `main` から `sync/v<版>` を作り、`develop` 向きの PR を作って auto-merge を予約する（決定 3）。`develop` の Ruleset は最新の `develop` を含むことを求めるので、衝突しなければ `develop` を取り込んでおく。衝突したら、PR にそう書いて人に任せる。
+- やり直しても、同じ版を 2 回出さない。タグ `v<版>` があれば GitHub Release を作らず、`sync/v<版>` の PR があれば PR を作らない。
 - 戻しの PR のレビューの承認（1 人）は、人が行う。
 
 ## 採らなかった案
@@ -130,6 +144,9 @@
 - **予行演習で行が減ったらチェックを失敗にする**: 決定 8 のとおり、意図して消すときの印や改名の扱いを、いつも運用で守る必要がある。
 - **概要に表ごとの行数を出す**: 公開リポジトリなので、本番の行数（利用者の人数など）が誰にでも読める。
 - **`develop` 向きの PR の中でマイグレーションを当てる**: PR が同時に何本も出るので、共有の preview の D1 が、どの PR の形になっているか分からなくなる。
+- **予行演習のために D1 を書き出す（`wrangler d1 export`）**: 書き出しには D1 Edit のトークンが要る。承認の前に PR のワークフローで動くので、本番の D1 を書き換えられるトークンを、PR を出せる人なら誰でも使えるようになる。書き出している間は、相手の D1 も止まる。
+- **予行演習を、本番のデータを読まずにスキーマだけで行う**: 本番の行を読まずに済むが、行が減ったことや、データによる失敗（`UNIQUE` など）を見つけられない。
+- **release と hotfix の PR をまたいで、当てるジョブを 1 つずつにする**: 決定 6 のとおり。
 - **`release/*`・`hotfix/*` の Preview を本番の Worker で出す**: 決定 4 のとおり。
 - **`iclub-reserve` は `main` だけをビルドする**: 本番の設定でビルドできるかが、マージした後まで分からない。
 - **本番の設定でのビルドを、CI のジョブ（`pnpm run build:production`）で確かめる**: CI と Workers Builds では、ビルドの環境（ビルドの変数・Node.js と pnpm の版）が別に決まる。Workers Builds の dry-run なら、本番と同じ環境で確かめられる。
@@ -142,22 +159,22 @@
 - 新しい表や列を使うブランチは、`develop` にマージするまで Preview で動かない（決定 7）。
 - `release/*`・`hotfix/*` は、2 つの Worker でビルドされる。`iclub-reserve` のほうは dry-run なので、Preview は 1 つだけできる。
 - dry-run は Cloudflare に問い合わせないので、本番の D1・R2・Queue が本当にあるかまでは確かめない。確かめるのは、本番の設定でビルドでき、設定とコードを組み立てられることまでである。
-- `main` 向きの PR に未適用のマイグレーションがあると、push のたびに本番の D1 を書き出すので、その間は本番の D1 が止まる（決定 8）。
+- `main` 向きの PR に未適用のマイグレーションがあると、push のたびに本番の D1 の行をすべて読む（決定 8）。D1 の読み取りの行数に数えられる。
+- D1 Read のトークンはリポジトリの secret なので、書き込みの権限がある人は、PR でワークフローを書き換えれば本番の行を読める。D1 の権限はアカウント単位なので、preview の D1 だけに絞ることもできない。
 - `iclub-reserve-preview` のビルドのトークンは、D1 を編集できる。D1 の権限はアカウント単位なので、本番の D1 も書き換えられる。今の既定のトークンも、アカウントのすべての Worker を編集できるので、危うさの大きさは今と大きくは変わらない。
 - `check_run` のワークフローが、ほかのチェックのたびにも起動する（決定 9）。
+- release と hotfix の PR を同時に承認しないことを、運用で守る（決定 6）。
 
 ## 残っていること
 
-- 概要のジョブ（決定 8）は、承認の前に本番の D1 を書き出す。書き出しに要る Cloudflare の権限を確かめる。編集の権限が要るなら、承認前のジョブが本番の D1 を書き換えられるトークンを持つことになるので、扱いを決め直す。
-- ローカルの D1（miniflare）でも、本番と同じく `DROP TABLE` で `ON DELETE CASCADE` が働くかを確かめる。働かないなら、予行演習で行が減ったことの警告が当てにならない。
-- Environment の対象のブランチの指定が、`pull_request` で動いたジョブでどう判定されるかを確かめる（`release/*`・`hotfix/*` だけに絞れるか）。
 - `branch_includes` に `release/*` の形のパターンを書けるかを確かめる。
 - 本番の Workers Builds のデプロイの前に、「本番に未適用のマイグレーションがあれば止める」確認を足すか決める。Ruleset をバイパスしてマージしたときの保険になるが、本番のビルドのトークンに D1 の読み取りの権限が要る。
 - `iclub-reserve-preview` のビルドのトークンが、`develop` のビルドとほかのブランチ（Dependabot のブランチを含む）のビルドで同じものかを確かめる。
-- 作業の一覧（この ADR を承認した後に行う）:
-  - Cloudflare: `iclub-reserve` の本番以外のブランチのビルドを `release/*`・`hotfix/*` に絞り（`branch_includes`）、デプロイコマンドを dry-run にし、プレビューのベースにビルドの変数を置く。`iclub-reserve-preview` の `branch_excludes` に `main` を入れる。D1 の編集を足したビルドのトークンを作り、`develop` のデプロイコマンドを変える。
-  - GitHub: GitHub App を作り、トークンを作るための secret を置く。Environment（`production`）を作る。`main` の Ruleset の必須のチェックに `Workers Builds: iclub-reserve`・`Version`・`Migration Plan`・`Release Approval` を足す（`develop` には `Migration Plan` だけ）。
-  - リポジトリ: `package.json` に `version` を足す。`ci.yml` の `pull_request` に `main` を足す。決定 2・3・5・8・9 のワークフローを書く。README の「マイグレーションの適用」を書き直す。
+- 1 つのクエリの途中で落ちたときに前の文が残らないことを、本番の D1 でも確かめる（決定 6。ローカルの D1 でだけ確かめた）。
+- 作業の一覧:
+  - Cloudflare: D1 Read のトークン（`Migration Plan` 用）と、D1 Edit のトークン（`Release Approval` 用）を作る。`iclub-reserve` の本番以外のブランチのビルドを `release/*`・`hotfix/*` に絞り（`branch_includes`）、デプロイコマンドを dry-run にし、プレビューのベースにビルドの変数を置く。`iclub-reserve-preview` の `branch_excludes` に `main` を入れる。D1 の編集を足したビルドのトークンを作り、`develop` のデプロイコマンドを変える。
+  - GitHub: GitHub App（Contents・Pull requests・Workflows の読み書き）を作ってリポジトリに入れ、Ruleset `release` のバイパスに足す。Environment `release-bot`（対象のブランチは `develop`。変数 `RELEASE_BOT_CLIENT_ID`・secret `RELEASE_BOT_PRIVATE_KEY`）と、Environment `production`（対象のブランチは `refs/pull/*/merge`。必須のレビュアーと自己承認の禁止。secret `CLOUDFLARE_D1_MIGRATE_TOKEN`）を作る。リポジトリの secret に `CLOUDFLARE_ACCOUNT_ID`・`CLOUDFLARE_D1_READ_TOKEN` を置く。`main` の Ruleset の必須のチェックに `Version`・`Migration Plan`・`Release Approval` を足し（`Workers Builds: iclub-reserve` は足した）、`develop` の Ruleset に `Migration Plan` を足す。
+  - リポジトリ: 済んだ（`package.json` の `version`、`ci.yml` の `main`、決定 2・3・5・8・9 のワークフローと `scripts/release/`、README の「マイグレーションの適用」）。
 
 ## 関連
 
