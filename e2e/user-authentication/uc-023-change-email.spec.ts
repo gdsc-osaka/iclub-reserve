@@ -48,7 +48,7 @@ test.describe("UC-023 メールアドレスを変更する", { tag: "@UC-023" },
 
     // 3. 新しいアドレスに届いた認証コードを入れる
     await expect(dialog.getByText("新しいアドレスでの確認 (3/3)")).toBeVisible();
-    const newCode = await readLatestOtp(db, otpIdentifier.changeEmail(user.email, newEmail));
+    const newCode = await readLatestOtp(db, otpIdentifier.changeEmail(user.id, newEmail));
     expect(newCode, "新しいアドレスへの認証コードが DB に無い").not.toBeNull();
     await dialog.getByLabel("認証コード").fill(newCode ?? "");
     await dialog.getByRole("button", { name: "変更を完了する" }).click();
