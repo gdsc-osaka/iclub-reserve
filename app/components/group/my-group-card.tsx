@@ -2,6 +2,13 @@ import { ChevronRight, Users } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "~/components/ui/empty";
 import { AppArea } from "~/lib/app-area";
 import { toGroupDetailPath } from "~/lib/group-paths";
 
@@ -43,16 +50,16 @@ export function MyGroupCard({ group }: Readonly<{ group: MyGroup }>) {
  */
 export function NoGroupsCard() {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center">
-      <p className="text-sm font-medium">まだどの団体にも所属していません</p>
-      <p className="mt-1.5 text-sm text-muted-foreground">
-        団体に招待されると、ここに表示されます。
-      </p>
-      <div className="mt-4">
+    <Empty className="border">
+      <EmptyHeader>
+        <EmptyTitle>まだどの団体にも所属していません</EmptyTitle>
+        <EmptyDescription>団体に招待されると、ここに表示されます。</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
         <Button asChild size="sm">
           <Link to="/groups/new">団体を登録</Link>
         </Button>
-      </div>
-    </div>
+      </EmptyContent>
+    </Empty>
   );
 }

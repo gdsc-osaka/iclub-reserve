@@ -1,5 +1,6 @@
 import { cn } from "cn";
 
+import { Badge } from "~/components/ui/badge";
 import { MembershipRole, membershipRoleLabel } from "~/domain/membership";
 
 /** 役割ごとの配色。管理者は primary 系で強調し、一般メンバーは muted 系で控えめにする。 */
@@ -32,15 +33,12 @@ export function MembershipRoleBadge({
   const style = membershipRoleStyle[role];
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        style.badge,
-        className,
-      )}
+    <Badge
+      variant="outline"
+      className={cn("gap-1.5 border-transparent ring-1 ring-inset", style.badge, className)}
     >
       <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
       {membershipRoleLabel[role]}
-    </span>
+    </Badge>
   );
 }

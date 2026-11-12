@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { AllowedEmailHint } from "~/components/auth/allowed-email-hint";
 import { OtpCodeForm } from "~/components/auth/otp-code-form";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -454,9 +455,9 @@ function EmailChangeDialog({
         </DialogHeader>
 
         {errorText && (
-          <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-            {errorText}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{errorText}</AlertDescription>
+          </Alert>
         )}
 
         {step === 1 && (
@@ -818,20 +819,19 @@ function PasskeyCard({
             このブラウザはパスキーに対応していません。
           </p>
         ) : passkeySupport.status === "unknown" ? null : !isFresh ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            <div className="flex items-start gap-2">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <span>
+          <Alert className="border-amber-500/30 bg-amber-500/5">
+            <ShieldAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+            {/* 文とボタンの間は、AlertDescription が段落に付ける余白で空ける */}
+            <AlertDescription>
+              <p>
                 安全のため、もう一度ログインしてから追加してください（最後のログインから 24
                 時間以上たっています）。
-              </span>
-            </div>
-            <div>
+              </p>
               <Button variant="outline" size="sm" onClick={() => void handleReLogin()}>
                 もう一度ログイン
               </Button>
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
         ) : (
           <div>
             <Button

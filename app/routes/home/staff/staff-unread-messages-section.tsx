@@ -2,6 +2,7 @@ import { Check, CornerDownLeft, MessageSquareText } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { AppArea } from "~/lib/app-area";
 import { formatMonthDay, formatRelativeTime, formatTimeRange } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
@@ -52,9 +53,11 @@ export function StaffUnreadMessagesSection({
       {isUnavailable && <SectionUnavailableAlert what="未読メッセージ" forStaff />}
 
       {items.length === 0 && !isUnavailable && (
-        <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          未読のメッセージはありません
-        </p>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyDescription>未読のメッセージはありません</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {items.length > 0 && (

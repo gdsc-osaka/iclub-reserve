@@ -5,6 +5,13 @@ import { ReservationStatusBadge } from "~/components/reservation/reservation-sta
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "~/components/ui/empty";
 import { AppArea } from "~/lib/app-area";
 import { formatDaysUntil, formatMonthDay, formatMonthDayParts, formatTime } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
@@ -49,15 +56,17 @@ export function UpcomingSection({
       {isUnavailable && <SectionUnavailableAlert what="今後の予約" />}
 
       {reservations.length === 0 && !isUnavailable && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card p-6 text-center">
-          <p className="text-sm font-medium">今後の予約はありません</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            空き状況を確認して、予約を申請できます。
-          </p>
-          <Button asChild size="sm" variant="outline" className="mt-3">
-            <Link to="/availability">空き状況を見る</Link>
-          </Button>
-        </div>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyTitle>今後の予約はありません</EmptyTitle>
+            <EmptyDescription>空き状況を確認して、予約を申請できます。</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/availability">空き状況を見る</Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
       )}
 
       {first !== null && (

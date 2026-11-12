@@ -1,5 +1,7 @@
 import { cn } from "cn";
 
+import { Badge } from "~/components/ui/badge";
+
 /**
  * 施設・設備の状態を利用者向けの日本語にする。
  */
@@ -27,15 +29,12 @@ export function FacilityStatusBadge({
   const style = isActive ? facilityStatusStyle.active : facilityStatusStyle.inactive;
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        style.badge,
-        className,
-      )}
+    <Badge
+      variant="outline"
+      className={cn("gap-1.5 border-transparent ring-1 ring-inset", style.badge, className)}
     >
       <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
       {facilityStatusLabel(isActive)}
-    </span>
+    </Badge>
   );
 }

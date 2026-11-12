@@ -6,8 +6,16 @@ import { formatChanges } from "~/components/audit-log/format-changes";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "~/components/ui/pagination";
 import {
   Select,
   SelectContent,
@@ -280,9 +288,11 @@ export default function StaffAuditLogRoute({ loaderData }: Route.ComponentProps)
 
       {/* 履歴は表ではなく行のリストにして、幅 320px のスマホでも横スクロールさせない */}
       {items.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-          条件に合う操作履歴はありません
-        </div>
+        <Empty className="border p-10">
+          <EmptyHeader>
+            <EmptyDescription>条件に合う操作履歴はありません</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <ol aria-label="操作履歴" className="flex flex-col gap-3">
           {items.map((item) => {
@@ -345,30 +355,28 @@ export default function StaffAuditLogRoute({ loaderData }: Route.ComponentProps)
       )}
 
       {/* ページ送りリンク */}
-      <nav aria-label="ページ送り" className="flex items-center justify-between pt-2">
-        <div>
-          {params.page > 1 ? (
-            <Link
-              to={toAuditLogSearchPath({ ...params, page: params.page - 1 })}
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              ← 新しい履歴
-            </Link>
-          ) : (
-            <span />
-          )}
-        </div>
-        <div>
-          {hasNextPage && (
-            <Link
-              to={toAuditLogSearchPath({ ...params, page: params.page + 1 })}
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              古い履歴 →
-            </Link>
-          )}
-        </div>
-      </nav>
+      {(params.page > 1 || hasNextPage) && (
+        <Pagination aria-label="ページ送り" className="pt-2">
+          <PaginationContent className="w-full">
+            {params.page > 1 && (
+              <PaginationItem>
+                <PaginationPrevious
+                  to={toAuditLogSearchPath({ ...params, page: params.page - 1 })}
+                  text="新しい履歴"
+                />
+              </PaginationItem>
+            )}
+            {hasNextPage && (
+              <PaginationItem className="ms-auto">
+                <PaginationNext
+                  to={toAuditLogSearchPath({ ...params, page: params.page + 1 })}
+                  text="古い履歴"
+                />
+              </PaginationItem>
+            )}
+          </PaginationContent>
+        </Pagination>
+      )}
     </main>
   );
 }

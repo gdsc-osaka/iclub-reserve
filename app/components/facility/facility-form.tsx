@@ -1,7 +1,10 @@
 import { cn } from "cn";
+import { CircleAlert } from "lucide-react";
 import { Link } from "react-router";
 
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
@@ -47,12 +50,10 @@ export function FacilityForm({
     <div className="flex flex-col gap-6">
       {/* フォーム全体のエラー */}
       {errors.formError && (
-        <div
-          role="alert"
-          className="rounded-md bg-destructive/15 p-4 text-sm font-medium text-destructive"
-        >
-          {errors.formError}
-        </div>
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden />
+          <AlertDescription>{errors.formError}</AlertDescription>
+        </Alert>
       )}
 
       {/* 施設名 */}
@@ -120,12 +121,7 @@ export function FacilityForm({
               className="h-24 w-24 rounded-md border object-cover"
             />
             <div className="flex items-center gap-2">
-              <input
-                id="remove_photo"
-                name="remove_photo"
-                type="checkbox"
-                className="size-4 rounded border-gray-300 text-primary focus:ring-primary"
-              />
+              <Checkbox id="remove_photo" name="remove_photo" />
               <Label htmlFor="remove_photo" className="text-sm cursor-pointer">
                 現在の写真を外す
               </Label>
@@ -220,12 +216,10 @@ export function FacilityForm({
       {/* 登録時のみ: 有効/無効チェックボックス（既定は有効） */}
       {mode === "create" && (
         <div className="flex items-center gap-2 pt-2">
-          <input
+          <Checkbox
             id="is_active"
             name="is_active"
-            type="checkbox"
             defaultChecked={initialValues.isActive ?? true}
-            className="size-4 rounded border-gray-300 text-primary focus:ring-primary"
           />
           <Label htmlFor="is_active" className="text-sm font-medium cursor-pointer">
             登録後すぐに予約を受け付ける（有効にする）

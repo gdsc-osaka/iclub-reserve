@@ -2,6 +2,7 @@ import { Activity, Clock } from "lucide-react";
 import { Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
+import { Empty, EmptyHeader, EmptyTitle } from "~/components/ui/empty";
 import {
   AuditLogTargetType,
   auditLogActionLabel,
@@ -44,9 +45,11 @@ export function RecentActivitySection({
       {isUnavailable && <SectionUnavailableAlert what="団体の最近の動き" />}
 
       {activities.length === 0 && !isUnavailable && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-card p-6 text-center">
-          <p className="text-sm font-medium">最近の動きはありません</p>
-        </div>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyTitle>最近の動きはありません</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {activities.length > 0 && (
