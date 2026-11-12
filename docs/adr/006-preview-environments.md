@@ -46,7 +46,7 @@
 
 - Better Auth の `trustedOrigins` に `https://*.iclub-preview.gdgoc-osaka.jp` を足す (`buildPreviewTrustedOrigins`)。デプロイごとの URL (`<デプロイ ID>-<ブランチ名>.iclub-preview...`) にも一致する。
 - passkey プラグインの `origin` は、プレビューのときだけ未指定にする (`toPasskeyOrigin`)。ブランチごとに origin が違い、`origin` はワイルドカードを受け付けないため。
-  期待値はリクエストの Origin ヘッダーになるが、その Origin は先に trustedOrigins の検査を通っている。さらにブラウザは rpID の配下の origin にしかパスキーを使わせないので、信頼する範囲は `iclub-preview.gdgoc-osaka.jp` とそのサブドメインに限られる。
+  未指定だと、passkey プラグインはブラウザが報告した origin を、trustedOrigins に完全一致で載っているときだけ受け入れる (1.7.18 時点。ワイルドカードは数えない)。そこで trustedOrigins を関数にし、リクエストを受けたブランチ自身の origin をリクエストごとに足す。
 - 本番とローカルは、これまでどおり `BETTER_AUTH_URL` の origin に固定する。
 
 ### 4. Queue の consumer と Cron は `develop` 本体に残す

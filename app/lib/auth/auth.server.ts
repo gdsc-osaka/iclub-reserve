@@ -68,12 +68,17 @@ const toOrigin = (baseURL: string | undefined): string | undefined =>
  *
  * プレビューだけは固定しない。派生ブランチの Preview は `<ブランチ名>.<代表 URL のホスト名>`
  * で公開され（ADR-006）、origin がブランチごとに違うため、1 つの値に決められない。
- * Better Auth の `origin` はワイルドカードを受け付けないので、未指定にして
- * リクエストの Origin ヘッダーを期待値に使わせる。
+ * Better Auth の `origin` はワイルドカードを受け付けず、インスタンスも isolate 内で
+ * 使い回すので、リクエストごとに変えることもできない。
  *
- * その Origin は、先に trustedOrigins（代表 URL とそのサブドメイン）の検査を通ったものだけ。
- * さらにブラウザは rpID（代表 URL のホスト名）の配下の origin にしかパスキーを使わせないので、
- * 信頼できる範囲は代表 URL のサブドメインに限られる。
+ * 未指定にすると、passkey プラグインは baseURL の origin に加えて、ブラウザが報告した
+ * origin を `trustedOrigins` に完全一致で載っている場合だけ受け入れる（ワイルドカードは数えない）。
+ * そこでプレビューの trustedOrigins には、リクエストを受けたブランチ自身の origin を
+ * リクエストごとに足している（buildPreviewTrustedOrigins）。
+ *
+ * なお @better-auth/passkey 1.7.15 では、未指定のときリクエストの Origin ヘッダーを
+ * そのまま期待値に使っていた。1.7.18 では上の挙動になっており、そのままではブランチの
+ * Preview でパスキーの登録・ログインが失敗するため、trustedOrigins 側で補っている。
  */
 const toPasskeyOrigin = (appEnv: Env["APP_ENV"], baseURL: string | undefined): string | undefined =>
   appEnv === "preview" ? undefined : toOrigin(baseURL);
@@ -103,9 +108,14 @@ const createAuth = () => {
      * baseURL の origin は Better Auth が自動で足すので、それ以外を渡す。
      *
      * プレビューだけ、ブランチごとのプレビュー URL を信頼する必要がある。
+     * パスキーの検証にリクエストを受けたブランチの origin が要るので、関数にして
+     * リクエストごとに作る（Better Auth は関数を渡すとリクエストごとに呼ぶ）。
      * 理由と作り方は buildPreviewTrustedOrigins のコメントを参照。
      */
-    trustedOrigins: env.APP_ENV === "preview" ? buildPreviewTrustedOrigins(BETTER_AUTH_URL) : [],
+    trustedOrigins:
+      env.APP_ENV === "preview"
+        ? (request) => buildPreviewTrustedOrigins(BETTER_AUTH_URL, request?.url)
+        : [],
 
     database: drizzleAdapter(createDb(env.DB), {
       provider: "sqlite",
