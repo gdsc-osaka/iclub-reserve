@@ -9,9 +9,11 @@ import {
   ScrollRestoration,
 } from "react-router";
 
+import { ConnectionLost } from "~/components/layout/connection-lost";
 import { NavigationProgress } from "~/components/navigation-progress";
 import { Toaster } from "~/components/ui/sonner";
 import { getRequestUser, requireAuthentication } from "~/lib/auth/auth-session.server";
+import { isNetworkError } from "~/lib/network-error";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -146,6 +148,14 @@ export default function App() {
  * （例: app/routes/groups/$groupId/route.tsx）。
  */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  /*
+   * 通信が切れて読み直せなかったときは、接続が戻りしだい元の画面に戻す（ADR-019 決定 5）。
+   * 読み直しでは root の loader も一緒に失敗するので、エラーは外枠ではなくここに届く。
+   */
+  if (isNetworkError(error)) {
+    return <ConnectionLost />;
+  }
+
   let message = "エラーが発生しました";
   let details = "時間をおいて、もう一度お試しください。";
   let stack: string | undefined;
