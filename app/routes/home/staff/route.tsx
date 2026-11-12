@@ -15,11 +15,13 @@ import { reservationActionErrors } from "~/routes/_shared/reservation-error.serv
 import { changeReservationStatus } from "~/routes/_shared/reservation-transition.server";
 
 import type { Route } from "./+types/route";
+import { STAFF_DASHBOARD_REVALIDATE_INTERVAL_MS } from "../auto-revalidate";
 import { DashboardHeader } from "../dashboard-header";
 import { HomeIntent } from "../home-intent";
 import { loadSection } from "../load-section.server";
 import { markReservationRead } from "../mark-read.server";
 import { readFormText } from "../read-form-text";
+import { useAutoRevalidate } from "../use-auto-revalidate";
 import { StaffPendingGroupsSection } from "./staff-pending-groups-section";
 import { StaffPendingSection } from "./staff-pending-section";
 import { StaffTilesSection } from "./staff-tiles-section";
@@ -190,9 +192,14 @@ export default function StaffHome({ loaderData }: Route.ComponentProps) {
   const { pending, unlockRequired, unreadMessages, pendingGroups, today } = loaderData;
   const now = new Date(loaderData.now);
 
+  useAutoRevalidate({
+    loadedAt: loaderData.now,
+    intervalMs: STAFF_DASHBOARD_REVALIDATE_INTERVAL_MS,
+  });
+
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6">
-      <DashboardHeader now={now} area={AppArea.Staff} />
+      <DashboardHeader now={now} area={AppArea.Staff} showLoadedTime />
 
       <StaffTilesSection
         counts={{

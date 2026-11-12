@@ -37,6 +37,7 @@ import { markReservationRead } from "./mark-read.server";
 import { readFormText } from "./read-form-text";
 import { RecentActivitySection } from "./recent-activity-section";
 import { UpcomingSection } from "./upcoming-section";
+import { useAutoRevalidate } from "./use-auto-revalidate";
 
 export function meta() {
   return [{ title: "ダッシュボード | i-Club 予約システム" }];
@@ -274,6 +275,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { groups, invitations, groupUnread, upcoming, recentActivities } = loaderData;
   const now = new Date(loaderData.now);
+
+  // 利用者は開いて閉じる使い方が中心で、相手の動きはメールでも届くので、定期的には読み直さない。ホーム画面のアプリは裏に回っても画面を持ち続けるので、戻ってきたときだけ読み直す（ADR-019）。
+  useAutoRevalidate({ loadedAt: loaderData.now, intervalMs: null });
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6">
