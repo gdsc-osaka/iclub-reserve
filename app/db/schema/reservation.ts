@@ -30,67 +30,86 @@ export const facilityTable = sqliteTable("facility", {
     .$defaultFn(() => new Date()),
 });
 
-export const reservationTable = sqliteTable("reservation", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
+/**
+ * 予約テーブル（INFO-001）。
+ *
+ * 索引: D1 は読んだ行の数で費用を数えるので、ダッシュボードの区画が全件を読まないようにする。
+ * 索引が無いと、承認待ちの行ごとに重なる予約を全件から探し、予約 4,000 件で 1 回の表示に約 64 万行を読んでいた。
+ * 「開始 < 終わり かつ 終了 > 始まり」の重なりの条件は 1 つの列でしか範囲を絞れないので、
+ * どの索引も終了日時を最後に置き、終わった予約を読み飛ばせるようにしている。
+ */
+export const reservationTable = sqliteTable(
+  "reservation",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
 
-  groupId: text("group_id")
-    .references(() => groupTable.id)
-    .notNull(),
+    groupId: text("group_id")
+      .references(() => groupTable.id)
+      .notNull(),
 
-  facilityId: text("facility_id")
-    .references(() => facilityTable.id)
-    .notNull(),
+    facilityId: text("facility_id")
+      .references(() => facilityTable.id)
+      .notNull(),
 
-  startAt: integer("start_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
+    startAt: integer("start_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
 
-  endAt: integer("end_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
+    endAt: integer("end_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
 
-  headCount: integer("head_count").notNull(),
+    headCount: integer("head_count").notNull(),
 
-  note: text("note"),
+    note: text("note"),
 
-  status: text("status")
-    .$type<ReservationStatus>()
-    .notNull()
-    .$default(() => ReservationStatus.Provisional),
+    status: text("status")
+      .$type<ReservationStatus>()
+      .notNull()
+      .$default(() => ReservationStatus.Provisional),
 
-  /**
-   * 施設の解錠の手配（INFO-001 / STATE-004 / COND-027）。
-   *
-   * "required"（要手配）、"arranged"（手配済み）、"not_required"（不要）。
-   * null は未定を表す。
-   */
-  unlockArrangement: text("unlock_arrangement").$type<UnlockArrangement>(),
+    /**
+     * 施設の解錠の手配（INFO-001 / STATE-004 / COND-027）。
+     *
+     * "required"（要手配）、"arranged"（手配済み）、"not_required"（不要）。
+     * null は未定を表す。
+     */
+    unlockArrangement: text("unlock_arrangement").$type<UnlockArrangement>(),
 
-  statusReason: text("status_reason"),
+    statusReason: text("status_reason"),
 
-  createdBy: text("created_by")
-    .notNull()
-    .references(() => user.id),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id),
 
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
 
-  /**
-   * 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）。
-   *
-   * 作成日時・更新日時と違って既定値を持たせていない。作成日時と別々に既定値を取ると
-   * 1 ミリ秒ずれることがあり、施設・日時を変えていないのに「申し込み直した」予約に見えてしまう。
-   * 書き込む側で必ず決めさせるため、書き忘れると型エラーになるようにしてある。
-   */
-  requestedAt: integer("requested_at", { mode: "timestamp_ms" }).notNull(),
+    /**
+     * 申請日時。いまの施設・時間帯を申し込んだ日時（INFO-001.requested_at）。
+     *
+     * 作成日時・更新日時と違って既定値を持たせていない。作成日時と別々に既定値を取ると
+     * 1 ミリ秒ずれることがあり、施設・日時を変えていないのに「申し込み直した」予約に見えてしまう。
+     * 書き込む側で必ず決めさせるため、書き忘れると型エラーになるようにしてある。
+     */
+    requestedAt: integer("requested_at", { mode: "timestamp_ms" }).notNull(),
 
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    // 重なりの判定と、施設ごとの今日の予約（施設・状態が同じで、時間帯が重なる予約）
+    index("reservation_facility_status_end_at_idx").on(table.facilityId, table.status, table.endAt),
+    // 状態ごとの一覧・件数（承認待ち・解錠の手配が要る予約など）
+    index("reservation_status_end_at_idx").on(table.status, table.endAt),
+    // 所属団体ごとの予約（利用者のダッシュボードのこれからの予約・未読）
+    index("reservation_group_end_at_idx").on(table.groupId, table.endAt),
+  ],
+);
 
 export const reservationMessageTable = sqliteTable(
   "reservation_message",
@@ -115,6 +134,8 @@ export const reservationMessageTable = sqliteTable(
   },
   (table) => [
     index("reservation_message_reservation_sent_at_idx").on(table.reservationId, table.sentAt),
+    // 新しい順に読むメッセージ（事務局のダッシュボードの未読のメッセージ）
+    index("reservation_message_sent_at_idx").on(table.sentAt),
   ],
 );
 
