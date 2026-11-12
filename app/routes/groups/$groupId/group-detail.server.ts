@@ -13,6 +13,7 @@ import { createQueueMailOutboxNotifier } from "~/infra/mail/mail-queue.server";
 import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { type AppArea, toAreaDashboardPath } from "~/lib/app-area";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { parseHistoryPage } from "~/lib/history-page";
 import { generateRandomToken } from "~/lib/random-token";
 import { requireAreaUser, toAreaWhere } from "~/routes/_shared/app-area.server";
@@ -144,7 +145,9 @@ export async function handleGroupDetailAction(args: HandleGroupDetailActionArgs,
     }
 
     // 同じ内容の再送信を防ぐ PRG。戻ったあとはローダーが新しい名前を読み直す
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(args.request, { title: "団体名を変更しました" }),
+    });
   }
 
   // 2. メンバーの役割変更（昇格・降格）
@@ -176,7 +179,9 @@ export async function handleGroupDetailAction(args: HandleGroupDetailActionArgs,
       } satisfies GroupActionData;
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(args.request, { title: "役割を変更しました" }),
+    });
   }
 
   // 3. メンバーの削除
@@ -214,10 +219,14 @@ export async function handleGroupDetailAction(args: HandleGroupDetailActionArgs,
      * 事務局の画面では所属に関わらず団体を見られるので、下の "." でこの画面に残す。
      */
     if (result.value.removedUserId === user.id && !actsAsStaff) {
-      return redirect(toAreaDashboardPath(area));
+      return redirect(toAreaDashboardPath(area), {
+        headers: flashToastHeaders(args.request, { title: "団体から自分を削除しました" }),
+      });
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(args.request, { title: "メンバーを団体から削除しました" }),
+    });
   }
 
   // 4. 招待の送信
@@ -260,7 +269,9 @@ export async function handleGroupDetailAction(args: HandleGroupDetailActionArgs,
       } satisfies GroupActionData;
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(args.request, { title: "招待を送りました" }),
+    });
   }
 
   // 5. 招待の取り消し
@@ -289,7 +300,9 @@ export async function handleGroupDetailAction(args: HandleGroupDetailActionArgs,
       } satisfies GroupActionData;
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(args.request, { title: "招待を取り消しました" }),
+    });
   }
 
   // 6. カレンダー購読 URL の発行
@@ -316,7 +329,9 @@ export async function handleGroupDetailAction(args: HandleGroupDetailActionArgs,
       } satisfies GroupActionData;
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(args.request, { title: "購読 URL を発行しました" }),
+    });
   }
 
   // 7. カレンダー購読 URL の作り直し
@@ -343,7 +358,12 @@ export async function handleGroupDetailAction(args: HandleGroupDetailActionArgs,
       } satisfies GroupActionData;
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(args.request, {
+        title: "購読 URL を作り直しました",
+        description: "新しい URL をカレンダーアプリに登録し直してください。",
+      }),
+    });
   }
 
   // この画面が出している操作以外は受け付けない

@@ -13,6 +13,7 @@ import { GROUP_NAME_MAX_LENGTH } from "~/domain/group/group-name";
 import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { groupActionErrors } from "~/routes/_shared/group-error.server";
 import { createGroupUseCase } from "~/usecases/group/create-group";
 
@@ -79,7 +80,12 @@ export async function action({ request, context }: Route.ActionArgs) {
    * これが BUC-010 の最後のステップ（作成完了と、有効化までは申請できない旨の表示）の要件を
    * そのまま満たすため、個別の完了画面を新設せずダッシュボードへリダイレクトする。
    */
-  return redirect("/");
+  return redirect("/", {
+    headers: flashToastHeaders(request, {
+      title: "団体を登録しました",
+      description: "事務局の承認後、予約を申請いただけます。",
+    }),
+  });
 }
 
 /**

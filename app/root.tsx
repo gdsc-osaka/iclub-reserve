@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { useEffect } from "react";
 import {
+  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -11,7 +12,9 @@ import {
 
 import { NavigationProgress } from "~/components/navigation-progress";
 import { Toaster } from "~/components/ui/sonner";
+import { useFlashToast } from "~/hooks/use-flash-toast";
 import { getRequestUser, requireAuthentication } from "~/lib/auth/auth-session.server";
+import { readFlashToast } from "~/lib/flash-toast.server";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -33,8 +36,13 @@ export const middleware: Route.MiddlewareFunction[] = [requireAuthentication];
  * サーバーへ問い合わせないため、root にローダーがないと
  * その遷移だけログインの確認をすり抜けてしまう。
  */
-export function loader({ context }: Route.LoaderArgs) {
-  return { user: getRequestUser(context), staffContactEmail: env.STAFF_CONTACT_EMAIL };
+export function loader({ request, context }: Route.LoaderArgs) {
+  // action が残した成功の知らせ（app/lib/flash-toast.server.ts）。読んだら Cookie を消す
+  const { toast: flashToast, headers } = readFlashToast(request);
+  return data(
+    { user: getRequestUser(context), staffContactEmail: env.STAFF_CONTACT_EMAIL, flashToast },
+    { headers },
+  );
 }
 
 export const links: Route.LinksFunction = () => [
@@ -122,7 +130,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
+export default function App({ loaderData }: Route.ComponentProps) {
+  useFlashToast(loaderData.flashToast);
+
   return (
     <>
       {/*

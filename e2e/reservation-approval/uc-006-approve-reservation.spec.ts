@@ -150,6 +150,8 @@ test.describe("UC-006 仮予約を承認・却下する", { tag: "@UC-006" }, ()
     await expect(hint).toBeHidden();
     await dialog.getByRole("button", { name: "承認する" }).click();
 
+    await expect(page.getByText("予約を承認しました")).toBeVisible();
+
     // 承認済みになり、添えたメッセージが予約のメッセージの一覧に並ぶ
     await expect(page.getByText("承認済み", { exact: true }).first()).toBeVisible();
     const messageList = page.getByRole("list", { name: "メッセージの一覧" });

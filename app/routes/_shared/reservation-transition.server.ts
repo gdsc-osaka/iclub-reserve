@@ -9,6 +9,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
 import { logReservationError } from "~/routes/_shared/reservation-error.server";
+import { toReservationTransitionToast } from "~/routes/_shared/reservation-transition-toast";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
 import { resolveProvisionalOverlapUseCase } from "~/usecases/reservation/resolve-provisional-overlap";
@@ -87,10 +88,19 @@ export const changeReservationStatus = async (
                 error,
               );
             }
-            return approval;
+            const rejectedCount = rejectReservationIds.length - skipped.length;
+            return {
+              ...approval,
+              toast: toReservationTransitionToast(input.transition, rejectedCount),
+            };
           },
         )
-      : await changeReservationStatusUseCase(deps, { ...args, transition: input.transition });
+      : (await changeReservationStatusUseCase(deps, { ...args, transition: input.transition })).map(
+          (approval) => ({
+            ...approval,
+            toast: toReservationTransitionToast(input.transition, 0),
+          }),
+        );
 
   if (result.isOk() && result.value.messageId !== null) {
     await markReservationReadUseCase(

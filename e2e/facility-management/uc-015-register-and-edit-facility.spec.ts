@@ -30,6 +30,7 @@ test.describe("UC-015 施設・設備を登録・編集する", { tag: "@UC-015"
 
     // 一覧に戻り、写真が読み込めている
     await expect(page).toHaveURL("/staff/facilities");
+    await expect(page.getByText("施設・設備を登録しました")).toBeVisible();
     const photo = page.getByRole("img", { name });
     await expect(photo).toBeVisible();
     await expect(photo).not.toHaveJSProperty("naturalWidth", 0);

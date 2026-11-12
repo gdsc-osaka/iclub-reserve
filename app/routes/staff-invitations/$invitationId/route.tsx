@@ -11,6 +11,7 @@ import { InvitationResponseCard } from "~/components/invitation/invitation-respo
 import { createDb } from "~/infra/db";
 import { createStaffInvitationRepository } from "~/infra/staff/staff-invitation-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { formatDateTime } from "~/lib/date";
 import {
   staffInvitationActionErrors,
@@ -101,7 +102,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
 
     // 承諾成功時は事務局一覧へ案内する（一覧に自分が並ぶので事務局になったことが分かる）
-    return redirect("/staff/staff-members");
+    return redirect("/staff/staff-members", {
+      headers: flashToastHeaders(request, { title: "事務局に加わりました" }),
+    });
   }
 
   // 2. 辞退
@@ -130,7 +133,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
      * 辞退するとその招待は二度と開けなくなるので、同じ画面に戻すと 404 になってしまう。
      * 操作は成功しているのに失敗したように見えるため、ダッシュボード（"/"）へ送る。
      */
-    return redirect("/");
+    return redirect("/", {
+      headers: flashToastHeaders(request, { title: "招待を辞退しました" }),
+    });
   }
 
   return {

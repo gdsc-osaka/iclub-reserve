@@ -10,6 +10,7 @@ import { createMembershipRepository } from "~/infra/membership/membership-repo";
 import { createReservationRepository } from "~/infra/reservation/reservation-repo";
 import type { AppArea } from "~/lib/app-area";
 import { parseTokyoDateKey, toTokyoDateKey } from "~/lib/date";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { createApplicantGroupQuery } from "~/query/reservation/applicant-groups";
 import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import { requireAreaUser, toAreaWhere } from "~/routes/_shared/app-area.server";
@@ -228,5 +229,7 @@ export async function handleAvailabilityAction(
    * `.` は URL の階層ではなく「いま表示しているルート」を指し、React Router がルートのパスから
    * 解決する（事務局の予約一覧と同じ）。施設と週を外さないよう、クエリは残す。
    */
-  return redirect(`.${new URL(args.request.url).search}`);
+  return redirect(`.${new URL(args.request.url).search}`, {
+    headers: flashToastHeaders(args.request, result.value.toast),
+  });
 }

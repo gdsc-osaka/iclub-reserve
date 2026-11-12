@@ -10,6 +10,7 @@ import { createStaffInvitationRepository } from "~/infra/staff/staff-invitation-
 import { createStaffMemberRepository } from "~/infra/staff/staff-member-repo";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { findStaffManagement } from "~/query/staff/staff-management";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
 import { staffActionErrors } from "~/routes/_shared/staff-error.server";
@@ -101,7 +102,9 @@ export async function action({ request, context }: Route.ActionArgs) {
       } satisfies StaffActionData;
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(request, { title: "事務局への招待を送りました" }),
+    });
   }
 
   // 2. 招待の取り消し
@@ -128,7 +131,9 @@ export async function action({ request, context }: Route.ActionArgs) {
       } satisfies StaffActionData;
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(request, { title: "招待を取り消しました" }),
+    });
   }
 
   // 3. 事務局権限の解除
@@ -160,10 +165,14 @@ export async function action({ request, context }: Route.ActionArgs) {
      * この画面を含む事務局画面を開けなくなるため、ホーム画面（"/"）へ戻す。
      */
     if (result.value.revokedSelf) {
-      return redirect("/");
+      return redirect("/", {
+        headers: flashToastHeaders(request, { title: "自分の事務局権限を解除しました" }),
+      });
     }
 
-    return redirect(".");
+    return redirect(".", {
+      headers: flashToastHeaders(request, { title: "事務局権限を解除しました" }),
+    });
   }
 
   return redirect(".");
