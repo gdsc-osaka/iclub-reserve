@@ -51,14 +51,11 @@ export function PasskeyRegistrationStep({ onDone }: Readonly<PasskeyRegistration
     setPending(true);
     setErrorMessage(null);
 
-    // 名前は付けずに登録する。
-    // 「iPhone の Face ID」のような分かりやすい名前は、
-    // パスキーの一覧を作るとき（マイページ）に、保存されている
-    // 認証器の情報から組み立てる予定のため、ここでは決めない。
+    // 名前は付けずに登録する。保存する名前はサーバーが付ける（COND-020）。
     //
-    // なお `name` を渡すと、その文字列は保存名になるだけでなく、
-    // OS のパスキー保存ダイアログや一覧に出るアカウント名も置き換えてしまう。
-    // 渡さなければメールアドレスが使われる（利用者にとってはこちらの方が分かりやすい）。
+    // `name` を渡すと、保存する名前だけでなく、OS のパスキー保存ダイアログや一覧に出る
+    // アカウント名（メールアドレス）も置き換わってしまう。
+    // 端末に渡す表示名（氏名）は、サーバーが登録オプションに入れる。
     const { error } = await authClient.passkey.addPasskey();
 
     setPending(false);

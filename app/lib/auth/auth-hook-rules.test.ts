@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  applyGenerateRegisterOptionsRule,
   applyUpdatePasskeyRule,
   applyUpdateUserRule,
   applyVerifyRegistrationRule,
@@ -133,6 +134,83 @@ describe("applyVerifyRegistrationRule", () => {
     expect(updatedBody.name).not.toBeUndefined();
     expect(updatedBody.credential).toEqual({ id: "cred-1" });
     expect(updatedBody.counter).toBe(0);
+  });
+});
+
+describe("applyGenerateRegisterOptionsRule", () => {
+  it("表示名が氏名になり、user.name・user.id・ほかの項目は変わらない", () => {
+    const returned = {
+      challenge: "challenge-1",
+      rp: { name: "i-Club 予約システム", id: "localhost" },
+      user: {
+        id: "user-1",
+        name: "user@osaka-u.ac.jp",
+        displayName: "user@osaka-u.ac.jp",
+      },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+    };
+
+    const result = applyGenerateRegisterOptionsRule(returned, "阪大 太郎");
+
+    expect(result).toEqual({
+      challenge: "challenge-1",
+      rp: { name: "i-Club 予約システム", id: "localhost" },
+      user: {
+        id: "user-1",
+        name: "user@osaka-u.ac.jp",
+        displayName: "阪大 太郎",
+      },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+    });
+  });
+
+  it("入力のオブジェクトを書き換えない", () => {
+    const user = {
+      id: "user-1",
+      name: "user@osaka-u.ac.jp",
+      displayName: "user@osaka-u.ac.jp",
+    };
+    const returned = {
+      challenge: "challenge-1",
+      user,
+    };
+
+    const result = applyGenerateRegisterOptionsRule(returned, "阪大 太郎");
+
+    expect(result).not.toBeNull();
+    expect(result).not.toBe(returned);
+    expect(result?.user).not.toBe(user);
+    expect(user.displayName).toBe("user@osaka-u.ac.jp");
+  });
+
+  it("氏名が null・undefined・空文字・空白だけなら null を返す", () => {
+    const returned = {
+      challenge: "challenge-1",
+      user: {
+        id: "user-1",
+        name: "user@osaka-u.ac.jp",
+        displayName: "user@osaka-u.ac.jp",
+      },
+    };
+
+    expect(applyGenerateRegisterOptionsRule(returned, null)).toBeNull();
+    expect(applyGenerateRegisterOptionsRule(returned, undefined)).toBeNull();
+    expect(applyGenerateRegisterOptionsRule(returned, "")).toBeNull();
+    expect(applyGenerateRegisterOptionsRule(returned, "   ")).toBeNull();
+    expect(applyGenerateRegisterOptionsRule(returned, "　")).toBeNull();
+  });
+
+  it("returned が null・文字列・user の無いオブジェクト・user.displayName が文字列でないオブジェクトなら null を返す", () => {
+    expect(applyGenerateRegisterOptionsRule(null, "阪大 太郎")).toBeNull();
+    expect(applyGenerateRegisterOptionsRule("error", "阪大 太郎")).toBeNull();
+    expect(applyGenerateRegisterOptionsRule({ challenge: "c" }, "阪大 太郎")).toBeNull();
+    expect(applyGenerateRegisterOptionsRule({ user: null }, "阪大 太郎")).toBeNull();
+    expect(
+      applyGenerateRegisterOptionsRule(
+        { user: { id: "user-1", name: "user@osaka-u.ac.jp", displayName: 123 } },
+        "阪大 太郎",
+      ),
+    ).toBeNull();
   });
 });
 

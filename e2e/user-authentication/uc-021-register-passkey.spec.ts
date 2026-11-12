@@ -27,7 +27,16 @@ test.describe("UC-021 パスキーを登録する", { tag: "@UC-021" }, () => {
 
     // パスキーを作れる端末なので、ダッシュボードの前に登録の案内（SCR-015）が出る
     await expect(page).toHaveURL("/passkey/suggest");
+    // 端末に渡す名前は、アカウント名がメールアドレス、表示名が氏名（COND-020）
+    const registerOptionsPromise = page.waitForResponse((res) =>
+      res.url().includes("/passkey/generate-register-options"),
+    );
     await page.getByRole("button", { name: "パスキーを登録" }).click();
+    const registerOptionsResponse = await registerOptionsPromise;
+    expect(registerOptionsResponse.status()).toBe(200);
+    expect(await registerOptionsResponse.json()).toMatchObject({
+      user: { name: user.email, displayName: user.name },
+    });
     await expect(page.getByText("パスキーを登録しました。")).toBeVisible();
 
     // 端末とアプリの両方にパスキーが残る
