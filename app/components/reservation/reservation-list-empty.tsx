@@ -2,7 +2,14 @@ import { CalendarDays, FilterX, Users } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "~/components/ui/empty";
 import {
   toReservationListPath,
   type ParsedReservationListParams,
@@ -31,37 +38,37 @@ export function ReservationListEmpty({
   // 1. 所属団体が 0 件の場合
   if (noGroups) {
     return (
-      <Card className="border-dashed py-8 text-center">
-        <CardHeader className="flex flex-col items-center gap-2 pb-2">
-          <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-            <Users className="size-6 text-muted-foreground" />
-          </div>
-          <CardTitle className="text-lg">まだどの団体にも所属していません</CardTitle>
-          <CardDescription className="max-w-md">
+      <Empty className="border bg-card py-8">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Users aria-hidden />
+          </EmptyMedia>
+          <EmptyTitle>まだどの団体にも所属していません</EmptyTitle>
+          <EmptyDescription>
             予約を申請するには、団体に参加するか団体を登録して、事務局の承認を受ける必要があります。
             空き状況の確認は所属がなくてもご利用いただけます。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-2">
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
           <Button asChild>
             <Link to="/availability" className="inline-flex items-center gap-2">
-              <CalendarDays className="size-4" />
+              <CalendarDays />
               空き状況を見る
             </Link>
           </Button>
-        </CardContent>
-      </Card>
+        </EmptyContent>
+      </Empty>
     );
   }
 
   // 2. 事務局の承認待ちが 0 件の場合
   if (isStaffProvisionalEmpty) {
     return (
-      <Card className="border-dashed py-10 text-center">
-        <CardContent className="flex flex-col items-center gap-2 py-4">
-          <p className="text-base font-medium text-foreground">承認を待っている申請はありません</p>
-        </CardContent>
-      </Card>
+      <Empty className="border bg-card py-10">
+        <EmptyHeader>
+          <EmptyTitle className="text-base">承認を待っている申請はありません</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
@@ -78,18 +85,18 @@ export function ReservationListEmpty({
   );
 
   return (
-    <Card className="border-dashed py-10 text-center">
-      <CardHeader className="flex flex-col items-center gap-2 pb-2">
-        <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-          <FilterX className="size-6 text-muted-foreground" />
-        </div>
-        <CardTitle className="text-lg">条件に合う予約がありません</CardTitle>
-      </CardHeader>
-      <CardContent className="pt-2">
+    <Empty className="border bg-card py-10">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <FilterX aria-hidden />
+        </EmptyMedia>
+        <EmptyTitle>条件に合う予約がありません</EmptyTitle>
+      </EmptyHeader>
+      <EmptyContent>
         <Button asChild variant="outline">
           <Link to={resetPath}>絞り込みを解除する</Link>
         </Button>
-      </CardContent>
-    </Card>
+      </EmptyContent>
+    </Empty>
   );
 }

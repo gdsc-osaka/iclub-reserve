@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { CircleAlert } from "lucide-react";
+import { data } from "react-router";
 
 import { toMyGroup, type MyGroup } from "~/components/group/my-group";
 import { NoGroupsCard } from "~/components/group/my-group-card";
@@ -13,6 +14,7 @@ import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { createReservationReadRepository } from "~/infra/reservation/reservation-read-repo";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { findUserInvitations } from "~/query/group/user-invitations";
 import { requireAreaUser } from "~/routes/_shared/app-area.server";
 import {
@@ -217,7 +219,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         result.error,
       );
     }
-    return { ok: true } as const;
+    return data({ ok: true } as const, {
+      headers: flashToastHeaders(request, { title: "すべて確認済みにしました" }),
+    });
   }
 
   // 招待を承諾する（UC-022）
@@ -238,7 +242,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         result.error,
       );
     }
-    return { ok: true } as const;
+    return data({ ok: true } as const, {
+      headers: flashToastHeaders(request, { title: "団体に参加しました" }),
+    });
   }
 
   // 招待を辞退する（UC-022）
@@ -259,7 +265,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         result.error,
       );
     }
-    return { ok: true } as const;
+    return data({ ok: true } as const, {
+      headers: flashToastHeaders(request, { title: "招待を辞退しました" }),
+    });
   }
 
   return { formError: "この操作は受け付けられませんでした。画面を読み込み直してください。" };

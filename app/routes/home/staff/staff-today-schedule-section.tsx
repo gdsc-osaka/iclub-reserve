@@ -17,6 +17,7 @@ import {
 import { layoutTimelineItems } from "~/components/reservation/timeline-layout";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { ReservationStatus } from "~/domain/reservation";
 import { AppArea, toSharedScreenPath } from "~/lib/app-area";
 import { formatTimeRange, startOfTokyoDay, tokyoMinutesOfDay } from "~/lib/date";
@@ -74,9 +75,11 @@ export function StaffTodayScheduleSection({
       {isUnavailable && <SectionUnavailableAlert what="今日の予約状況" forStaff />}
 
       {!isUnavailable && facilities.length === 0 && (
-        <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          有効な施設・設備がありません
-        </p>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyDescription>有効な施設・設備がありません</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {!isUnavailable && facilities.length > 0 && (
@@ -251,9 +254,15 @@ function TodayList({
   return (
     <div className="flex flex-col gap-2">
       {remaining.length === 0 ? (
-        <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          {reservations.length === 0 ? "今日の予約はありません" : "今日の予約はすべて終わりました"}
-        </p>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyDescription>
+              {reservations.length === 0
+                ? "今日の予約はありません"
+                : "今日の予約はすべて終わりました"}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <ul className="flex flex-col divide-y overflow-hidden rounded-xl border bg-card">
           {remaining.map((reservation) => {

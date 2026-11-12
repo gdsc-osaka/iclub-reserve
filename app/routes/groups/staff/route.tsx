@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { GroupStatusBadge, groupStatusLabel } from "~/components/group/group-status-badge";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { GroupStatus } from "~/domain/group";
 import { allowedGroupStatusTransitions } from "~/domain/group/status-transition";
 import { createDb } from "~/infra/db";
@@ -263,9 +264,11 @@ export default function StaffGroupsRoute({ loaderData, actionData }: Route.Compo
 
       {/* 団体一覧（スマホ幅 320px〜 でも横スクロールしないカード形式） */}
       {items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          該当する団体はありません
-        </div>
+        <Empty className="border p-8">
+          <EmptyHeader>
+            <EmptyDescription>該当する団体はありません</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <ul className="flex flex-col gap-3">
           {items.map((item) => (

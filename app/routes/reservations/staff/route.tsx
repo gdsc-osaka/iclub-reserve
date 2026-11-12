@@ -7,6 +7,7 @@ import { isStaffTransition, parseReservationTransition } from "~/domain/reservat
 import { createDb } from "~/infra/db";
 import { createReservationListQuery } from "~/infra/reservation/reservation-list-query";
 import { AppArea } from "~/lib/app-area";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { createUserGroupListQuery } from "~/query/user/user-group-list";
 import { requireAreaUser } from "~/routes/_shared/app-area.server";
 import { queryErrorResponse } from "~/routes/_shared/query-error.server";
@@ -132,7 +133,9 @@ export async function action({ request, context }: Route.ActionArgs) {
    *
    * 絞り込みのクエリは残す。操作のたびに外れると、一覧を見ていた場所を毎回探し直すことになる。
    */
-  return redirect(`.${new URL(request.url).search}`);
+  return redirect(`.${new URL(request.url).search}`, {
+    headers: flashToastHeaders(request, result.value.toast),
+  });
 }
 
 export default function StaffReservationListRoute({

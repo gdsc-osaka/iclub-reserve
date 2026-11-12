@@ -7,6 +7,7 @@ import { FacilityStatusBadge } from "~/components/facility/facility-status-badge
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
+import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { createDb } from "~/infra/db";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
 import {
@@ -73,18 +74,22 @@ export default function StaffFacilitiesPage({ loaderData }: Route.ComponentProps
 
       {/* 施設一覧 */}
       {items.length === 0 ? (
-        <Card className="p-8 text-center">
-          <div className="flex flex-col items-center justify-center gap-3">
-            <Wrench className="size-10 text-muted-foreground" />
-            <CardTitle className="text-lg">登録された施設・設備はありません</CardTitle>
-            <Button asChild className="mt-2">
+        <Empty className="border bg-card p-8">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Wrench aria-hidden />
+            </EmptyMedia>
+            <EmptyTitle>登録された施設・設備はありません</EmptyTitle>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild>
               <Link to="/staff/facilities/new">
-                <Plus className="size-4 mr-1.5" />
+                <Plus />
                 施設・設備を登録
               </Link>
             </Button>
-          </div>
-        </Card>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {items.map((facility) => (

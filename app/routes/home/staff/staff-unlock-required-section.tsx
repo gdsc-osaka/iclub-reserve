@@ -1,6 +1,7 @@
 import { ChevronRight, KeyRound } from "lucide-react";
 import { Link } from "react-router";
 
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { AppArea } from "~/lib/app-area";
 import { formatMonthDay, formatTimeRange } from "~/lib/date";
 import { toReservationDetailPath } from "~/lib/reservation-paths";
@@ -47,9 +48,11 @@ export function StaffUnlockRequiredSection({
       {isUnavailable && <SectionUnavailableAlert what="解錠の手配が要る予約" forStaff />}
 
       {!isUnavailable && reservations.length === 0 && (
-        <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          解錠の手配が要る予約はありません
-        </p>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyDescription>解錠の手配が要る予約はありません</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {reservations.length > 0 && (

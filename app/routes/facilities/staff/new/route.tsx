@@ -14,6 +14,7 @@ import {
 import { createR2FacilityPhotoStorage } from "~/infra/facility/r2-facility-photo-storage";
 import { createFacilityRepository } from "~/infra/facility/facility-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import {
   facilityActionErrors,
   facilityErrorResponse,
@@ -137,7 +138,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     };
   }
 
-  return redirect("/staff/facilities");
+  return redirect("/staff/facilities", {
+    headers: flashToastHeaders(request, { title: "施設・設備を登録しました" }),
+  });
 }
 
 export default function NewFacilityPage({ loaderData, actionData }: Route.ComponentProps) {

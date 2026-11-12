@@ -9,6 +9,7 @@ import {
 } from "~/components/reservation/reservation-notices";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { isShortNotice, ReservationStatus } from "~/domain/reservation";
 import { ReservationTransition } from "~/domain/reservation/transition";
 import { AppArea } from "~/lib/app-area";
@@ -61,9 +62,11 @@ export function StaffPendingSection({
       {isUnavailable && <SectionUnavailableAlert what="承認待ちの予約" forStaff />}
 
       {!isUnavailable && reservations.length === 0 && (
-        <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          承認待ちの予約はありません
-        </p>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyDescription>承認待ちの予約はありません</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {reservations.length > 0 && (

@@ -2,6 +2,7 @@ import { Building2, ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { AppArea } from "~/lib/app-area";
 import { formatMonthDay } from "~/lib/date";
 import { toGroupDetailPath } from "~/lib/group-paths";
@@ -51,9 +52,11 @@ export function StaffPendingGroupsSection({
       {isUnavailable && <SectionUnavailableAlert what="承認待ちの団体" forStaff />}
 
       {!isUnavailable && groups.length === 0 && (
-        <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          承認待ちの団体はありません
-        </p>
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyDescription>承認待ちの団体はありません</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {groups.length > 0 && (

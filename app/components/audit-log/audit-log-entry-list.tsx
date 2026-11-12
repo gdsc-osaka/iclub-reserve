@@ -1,8 +1,13 @@
-import { Link } from "react-router";
-
 import { formatChanges } from "~/components/audit-log/format-changes";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent } from "~/components/ui/card";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "~/components/ui/pagination";
 import {
   auditLogActionLabel,
   auditLogTargetTypeLabel,
@@ -104,34 +109,28 @@ export function AuditLogEntryList({
 
       {/* ページ送りリンク。1 ページに収まるときは、中身の無い nav を出さない */}
       {(page > 1 || hasNextPage) && (
-        <nav aria-label="操作履歴のページ送り" className="flex items-center justify-between pt-2">
-          <div>
-            {page > 1 ? (
-              <Link
-                to={page === 2 ? "." : `?historyPage=${page - 1}`}
-                preventScrollReset
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                ← 新しい履歴
-              </Link>
-            ) : (
-              <span />
+        <Pagination aria-label="操作履歴のページ送り" className="pt-2">
+          <PaginationContent className="w-full">
+            {page > 1 && (
+              <PaginationItem>
+                <PaginationPrevious
+                  to={page === 2 ? "." : `?historyPage=${page - 1}`}
+                  preventScrollReset
+                  text="新しい履歴"
+                />
+              </PaginationItem>
             )}
-          </div>
-          <div>
-            {hasNextPage ? (
-              <Link
-                to={`?historyPage=${page + 1}`}
-                preventScrollReset
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                古い履歴 →
-              </Link>
-            ) : (
-              <span />
+            {hasNextPage && (
+              <PaginationItem className="ms-auto">
+                <PaginationNext
+                  to={`?historyPage=${page + 1}`}
+                  preventScrollReset
+                  text="古い履歴"
+                />
+              </PaginationItem>
             )}
-          </div>
-        </nav>
+          </PaginationContent>
+        </Pagination>
       )}
     </>
   );

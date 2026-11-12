@@ -9,6 +9,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
 import { logReservationError } from "~/routes/_shared/reservation-error.server";
+import { toReservationTransitionToast } from "~/routes/_shared/reservation-transition-toast";
 import { changeReservationStatusUseCase } from "~/usecases/reservation/change-reservation-status";
 import { markReservationReadUseCase } from "~/usecases/reservation/mark-reservation-read";
 import { resolveProvisionalOverlapUseCase } from "~/usecases/reservation/resolve-provisional-overlap";
@@ -80,17 +81,26 @@ export const changeReservationStatus = async (
   const result =
     input.transition === ReservationTransition.Approve && rejectReservationIds.length > 0
       ? (await resolveProvisionalOverlapUseCase(deps, { ...args, rejectReservationIds })).map(
-          ({ approval, skipped }) => {
+          ({ approval, rejectedReservationIds, skipped }) => {
             for (const { error } of skipped) {
               logReservationError(
                 { where: `${input.where}.reject-overlap`, userId: user.id },
                 error,
               );
             }
-            return approval;
+            // 送られてきた ID の数ではなく、実際に却下できた数を出す（重複や承認対象自身の ID はユースケースが除くため）
+            return {
+              ...approval,
+              toast: toReservationTransitionToast(input.transition, rejectedReservationIds.length),
+            };
           },
         )
-      : await changeReservationStatusUseCase(deps, { ...args, transition: input.transition });
+      : (await changeReservationStatusUseCase(deps, { ...args, transition: input.transition })).map(
+          (approval) => ({
+            ...approval,
+            toast: toReservationTransitionToast(input.transition, 0),
+          }),
+        );
 
   if (result.isOk() && result.value.messageId !== null) {
     await markReservationReadUseCase(

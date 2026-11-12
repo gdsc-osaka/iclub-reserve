@@ -1,10 +1,12 @@
 import { env } from "cloudflare:workers";
+import { data } from "react-router";
 
 import { AppArea } from "~/lib/app-area";
 import { GroupStatus, STAFF_PENDING_GROUPS_LIMIT } from "~/domain/group";
 import { isStaffTransition, parseReservationTransition } from "~/domain/reservation/transition";
 import { createDb, type Database } from "~/infra/db";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { requireAreaUser } from "~/routes/_shared/app-area.server";
 import { findGroupSearchList } from "~/query/group/group-search";
 import { findStaffPendingReservations } from "~/query/reservation/staff-pending-reservations";
@@ -164,7 +166,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (result.isErr()) {
       return reservationActionErrors({ where, userId: user.id }, result.error);
     }
-    return { ok: true } as const;
+    return data({ ok: true } as const, {
+      headers: flashToastHeaders(request, result.value.toast),
+    });
   }
 
   // 予約 1 件を確認済みにする（UC-037）

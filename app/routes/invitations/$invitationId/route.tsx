@@ -13,6 +13,7 @@ import { createDb } from "~/infra/db";
 import { createGroupRepository } from "~/infra/group/group-repo";
 import { createInvitationRepository } from "~/infra/invitation/invitation-repo";
 import { requireRequestUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { AppArea } from "~/lib/app-area";
 import { formatDateTime } from "~/lib/date";
 import { toGroupDetailPath } from "~/lib/group-paths";
@@ -105,7 +106,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
 
     // 承諾成功時は、参加した団体の詳細画面へ案内する
-    return redirect(toGroupDetailPath(AppArea.User, result.value.groupId));
+    return redirect(toGroupDetailPath(AppArea.User, result.value.groupId), {
+      headers: flashToastHeaders(request, { title: "団体に参加しました" }),
+    });
   }
 
   // 2. 辞退
@@ -134,7 +137,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
      * 辞退するとその招待は二度と開けなくなるので、同じ画面に戻すと 404 になってしまう。
      * 操作は成功しているのに失敗したように見えるため、ダッシュボード（"/"）へ送る。
      */
-    return redirect("/");
+    return redirect("/", {
+      headers: flashToastHeaders(request, { title: "招待を辞退しました" }),
+    });
   }
 
   return {

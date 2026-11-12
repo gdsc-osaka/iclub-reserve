@@ -1,5 +1,6 @@
 import { cn } from "cn";
 
+import { Badge } from "~/components/ui/badge";
 import { GroupStatus } from "~/domain/group";
 
 /**
@@ -38,15 +39,12 @@ export function GroupStatusBadge({
   const style = groupStatusStyle[status];
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
-        style.badge,
-        className,
-      )}
+    <Badge
+      variant="outline"
+      className={cn("gap-1.5 border-transparent ring-1 ring-inset", style.badge, className)}
     >
       <span aria-hidden className={cn("size-1.5 rounded-full", style.dot)} />
       {groupStatusLabel[status]}
-    </span>
+    </Badge>
   );
 }

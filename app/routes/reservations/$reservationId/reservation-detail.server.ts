@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { redirect, type RouterContextProvider } from "react-router";
+import { data, redirect, type RouterContextProvider } from "react-router";
 
 import {
   SEND_MESSAGE_INTENT,
@@ -25,6 +25,7 @@ import { createReservationRepository } from "~/infra/reservation/reservation-rep
 import type { AppArea } from "~/lib/app-area";
 import { resolveAppBaseUrl } from "~/lib/app-url.server";
 import type { SessionUser } from "~/lib/auth/auth-session.server";
+import { flashToastHeaders } from "~/lib/flash-toast.server";
 import { parseHistoryPage } from "~/lib/history-page";
 import { requireAreaUser, toAreaWhere } from "~/routes/_shared/app-area.server";
 import {
@@ -223,7 +224,7 @@ async function handleUpdateUnlockArrangementAction(
   formData: FormData,
   actsAsStaff: boolean,
   where: string,
-): Promise<UpdateUnlockArrangementActionData> {
+) {
   if (!actsAsStaff) {
     return {
       intent: UPDATE_UNLOCK_ARRANGEMENT_INTENT,
@@ -231,7 +232,7 @@ async function handleUpdateUnlockArrangementAction(
       unlockArrangement: null,
       message: null,
       formError: "この操作は受け付けられませんでした。画面を読み込み直してください。",
-    };
+    } satisfies UpdateUnlockArrangementActionData;
   }
 
   const unlockArrangement = parseUnlockArrangement(formData.get("unlockArrangement"));
@@ -267,7 +268,7 @@ async function handleUpdateUnlockArrangementAction(
         [ReservationField.UnlockArrangement]: "unlockArrangement",
         [ReservationField.MessageBody]: "message",
       }),
-    };
+    } satisfies UpdateUnlockArrangementActionData;
   }
 
   /*
@@ -293,13 +294,16 @@ async function handleUpdateUnlockArrangementAction(
     }
   }
 
-  return {
-    intent: UPDATE_UNLOCK_ARRANGEMENT_INTENT,
-    updated: true,
-    unlockArrangement: null,
-    message: null,
-    formError: null,
-  };
+  return data(
+    {
+      intent: UPDATE_UNLOCK_ARRANGEMENT_INTENT,
+      updated: true,
+      unlockArrangement: null,
+      message: null,
+      formError: null,
+    } satisfies UpdateUnlockArrangementActionData,
+    { headers: flashToastHeaders(request, { title: "解錠の手配を変更しました" }) },
+  );
 }
 
 /**
@@ -377,5 +381,5 @@ export async function handleReservationDetailAction(
     return reservationActionErrors({ where: transitionWhere, userId: user.id }, result.error);
   }
 
-  return redirect(".");
+  return redirect(".", { headers: flashToastHeaders(args.request, result.value.toast) });
 }
