@@ -27,6 +27,7 @@ import {
 import { createFinishEmailChangeUseCase } from "~/usecases/user/finish-email-change";
 import { passkey } from "@better-auth/passkey";
 import {
+  applyGenerateRegisterOptionsRule,
   applyUpdatePasskeyRule,
   applyUpdateUserRule,
   applyVerifyRegistrationRule,
@@ -283,6 +284,19 @@ const createAuth = () => {
 
       after: createAuthMiddleware(async (ctx) => {
         /*
+         * パスキー登録オプションの表示名（COND-020）。
+         * アカウント名（user.name）はメールアドレスのまま、表示名（user.displayName）だけを氏名にする。
+         */
+        if (ctx.path === "/passkey/generate-register-options") {
+          const options = applyGenerateRegisterOptionsRule(
+            ctx.context.returned,
+            ctx.context.session?.user.name,
+          );
+          if (!options) return;
+          return ctx.json(options);
+        }
+
+        /*
          * メールアドレスの切り替えが済んだ後の処理（EVT-016 / COND-018）。
          * 変更前のアドレスへの通知と、変更に使った端末以外のログアウトを行う。
          *
@@ -407,6 +421,7 @@ const createAuth = () => {
          *
          * ブラウザから届いた名前は `hooks.before` で空にしてあるので、ここで返した名前が保存される。
          * ブラウザから名前を渡すと、OS のパスキー保存ダイアログに出るアカウント名まで置き換わってしまうため。
+         * 端末に渡す表示名（user.displayName）は、登録オプションの応答を `hooks.after` で氏名に差し替えている。
          */
         registration: {
           afterVerification: ({ ctx, verification }) => ({

@@ -111,6 +111,47 @@ export const applyVerifyRegistrationRule = <T extends Record<string, unknown>>(
 });
 
 /**
+ * `/passkey/generate-register-options` のフック判定（COND-020）。
+ *
+ * 端末に渡すユーザー情報のうち、アカウント名（`user.name`）はメールアドレスのまま残し、
+ * 表示名（`user.displayName`）だけを氏名に差し替える。
+ * アカウント名は識別子であり、オートフィルの候補などにも出るため変えない。
+ * ブラウザから `name` を渡すとアカウント名のほうが置き換わってしまうため使わない。
+ *
+ * 氏名が無ければ書き換えず、`null` を返す（Better Auth の既定のメールアドレスのままにする）。
+ * 応答や `user.displayName` が期待する形で無い場合も `null` を返す。
+ */
+export const applyGenerateRegisterOptionsRule = (
+  returned: unknown,
+  userName: string | null | undefined,
+) => {
+  if (typeof userName !== "string" || userName.trim().length === 0) {
+    return null;
+  }
+  if (typeof returned !== "object" || returned === null || Array.isArray(returned)) {
+    return null;
+  }
+  if (!("user" in returned)) {
+    return null;
+  }
+  const { user } = returned;
+  if (typeof user !== "object" || user === null || Array.isArray(user)) {
+    return null;
+  }
+  if (!("displayName" in user) || typeof user.displayName !== "string") {
+    return null;
+  }
+
+  return {
+    ...returned,
+    user: {
+      ...user,
+      displayName: userName,
+    },
+  };
+};
+
+/**
  * `/passkey/update-passkey` のフック判定（COND-020 / UC-030）。
  *
  * validatePasskeyName を通し、1〜50文字（コードポイント単位）を満たさない場合は 400（INVALID_PASSKEY_NAME）で拒否する。
