@@ -17,8 +17,8 @@ catalog:
   better-auth: ^1.7.19
   # Vite+ の版。`vite` は Vite+ に入っている Vite（vite-plus-core）に置き換える。
   # 2 つは必ず同じ版にそろえる（上げるときは `vp migrate` を使う）
-  vite: npm:@voidzero-dev/vite-plus-core@1.5.0
-  vite-plus: 1.5.0
+  vite: npm:@voidzero-dev/vite-plus-core@1.6.0
+  vite-plus: 1.6.0
 overrides:
   better-auth: "catalog:"
   # React Router・Cloudflare・Tailwind の Vite プラグインが読む `vite` も、Vite+ の Vite にそろえる。
