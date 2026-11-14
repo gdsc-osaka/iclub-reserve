@@ -7,7 +7,7 @@ import {
   type AvailabilityDay,
 } from "~/components/reservation/availability-week";
 import type { SlotRange } from "~/components/reservation/editor/reservation-slots";
-import { addDays, toTokyoDateKey } from "~/lib/date";
+import { addDays, parseTokyoDateKey, toTokyoDateKey, tokyoDaysUntil } from "~/lib/date";
 
 import {
   findDayIndex,
@@ -245,29 +245,79 @@ export function useCalendarScroll({
     // 最初の 1 回だけ。読み直した後は下の effect が合わせる
   }, []);
 
+  /**
+   * 指で送っている途中に 4 週間を読み直したとき、押し始めの位置を新しい 4 週間の位置に置き直す。
+   *
+   * 読み直すと前に列が増える（減る）ので、同じ日でも `scrollLeft` がずれる。押し始めの位置を古いままにすると、
+   * 次の pointermove が読み直した後の合わせ直し（下の effect）を取り消し、別の日へ跳んでしまう。
+   * 横に送っている途中なら、増えた列のぶん押し始めの位置をずらし、指の下にある日を保つ。
+   * 戻る・進むで別の基準の日へ移ったときは、指の動きとつながらないので送る操作をやめる。
+   */
+  const carrySwipeOver = (previousFirstDayKey: string | undefined, isReload: boolean) => {
+    const swipe = swipeRef.current;
+    const container = containerRef.current;
+    if (swipe === null || container === null) return;
+
+    if (swipe.phase === "pending") {
+      // まだ動かしていないので、合わせ直した位置から数える
+      swipeRef.current = { ...swipe, startScrollLeft: container.scrollLeft };
+      return;
+    }
+
+    const previousFirstDay = parseTokyoDateKey(previousFirstDayKey ?? null);
+    const firstDay = days[0];
+    const { columnWidth } = measure(container);
+    if (!isReload || previousFirstDay === null || firstDay === undefined || columnWidth <= 0) {
+      swipeRef.current = null;
+      // 離したときに handlePointerEnd が受けないので、ここで click を捨てる印を付ける
+      swipedRef.current = true;
+      return;
+    }
+
+    const startScrollLeft =
+      swipe.startScrollLeft + tokyoDaysUntil(previousFirstDay, firstDay.date) * columnWidth;
+    const lastX = swipe.samples.at(-1)?.x ?? swipe.startX;
+    swipeRef.current = { ...swipe, startScrollLeft };
+    // 合わせ直し（settle）が scroll-snap を戻したので、離すまで外し直す
+    container.style.scrollSnapType = "none";
+    container.scrollLeft = startScrollLeft - (lastX - swipe.startX);
+  };
+
   /*
    * 読み直した後（先頭の日付が変わったとき）。列は日付をキーにしているので同じ DOM が使い回されるが、
    * 前に列が増えたぶん横にずれる。描画の前に、合わせる日へ戻す。
    * 戻る・進むで別の基準の日へ移ったときは、合わせる日が無いので基準の日へ合わせる。
+   * 指で送っている途中なら、押し始めの位置も新しい 4 週間に置き直す（carrySwipeOver）。
    */
   const firstDayKey = days[0]?.dateKey;
   const alignedFirstDayKeyRef = useRef(firstDayKey);
   useLayoutEffect(() => {
-    if (alignedFirstDayKeyRef.current === firstDayKey) return;
+    const previousFirstDayKey = alignedFirstDayKeyRef.current;
+    if (previousFirstDayKey === firstDayKey) return;
     alignedFirstDayKeyRef.current = firstDayKey;
-    scrollToIndex(findDayIndex(days, pendingAlignKeyRef.current ?? anchorKey), "instant");
+    const alignKey = pendingAlignKeyRef.current;
     pendingAlignKeyRef.current = null;
+    scrollToIndex(findDayIndex(days, alignKey ?? anchorKey), "instant");
+    carrySwipeOver(previousFirstDayKey, alignKey !== null);
   }, [firstDayKey]);
 
   /**
    * 端に近づいていれば、先頭の日を基準の日にして読み直す。
    *
-   * ほかの遷移の途中・なめらかに送っている途中は見送る。読み直しが重なると、合わせる日が入れ替わる。
+   * ほかの遷移の途中・なめらかに送っている途中・指で横に送っている途中は見送る。
+   * 読み直しが重なると、合わせる日が入れ替わる。指で送っている途中の位置は、止まる位置ではない。
    * 見送ったぶんは、遷移が終わったときと、スクロールが止まったときに確かめ直す。
    */
   const reloadIfNearEdge = () => {
     const container = containerRef.current;
-    if (container === null || isNavigating || targetIndexRef.current !== null) return;
+    if (
+      container === null ||
+      isNavigating ||
+      targetIndexRef.current !== null ||
+      swipeRef.current?.phase === "horizontal"
+    ) {
+      return;
+    }
     const { columnWidth, visibleCount, firstIndex } = measure(container);
     if (columnWidth <= 0 || !needsWindowShift(firstIndex, visibleCount, days.length)) return;
     const firstDay = days[firstIndex];
