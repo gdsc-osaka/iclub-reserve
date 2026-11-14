@@ -1,5 +1,6 @@
+import { cn } from "cn";
 import { CircleAlert, ClipboardCheck } from "lucide-react";
-import { useId, useState, type FocusEvent, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type Ref } from "react";
 import { Form, useNavigation } from "react-router";
 
 import { CardItem } from "~/components/reservation/availability-detail-card";
@@ -48,7 +49,8 @@ import type {
 import type { ReservationFormGroup } from "~/query/reservation/reservation-form";
 
 import { calculateDraftSchedule } from "./draft-schedule";
-import { DraftScheduleFields } from "./draft-schedule-fields";
+import { DraftScheduleFields, RepickOnCalendarButton } from "./draft-schedule-fields";
+import { DraftSummaryBar } from "./draft-summary-bar";
 import { toCalendarPath, type CalendarDraft } from "./paths";
 
 /** 予約を作る操作の識別子。同じ画面の事務局の操作（承認・却下・キャンセル）と action で分ける */
@@ -70,7 +72,9 @@ export interface CreateReservationActionError {
 /**
  * 空き状況カレンダーの仮の枠から、予約を申請する（事務局は直接作成もできる）欄の中身（ADR-014 決定 10・11・13）。
  *
- * 入力欄は CardContent の中でスクロールし、「内容を確認する」ボタンは CardFooter で下端に固定する。
+ * スマホは 2 段階（選ぶ・入力する）で、選ぶ段階ではバーだけを出し、入力欄（CardContent・CardFooter）は描いたまま隠す。
+ * PC は CardContent の中でスクロールし、「内容を確認する」ボタンを CardFooter で下端に固定する。
+ * スマホの入力段階では見出しより下をまとめてスクロールし、ボタンも中身と一緒に流す。
  * 日付と時間帯は状態に持たず、URL の仮の枠（`draft`）を書き換える。カレンダーの仮の枠と同じものを指すため。
  * 団体・使用人数・備考は、この部品の中に持つ。欄は仮の枠を変えても開いたまま使い回されるので、入力は残る。
  */
@@ -87,7 +91,10 @@ export function AvailabilityDraftForm({
   onDraftChange,
   createError,
   onSubmitCreate,
-  onExpand,
+  isExpanded,
+  onProceed,
+  onRepick,
+  proceedButtonRef,
 }: Readonly<{
   draft: CalendarDraft;
   facility: AvailabilityFacility;
@@ -106,8 +113,13 @@ export function AvailabilityDraftForm({
   createError: CreateReservationActionError | null;
   /** 確認のダイアログから送ったとき。作れたことを知らせるのに使う（欄は転送で消えるので、知らせるのは呼び出し側） */
   onSubmitCreate: () => void;
-  /** スマホで欄を広げる（文字を打つ欄に入ったとき） */
-  onExpand: () => void;
+  /** スマホで入力する段階へ進んでいるか */
+  isExpanded: boolean;
+  /** スマホで選ぶ段階の「次へ」を押したとき */
+  onProceed: () => void;
+  /** スマホで入力する段階から「カレンダーで選び直す」を押したとき */
+  onRepick: () => void;
+  proceedButtonRef?: Ref<HTMLButtonElement>;
 }>) {
   const formId = useId();
   const periodErrorId = useId();
@@ -115,6 +127,14 @@ export function AvailabilityDraftForm({
   const groupSelectId = useId();
   const groupErrorId = useId();
   const unlockArrangementIdPrefix = useId();
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // スマホで入力する段階に入ったときは、見出しより下のスクロール位置を先頭から始める
+  useEffect(() => {
+    if (isExpanded && scrollContainerRef.current !== null) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [isExpanded]);
 
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -144,24 +164,17 @@ export function AvailabilityDraftForm({
   const day = days.find((item) => item.dateKey === draft.dateKey);
   if (day === undefined) return null;
 
-  const { blockedSlots, pastSlots, isAvailable, isStartPast, conflicts } = calculateDraftSchedule({
-    draft,
-    day,
-    reservations,
-    now,
-  });
+  const schedule = calculateDraftSchedule({ draft, day, reservations, now });
+  const { blockedSlots, pastSlots, isAvailable, isStartPast, conflicts } = schedule;
 
   // 事務局でも、有効な団体が 1 つも無ければ申請元を選べない（一般のユーザーは、そもそも欄を開けない）
   const hasNoGroups = applicantGroups.length === 0;
 
-  /** 申請の期限の目安（COND-028）の、いつも出す案内と、7 日を切ったときの注意を出すか */
+  /** 申請の期限の目安（COND-028）の案内と、7 日を切ったときの注意を出すか */
   const noticeContext = { kind: "create", isDirect } as const;
-  const showApplicationNotice = shouldShowApplicationNotice(noticeContext);
-  const showShortNotice = shouldShowShortNoticeAlert(
-    noticeContext,
-    draft.range === null ? null : atTokyoMinutes(day.date, draft.range.startMinutes),
-    now,
-  );
+  const startAt = draft.range === null ? null : atTokyoMinutes(day.date, draft.range.startMinutes);
+  const showApplicationNotice = shouldShowApplicationNotice(noticeContext, startAt, now);
+  const showShortNotice = shouldShowShortNoticeAlert(noticeContext, startAt, now);
 
   /*
    * 解錠の手配（COND-027）は、直接作成のときだけ選ばせる。選ぶまでは確認へ進ませない。
@@ -193,205 +206,247 @@ export function AvailabilityDraftForm({
     onSubmitCreate();
   };
 
-  /*
-   * 文字を打つ欄に入ったら、スマホでは欄を広げる（ADR-014 決定 13）。
-   * キーボードが出ると、45% の高さの欄では打っている欄が隠れてしまうため。
-   * 団体の選択や日付のボタンでは広げない（キーボードが出ない）。
-   */
-  const handleFocus = (event: FocusEvent<HTMLFormElement>) => {
-    const target = event.target;
-    if (
-      (target instanceof HTMLInputElement && target.type !== "hidden") ||
-      target instanceof HTMLTextAreaElement
-    ) {
-      onExpand();
-    }
-  };
-
   return (
     <>
-      <CardContent className="min-h-0 flex-1 overflow-y-auto py-4">
-        {/*
-         * replace を付けるのは、成功の転送で仮の枠を開いていた履歴を置き換えるため（ADR-014 決定 10）。
-         * 積むと、戻る操作で送り終えた仮の枠の欄がもう一度開く。
-         */}
-        {/*
-         * 送り先は、今の URL に任せず組み立てる。任せると、サーバーとブラウザで送り先の書き方が食い違い、
-         * hydration の不一致になる（開発サーバーでは、サーバーが受け取る URL の `:` が `%3A` になっていた）。
-         */}
-        <Form
-          method="post"
-          action={toCalendarPath(area, facility.id, anchorKey, { kind: "draft", draft })}
-          replace
-          id={formId}
-          onSubmit={handleSubmit}
-          onFocus={handleFocus}
-          className="flex flex-col gap-4"
-        >
-          <input type="hidden" name="intent" value={CREATE_RESERVATION_INTENT} />
-          <input type="hidden" name="facility_id" value={facility.id} />
-          <input type="hidden" name="date" value={draft.dateKey} />
-          <input
-            type="hidden"
-            name="start_time"
-            value={draft.range === null ? "" : toTokyoTimeKey(draft.range.startMinutes)}
-          />
-          <input
-            type="hidden"
-            name="end_time"
-            value={draft.range === null ? "" : toTokyoTimeKey(draft.range.endMinutes)}
-          />
+      {!isExpanded && (
+        <DraftSummaryBar
+          day={day}
+          draft={draft}
+          facilityName={facility.name}
+          schedule={schedule}
+          now={now}
+          isBusy={isBusy}
+          onDraftChange={onDraftChange}
+          onProceed={onProceed}
+          proceedButtonRef={proceedButtonRef}
+        />
+      )}
 
-          {formError !== null && (
-            <Alert variant="destructive">
-              <CircleAlert aria-hidden className="size-4" />
-              <AlertTitle>申請できませんでした</AlertTitle>
-              <AlertDescription>{formError}</AlertDescription>
-            </Alert>
-          )}
+      <div
+        ref={scrollContainerRef}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col max-md:overflow-y-auto",
+          !isExpanded && "max-md:hidden",
+        )}
+      >
+        <CardContent className="min-h-0 flex-1 overflow-y-auto py-4 max-md:flex-none max-md:overflow-visible max-md:px-0 max-md:pt-0 max-md:pb-4">
+          {/*
+           * replace を付けるのは、成功の転送で仮の枠を開いていた履歴を置き換えるため（ADR-014 決定 10）。
+           * 積むと、戻る操作で送り終えた仮の枠の欄がもう一度開く。
+           */}
+          {/*
+           * 送り先は、今の URL に任せず組み立てる。任せると、サーバーとブラウザで送り先の書き方が食い違い、
+           * hydration の不一致になる（開発サーバーでは、サーバーが受け取る URL の `:` が `%3A` になっていた）。
+           */}
+          <Form
+            method="post"
+            action={toCalendarPath(area, facility.id, anchorKey, { kind: "draft", draft })}
+            replace
+            id={formId}
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4 max-md:gap-6"
+          >
+            <input type="hidden" name="intent" value={CREATE_RESERVATION_INTENT} />
+            <input type="hidden" name="facility_id" value={facility.id} />
+            <input type="hidden" name="date" value={draft.dateKey} />
+            <input
+              type="hidden"
+              name="start_time"
+              value={draft.range === null ? "" : toTokyoTimeKey(draft.range.startMinutes)}
+            />
+            <input
+              type="hidden"
+              name="end_time"
+              value={draft.range === null ? "" : toTokyoTimeKey(draft.range.endMinutes)}
+            />
 
-          {/* 施設はカレンダーの上の切り替えで選ぶので、ここでは名前を出すだけにする */}
-          <dl className="flex flex-col gap-1 text-sm">
-            <CardItem label="施設・設備">{facility.name}</CardItem>
-          </dl>
+            {formError !== null && (
+              <Alert variant="destructive">
+                <CircleAlert aria-hidden className="size-4" />
+                <AlertTitle>申請できませんでした</AlertTitle>
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
 
-          <DraftScheduleFields
-            day={day}
-            draft={draft}
-            now={now}
-            isBusy={isBusy}
-            blockedSlots={blockedSlots}
-            pastSlots={pastSlots}
-            periodErrorId={fieldErrors.period ? periodErrorId : undefined}
-            onDraftChange={onDraftChange}
-          />
+            <div className="flex flex-col gap-4 max-md:gap-2">
+              <h3 className="px-1 text-sm font-medium text-muted-foreground md:hidden">
+                施設・日時
+              </h3>
 
-          <FieldError id={periodErrorId}>{fieldErrors.period}</FieldError>
-          <FieldError id={facilityErrorId}>{fieldErrors.facilityId}</FieldError>
+              <div className="flex flex-col gap-4 max-md:rounded-xl max-md:border max-md:border-foreground/10 max-md:bg-card max-md:p-4">
+                {/* 施設はカレンダーの上の切り替えで選ぶので、ここでは名前を出すだけにする */}
+                <dl className="flex flex-col gap-1 text-sm">
+                  <CardItem label="施設・設備">{facility.name}</CardItem>
+                  <CardItem label="日時" className="md:hidden">
+                    <span className="tabular-nums">
+                      {formatMonthDay(day.date)}
+                      {draft.range !== null &&
+                        ` ${toTokyoTimeKey(draft.range.startMinutes)}〜${toTokyoTimeKey(draft.range.endMinutes)}`}
+                    </span>
+                  </CardItem>
+                </dl>
 
-          {/* 1 週間前までの申請の案内（COND-028） */}
-          {showApplicationNotice && (
-            <p className="text-xs text-muted-foreground">{APPLICATION_DEADLINE_NOTICE}</p>
-          )}
-
-          {isStartPast ? (
-            <Alert className="border-amber-500/30 bg-amber-500/5">
-              <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
-              <AlertDescription>
-                過ぎた日時からは申請できません。日時を選び直してください。
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              {/* 7 日を切ったときの注意（COND-028）。過ぎているときは選び直すしかないので出さない */}
-              {showShortNotice && (
-                <Alert className="border-amber-500/30 bg-amber-500/5">
-                  <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
-                  <AlertDescription>{SHORT_NOTICE_ALERT}</AlertDescription>
-                </Alert>
-              )}
-              {conflicts !== null && <ScheduleConflictAlerts conflicts={conflicts} />}
-            </>
-          )}
-
-          {hasNoGroups ? (
-            <Alert className="border-amber-500/30 bg-amber-500/5">
-              <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
-              <AlertDescription>
-                予約を作成できる有効な団体がまだありません。先に団体を承認するか、有効にしてください。
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              {/* 直接作成（UC-008）では解錠の手配を選ぶ（COND-027） */}
-              {isDirect && (
-                <>
-                  <Separator />
-                  <UnlockArrangementField
-                    idPrefix={unlockArrangementIdPrefix}
-                    value={unlockArrangement}
-                    onValueChange={selectUnlockArrangement}
-                    error={fieldErrors.unlockArrangement}
+                <div className="flex flex-col gap-4 max-md:hidden">
+                  <DraftScheduleFields
+                    day={day}
+                    draft={draft}
+                    now={now}
+                    isBusy={isBusy}
+                    blockedSlots={blockedSlots}
+                    pastSlots={pastSlots}
+                    periodErrorId={fieldErrors.period ? periodErrorId : undefined}
+                    onDraftChange={onDraftChange}
                   />
-                </>
-              )}
+                </div>
 
-              <Field data-invalid={fieldErrors.groupId !== undefined}>
-                <FieldLabel htmlFor={groupSelectId}>申請元の団体</FieldLabel>
+                <FieldError id={periodErrorId}>{fieldErrors.period}</FieldError>
+                <FieldError id={facilityErrorId}>{fieldErrors.facilityId}</FieldError>
 
-                {applicantGroups.length === 1 ? (
-                  /* 選べる団体が 1 つしかないなら、選ばせる意味がないので表示だけにする */
-                  <>
-                    <p id={groupSelectId} className="text-sm font-medium">
-                      {applicantGroups[0].name}
-                    </p>
-                    <input type="hidden" name="group_id" value={applicantGroups[0].id} />
-                  </>
+                {isStartPast ? (
+                  <Alert className="border-amber-500/30 bg-amber-500/5">
+                    <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+                    <AlertDescription>
+                      過ぎた日時からは申請できません。日時を選び直してください。
+                    </AlertDescription>
+                  </Alert>
                 ) : (
-                  // `name` は Select に付ける。Select が送信用の隠れた select を描き、選んだ値を送る
-                  <Select name="group_id" required value={groupId} onValueChange={setGroupId}>
-                    <SelectTrigger
-                      id={groupSelectId}
-                      className="w-full"
-                      aria-invalid={fieldErrors.groupId !== undefined}
-                      aria-describedby={
-                        fieldErrors.groupId === undefined ? undefined : groupErrorId
-                      }
-                    >
-                      <SelectValue placeholder="選んでください" />
-                    </SelectTrigger>
-
-                    {/*
-                     * 見出しを付けないときも、項目は `SelectGroup` で包むこと。
-                     *
-                     * この Select は「選んでいる項目の文字を、トリガーの値の文字に重ねる」
-                     * 置き方（radix-nova の既定 `item-aligned`）で、一覧の幅はそこから
-                     * 逆算される（トリガーの幅 + トリガーとの左端のずれ）。
-                     * つまり端をそろえているのは幅の指定ではなく、項目の左余白。
-                     * 包まないと `SelectGroup` の `p-1` が抜けて 4px 足りず、
-                     * 一覧の左端だけが内側へずれる。
-                     */}
-                    <SelectContent>
-                      <SelectGroup>
-                        {applicantGroups.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <>
+                    {/* 7 日を切ったときの注意（COND-028）。過ぎているときは選び直すしかないので出さない */}
+                    {showShortNotice && (
+                      <Alert className="border-amber-500/30 bg-amber-500/5">
+                        <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+                        <AlertDescription>{SHORT_NOTICE_ALERT}</AlertDescription>
+                      </Alert>
+                    )}
+                    {conflicts !== null && <ScheduleConflictAlerts conflicts={conflicts} />}
+                  </>
                 )}
 
-                <FieldError id={groupErrorId}>{fieldErrors.groupId}</FieldError>
-              </Field>
+                <RepickOnCalendarButton onClick={onRepick} />
+              </div>
 
-              <HeadCountField
-                value={headCount}
-                onChange={setHeadCount}
-                error={fieldErrors.headCount}
-              />
+              {/* 1 週間前までの申請の案内（COND-028） */}
+              {showApplicationNotice && (
+                <p className="text-xs text-muted-foreground">{APPLICATION_DEADLINE_NOTICE}</p>
+              )}
+            </div>
 
-              <NoteField value={note} onChange={setNote} error={fieldErrors.note} />
-            </>
-          )}
-        </Form>
-      </CardContent>
+            {hasNoGroups ? (
+              <Alert className="border-amber-500/30 bg-amber-500/5">
+                <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+                <AlertDescription>
+                  予約を作成できる有効な団体がまだありません。先に団体を承認するか、有効にしてください。
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                {isDirect && <Separator className="max-md:hidden" />}
 
-      {/* 欄の中を送っても動かないよう、ボタンは中身の外の下端に置き、`form` 属性でフォームを指す */}
-      {!hasNoGroups && (
-        <CardFooter className="shrink-0 flex-col gap-2 border-t p-4">
-          {isUnlockArrangementMissing && (
-            <p className="text-center text-xs text-muted-foreground">
-              解錠の手配を選んでください。
-            </p>
-          )}
-          <Button type="submit" form={formId} disabled={!canSubmit} className="w-full">
-            <ClipboardCheck aria-hidden />
-            内容を確認する
-          </Button>
-        </CardFooter>
-      )}
+                {/* 直接作成（UC-008）では解錠の手配を選ぶ（COND-027） */}
+                {isDirect && (
+                  <div className="flex flex-col gap-4 max-md:gap-2">
+                    <h3 className="px-1 text-sm font-medium text-muted-foreground md:hidden">
+                      解錠の手配
+                      <span className="ml-1.5 text-xs font-semibold text-destructive">(必須)</span>
+                    </h3>
+
+                    <div className="flex flex-col gap-4 max-md:rounded-xl max-md:border max-md:border-foreground/10 max-md:bg-card max-md:p-4">
+                      <UnlockArrangementField
+                        idPrefix={unlockArrangementIdPrefix}
+                        value={unlockArrangement}
+                        onValueChange={selectUnlockArrangement}
+                        error={fieldErrors.unlockArrangement}
+                        headingClassName="max-md:hidden"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-4 max-md:gap-2">
+                  <h3 className="px-1 text-sm font-medium text-muted-foreground md:hidden">
+                    利用内容
+                  </h3>
+
+                  <div className="flex flex-col gap-4 max-md:rounded-xl max-md:border max-md:border-foreground/10 max-md:bg-card max-md:p-4">
+                    <Field data-invalid={fieldErrors.groupId !== undefined}>
+                      <FieldLabel htmlFor={groupSelectId}>申請元の団体</FieldLabel>
+
+                      {applicantGroups.length === 1 ? (
+                        /* 選べる団体が 1 つしかないなら、選ばせる意味がないので表示だけにする */
+                        <>
+                          <p id={groupSelectId} className="text-sm font-medium">
+                            {applicantGroups[0].name}
+                          </p>
+                          <input type="hidden" name="group_id" value={applicantGroups[0].id} />
+                        </>
+                      ) : (
+                        // `name` は Select に付ける。Select が送信用の隠れた select を描き、選んだ値を送る
+                        <Select name="group_id" required value={groupId} onValueChange={setGroupId}>
+                          <SelectTrigger
+                            id={groupSelectId}
+                            className="w-full"
+                            aria-invalid={fieldErrors.groupId !== undefined}
+                            aria-describedby={
+                              fieldErrors.groupId === undefined ? undefined : groupErrorId
+                            }
+                          >
+                            <SelectValue placeholder="選んでください" />
+                          </SelectTrigger>
+
+                          {/*
+                           * 見出しを付けないときも、項目は `SelectGroup` で包むこと。
+                           *
+                           * この Select は「選んでいる項目の文字を、トリガーの値の文字に重ねる」
+                           * 置き方（radix-nova の既定 `item-aligned`）で、一覧の幅はそこから
+                           * 逆算される（トリガーの幅 + トリガーとの左端のずれ）。
+                           * つまり端をそろえているのは幅の指定ではなく、項目の左余白。
+                           * 包まないと `SelectGroup` の `p-1` が抜けて 4px 足りず、
+                           * 一覧の左端だけが内側へずれる。
+                           */}
+                          <SelectContent>
+                            <SelectGroup>
+                              {applicantGroups.map((item) => (
+                                <SelectItem key={item.id} value={item.id}>
+                                  {item.name}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      <FieldError id={groupErrorId}>{fieldErrors.groupId}</FieldError>
+                    </Field>
+
+                    <HeadCountField
+                      value={headCount}
+                      onChange={setHeadCount}
+                      error={fieldErrors.headCount}
+                    />
+
+                    <NoteField value={note} onChange={setNote} error={fieldErrors.note} />
+                  </div>
+                </div>
+              </>
+            )}
+          </Form>
+        </CardContent>
+
+        {/* PC では中身だけを送ってもボタンが流れないよう、CardFooter を中身の外に置き、`form` 属性でフォームを指す */}
+        {!hasNoGroups && (
+          <CardFooter className="shrink-0 flex-col gap-2 border-t p-4 max-md:rounded-none max-md:border-t-0 max-md:bg-transparent max-md:px-0 max-md:pt-0 max-md:pb-4">
+            {isUnlockArrangementMissing && (
+              <p className="text-center text-xs text-muted-foreground">
+                解錠の手配を選んでください。
+              </p>
+            )}
+            <Button type="submit" form={formId} disabled={!canSubmit} className="w-full">
+              <ClipboardCheck aria-hidden />
+              内容を確認する
+            </Button>
+          </CardFooter>
+        )}
+      </div>
 
       <ReservationConfirmDialog
         open={isConfirmOpen}

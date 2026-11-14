@@ -116,11 +116,16 @@ export function AvailabilityCalendar({
      *
      * `scroll-pt-14` は日付の見出し（sticky）の高さ。キーボードの移動などで帯を見える所へ送るとき、
      * 見出しの裏に隠さないようにする。
+     *
+     * `touch-pan-y touch-pinch-zoom` で、指での操作は縦スクロールとピンチ拡大だけをブラウザに任せる。
+     * 2 方向にスクロールする箱の向きを固定する CSS が無く、`touch-action` は押し始めで決まり途中で
+     * 変えられないため、そのままにすると指で縦に送るときのわずかな左右のぶれで隣の列へ移ってしまう。
+     * そのため、指による横の送りだけは `useCalendarScroll` が JavaScript で受け持つ（ADR-014 決定 21）。
      */
     <div
       ref={containerRef}
       data-ready={isReady}
-      className="group/calendar @container h-full snap-x snap-mandatory scroll-pl-14 scroll-pt-14 overflow-auto overscroll-contain"
+      className="group/calendar @container h-full touch-pan-y touch-pinch-zoom snap-x snap-mandatory scroll-pl-14 scroll-pt-14 overflow-auto overscroll-contain"
     >
       <div className="flex min-h-full w-max">
         <HourAxis />
@@ -692,8 +697,8 @@ function DraftBlock({
  * Google カレンダーに合わせて、開始の丸は上端の左寄り、終了の丸は下端の右寄りに置き、枠の線の上に中心を合わせる。
  * 見た目は小さな丸（size-3）だが、指でも押せるよう透明な外側の箱（size-8）で押せる範囲を広げている。
  *
- * `touch-none` を付けるのは、丸の上で指を動かしたときに、カレンダーが縦にスクロールせず丸が動くようにするため。
- * 30 分の枠には付けない。指でなぞる操作は無く、枠の上ではスクロールに使う。
+ * `touch-none` を付けるのは、丸の上で指を動かしたときに、カレンダーが縦・横にスクロールせず丸が動くようにするため。
+ * 30 分の枠には付けない。指でなぞる操作は無く、枠の上では縦（ブラウザ）と横（`useCalendarScroll`）のスクロールに使う。
  *
  * 読み上げでは仮の枠ごと隠れる。E2E で探せるよう data-slot を付ける。
  */

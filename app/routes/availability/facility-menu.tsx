@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { CalendarDays, Check, ChevronDown } from "lucide-react";
 import { Link } from "react-router";
 
@@ -56,7 +57,7 @@ export function FacilityMenu({
   }
 
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    <span className="flex min-w-0 items-center gap-2 max-md:w-full">
       {/* 読み上げでは、ボタンの名前に「施設・設備を選んで切り替え」を含めているので読ませない */}
       {current !== null && (
         <span
@@ -73,11 +74,10 @@ export function FacilityMenu({
           <Button
             type="button"
             variant="outline"
-            className={
-              current === null
-                ? "min-w-0 justify-between border-primary/60 dark:border-primary/60"
-                : "min-w-0 justify-between"
-            }
+            className={cn(
+              "min-w-0 justify-between max-md:w-full",
+              current === null && "border-primary/60 dark:border-primary/60",
+            )}
           >
             {current === null ? (
               <span className="truncate text-muted-foreground">施設・設備を選択</span>

@@ -15,6 +15,7 @@ import {
   needsWindowShift,
   toAlignedIndex,
   toRevealIndex,
+  toSwipeTargetIndex,
   toVisibleCount,
 } from "./calendar-window";
 
@@ -24,6 +25,45 @@ import {
  * `scrollend` は Safari で使えないので、`scroll` が途切れるのを待つ。
  */
 const SCROLL_SETTLE_MS = 150;
+
+/** 指の操作を「横に送る操作」と決めるまでの最小移動量（px） */
+const SWIPE_LOCK_THRESHOLD_PX = 8;
+
+/** 離す直前の横方向の速さを測る時間の窓（ms） */
+const SWIPE_VELOCITY_WINDOW_MS = 120;
+
+type SwipeSample = Readonly<{ x: number; time: number }>;
+
+type TouchSwipeState =
+  | {
+      readonly phase: "pending";
+      readonly pointerId: number;
+      readonly startX: number;
+      readonly startY: number;
+      readonly startScrollLeft: number;
+      readonly samples: SwipeSample[];
+    }
+  | {
+      readonly phase: "horizontal";
+      readonly pointerId: number;
+      readonly startX: number;
+      readonly startScrollLeft: number;
+      readonly samples: SwipeSample[];
+    };
+
+/** 離す直前の横方向の `scrollLeft` の速さ（px / ms）を求める。指を左へ払う（`scrollLeft` が増える）向きが正 */
+const measureScrollVelocity = (
+  samples: readonly SwipeSample[],
+  endX: number,
+  endTime: number,
+): number => {
+  const cutoff = endTime - SWIPE_VELOCITY_WINDOW_MS;
+  const base = samples.find((sample) => sample.time >= cutoff);
+  if (base === undefined) return 0;
+  const dt = endTime - base.time;
+  if (dt <= 0) return 0;
+  return -(endX - base.x) / dt;
+};
 
 /**
  * 箱の中を測る。押したとき・スクロールが止まったとき・幅が変わったときにだけ呼び、描画の中では測らない。
@@ -79,6 +119,10 @@ const toRevealScrollTop = (
  * `scrollBy` は使わない。Chrome は向きのあるスクロールとして扱い、`scroll-snap-stop: always` のせいで
  * 次の 1 列で止まってしまう。
  *
+ * 指による横スクロールだけは JavaScript で受け持つ（ADR-014 決定 21）。2 方向にスクロールする箱の向きを固定する CSS が無く、
+ * `touch-action` は押し始めで決まり途中で変えられないため、箱には `touch-pan-y touch-pinch-zoom` を付けて
+ * 縦スクロールと拡大だけをブラウザに任せ、横は押し始めからの向きを見て動かす。マウス・トラックパッド・ペンはブラウザのまま。
+ *
  * 端に近づいたら基準の日を変えて 4 週間を読み直し、読み直した後に同じ日へ合わせ直す。
  * 返す `containerRef` は、カレンダーのスクロールする箱に付ける。
  */
@@ -104,16 +148,22 @@ export function useCalendarScroll({
   /**
    * 最後に止まったときの先頭の日。幅が変わったら、この日を保つ位置へ合わせ直す。
    * 幅が変わった時点の `scrollLeft` は、ブラウザが止まる位置を選び直した後の値のことがあるので使わない。
+   * カレンダーを隠したまま開いたとき（幅 0）でも、出たときに基準の日へ合わせられるよう基準の日の位置で始める。
    */
-  const settledIndexRef = useRef(0);
+  const settledIndexRef = useRef(Math.max(0, findDayIndex(days, anchorKey)));
   /** なめらかに送っている途中の行き先。続けて押したとき、途中の位置ではなく行き先から数える */
   const targetIndexRef = useRef<number | null>(null);
   /** 読み直した後に先頭へ合わせる日 */
   const pendingAlignKeyRef = useRef<string | null>(null);
   /** 最後に合わせたときの箱の幅。高さだけが変わったときは合わせ直さない */
   const widthRef = useRef(0);
+  /** 指による横スクロールの途中の状態 */
+  const swipeRef = useRef<TouchSwipeState | null>(null);
+  /** 横に送る操作の直後の click を 1 回だけ捨てるための印 */
+  const swipedRef = useRef(false);
 
   const settle = (firstIndex: number, visibleCount: number) => {
+    if (containerRef.current !== null) containerRef.current.style.scrollSnapType = "";
     settledIndexRef.current = firstIndex;
     targetIndexRef.current = null;
     setView({ firstIndex, visibleCount });
@@ -124,7 +174,11 @@ export function useCalendarScroll({
     const container = containerRef.current;
     if (container === null) return;
     const { columnWidth, visibleCount } = measure(container);
-    if (columnWidth <= 0) return;
+    if (columnWidth <= 0) {
+      // 隠れたまま開いたときは幅が 0 なので、出たときに合わせ直せるよう目標の日だけ覚えておく
+      if (behavior === "instant" && index >= 0) settledIndexRef.current = index;
+      return;
+    }
 
     const aligned = toAlignedIndex(days, index, visibleCount);
     container.scrollTo({ left: aligned * columnWidth, behavior });
@@ -222,8 +276,11 @@ export function useCalendarScroll({
 
   /** スクロールが止まったとき。先頭の日を覚え、端に近づいていれば読み直す */
   const handleSettled = () => {
+    // 指で横に送っている最中は、途中で止めても確定させない（離したときに送る）
+    if (swipeRef.current?.phase === "horizontal") return;
     const container = containerRef.current;
     if (container === null) return;
+    container.style.scrollSnapType = "";
     const { columnWidth, visibleCount, firstIndex } = measure(container);
     if (columnWidth <= 0) return;
     settle(firstIndex, visibleCount);
@@ -233,7 +290,8 @@ export function useCalendarScroll({
   /**
    * 箱の幅が変わったとき。表示日数や列の幅が変わるので、止まっていた先頭の日を保つ位置へ合わせ直す。
    *
-   * スマホで欄を広げている間は、カレンダーを隠す（ADR-014 決定 13）。Safari は隠した箱の横の位置を 0 に戻すので、
+   * スマホで欄を広げている間（2 段階（選ぶ・入力する）の入力段階）は、カレンダーを隠す（ADR-014 決定 13）。
+   * Safari は隠した箱の横の位置を 0 に戻すので、
    * 隠れた（幅が 0 になった）ことを覚えておき、また出たときに合わせ直す。覚えておかないと、出たときの幅が
    * 隠す前と同じなので合わせ直さず、4 週間の先頭に戻ったまま、端に近づいたとみなして読み直してしまう。
    */
@@ -247,13 +305,152 @@ export function useCalendarScroll({
     scrollToIndex(targetIndexRef.current ?? settledIndexRef.current, "instant");
   };
 
+  const handlePointerDown = (event: PointerEvent) => {
+    swipedRef.current = false;
+    if (event.pointerType !== "touch") return;
+    // 2 本目の指（ピンチ拡大など）が触れたら、進行中の待機は取りやめる
+    if (!event.isPrimary) {
+      if (swipeRef.current?.phase === "pending") swipeRef.current = null;
+      return;
+    }
+    if (
+      event.target instanceof Element &&
+      event.target.closest("[data-slot='draft-start-handle'], [data-slot='draft-end-handle']") !==
+        null
+    ) {
+      return;
+    }
+    const container = containerRef.current;
+    if (container === null) return;
+
+    swipeRef.current = {
+      phase: "pending",
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: container.scrollLeft,
+      samples: [{ x: event.clientX, time: event.timeStamp }],
+    };
+  };
+
+  const handlePointerMove = (event: PointerEvent) => {
+    const swipe = swipeRef.current;
+    if (swipe === null || event.pointerType !== "touch" || event.pointerId !== swipe.pointerId) {
+      return;
+    }
+    const container = containerRef.current;
+    if (container === null) return;
+
+    const dx = event.clientX - swipe.startX;
+
+    if (swipe.phase === "pending") {
+      const dy = event.clientY - swipe.startY;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      if (absDy >= SWIPE_LOCK_THRESHOLD_PX && absDy >= absDx) {
+        // 縦の動きが先に大きくなったらブラウザの縦スクロールに任せる
+        swipeRef.current = null;
+        return;
+      }
+      if (absDx < SWIPE_LOCK_THRESHOLD_PX || absDx <= absDy) return;
+
+      // 横に送る操作を始めるときは scroll-snap を外す（止まったあと handleSettled で戻す）
+      container.style.scrollSnapType = "none";
+      targetIndexRef.current = null;
+      swipeRef.current = {
+        phase: "horizontal",
+        pointerId: swipe.pointerId,
+        startX: swipe.startX,
+        startScrollLeft: swipe.startScrollLeft,
+        samples: swipe.samples,
+      };
+    }
+
+    const active = swipeRef.current;
+    if (active === null || active.phase !== "horizontal") return;
+
+    container.scrollLeft = active.startScrollLeft - dx;
+    active.samples.push({ x: event.clientX, time: event.timeStamp });
+    while (
+      active.samples.length > 1 &&
+      event.timeStamp - active.samples[0].time > SWIPE_VELOCITY_WINDOW_MS
+    ) {
+      active.samples.shift();
+    }
+  };
+
+  const handlePointerEnd = (event: PointerEvent) => {
+    const swipe = swipeRef.current;
+    if (swipe === null || event.pointerType !== "touch" || event.pointerId !== swipe.pointerId) {
+      return;
+    }
+    swipeRef.current = null;
+    if (swipe.phase !== "horizontal") return;
+
+    swipedRef.current = true;
+    const container = containerRef.current;
+    if (container === null) return;
+    const { columnWidth, visibleCount } = measure(container);
+    if (columnWidth <= 0) {
+      container.style.scrollSnapType = "";
+      return;
+    }
+
+    const scrollVelocity = measureScrollVelocity(swipe.samples, event.clientX, event.timeStamp);
+    const to = toSwipeTargetIndex({
+      days,
+      startScrollLeft: swipe.startScrollLeft,
+      currentScrollLeft: container.scrollLeft,
+      columnWidth,
+      visibleCount,
+      scrollVelocity,
+    });
+    const targetLeft = to * columnWidth;
+    if (Math.abs(container.scrollLeft - targetLeft) < 1) {
+      // 端などで位置が変わらず scroll イベントが起きないときは、ここで止まった扱いにする
+      handleSettled();
+      return;
+    }
+    container.scrollTo({ left: targetLeft, behavior: "smooth" });
+    targetIndexRef.current = to;
+  };
+
+  const handleClickCapture = (event: MouseEvent) => {
+    if (!swipedRef.current) return;
+    swipedRef.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleKeyDown = () => {
+    swipedRef.current = false;
+  };
+
   /*
-   * scroll と ResizeObserver は 1 度だけ登録し、中では最新の処理を呼ぶ。
-   * 描画のたびに登録し直すと、止まるのを待っている間の timer が消えてしまう。
+   * scroll・ResizeObserver・指の操作は 1 度だけ登録し、中では最新の処理を呼ぶ。
+   * 描画のたびに登録し直すと、止まるのを待っている間の timer やスワイプの途中が消えてしまう。
    */
-  const handlersRef = useRef({ handleSettled, handleResize, reloadIfNearEdge });
+  const handlersRef = useRef({
+    handleSettled,
+    handleResize,
+    reloadIfNearEdge,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerEnd,
+    handleClickCapture,
+    handleKeyDown,
+  });
   useLayoutEffect(() => {
-    handlersRef.current = { handleSettled, handleResize, reloadIfNearEdge };
+    handlersRef.current = {
+      handleSettled,
+      handleResize,
+      reloadIfNearEdge,
+      handlePointerDown,
+      handlePointerMove,
+      handlePointerEnd,
+      handleClickCapture,
+      handleKeyDown,
+    };
   });
 
   // 遷移の途中に止まったときは読み直しを見送っているので、遷移が終わったら確かめ直す
@@ -270,13 +467,31 @@ export function useCalendarScroll({
       clearTimeout(timer);
       timer = setTimeout(() => handlersRef.current.handleSettled(), SCROLL_SETTLE_MS);
     };
+    const onPointerDown = (event: PointerEvent) => handlersRef.current.handlePointerDown(event);
+    const onPointerMove = (event: PointerEvent) => handlersRef.current.handlePointerMove(event);
+    const onPointerEnd = (event: PointerEvent) => handlersRef.current.handlePointerEnd(event);
+    const onClickCapture = (event: MouseEvent) => handlersRef.current.handleClickCapture(event);
+    const onKeyDown = () => handlersRef.current.handleKeyDown();
     const observer = new ResizeObserver(() => handlersRef.current.handleResize());
 
     container.addEventListener("scroll", onScroll, { passive: true });
+    container.addEventListener("pointerdown", onPointerDown);
+    container.addEventListener("click", onClickCapture, { capture: true });
+    container.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerup", onPointerEnd);
+    window.addEventListener("pointercancel", onPointerEnd);
     observer.observe(container);
     return () => {
       clearTimeout(timer);
+      container.style.scrollSnapType = "";
       container.removeEventListener("scroll", onScroll);
+      container.removeEventListener("pointerdown", onPointerDown);
+      container.removeEventListener("click", onClickCapture, { capture: true });
+      container.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerEnd);
+      window.removeEventListener("pointercancel", onPointerEnd);
       observer.disconnect();
     };
   }, [containerRef]);
@@ -293,6 +508,8 @@ export function useCalendarScroll({
       const container = containerRef.current;
       const index = findDayIndex(days, dateKey);
       if (container === null || index === -1) return;
+      // 隠れていたカレンダーが出た直後は ResizeObserver より先にこのフレームが走ることがあるため、先に幅を合わせる
+      handleResize();
       const { columnWidth, visibleCount, firstIndex } = measure(container);
       if (columnWidth <= 0) return;
 

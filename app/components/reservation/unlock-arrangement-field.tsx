@@ -1,3 +1,5 @@
+import { cn } from "cn";
+
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { UnlockArrangement } from "~/domain/reservation";
 import {
@@ -36,6 +38,8 @@ interface UnlockArrangementFieldProps {
   readonly onValueChange: (value: UnlockArrangement) => void;
   /** サーバーが返した、この欄のエラー */
   readonly error?: string;
+  /** 見出しの p に足す class（スマホで外の見出しと二重にしないため `hidden` で隠すときなどに使う。`aria-labelledby` が指しているので、隠しても選択肢のグループの名前は残る） */
+  readonly headingClassName?: string;
 }
 
 /**
@@ -52,6 +56,7 @@ export function UnlockArrangementField({
   value,
   onValueChange,
   error,
+  headingClassName,
 }: Readonly<UnlockArrangementFieldProps>) {
   const headingId = `${idPrefix}-heading`;
   const descriptionId = `${idPrefix}-description`;
@@ -60,7 +65,7 @@ export function UnlockArrangementField({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-1">
-        <p id={headingId} className="text-sm font-medium">
+        <p id={headingId} className={cn("text-sm font-medium", headingClassName)}>
           解錠の手配
           <span className="ml-1.5 text-xs font-semibold text-destructive">(必須)</span>
         </p>

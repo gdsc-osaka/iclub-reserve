@@ -1,6 +1,10 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { formatMonthDay } from "~/lib/date";
+import {
+  proceedToAvailabilityInputStep,
+  selectAvailabilityTimeRange,
+} from "../support/availability-panel.js";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -118,6 +122,7 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const staff = await createUser(db, { is_staff: true });
     const group = await createGroup(db, {
@@ -152,10 +157,10 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
     const userEditPanel = page.getByRole("region", { name: "予約の変更" });
     await expect(userEditPanel).toBeVisible();
 
-    await userEditPanel.getByRole("combobox", { name: "開始時刻" }).click();
-    await page.getByRole("option", { name: "13:00" }).click();
-    await userEditPanel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "15:00" }).click();
+    await selectAvailabilityTimeRange(page, userEditPanel, isMobile, {
+      start: "13:00",
+      end: "15:00",
+    });
 
     await userEditPanel.getByRole("button", { name: "変更内容を確認する" }).click();
     const userConfirm = page.getByRole("alertdialog", { name: "この内容で変更しますか？" });
@@ -175,10 +180,10 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
     const staffEditPanel = page.getByRole("region", { name: "予約の変更" });
     await expect(staffEditPanel).toBeVisible();
 
-    await staffEditPanel.getByRole("combobox", { name: "開始時刻" }).click();
-    await page.getByRole("option", { name: "13:00" }).click();
-    await staffEditPanel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "15:00" }).click();
+    await selectAvailabilityTimeRange(page, staffEditPanel, isMobile, {
+      start: "13:00",
+      end: "15:00",
+    });
 
     await staffEditPanel.getByLabel("要手配").click();
     await staffEditPanel.getByRole("button", { name: "変更内容を確認する" }).click();
@@ -197,6 +202,7 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const staff = await createUser(db, { is_staff: true });
     const group = await createGroup(db, {
@@ -219,6 +225,7 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
 
     const staffPanel = page.getByRole("region", { name: "新しい予約" });
     await expect(staffPanel).toBeVisible();
+    await proceedToAvailabilityInputStep(staffPanel, isMobile);
     await expect(
       staffPanel.getByRole("switch", { name: "承認済みとして直接作成する" }),
     ).toHaveCount(0);
@@ -251,6 +258,7 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
 
     const userPanel = page.getByRole("region", { name: "新しい予約" });
     await expect(userPanel).toBeVisible();
+    await proceedToAvailabilityInputStep(userPanel, isMobile);
     await expect(userPanel.getByRole("switch", { name: "承認済みとして直接作成する" })).toHaveCount(
       0,
     );
@@ -312,6 +320,7 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const applicant = await createUser(db, { is_staff: false });
     const staff = await createUser(db, { is_staff: true });
@@ -333,6 +342,7 @@ test.describe("COND-030 画面領域による立場の決定", { tag: "@COND-030
 
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
+    await proceedToAvailabilityInputStep(panel, isMobile);
 
     await panel.getByLabel("使用人数").fill("4");
     await panel.getByRole("button", { name: "内容を確認する" }).click();

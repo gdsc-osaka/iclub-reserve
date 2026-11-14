@@ -1,6 +1,13 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { addDays, formatMonthDay } from "~/lib/date";
+import {
+  expectAvailabilityBlocked,
+  expectAvailabilityTimeRange,
+  proceedToAvailabilityInputStep,
+  repickOnAvailabilityCalendar,
+  selectAvailabilityTimeRange,
+} from "../support/availability-panel.js";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -17,18 +24,19 @@ import { openPage } from "../support/page.js";
  * UC-002 仮予約を申請する（`rdra/contexts/reservation-application.md`）
  */
 test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
-  test("欄から申請する（主な流れ）", async ({ page, db, signInAs }) => {
+  test("欄から申請する（主な流れ）", async ({ page, db, signInAs, isMobile }) => {
     // 前提: 有効な団体の一般メンバー（団体は 1 つ）と、ほかの予約が入っていない施設
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
     const facility = await createFacility(db);
     await signInAs(member.id);
 
-    const wednesday = nextWeekAt(Weekday.Wednesday, 0);
+    // どの曜日に実行しても利用日まで 7 日以上先になり、1 週間前までの案内が出るよう再来週を使う
+    const wednesday = addDays(nextWeekAt(Weekday.Wednesday, 0), 7);
     const dateKey = toDateKey(wednesday);
     await openPage(page, `/availability?facility=${facility.id}&date=${dateKey}`);
 
-    // 来週の水曜の「10:30 から申請」を押す
+    // 再来週の水曜の「10:30 から申請」を押す
     const column = page.getByRole("group", { name: formatMonthDay(wednesday) });
     await column
       .getByRole("button", { name: `${formatMonthDay(wednesday)} 10:30 から申請` })
@@ -37,16 +45,15 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
 
-    // 申請の案内文が常に出ていること（COND-028）
+    // 欄の「終了時刻」で 12:00 を選ぶ（スマホは「次へ」で入力する段階へ進む）
+    await selectAvailabilityTimeRange(page, panel, isMobile, { end: "12:00" });
+
+    // 7 日以上先のため、1 週間前までの申請の案内文が出ていること（COND-028）
     await expect(
       panel.getByText(
         "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
       ),
     ).toBeVisible();
-
-    // 欄の「終了時刻」で 12:00 を選ぶ
-    await panel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "12:00" }).click();
 
     // 使用人数 4
     await panel.getByLabel("使用人数").fill("4");
@@ -97,12 +104,17 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     ).toHaveLength(1);
   });
 
-  test("承認済みと重なる時間は申請できない（代表的な失敗）", async ({ page, db, signInAs }) => {
+  test("承認済みと重なる時間は申請できない（代表的な失敗）", async ({
+    page,
+    db,
+    signInAs,
+    isMobile,
+  }) => {
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
     const facility = await createFacility(db);
 
-    // 他団体の承認済みの予約が来週の水曜の 10:00〜12:00 にある
+    // 他団体の承認済みの予約が再来週の水曜の 10:00〜12:00 にある（7 日以上先にして案内文も確かめる）
     const otherApplicant = await createUser(db);
     const otherGroup = await createGroup(db, {
       members: [{ userId: otherApplicant.id, role: MembershipRole.Member }],
@@ -111,13 +123,13 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
       groupId: otherGroup.id,
       facilityId: facility.id,
       createdBy: otherApplicant.id,
-      startAt: nextWeekAt(Weekday.Wednesday, 10),
-      endAt: nextWeekAt(Weekday.Wednesday, 12),
+      startAt: addDays(nextWeekAt(Weekday.Wednesday, 10), 7),
+      endAt: addDays(nextWeekAt(Weekday.Wednesday, 12), 7),
       status: ReservationStatus.Approved,
     });
     await signInAs(member.id);
 
-    const wednesday = nextWeekAt(Weekday.Wednesday, 0);
+    const wednesday = addDays(nextWeekAt(Weekday.Wednesday, 0), 7);
     const dateKey = toDateKey(wednesday);
     await openPage(page, `/availability?facility=${facility.id}&date=${dateKey}`);
 
@@ -130,20 +142,19 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
 
-    // 申請の案内文が常に出ていること（COND-028）
+    // スマホは入力する段階へ進んで案内文が出ていることを確かめる
+    await proceedToAvailabilityInputStep(panel, isMobile);
     await expect(
       panel.getByText(
         "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
       ),
     ).toBeVisible();
 
-    // 「終了時刻」で 11:00 を選ぶ
-    await panel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "11:00" }).click();
+    // 「終了時刻」で 11:00 を選ぶ（スマホは重なると「次へ」が押せないため選ぶ段階にとどまる）
+    await selectAvailabilityTimeRange(page, panel, isMobile, { end: "11:00", proceed: false });
 
-    // 「この時間帯はすでに埋まっています」が出て、「内容を確認する」が押せない
-    await expect(panel.getByText("この時間帯はすでに埋まっています")).toBeVisible();
-    await expect(panel.getByRole("button", { name: "内容を確認する" })).toBeDisabled();
+    // 重なっている警告が出て先へ進めない
+    await expectAvailabilityBlocked(panel, isMobile, "内容を確認する");
 
     // 予約は増えていない
     expect(await findReservationsOfFacility(db, facility.id)).toHaveLength(1);
@@ -153,6 +164,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
@@ -187,15 +199,23 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
       new RegExp(`/availability\\?facility=${facility.id}&date=${todayKey}&draft=${todayKey}`),
     );
 
-    // 欄「新しい予約」に「時刻を選んでいないとき」の文言が出て、「内容を確認する」が押せない
+    // 欄「新しい予約」に「時刻を選んでいないとき」の文言が出て、先へ進めない
     const memberPanel = page.getByRole("region", { name: "新しい予約" });
     await expect(memberPanel).toBeVisible();
-    await expect(
-      memberPanel.getByText(
-        "カレンダーの空いている時間を押すか、開始時刻と終了時刻を選んでください。",
-      ),
-    ).toBeVisible();
-    await expect(memberPanel.getByRole("button", { name: "内容を確認する" })).toBeDisabled();
+    if (isMobile) {
+      // スマホの選ぶ段階ではバーの文言が出て「次へ」が押せない（ADR-014 決定 13）
+      await expect(
+        memberPanel.getByText("カレンダーの空いている時間を押してください。"),
+      ).toBeVisible();
+      await expect(memberPanel.getByRole("button", { name: "次へ" })).toBeDisabled();
+    } else {
+      await expect(
+        memberPanel.getByText(
+          "カレンダーの空いている時間を押すか、開始時刻と終了時刻を選んでください。",
+        ),
+      ).toBeVisible();
+      await expect(memberPanel.getByRole("button", { name: "内容を確認する" })).toBeDisabled();
+    }
 
     // 事務局では「予約を作成」で事務局の画面の同じ欄が開き、直接作成で選ぶ解錠の手配が出る（ADR-016 決定 13）
     const staff = await createUser(db, { is_staff: true });
@@ -214,12 +234,28 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     await page.getByRole("menuitem", { name: facility.name }).click();
     const staffPanel = page.getByRole("region", { name: "新しい予約" });
     await expect(staffPanel).toBeVisible();
-    await expect(
-      staffPanel.getByText(
-        "カレンダーの空いている時間を押すか、開始時刻と終了時刻を選んでください。",
-      ),
-    ).toBeVisible();
-    await expect(staffPanel.getByLabel("要手配")).toBeVisible();
+    if (isMobile) {
+      // スマホでは選ぶ段階にバーの文言が出て、明日以降の時刻を選んで「次へ」で進むと解錠の手配が出る（ADR-014 決定 13）
+      await expect(
+        staffPanel.getByText("カレンダーの空いている時間を押してください。"),
+      ).toBeVisible();
+      const tomorrow = addDays(new Date(), 1);
+      await staffPanel.getByRole("button", { name: "日時を入力する" }).click();
+      await staffPanel.getByRole("button", { name: "次の日" }).click();
+      await expect(page).toHaveURL(new RegExp(`draft=${toDateKey(tomorrow)}`));
+      await selectAvailabilityTimeRange(page, staffPanel, isMobile, {
+        start: "10:00",
+        end: "11:00",
+      });
+      await expect(staffPanel.getByLabel("要手配")).toBeVisible();
+    } else {
+      await expect(
+        staffPanel.getByText(
+          "カレンダーの空いている時間を押すか、開始時刻と終了時刻を選んでください。",
+        ),
+      ).toBeVisible();
+      await expect(staffPanel.getByLabel("要手配")).toBeVisible();
+    }
   });
 
   test("カレンダーを遠くの日へ移しても、仮の枠と欄の入力は残る", async ({
@@ -245,12 +281,13 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
 
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
+    await proceedToAvailabilityInputStep(panel, isMobile);
     await panel.getByLabel("使用人数").fill("4");
 
-    // スマホでは文字の欄に入ると欄が広がってカレンダーが隠れるので、縮めてから移る（ADR-014 決定 13）。
-    // 縮めたら、隠す前に見ていた日に戻る（Safari は隠すと横の位置を先頭に戻すので、合わせ直している）
+    // スマホでは入力する段階だとカレンダーが隠れているので、「カレンダーで選び直す」で選ぶ段階へ戻ってから移る（ADR-014 決定 13）。
+    // 戻ったときに、隠す前に見ていた日に戻ることも確かめる（Safari は隠すと横の位置を先頭に戻すので、合わせ直している）
+    await repickOnAvailabilityCalendar(panel, isMobile);
     if (isMobile) {
-      await panel.getByRole("button", { name: "縮める" }).click();
       await expect(column).toBeInViewport();
     }
 
@@ -260,8 +297,8 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     await expect(column).toHaveCount(0);
 
     await expect(panel).toBeVisible();
-    await expect(panel.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:00");
-    await expect(panel.getByRole("combobox", { name: "終了時刻" })).toHaveText("11:00");
+    await expectAvailabilityTimeRange(panel, isMobile, { start: "10:00", end: "11:00" });
+    await proceedToAvailabilityInputStep(panel, isMobile);
     await expect(panel.getByLabel("使用人数")).toHaveValue("4");
 
     // そのまま申請すると、作った予約の日のカレンダーへ戻り、欄に予約が開く
@@ -294,7 +331,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     await slot1000.click();
 
     const panel = page.getByRole("region", { name: "新しい予約" });
-    await expect(panel.getByRole("combobox", { name: "終了時刻" })).toHaveText("11:00");
+    await expectAvailabilityTimeRange(panel, isMobile, { start: "10:00", end: "11:00" });
 
     // 終了の丸（[data-slot="draft-end-handle"]）をマウスで「12:00 から申請」の枠の上端まで動かす
     const endHandle = page.locator('[data-slot="draft-end-handle"]');
@@ -320,8 +357,8 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     });
     await page.mouse.up({ button: "left" });
 
-    // 欄の「終了時刻」が 12:00 になる
-    await expect(panel.getByRole("combobox", { name: "終了時刻" })).toHaveText("12:00");
+    // 欄の時刻が 10:00〜12:00 になる
+    await expectAvailabilityTimeRange(panel, isMobile, { start: "10:00", end: "12:00" });
 
     // PC だけ（isMobile のときはここで終える）
     if (isMobile) return;
@@ -356,6 +393,7 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
@@ -374,18 +412,19 @@ test.describe("UC-002 仮予約を申請する", { tag: "@UC-002" }, () => {
 
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
+    await proceedToAvailabilityInputStep(panel, isMobile);
 
-    // 案内文と注意文の両方が表示されていること（COND-028）
-    await expect(
-      panel.getByText(
-        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
-      ),
-    ).toBeVisible();
+    // 7日を切った注意文が表示され、1週間前までの案内文は表示されないこと（COND-028）
     await expect(
       panel.getByText(
         "利用日まで7日を切っています。承認や施設の解錠の手配が間に合わないことがあります。",
       ),
     ).toBeVisible();
+    await expect(
+      panel.getByText(
+        "予約は利用日の1週間前までに申請してください。それより後の申請も受け付けますが、承認や施設の解錠の手配が間に合わないことがあります。",
+      ),
+    ).toBeHidden();
 
     await panel.getByLabel("使用人数").fill("4");
 

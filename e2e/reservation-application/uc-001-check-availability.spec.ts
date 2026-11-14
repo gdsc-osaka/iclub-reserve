@@ -4,6 +4,7 @@ import { GroupStatus } from "~/domain/group";
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
 import { addDays, atTokyoTime, formatMonthDay } from "~/lib/date";
+import { expectAvailabilityTimeRange } from "../support/availability-panel.js";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -191,6 +192,7 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
@@ -210,9 +212,9 @@ test.describe("UC-001 空き状況を確認する", { tag: "@UC-001" }, () => {
     // 欄（名前「新しい予約」）に「開始時刻」が 10:30、「終了時刻」が 11:30、施設名が出ている
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
-    await expect(panel.getByText(facility.name)).toBeVisible();
-    await expect(panel.getByRole("combobox", { name: "開始時刻" })).toHaveText("10:30");
-    await expect(panel.getByRole("combobox", { name: "終了時刻" })).toHaveText("11:30");
+    // 施設名は PC の入力欄とスマホ用のバー（md:hidden）の両方に描かれるため、見えている方だけを確かめる
+    await expect(panel.getByText(facility.name).filter({ visible: true })).toBeVisible();
+    await expectAvailabilityTimeRange(panel, isMobile, { start: "10:30", end: "11:30" });
 
     // 戻る操作で欄が消え、URL から draft が外れる
     await page.goBack();

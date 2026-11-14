@@ -1,5 +1,6 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
+import { selectAvailabilityTimeRange } from "../support/availability-panel.js";
 import { nextWeekAt, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -71,6 +72,7 @@ test.describe("UC-005 承認済み予約の内容を変更する", { tag: "@UC-0
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const member = await createUser(db);
     const group = await createGroup(db, {
@@ -93,10 +95,7 @@ test.describe("UC-005 承認済み予約の内容を変更する", { tag: "@UC-0
     await expect(panel).toBeVisible();
 
     // 時間帯を 13:00〜15:00 に変更
-    await panel.getByRole("combobox", { name: "開始時刻" }).click();
-    await page.getByRole("option", { name: "13:00" }).click();
-    await panel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "15:00" }).click();
+    await selectAvailabilityTimeRange(page, panel, isMobile, { start: "13:00", end: "15:00" });
 
     // フォーム上に再承認が必要な警告が出ている
     await expect(panel.getByText("再承認が必要です")).toBeVisible();

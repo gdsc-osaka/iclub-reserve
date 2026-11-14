@@ -1,7 +1,9 @@
+import { CalendarDays } from "lucide-react";
+
 import type { AvailabilityDay } from "~/components/reservation/availability-week";
 import { DateNavigation } from "~/components/reservation/editor/date-navigation";
-import { OperatingHoursNotice } from "~/components/reservation/editor/operating-hours-notice";
 import { TimeRangeFields } from "~/components/reservation/editor/time-range-fields";
+import { Button } from "~/components/ui/button";
 import { toTokyoDateKey } from "~/lib/date";
 
 import type { CalendarDraft } from "./paths";
@@ -20,6 +22,7 @@ export function DraftScheduleFields({
   pastSlots,
   periodErrorId,
   onDraftChange,
+  showUnselectedHint = true,
 }: Readonly<{
   day: AvailabilityDay;
   draft: CalendarDraft;
@@ -29,6 +32,12 @@ export function DraftScheduleFields({
   pastSlots: ReadonlySet<number>;
   periodErrorId?: string;
   onDraftChange: (draft: CalendarDraft) => void;
+  /**
+   * 時刻を選んでいないときの注記を出すか。PC の欄では出し、スマホのバーでは出さない
+   * （バーの文で同じことを伝えているため）。
+   * 利用できる時間帯と日をまたげないことの案内は出さない。選択肢がその範囲しか無く、見れば分かるため（ADR-014 決定 12）
+   */
+  showUnselectedHint?: boolean;
 }>) {
   return (
     <>
@@ -58,14 +67,26 @@ export function DraftScheduleFields({
           errorId={periodErrorId}
         />
 
-        <OperatingHoursNotice />
-
-        {draft.range === null && (
+        {showUnselectedHint && draft.range === null && (
           <p className="text-xs text-muted-foreground">
             カレンダーの空いている時間を押すか、開始時刻と終了時刻を選んでください。
           </p>
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * スマホの入力段階の「施設・日時」グループの一番下に置く、選ぶ段階へ戻るボタン。
+ *
+ * 申請の欄（AvailabilityDraftForm）と変更の欄（AvailabilityEditForm）で共有する。
+ */
+export function RepickOnCalendarButton({ onClick }: Readonly<{ onClick: () => void }>) {
+  return (
+    <Button type="button" variant="outline" onClick={onClick} className="w-full md:hidden">
+      <CalendarDays aria-hidden />
+      カレンダーで選び直す
+    </Button>
   );
 }

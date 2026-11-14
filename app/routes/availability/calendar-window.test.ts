@@ -9,11 +9,13 @@ import {
   formatVisibleMonths,
   isInCalendarWindow,
   needsWindowShift,
+  SWIPE_FLICK_VELOCITY_PX_PER_MS,
   toAlignedIndex,
   toCalendarPeriods,
   toCalendarWindowStart,
   toDraftDayOutsideWindow,
   toRevealIndex,
+  toSwipeTargetIndex,
   toVisibleCount,
 } from "./calendar-window";
 
@@ -273,6 +275,171 @@ describe("calendar-window", () => {
       const first = new Date("2026-09-30T15:00:00.000Z");
       const last = new Date("2026-10-05T00:00:00.000Z");
       expect(formatVisibleMonths(first, last)).toBe("2026年10月");
+    });
+  });
+
+  describe("toSwipeTargetIndex", () => {
+    const today = new Date("2026-10-28T09:00:00+09:00");
+    const windowStart = new Date("2026-10-18T00:00:00+09:00"); // 日曜
+    const days = buildDays(windowStart, CALENDAR_WINDOW_DAYS, today, []);
+    const columnWidth = 100;
+
+    it("ゆっくり離し、移動量が半列以下なら元の列に戻る", () => {
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 10 * columnWidth,
+          currentScrollLeft: 10.4 * columnWidth,
+          columnWidth,
+          visibleCount: 3,
+          scrollVelocity: 0.05,
+        }),
+      ).toBe(10);
+
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 10 * columnWidth,
+          currentScrollLeft: 9.6 * columnWidth,
+          columnWidth,
+          visibleCount: 5,
+          scrollVelocity: -0.05,
+        }),
+      ).toBe(10);
+    });
+
+    it("半分を超えて動かして離すと、その先の列に進む・戻る", () => {
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 10 * columnWidth,
+          currentScrollLeft: 10.6 * columnWidth,
+          columnWidth,
+          visibleCount: 3,
+          scrollVelocity: 0.05,
+        }),
+      ).toBe(11);
+
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 10 * columnWidth,
+          currentScrollLeft: 8.4 * columnWidth,
+          columnWidth,
+          visibleCount: 3,
+          scrollVelocity: -0.05,
+        }),
+      ).toBe(8);
+    });
+
+    it("速く払ったとき、移動量が半列未満でも払った向きに 1 日だけ送る", () => {
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 10 * columnWidth,
+          currentScrollLeft: 10.2 * columnWidth,
+          columnWidth,
+          visibleCount: 3,
+          scrollVelocity: SWIPE_FLICK_VELOCITY_PX_PER_MS,
+        }),
+      ).toBe(11);
+
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 10 * columnWidth,
+          currentScrollLeft: 9.8 * columnWidth,
+          columnWidth,
+          visibleCount: 5,
+          scrollVelocity: -SWIPE_FLICK_VELOCITY_PX_PER_MS,
+        }),
+      ).toBe(9);
+    });
+
+    it("速く払っても、すでに丸めで 1 日以上動く位置なら重ねて送らない", () => {
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 10 * columnWidth,
+          currentScrollLeft: 10.7 * columnWidth,
+          columnWidth,
+          visibleCount: 3,
+          scrollVelocity: 1.0,
+        }),
+      ).toBe(11);
+    });
+
+    it("7 日の表示では 1 週単位で丸め、速く払ったときも 1 週だけ送る", () => {
+      // 7 日目の日曜から 3 列（半週未満）動かしてゆっくり離すと 7 に戻る
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 7 * columnWidth,
+          currentScrollLeft: 10 * columnWidth,
+          columnWidth,
+          visibleCount: 7,
+          scrollVelocity: 0.05,
+        }),
+      ).toBe(7);
+
+      // 半週（3.5 列）を超えて 4 列動かすと次の週（14）へ進む
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 7 * columnWidth,
+          currentScrollLeft: 11 * columnWidth,
+          columnWidth,
+          visibleCount: 7,
+          scrollVelocity: 0.05,
+        }),
+      ).toBe(14);
+
+      // 1 列だけ動かして速く払うと 1 週（14 または 0）へ送る
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 7 * columnWidth,
+          currentScrollLeft: 8 * columnWidth,
+          columnWidth,
+          visibleCount: 7,
+          scrollVelocity: SWIPE_FLICK_VELOCITY_PX_PER_MS,
+        }),
+      ).toBe(14);
+
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 7 * columnWidth,
+          currentScrollLeft: 6 * columnWidth,
+          columnWidth,
+          visibleCount: 7,
+          scrollVelocity: -SWIPE_FLICK_VELOCITY_PX_PER_MS,
+        }),
+      ).toBe(0);
+    });
+
+    it("先頭や末尾の境界を超えない", () => {
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 0,
+          currentScrollLeft: 0,
+          columnWidth,
+          visibleCount: 3,
+          scrollVelocity: -1.0,
+        }),
+      ).toBe(0);
+
+      expect(
+        toSwipeTargetIndex({
+          days,
+          startScrollLeft: 25 * columnWidth,
+          currentScrollLeft: 25 * columnWidth,
+          columnWidth,
+          visibleCount: 3,
+          scrollVelocity: 1.0,
+        }),
+      ).toBe(25);
     });
   });
 });

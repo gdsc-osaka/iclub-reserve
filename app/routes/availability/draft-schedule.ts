@@ -66,3 +66,30 @@ export const calculateDraftSchedule = ({
     conflicts,
   };
 };
+
+/** 仮の枠を選んだ段階のバーに出す状態の種類 */
+export type DraftSummaryKind = "unselected" | "past" | "blocked" | "provisional" | "ok";
+
+/** 仮の枠を選んだ段階のバーに出す状態と、入力段階へ進めるか */
+export interface DraftSummaryStatus {
+  readonly kind: DraftSummaryKind;
+  readonly canProceed: boolean;
+}
+
+/**
+ * 仮の枠の日時の状態から、スマホの選ぶ段階のバーに出す状態と先へ進めるかを求める純粋な関数。
+ *
+ * 優先順位は、未選択 → 開始が過去 → 取れない（承認済みと重なるなど） → 仮予約と重なる → 問題なし。
+ */
+export const toDraftSummaryStatus = (
+  schedule: Pick<DraftScheduleState, "isStartPast" | "isAvailable" | "conflicts">,
+  range: CalendarDraft["range"],
+): DraftSummaryStatus => {
+  if (range === null) return { kind: "unselected", canProceed: false };
+  if (schedule.isStartPast) return { kind: "past", canProceed: false };
+  if (!schedule.isAvailable) return { kind: "blocked", canProceed: false };
+  if (schedule.conflicts !== null && schedule.conflicts.provisionalConflicts.length > 0) {
+    return { kind: "provisional", canProceed: true };
+  }
+  return { kind: "ok", canProceed: true };
+};
