@@ -1,6 +1,10 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus, UnlockArrangement } from "~/domain/reservation";
 import { formatMonthDay } from "~/lib/date";
+import {
+  expectAvailabilityBlocked,
+  proceedToAvailabilityInputStep,
+} from "../support/availability-panel.js";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -17,7 +21,7 @@ import { openPage } from "../support/page.js";
  * UC-008 予約を直接作成する（`rdra/contexts/reservation-approval.md`）
  */
 test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
-  test("欄から直接作成する（主な流れ）", async ({ page, db, signInAs }) => {
+  test("欄から直接作成する（主な流れ）", async ({ page, db, signInAs, isMobile }) => {
     // 前提: 有効な団体と施設
     const applicant = await createUser(db);
     const group = await createGroup(db, {
@@ -39,6 +43,7 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
 
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
+    await proceedToAvailabilityInputStep(panel, isMobile);
 
     // 欄の「申請元の団体」で、このテストで作った団体を選ぶ
     await panel.getByRole("combobox", { name: "申請元の団体" }).click();
@@ -92,7 +97,12 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     expect(await mailsOfReservation(personas.staff.email)).toHaveLength(0);
   });
 
-  test("一般ユーザーには切り替えが出ない（権限の境目）", async ({ page, db, signInAs }) => {
+  test("一般ユーザーには切り替えが出ない（権限の境目）", async ({
+    page,
+    db,
+    signInAs,
+    isMobile,
+  }) => {
     const member = await createUser(db);
     await createGroup(db, { members: [{ userId: member.id, role: MembershipRole.Member }] });
     const facility = await createFacility(db);
@@ -109,10 +119,16 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
     // 欄「新しい予約」は出るが、「承認済みとして直接作成する」は出ない
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
+    await proceedToAvailabilityInputStep(panel, isMobile);
     await expect(panel.getByRole("switch", { name: "承認済みとして直接作成する" })).toBeHidden();
   });
 
-  test("承認済みと重なる時間は直接作成できない（COND-001）", async ({ page, db, signInAs }) => {
+  test("承認済みと重なる時間は直接作成できない（COND-001）", async ({
+    page,
+    db,
+    signInAs,
+    isMobile,
+  }) => {
     const applicant = await createUser(db);
     const group = await createGroup(db, {
       members: [{ userId: applicant.id, role: MembershipRole.Member }],
@@ -139,11 +155,10 @@ test.describe("UC-008 予約を直接作成する", { tag: "@UC-008" }, () => {
       `/staff/availability?facility=${facility.id}&date=${day}&draft=${day}T10:00-11:00`,
     );
 
-    // 「この時間帯はすでに埋まっています」が出て、「内容を確認する」が押せない
+    // 埋まっている理由が出て、確認・次へ進めない
     const panel = page.getByRole("region", { name: "新しい予約" });
     await expect(panel).toBeVisible();
-    await expect(panel.getByText("この時間帯はすでに埋まっています")).toBeVisible();
-    await expect(panel.getByRole("button", { name: "内容を確認する" })).toBeDisabled();
+    await expectAvailabilityBlocked(panel, isMobile, "内容を確認する");
 
     // 予約は増えていない
     expect(await findReservationsOfFacility(db, facility.id)).toHaveLength(1);

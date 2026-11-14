@@ -65,8 +65,13 @@ export function CalendarCard({
   className?: string;
 }>) {
   return (
-    <Card className={cn("min-h-0 min-w-0 flex-1 gap-0 overflow-hidden py-0", className)}>
-      <CardHeader className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-3 border-b py-4">
+    <Card
+      className={cn(
+        "min-h-0 min-w-0 flex-1 gap-0 overflow-hidden py-0 max-md:gap-2 max-md:rounded-none max-md:bg-transparent max-md:ring-0",
+        className,
+      )}
+    >
+      <CardHeader className="flex shrink-0 flex-col items-stretch gap-2 max-md:rounded-none max-md:p-0 md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-3 md:border-b md:py-4">
         <CardTitle className="flex min-w-0 items-center text-base">
           <FacilityMenu
             facilities={facilities}
@@ -87,7 +92,7 @@ export function CalendarCard({
         />
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col px-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col px-0 max-md:overflow-hidden max-md:rounded-xl max-md:border max-md:border-foreground/10 max-md:bg-card">
         {/*
          * スマホで欄を開いている間は凡例を隠す。欄がカレンダーの下に入るぶん高さが足りず、
          * 凡例を出したままだと時刻の部分がほとんど見えなくなって、カレンダーで選び直せない。

@@ -1,5 +1,10 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
+import {
+  expectAvailabilityBlocked,
+  repickOnAvailabilityCalendar,
+  selectAvailabilityTimeRange,
+} from "../support/availability-panel.js";
 import { nextWeekAt, toDateKey, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -20,6 +25,7 @@ test.describe("UC-017 仮予約の内容を編集する", { tag: "@UC-017" }, ()
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     // 前提: 自団体の仮予約が施設 A に 1 件ある
     const member = await createUser(db);
@@ -57,19 +63,17 @@ test.describe("UC-017 仮予約の内容を編集する", { tag: "@UC-017" }, ()
     const panel = page.getByRole("region", { name: "予約の変更" });
     await expect(panel).toBeVisible();
 
-    // 3. カレンダーの見出しの施設名から施設 B に替える。欄は「予約の変更」のまま、施設が替わり「変更前: <施設 A の名前>」が出る
+    // 3. スマホでは入力する段階だとカレンダーが隠れているため、選ぶ段階へ戻ってから施設 B に替える（ADR-014 決定 13）
+    await repickOnAvailabilityCalendar(panel, isMobile);
     await page.getByRole("button", { name: /施設・設備を選んで切り替え/ }).click();
     await page.getByRole("menuitem", { name: facilityB.name }).click();
 
     await expect(panel).toBeVisible();
-    await expect(panel.getByText(facilityB.name)).toBeVisible();
-    await expect(panel.getByText(`変更前: ${facilityA.name}`)).toBeVisible();
+    await expect(panel.getByText(facilityB.name).filter({ visible: true })).toBeVisible();
 
-    // 4. 時間帯・使用人数・備考を変更
-    await panel.getByRole("combobox", { name: "開始時刻" }).click();
-    await page.getByRole("option", { name: "14:00" }).click();
-    await panel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "16:00" }).click();
+    // 4. 時間帯・使用人数・備考を変更（スマホは時刻を選び直して「次へ」で入力する段階へ進むと「変更前: 施設 A」も出る）
+    await selectAvailabilityTimeRange(page, panel, isMobile, { start: "14:00", end: "16:00" });
+    await expect(panel.getByText(`変更前: ${facilityA.name}`)).toBeVisible();
 
     await panel.getByLabel("使用人数").fill("6");
     await panel.getByLabel("備考").fill("変更後の備考");
@@ -152,6 +156,7 @@ test.describe("UC-017 仮予約の内容を編集する", { tag: "@UC-017" }, ()
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     const member = await createUser(db);
     const group = await createGroup(db, {
@@ -187,16 +192,14 @@ test.describe("UC-017 仮予約の内容を編集する", { tag: "@UC-017" }, ()
     const panel = page.getByRole("region", { name: "予約の変更" });
     await expect(panel).toBeVisible();
 
-    // 重なる時間帯（13:00〜15:00）に変更（14:00〜16:00 の承認済み予約と重複）
-    await panel.getByRole("combobox", { name: "開始時刻" }).click();
-    await page.getByRole("option", { name: "13:00" }).click();
-    await panel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "15:00" }).click();
+    // 重なる時間帯（13:00〜15:00）に変更（14:00〜16:00 の承認済み予約と重複。スマホは選ぶ段階にとどまる）
+    await selectAvailabilityTimeRange(page, panel, isMobile, {
+      start: "13:00",
+      end: "15:00",
+      proceed: false,
+    });
 
-    // 埋まっている理由が欄の中に出る（COND-001）
-    await expect(panel.getByText("この時間帯はすでに埋まっています")).toBeVisible();
-
-    // 確認へ進むボタンが押せない
-    await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
+    // 埋まっている理由が出て、確認・次へ進めない（COND-001）
+    await expectAvailabilityBlocked(panel, isMobile, "変更内容を確認する");
   });
 });

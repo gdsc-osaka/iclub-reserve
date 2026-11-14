@@ -1,5 +1,9 @@
 import { MembershipRole } from "~/domain/membership";
 import { ReservationStatus } from "~/domain/reservation";
+import {
+  expectAvailabilityBlocked,
+  selectAvailabilityTimeRange,
+} from "../support/availability-panel.js";
 import { nextWeekAt, Weekday } from "../support/dates.js";
 import {
   createFacility,
@@ -19,6 +23,7 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     // 前提: 管理者がいる他団体の承認済み予約が 1 件ある
     const applicant = await createUser(db);
@@ -55,16 +60,8 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     await expect(panel.getByText("再承認は不要です", { exact: true })).toBeVisible();
     await expect(panel.getByText("再承認が必要です")).not.toBeVisible();
 
-    /** 時間帯を選ぶ */
-    const selectTimeRange = async (start: string, end: string) => {
-      await panel.getByRole("combobox", { name: "開始時刻" }).click();
-      await page.getByRole("option", { name: start }).click();
-      await panel.getByRole("combobox", { name: "終了時刻" }).click();
-      await page.getByRole("option", { name: end }).click();
-    };
-
     // 時間帯を 14:00〜16:00 に変更
-    await selectTimeRange("14:00", "16:00");
+    await selectAvailabilityTimeRange(page, panel, isMobile, { start: "14:00", end: "16:00" });
 
     // 人数と備考を変更
     await panel.getByLabel("使用人数").fill("6");
@@ -79,7 +76,7 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeEnabled();
 
     // 選んだあとで時間帯をまた変えると、最後の日時について選び直すよう未選択に戻る
-    await selectTimeRange("14:00", "15:00");
+    await selectAvailabilityTimeRange(page, panel, isMobile, { start: "14:00", end: "15:00" });
     await expect(panel.getByLabel("手配済み")).not.toBeChecked();
     await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
     await panel.getByLabel("手配済み").click();
@@ -173,6 +170,7 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     page,
     db,
     signInAs,
+    isMobile,
   }) => {
     // 前提: 同じ施設で 10:00〜12:00 の予約 A と 14:00〜16:00 の承認済み予約 B がある
     const userA = await createUser(db);
@@ -210,16 +208,14 @@ test.describe("UC-008 事務局による予約の直接変更", { tag: "@UC-008"
     const panel = page.getByRole("region", { name: "予約の変更" });
     await expect(panel).toBeVisible();
 
-    // 重なる時間帯（13:00〜15:00）に変更（14:00〜16:00 の承認済み予約と重複）
-    await panel.getByRole("combobox", { name: "開始時刻" }).click();
-    await page.getByRole("option", { name: "13:00" }).click();
-    await panel.getByRole("combobox", { name: "終了時刻" }).click();
-    await page.getByRole("option", { name: "15:00" }).click();
+    // 重なる時間帯（13:00〜15:00）に変更（14:00〜16:00 の承認済み予約と重複。スマホは選ぶ段階にとどまる）
+    await selectAvailabilityTimeRange(page, panel, isMobile, {
+      start: "13:00",
+      end: "15:00",
+      proceed: false,
+    });
 
-    // 埋まっている理由がその場に出る
-    await expect(panel.getByText("この時間帯はすでに埋まっています")).toBeVisible();
-
-    // 重複により「変更内容を確認する」ボタンが無効化されている
-    await expect(panel.getByRole("button", { name: "変更内容を確認する" })).toBeDisabled();
+    // 埋まっている理由が出て、確認・次へ進めない
+    await expectAvailabilityBlocked(panel, isMobile, "変更内容を確認する");
   });
 });

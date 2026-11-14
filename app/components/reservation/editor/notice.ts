@@ -19,11 +19,15 @@ export type ReservationEditorNoticeContext =
 /**
  * 1 週間前までの申請の案内（`APPLICATION_DEADLINE_NOTICE`）を出すか（COND-028）。
  *
- * 団体の申請・変更ではいつも出し、事務局の直接作成・直接変更では出さない。
+ * 団体の申請・変更で出し、事務局の直接作成・直接変更では出さない。
  * 直接作成・直接変更は承認を待たず、解錠の手配も事務局がその場で選ぶため。
+ * 7 日を切ったときの注意（`SHORT_NOTICE_ALERT`）を出しているときも出さない（ほぼ同じ内容を 2 回読ませないため）。
  */
-export const shouldShowApplicationNotice = (context: ReservationEditorNoticeContext): boolean =>
-  !context.isDirect;
+export const shouldShowApplicationNotice = (
+  context: ReservationEditorNoticeContext,
+  startAt: Date | null,
+  now: Date,
+): boolean => !context.isDirect && !shouldShowShortNoticeAlert(context, startAt, now);
 
 /**
  * 送った後、予約が事務局の承認を待つ（仮予約になる）か。

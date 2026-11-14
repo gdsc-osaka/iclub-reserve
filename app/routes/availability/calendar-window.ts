@@ -143,6 +143,46 @@ export const needsWindowShift = (
   dayCount: number,
 ): boolean => firstIndex < visibleCount || dayCount - (firstIndex + visibleCount) < visibleCount;
 
+/** 素早く払った（フリック）とみなす横方向の速さのしきい値（px / ms） */
+export const SWIPE_FLICK_VELOCITY_PX_PER_MS = 0.3;
+
+/**
+ * 指で横に送ったあとに止める列（先頭の日のインデックス）を決める。
+ *
+ * 動かした量（列の数）を、止まる単位（7 日の表示は 1 週、3・5 日の表示は 1 日）で丸める。
+ * 速く払った（`scrollVelocity` がしきい値以上）のに丸めると動かない場合は、
+ * CSS の `scroll-snap-stop: always` と同じく、払った向きに 1 単位だけ送る。
+ * `scrollVelocity` は `scrollLeft` が増える向き（指を左へ払う向き）を正とする（px / ms）。
+ */
+export const toSwipeTargetIndex = ({
+  days,
+  startScrollLeft,
+  currentScrollLeft,
+  columnWidth,
+  visibleCount,
+  scrollVelocity,
+}: Readonly<{
+  days: readonly AvailabilityDay[];
+  startScrollLeft: number;
+  currentScrollLeft: number;
+  columnWidth: number;
+  visibleCount: number;
+  scrollVelocity: number;
+}>): number => {
+  if (columnWidth <= 0) return 0;
+
+  const step = visibleCount === DAYS_IN_WEEK ? DAYS_IN_WEEK : 1;
+  const startIndex = Math.round(startScrollLeft / columnWidth);
+  const movedColumns = (currentScrollLeft - startScrollLeft) / columnWidth;
+  let movedUnits = Math.round(movedColumns / step) || 0;
+
+  if (movedUnits === 0 && Math.abs(scrollVelocity) >= SWIPE_FLICK_VELOCITY_PX_PER_MS) {
+    movedUnits = scrollVelocity > 0 ? 1 : -1;
+  }
+
+  return toAlignedIndex(days, startIndex + movedUnits * step, visibleCount);
+};
+
 /** 日本時間の年と月。日付キー（YYYY-MM-DD）から取り出す */
 const toTokyoYearMonth = (date: Date): { year: number; month: number } => {
   const dateKey = toTokyoDateKey(date);

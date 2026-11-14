@@ -4,7 +4,7 @@ import type { AvailabilityDay } from "~/components/reservation/availability-week
 import { ReservationStatus } from "~/domain/reservation";
 import type { AvailabilityReservation } from "~/query/facility/facility-availability-calendar";
 
-import { calculateDraftSchedule } from "./draft-schedule";
+import { calculateDraftSchedule, toDraftSummaryStatus } from "./draft-schedule";
 
 describe("calculateDraftSchedule", () => {
   const dummyDay: AvailabilityDay = {
@@ -123,5 +123,126 @@ describe("calculateDraftSchedule", () => {
     expect(result.conflicts?.approvedConflicts).toHaveLength(0);
     expect(result.conflicts?.provisionalConflicts).toHaveLength(1);
     expect(result.conflicts?.provisionalConflicts[0]?.reservation.id).toBe("res_prov");
+  });
+});
+
+describe("toDraftSummaryStatus", () => {
+  const dummyDay: AvailabilityDay = {
+    date: new Date("2026-11-04T00:00:00+09:00"),
+    dateKey: "2026-11-04",
+    isToday: true,
+    weekday: 3,
+    isHoliday: false,
+  };
+
+  const now = new Date("2026-11-04T10:30:00+09:00");
+
+  const approvedReservation: AvailabilityReservation = {
+    id: "res_app",
+    groupName: "ロボット部",
+    startAt: new Date("2026-11-04T13:00:00+09:00"),
+    endAt: new Date("2026-11-04T15:00:00+09:00"),
+    status: ReservationStatus.Approved,
+    isOwnGroup: true,
+    hasApprovedOverlap: false,
+    hasProvisionalOverlap: false,
+    transitions: [],
+    canEdit: false,
+    detail: null,
+  };
+
+  const provisionalReservation: AvailabilityReservation = {
+    id: "res_prov",
+    groupName: "AI 部",
+    startAt: new Date("2026-11-04T16:00:00+09:00"),
+    endAt: new Date("2026-11-04T17:00:00+09:00"),
+    status: ReservationStatus.Provisional,
+    isOwnGroup: false,
+    hasApprovedOverlap: false,
+    hasProvisionalOverlap: false,
+    transitions: [],
+    canEdit: false,
+    detail: null,
+  };
+
+  it("時刻を選んでいない場合は unselected で進めない", () => {
+    const draft = { dateKey: "2026-11-04", range: null };
+    const schedule = calculateDraftSchedule({
+      draft,
+      day: dummyDay,
+      reservations: [approvedReservation],
+      now,
+    });
+
+    expect(toDraftSummaryStatus(schedule, draft.range)).toEqual({
+      kind: "unselected",
+      canProceed: false,
+    });
+  });
+
+  it("開始時刻が過ぎている場合は past で進めない（重なりより優先）", () => {
+    const pastApproved: AvailabilityReservation = {
+      ...approvedReservation,
+      id: "res_past_app",
+      startAt: new Date("2026-11-04T09:00:00+09:00"),
+      endAt: new Date("2026-11-04T10:00:00+09:00"),
+    };
+    const draft = { dateKey: "2026-11-04", range: { startMinutes: 9 * 60, endMinutes: 10 * 60 } };
+    const schedule = calculateDraftSchedule({
+      draft,
+      day: dummyDay,
+      reservations: [pastApproved],
+      now,
+    });
+
+    expect(toDraftSummaryStatus(schedule, draft.range)).toEqual({
+      kind: "past",
+      canProceed: false,
+    });
+  });
+
+  it("承認済みの予約と重なる場合は blocked で進めない（仮予約とも重なっても優先）", () => {
+    const draft = { dateKey: "2026-11-04", range: { startMinutes: 14 * 60, endMinutes: 17 * 60 } };
+    const schedule = calculateDraftSchedule({
+      draft,
+      day: dummyDay,
+      reservations: [approvedReservation, provisionalReservation],
+      now,
+    });
+
+    expect(toDraftSummaryStatus(schedule, draft.range)).toEqual({
+      kind: "blocked",
+      canProceed: false,
+    });
+  });
+
+  it("仮予約とのみ重なる場合は provisional で先へ進める", () => {
+    const draft = { dateKey: "2026-11-04", range: { startMinutes: 16 * 60, endMinutes: 17 * 60 } };
+    const schedule = calculateDraftSchedule({
+      draft,
+      day: dummyDay,
+      reservations: [provisionalReservation],
+      now,
+    });
+
+    expect(toDraftSummaryStatus(schedule, draft.range)).toEqual({
+      kind: "provisional",
+      canProceed: true,
+    });
+  });
+
+  it("空いている未来の時間帯の場合は ok で先へ進める", () => {
+    const draft = { dateKey: "2026-11-04", range: { startMinutes: 11 * 60, endMinutes: 12 * 60 } };
+    const schedule = calculateDraftSchedule({
+      draft,
+      day: dummyDay,
+      reservations: [approvedReservation, provisionalReservation],
+      now,
+    });
+
+    expect(toDraftSummaryStatus(schedule, draft.range)).toEqual({
+      kind: "ok",
+      canProceed: true,
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -101,9 +102,13 @@ export function AvailabilityReservationCard({
 }
 
 /** 「項目名 + 値」を 1 組だけ表示する */
-export function CardItem({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
+export function CardItem({
+  label,
+  className,
+  children,
+}: Readonly<{ label: string; className?: string; children: ReactNode }>) {
   return (
-    <div className="flex min-w-0 items-baseline gap-1.5">
+    <div className={cn("flex min-w-0 items-baseline gap-1.5", className)}>
       <dt className="w-18 shrink-0 text-xs text-muted-foreground">{label}</dt>
       <dd className="min-w-0 font-medium break-words">{children}</dd>
     </div>

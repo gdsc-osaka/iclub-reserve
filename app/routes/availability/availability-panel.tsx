@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { Maximize2, Minimize2, Pencil, X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 
 import { AvailabilityReservationCard } from "~/components/reservation/availability-detail-card";
@@ -70,12 +70,14 @@ export function AvailabilityPanel({
   onSubmitCreate: () => void;
   /** 欄から予約を変更する操作を送ったとき */
   onSubmitEdit: () => void;
-  /** スマホで欄を画面いっぱいに広げているか（ADR-014 決定 13）。カレンダーも見るので route が持つ */
+  /** スマホで 2 段階（選ぶ・入力する）の入力段階に進んでいるか（ADR-014 決定 13）。カレンダーを隠すので route が持つ */
   isExpanded: boolean;
   onExpandedChange: (isExpanded: boolean) => void;
 }>) {
   const headingId = useId();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const proceedButtonRef = useRef<HTMLButtonElement | null>(null);
+  const shouldFocusProceedRef = useRef(false);
 
   /*
    * 閉じた状態から開いたときだけ、見出しにフォーカスを移す。
@@ -84,6 +86,38 @@ export function AvailabilityPanel({
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
   }, []);
+
+  /*
+   * 入力する段階から「カレンダーで選び直す」で戻ったときは、バーの「次へ」ボタンへフォーカスを移す。
+   * ボタンを押した時点ではバーがまだ描かれていないため、再描画の後に移す。
+   */
+  useEffect(() => {
+    if (!isExpanded && shouldFocusProceedRef.current) {
+      shouldFocusProceedRef.current = false;
+      if (proceedButtonRef.current && !proceedButtonRef.current.disabled) {
+        proceedButtonRef.current.focus({ preventScroll: true });
+      } else {
+        headingRef.current?.focus({ preventScroll: true });
+      }
+    }
+  }, [isExpanded]);
+
+  const handleProceed = () => {
+    onExpandedChange(true);
+    // 入力する段階へ移ると「次へ」のボタンは隠れて消えるため、見出しへフォーカスを移す
+    headingRef.current?.focus({ preventScroll: true });
+  };
+
+  const handleBackToCalendar = () => {
+    shouldFocusProceedRef.current = true;
+    onExpandedChange(false);
+  };
+
+  const handleCancelEdit = () => {
+    selectionOps.cancelEdit();
+    // 変更をやめると「やめる」ボタンは消えるため、見出しへフォーカスを移す
+    headingRef.current?.focus({ preventScroll: true });
+  };
 
   const handleKeyDown = (event: KeyboardEvent) => {
     /*
@@ -100,6 +134,9 @@ export function AvailabilityPanel({
       ? calendar.reservations.find((item) => item.id === selection.reservationId)
       : undefined;
 
+  const isSelectionBar = selection.kind !== "reservation" && !isExpanded;
+  const isInputStep = selection.kind !== "reservation" && isExpanded;
+
   return (
     <Card
       role="region"
@@ -107,18 +144,35 @@ export function AvailabilityPanel({
       onKeyDown={handleKeyDown}
       /*
        * スマホは高さを中身に合わせ、多くても 45% まで（カレンダーを見ながら選び直せるように）。
-       * 広げているときは高さの上限を外し、カレンダーを隠した残りの高さいっぱいに広げる（ADR-014 決定 13）。
+       * 2 段階（選ぶ・入力する）の入力段階では高さの上限を外し、カレンダーを隠した残りの高さいっぱいに広げる（ADR-014 決定 13）。
+       * スマホの入力段階では、全体の枠を外し、見出しを枠の外に出して中身をグループごとに囲う。
        * PC は幅を決めて、高さは並べた箱いっぱいにする。あふれたら欄の中だけを送る。
-       * 広げるのはスマホだけなので、`max-md:` だけに効かせる（PC で入力欄に入っても広げた扱いになるため）。
+       * 広げるのはスマホだけなので、`max-md:` だけに効かせる。
        */
       className={cn(
         "shrink-0 gap-0 overflow-hidden py-0 md:max-h-none md:w-80",
         isExpanded ? "max-md:flex-1" : "max-h-[45%]",
+        isInputStep && "max-md:rounded-none max-md:bg-transparent max-md:ring-0",
       )}
     >
-      <CardHeader className="shrink-0 items-center border-b py-4">
+      <CardHeader
+        className={cn(
+          "shrink-0 items-center",
+          selection.kind === "reservation" ? "border-b py-4" : "md:border-b md:py-4",
+          isSelectionBar && "max-md:pt-2 max-md:pb-0",
+          isInputStep && "max-md:rounded-none max-md:px-0 max-md:pt-0 max-md:pb-3",
+        )}
+      >
         <CardTitle>
-          <h2 id={headingId} ref={headingRef} tabIndex={-1} className="outline-none">
+          <h2
+            id={headingId}
+            ref={headingRef}
+            tabIndex={-1}
+            className={cn(
+              "outline-none",
+              isSelectionBar && "max-md:text-sm max-md:text-muted-foreground",
+            )}
+          >
             {selection.kind === "reservation"
               ? "予約の内容"
               : selection.kind === "edit"
@@ -134,29 +188,16 @@ export function AvailabilityPanel({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => selectionOps.openEdit(reservation.id)}
+              onClick={() => {
+                selectionOps.openEdit(reservation.id);
+                // 変更の欄へ替わると「変更」ボタンは消えるため、見出しへフォーカスを移す
+                headingRef.current?.focus({ preventScroll: true });
+              }}
             >
               <Pencil aria-hidden />
               変更
             </Button>
           )}
-
-          {/* スマホだけ広げる・縮めるボタン（ADR-014 決定 13） */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={isExpanded ? "縮める" : "広げる"}
-                onClick={() => onExpandedChange(!isExpanded)}
-                className="md:hidden"
-              >
-                {isExpanded ? <Minimize2 aria-hidden /> : <Maximize2 aria-hidden />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{isExpanded ? "縮める" : "広げる"}</TooltipContent>
-          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
@@ -189,7 +230,10 @@ export function AvailabilityPanel({
           onDraftChange={selectionOps.openDraft}
           createError={createError}
           onSubmitCreate={onSubmitCreate}
-          onExpand={() => onExpandedChange(true)}
+          isExpanded={isExpanded}
+          onProceed={handleProceed}
+          onRepick={handleBackToCalendar}
+          proceedButtonRef={proceedButtonRef}
         />
       )}
 
@@ -207,10 +251,13 @@ export function AvailabilityPanel({
           now={now}
           area={area}
           onDraftChange={selectionOps.openDraft}
-          onCancel={selectionOps.cancelEdit}
+          onCancel={handleCancelEdit}
           editError={editError}
           onSubmitEdit={onSubmitEdit}
-          onExpand={() => onExpandedChange(true)}
+          isExpanded={isExpanded}
+          onProceed={handleProceed}
+          onRepick={handleBackToCalendar}
+          proceedButtonRef={proceedButtonRef}
         />
       )}
 

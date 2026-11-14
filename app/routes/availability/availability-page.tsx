@@ -113,8 +113,11 @@ export function AvailabilityPage({
     [days, draftDayOutsideWindow, now, calendar.holidayDateKeys],
   );
 
-  /** スマホで欄を画面いっぱいに広げているか（ADR-014 決定 13） */
-  const [isExpanded, setIsExpanded] = useState(false);
+  /**
+   * スマホの 2 段階（選ぶ・入力する）で、既定の段階から切り替えた対象のキー（ADR-014 決定 13）。
+   * 既定は 仮の枠 = 選ぶ段階、変更 = 入力する段階。予約の内容はいつも 45% までに収める。
+   */
+  const [toggledKey, setToggledKey] = useState<string | null>(null);
 
   const scroll = useCalendarScroll({ days, anchorKey, todayKey: toTokyoDateKey(now) });
   const selectionOps = useCalendarSelection({
@@ -145,11 +148,22 @@ export function AvailabilityPage({
         ? undefined
         : selection;
 
+  const selectionKey = toSelectionKey(selection);
+
   /*
-   * 欄が閉じたら、広げていない状態に戻す（戻る操作で閉じたときも）。
-   * effect で戻すと、閉じた直後の 1 回はカレンダーを隠したまま描いてしまうので、描画の中で戻す。
+   * 欄が閉じた・別の欄へ移ったときは、既定の段階に戻す（戻る操作で閉じたときや、
+   * 申請から予約の内容へ替わったとき、予約の内容から変更を開いたときも）。
+   * effect で戻すと、閉じた直後の 1 回は前の段階のまま描いてしまうので、描画の中で戻す。
    */
-  if (selection === null && isExpanded) setIsExpanded(false);
+  if (toggledKey !== null && toggledKey !== selectionKey) setToggledKey(null);
+  const defaultExpanded = selection?.kind === "edit";
+  const isToggled = selectionKey !== null && toggledKey === selectionKey;
+  const isExpanded =
+    selection?.kind === "draft" || selection?.kind === "edit"
+      ? isToggled
+        ? !defaultExpanded
+        : defaultExpanded
+      : false;
 
   /*
    * 予約を作る・変更する操作の失敗（`intent` 付きで返る）は欄の中に出すので、画面の上の「操作に失敗しました」は
@@ -205,15 +219,25 @@ export function AvailabilityPage({
   }, [location.key, createError, editError]);
 
   /*
-   * 開いたものが変わったら、その日と時刻をカレンダーの見える範囲に入れる。
-   * 位置が変わったときだけ送る。描画のたびに送ると、欄を開いたままカレンダーを動かせなくなる。
+   * 開いたものが変わったとき、または隠れていたカレンダーが出たとき（入力する段階 → 選ぶ段階など）に、
+   * その日と時刻をカレンダーの見える範囲に入れる。
+   * 毎回送ると、欄を開いたままカレンダーを動かせなくなる。
    * 位置（日と時間帯）は仮の枠と同じ形なので、比べるためのキーは仮の枠の URL の値で作る。
    */
   const revealTarget = toRevealTarget(selection, reservations);
   const revealKey = revealTarget === null ? null : toDraftParam(revealTarget);
+  const prevRevealKeyRef = useRef<string | null>(null);
+  const wasExpandedRef = useRef(isExpanded);
   useEffect(() => {
-    if (revealTarget !== null) scroll.reveal(revealTarget.dateKey, revealTarget.range);
-  }, [revealKey]);
+    const revealChanged = prevRevealKeyRef.current !== revealKey;
+    const calendarReappeared = wasExpandedRef.current && !isExpanded;
+    prevRevealKeyRef.current = revealKey;
+    wasExpandedRef.current = isExpanded;
+
+    if ((revealChanged || calendarReappeared) && revealTarget !== null) {
+      scroll.reveal(revealTarget.dateKey, revealTarget.range);
+    }
+  }, [revealKey, isExpanded]);
 
   return (
     /*
@@ -278,13 +302,27 @@ export function AvailabilityPage({
               submittedActionRef.current = { kind: "edit" };
             }}
             isExpanded={isExpanded}
-            onExpandedChange={setIsExpanded}
+            onExpandedChange={(next) =>
+              setToggledKey(next !== defaultExpanded ? selectionKey : null)
+            }
           />
         )}
       </div>
     </main>
   );
 }
+
+/**
+ * 欄の種類と対象を識別するキー。
+ *
+ * 仮の枠・変更の日時を変えても・送信に失敗して同じ欄に戻っても同じキーになるため、
+ * 入力する段階のまま保てる。別の欄や閉じた状態へ移ったときは、自動で既定の段階に戻る。
+ */
+const toSelectionKey = (selection: CalendarSelection | null): string | null => {
+  if (selection === null) return null;
+  if (selection.kind === "draft") return "draft";
+  return `${selection.kind}:${selection.reservationId}`;
+};
 
 /**
  * 施設を選ぶ前の URL にある仮の枠（ADR-014 決定 20）。無ければ undefined。

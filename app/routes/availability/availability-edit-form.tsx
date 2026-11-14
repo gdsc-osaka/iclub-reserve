@@ -1,5 +1,6 @@
+import { cn } from "cn";
 import { CircleAlert, ClipboardCheck } from "lucide-react";
-import { useId, useState, type FocusEvent, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type Ref } from "react";
 import { Form, useNavigation } from "react-router";
 
 import { CardItem } from "~/components/reservation/availability-detail-card";
@@ -46,7 +47,13 @@ import {
   unlockArrangementLabel,
 } from "~/domain/reservation/unlock-arrangement";
 import type { AppArea } from "~/lib/app-area";
-import { atTokyoMinutes, formatMonthDay, formatTime, toTokyoTimeKey } from "~/lib/date";
+import {
+  atTokyoMinutes,
+  formatMonthDay,
+  formatTime,
+  formatTimeRange,
+  toTokyoTimeKey,
+} from "~/lib/date";
 import type {
   AvailabilityFacility,
   AvailabilityReservation,
@@ -54,8 +61,9 @@ import type {
 import type { ReservationEditTarget } from "~/usecases/reservation/get-reservation-edit-form";
 
 import { calculateDraftSchedule } from "./draft-schedule";
-import { DraftScheduleFields } from "./draft-schedule-fields";
-import { toCalendarPath, type CalendarDraft } from "./paths";
+import { DraftScheduleFields, RepickOnCalendarButton } from "./draft-schedule-fields";
+import { DraftSummaryBar } from "./draft-summary-bar";
+import { toCalendarPath, toReservationDraft, type CalendarDraft } from "./paths";
 import { excludeEditingReservation } from "./use-calendar-selection";
 
 /** 予約を変更する操作の識別子 */
@@ -74,9 +82,11 @@ export interface EditReservationActionError {
 }
 
 /**
- * 空き状況カレンダーの欄で、予約の内容を変更するフォーム（ADR-014 決定 15）。
+ * 空き状況カレンダーの欄で、予約の内容を変更するフォーム（ADR-014 決定 13・15）。
  *
- * 入力欄は CardContent の中でスクロールし、「変更内容を確認する」ボタンは CardFooter で下端に固定する。
+ * スマホは 2 段階（選ぶ・入力する）で、選ぶ段階ではバーだけを出し、入力欄（CardContent・CardFooter）は描いたまま隠す。
+ * PC は CardContent の中でスクロールし、「変更内容を確認する」ボタンを CardFooter で下端に固定する。
+ * スマホの入力段階では見出しより下をまとめてスクロールし、ボタンも中身と一緒に流す。
  * 日付と時間帯は状態に持たず、URL の仮の枠（`draft`）を書き換える。カレンダーの仮の枠と同じものを指すため。
  * 使用人数・備考は、この部品の中に持つ。
  */
@@ -95,7 +105,10 @@ export function AvailabilityEditForm({
   onCancel,
   editError,
   onSubmitEdit,
-  onExpand,
+  isExpanded,
+  onProceed,
+  onRepick,
+  proceedButtonRef,
 }: Readonly<{
   /** 変更前の予約情報 */
   target: ReservationEditTarget;
@@ -117,11 +130,25 @@ export function AvailabilityEditForm({
   /** 予約変更の失敗情報 */
   editError: EditReservationActionError | null;
   onSubmitEdit: () => void;
-  onExpand: () => void;
+  /** スマホで入力する段階へ進んでいるか */
+  isExpanded: boolean;
+  /** スマホで選ぶ段階の「次へ」を押したとき */
+  onProceed: () => void;
+  /** スマホで入力する段階から「カレンダーで選び直す」を押したとき */
+  onRepick: () => void;
+  proceedButtonRef?: Ref<HTMLButtonElement>;
 }>) {
   const formId = useId();
   const periodErrorId = useId();
   const facilityErrorId = useId();
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // スマホで入力する段階に入ったときは、見出しより下のスクロール位置を先頭から始める
+  useEffect(() => {
+    if (isExpanded && scrollContainerRef.current !== null) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [isExpanded]);
 
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -153,12 +180,13 @@ export function AvailabilityEditForm({
    * 変更を開いているときは、変更する予約そのものを除いて重なりや押せない枠を数える（ADR-014 決定 15）。
    * 除かないと自分自身と重なってしまうため。
    */
-  const { blockedSlots, pastSlots, isAvailable, isStartPast, conflicts } = calculateDraftSchedule({
+  const schedule = calculateDraftSchedule({
     draft,
     day,
     reservations: excludeEditingReservation(reservations, target.id),
     now,
   });
+  const { blockedSlots, pastSlots, isAvailable, isStartPast, conflicts } = schedule;
 
   /** 変更のとき、いまの入力で何が変わり、予約がどうなるか。まだ比べられないときは null */
   const editPreview = toEditPreview(
@@ -177,18 +205,15 @@ export function AvailabilityEditForm({
   /** 承認済みの予約の施設・日時を変えたので、仮予約に戻る（COND-005。直接変更では仮予約に戻らない） */
   const needsReapproval = !isDirect && editPreview?.outcome === ReservationEditOutcome.Reapproval;
 
-  /** 申請の期限の目安（COND-028）の、いつも出す案内と、7 日を切ったときの注意を出すか */
+  /** 申請の期限の目安（COND-028）の案内と、7 日を切ったときの注意を出すか */
   const noticeContext = {
     kind: "edit",
     isDirect,
     outcome: editPreview?.outcome ?? null,
   } as const;
-  const showApplicationNotice = shouldShowApplicationNotice(noticeContext);
-  const showShortNotice = shouldShowShortNoticeAlert(
-    noticeContext,
-    draft.range === null ? null : atTokyoMinutes(day.date, draft.range.startMinutes),
-    now,
-  );
+  const startAt = draft.range === null ? null : atTokyoMinutes(day.date, draft.range.startMinutes);
+  const showApplicationNotice = shouldShowApplicationNotice(noticeContext, startAt, now);
+  const showShortNotice = shouldShowShortNoticeAlert(noticeContext, startAt, now);
 
   /*
    * 解錠の手配（COND-027）の欄を出すか。承認済みの予約の施設・日時を直接変更するときだけ出す
@@ -214,6 +239,13 @@ export function AvailabilityEditForm({
   /** 変更前の施設名。確認のダイアログや一覧で「変更前」を添えるために使う */
   const originalFacility = facilities.find((item) => item.id === target.facilityId) ?? null;
 
+  /** 変更前の日時。日付か時刻を変えていれば、スマホの日時欄に「変更前: …」を添える */
+  const originalDraft = toReservationDraft(target);
+  const hasScheduleChanged =
+    draft.dateKey !== originalDraft.dateKey ||
+    draft.range?.startMinutes !== originalDraft.range?.startMinutes ||
+    draft.range?.endMinutes !== originalDraft.range?.endMinutes;
+
   /*
    * 確認のダイアログに出す、送ったあとの状態。
    * 変更では、どの項目を変えたかで承認済みのままか仮予約に戻るかが決まる（COND-005）。
@@ -237,163 +269,221 @@ export function AvailabilityEditForm({
     onSubmitEdit();
   };
 
-  /*
-   * 文字を打つ欄に入ったら、スマホでは欄を広げる（ADR-014 決定 13）。
-   * キーボードが出ると、45% の高さの欄では打っている欄が隠れてしまうため。
-   */
-  const handleFocus = (event: FocusEvent<HTMLFormElement>) => {
-    const focusTarget = event.target;
-    if (
-      (focusTarget instanceof HTMLInputElement && focusTarget.type !== "hidden") ||
-      focusTarget instanceof HTMLTextAreaElement
-    ) {
-      onExpand();
-    }
-  };
-
   return (
     <>
-      <CardContent className="min-h-0 flex-1 overflow-y-auto py-4">
-        {/*
-         * replace を付けるのは、成功の転送で変更を開いていた履歴を置き換えるため（ADR-014 決定 10）。
-         * 送り先は、今の URL に任せず組み立てる（申請の欄と同じ理由）。
-         */}
-        <Form
-          method="post"
-          action={toCalendarPath(area, facility.id, anchorKey, {
-            kind: "edit",
-            reservationId: target.id,
-            draft,
-          })}
-          replace
-          id={formId}
-          onSubmit={handleSubmit}
-          onFocus={handleFocus}
-          className="flex flex-col gap-4"
-        >
-          <input type="hidden" name="intent" value={EDIT_RESERVATION_INTENT} />
-          <input type="hidden" name="facility_id" value={facility.id} />
-          <input type="hidden" name="date" value={draft.dateKey} />
-          <input
-            type="hidden"
-            name="start_time"
-            value={draft.range === null ? "" : toTokyoTimeKey(draft.range.startMinutes)}
-          />
-          <input
-            type="hidden"
-            name="end_time"
-            value={draft.range === null ? "" : toTokyoTimeKey(draft.range.endMinutes)}
-          />
+      {!isExpanded && (
+        <DraftSummaryBar
+          day={day}
+          draft={draft}
+          facilityName={facility.name}
+          schedule={schedule}
+          now={now}
+          isBusy={isBusy}
+          onDraftChange={onDraftChange}
+          onProceed={onProceed}
+          proceedButtonRef={proceedButtonRef}
+        />
+      )}
 
-          {formError !== null && (
-            <Alert variant="destructive">
-              <CircleAlert aria-hidden className="size-4" />
-              <AlertTitle>変更できませんでした</AlertTitle>
-              <AlertDescription>{formError}</AlertDescription>
-            </Alert>
-          )}
+      <div
+        ref={scrollContainerRef}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col max-md:overflow-y-auto",
+          !isExpanded && "max-md:hidden",
+        )}
+      >
+        <CardContent className="min-h-0 flex-1 overflow-y-auto py-4 max-md:flex-none max-md:overflow-visible max-md:px-0 max-md:pt-0 max-md:pb-4">
+          {/*
+           * replace を付けるのは、成功の転送で変更を開いていた履歴を置き換えるため（ADR-014 決定 10）。
+           * 送り先は、今の URL に任せず組み立てる（申請の欄と同じ理由）。
+           */}
+          <Form
+            method="post"
+            action={toCalendarPath(area, facility.id, anchorKey, {
+              kind: "edit",
+              reservationId: target.id,
+              draft,
+            })}
+            replace
+            id={formId}
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4 max-md:gap-6"
+          >
+            <input type="hidden" name="intent" value={EDIT_RESERVATION_INTENT} />
+            <input type="hidden" name="facility_id" value={facility.id} />
+            <input type="hidden" name="date" value={draft.dateKey} />
+            <input
+              type="hidden"
+              name="start_time"
+              value={draft.range === null ? "" : toTokyoTimeKey(draft.range.startMinutes)}
+            />
+            <input
+              type="hidden"
+              name="end_time"
+              value={draft.range === null ? "" : toTokyoTimeKey(draft.range.endMinutes)}
+            />
 
-          <dl className="flex flex-col gap-1 text-sm">
-            <CardItem label="施設・設備">
-              <div className="flex flex-col">
-                <span>{facility.name}</span>
-                {originalFacility !== null && originalFacility.id !== facility.id && (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    変更前: {originalFacility.name}
-                  </span>
+            {formError !== null && (
+              <Alert variant="destructive">
+                <CircleAlert aria-hidden className="size-4" />
+                <AlertTitle>変更できませんでした</AlertTitle>
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex flex-col gap-4 max-md:gap-2">
+              <h3 className="px-1 text-sm font-medium text-muted-foreground md:hidden">
+                施設・日時
+              </h3>
+
+              <div className="flex flex-col gap-4 max-md:rounded-xl max-md:border max-md:border-foreground/10 max-md:bg-card max-md:p-4">
+                <dl className="flex flex-col gap-1 text-sm">
+                  <CardItem label="施設・設備">
+                    <div className="flex flex-col">
+                      <span>{facility.name}</span>
+                      {originalFacility !== null && originalFacility.id !== facility.id && (
+                        <span className="text-xs font-normal text-muted-foreground">
+                          変更前: {originalFacility.name}
+                        </span>
+                      )}
+                    </div>
+                  </CardItem>
+
+                  <CardItem label="日時" className="md:hidden">
+                    <div className="flex flex-col">
+                      <span className="tabular-nums">
+                        {formatMonthDay(day.date)}
+                        {draft.range !== null &&
+                          ` ${toTokyoTimeKey(draft.range.startMinutes)}〜${toTokyoTimeKey(draft.range.endMinutes)}`}
+                      </span>
+                      {hasScheduleChanged && (
+                        <span className="text-xs font-normal tabular-nums text-muted-foreground">
+                          変更前: {formatMonthDay(target.startAt)}{" "}
+                          {formatTimeRange(target.startAt, target.endAt)}
+                        </span>
+                      )}
+                    </div>
+                  </CardItem>
+                </dl>
+
+                <div className="flex flex-col gap-4 max-md:hidden">
+                  <DraftScheduleFields
+                    day={day}
+                    draft={draft}
+                    now={now}
+                    isBusy={isBusy}
+                    blockedSlots={blockedSlots}
+                    pastSlots={pastSlots}
+                    periodErrorId={fieldErrors.period ? periodErrorId : undefined}
+                    onDraftChange={onDraftChange}
+                  />
+                </div>
+
+                <FieldError id={periodErrorId}>{fieldErrors.period}</FieldError>
+                <FieldError id={facilityErrorId}>{fieldErrors.facilityId}</FieldError>
+
+                {isStartPast ? (
+                  <Alert className="border-amber-500/30 bg-amber-500/5">
+                    <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+                    <AlertDescription>
+                      過ぎた日時には変更できません。日時を選び直してください。
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    {/* 7 日を切ったときの注意（COND-028） */}
+                    {showShortNotice && (
+                      <Alert className="border-amber-500/30 bg-amber-500/5">
+                        <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
+                        <AlertDescription>{SHORT_NOTICE_ALERT}</AlertDescription>
+                      </Alert>
+                    )}
+                    {conflicts !== null && <ScheduleConflictAlerts conflicts={conflicts} />}
+                  </>
                 )}
+
+                <RepickOnCalendarButton onClick={onRepick} />
               </div>
-            </CardItem>
-            {/*
-             * 変更では団体を変えられないので、名前を出すだけにする。
-             * group_id も送らない（`ReservationContent` を参照）。
-             */}
-            <CardItem label="団体">{target.groupName}</CardItem>
-          </dl>
 
-          <DraftScheduleFields
-            day={day}
-            draft={draft}
-            now={now}
-            isBusy={isBusy}
-            blockedSlots={blockedSlots}
-            pastSlots={pastSlots}
-            periodErrorId={fieldErrors.period ? periodErrorId : undefined}
-            onDraftChange={onDraftChange}
-          />
-
-          <FieldError id={periodErrorId}>{fieldErrors.period}</FieldError>
-          <FieldError id={facilityErrorId}>{fieldErrors.facilityId}</FieldError>
-
-          {/* 1 週間前までの案内の注意（COND-028） */}
-          {showApplicationNotice && (
-            <p className="text-xs text-muted-foreground">{APPLICATION_DEADLINE_NOTICE}</p>
-          )}
-
-          {isStartPast ? (
-            <Alert className="border-amber-500/30 bg-amber-500/5">
-              <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
-              <AlertDescription>
-                過ぎた日時には変更できません。日時を選び直してください。
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              {/* 7 日を切ったときの注意（COND-028） */}
-              {showShortNotice && (
-                <Alert className="border-amber-500/30 bg-amber-500/5">
-                  <CircleAlert aria-hidden className="text-amber-600 dark:text-amber-400" />
-                  <AlertDescription>{SHORT_NOTICE_ALERT}</AlertDescription>
-                </Alert>
+              {/* 1 週間前までの案内の注意（COND-028） */}
+              {showApplicationNotice && (
+                <p className="text-xs text-muted-foreground">{APPLICATION_DEADLINE_NOTICE}</p>
               )}
-              {conflicts !== null && <ScheduleConflictAlerts conflicts={conflicts} />}
-            </>
-          )}
-
-          {needsReapproval && <ReapprovalAlert />}
-          {isDirect && <DirectEditAlert />}
-
-          {showUnlockArrangement && (
-            <div className="flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
-                承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。
-              </p>
-              <UnlockArrangementField
-                idPrefix="direct-edit"
-                value={unlockArrangement}
-                onValueChange={selectUnlockArrangement}
-                error={fieldErrors.unlockArrangement}
-              />
             </div>
+
+            {needsReapproval && <ReapprovalAlert />}
+            {isDirect && <DirectEditAlert />}
+
+            {showUnlockArrangement && (
+              <div className="flex flex-col gap-4 max-md:gap-2">
+                <h3 className="px-1 text-sm font-medium text-muted-foreground md:hidden">
+                  解錠の手配
+                  <span className="ml-1.5 text-xs font-semibold text-destructive">(必須)</span>
+                </h3>
+
+                <div className="flex flex-col border max-md:gap-4 max-md:rounded-xl max-md:border-foreground/10 max-md:bg-card max-md:p-4 md:gap-3 md:rounded-lg md:border-amber-500/30 md:bg-amber-500/5 md:p-3">
+                  <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                    承認済みの予約の施設・日時を変えるので、解錠の手配を選び直してください。
+                  </p>
+                  <UnlockArrangementField
+                    idPrefix="direct-edit"
+                    value={unlockArrangement}
+                    onValueChange={selectUnlockArrangement}
+                    error={fieldErrors.unlockArrangement}
+                    headingClassName="max-md:hidden"
+                  />
+                </div>
+              </div>
+            )}
+
+            <Separator className="max-md:hidden" />
+
+            <div className="flex flex-col gap-4 max-md:gap-2">
+              <h3 className="px-1 text-sm font-medium text-muted-foreground md:hidden">利用内容</h3>
+
+              <div className="flex flex-col gap-4 max-md:rounded-xl max-md:border max-md:border-foreground/10 max-md:bg-card max-md:p-4">
+                <dl className="flex flex-col gap-1 text-sm">
+                  {/*
+                   * 変更では団体を変えられないので、名前を出すだけにする。
+                   * group_id も送らない（`ReservationContent` を参照）。
+                   */}
+                  <CardItem label="団体">{target.groupName}</CardItem>
+                </dl>
+
+                <HeadCountField
+                  value={headCount}
+                  onChange={setHeadCount}
+                  error={fieldErrors.headCount}
+                />
+
+                <NoteField value={note} onChange={setNote} error={fieldErrors.note} />
+              </div>
+            </div>
+          </Form>
+        </CardContent>
+
+        <CardFooter className="shrink-0 flex-col gap-2 border-t pt-3 max-md:rounded-none max-md:border-t-0 max-md:bg-transparent max-md:px-0 max-md:pt-0 max-md:pb-4">
+          {/* ボタンの上の理由 */}
+          {isUnchanged && (
+            <p className="text-center text-xs text-muted-foreground">まだ何も変更していません。</p>
+          )}
+          {isUnlockArrangementMissing && (
+            <p className="text-center text-xs text-muted-foreground">
+              解錠の手配を選んでください。
+            </p>
           )}
 
-          <Separator />
-
-          <HeadCountField value={headCount} onChange={setHeadCount} error={fieldErrors.headCount} />
-
-          <NoteField value={note} onChange={setNote} error={fieldErrors.note} />
-        </Form>
-      </CardContent>
-
-      <CardFooter className="flex flex-col gap-2 border-t pt-3">
-        {/* ボタンの上の理由 */}
-        {isUnchanged && (
-          <p className="text-center text-xs text-muted-foreground">まだ何も変更していません。</p>
-        )}
-        {isUnlockArrangementMissing && (
-          <p className="text-center text-xs text-muted-foreground">解錠の手配を選んでください。</p>
-        )}
-
-        <div className="flex w-full items-center gap-2">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            やめる
-          </Button>
-          <Button type="submit" form={formId} disabled={!canConfirm} className="flex-1">
-            <ClipboardCheck aria-hidden className="size-4" />
-            変更内容を確認する
-          </Button>
-        </div>
-      </CardFooter>
+          <div className="flex w-full items-center gap-2">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              やめる
+            </Button>
+            <Button type="submit" form={formId} disabled={!canConfirm} className="flex-1">
+              <ClipboardCheck aria-hidden className="size-4" />
+              変更内容を確認する
+            </Button>
+          </div>
+        </CardFooter>
+      </div>
 
       <ReservationConfirmDialog
         open={isConfirmOpen}

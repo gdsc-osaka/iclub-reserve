@@ -33,7 +33,7 @@ export function CalendarToolbar({
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   return (
-    <div className="ml-auto flex items-center gap-2">
+    <div className="flex items-center gap-2 max-md:w-full max-md:justify-between md:ml-auto">
       <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
         <PopoverTrigger asChild>
           <Button type="button" variant="ghost">
