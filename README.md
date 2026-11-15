@@ -124,6 +124,7 @@ pnpm run test:e2e  # E2E テスト（Playwright）。ビルドしてから画面
 pnpm lint          # リント（vp lint。型の情報を使い、型のエラーも出す）。直せるところを直すなら pnpm run lint:fix
 pnpm format        # フォーマットの確認（vp fmt）。整えるなら pnpm run format:fix
 pnpm typecheck     # 型の検査
+pnpm peers check   # peer dependency の食い違いの検査（CI の Peer Dependencies と同じ。複数形の peers に注意）
 ```
 
 テストでは `describe`・`it`・`expect`・`vi` などを `vitest` ではなく `vite-plus/test` から読み込みます（`vitest` から読み込むとリントで止まります）。
