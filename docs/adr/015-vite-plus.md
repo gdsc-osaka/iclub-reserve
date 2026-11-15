@@ -59,7 +59,7 @@ Issue #246 を受けて決める。
   ルートを足したときは `pnpm run dev` の間に作り直されるが、そうでなければ `pnpm typecheck` で作り直す。
   `worker-configuration.d.ts` は `pnpm run dev` の間も作り直されないので、`wrangler.jsonc` を変えたときも `pnpm typecheck` で作り直す。
   - pnpm は、入れるものが変わっていないと install を飛ばし、`postinstall` も動かさない。CI はまっさらな状態から入れるので動く。
-- `pnpm typecheck`（`tsc -b`）と CI の Type Check は残す。ブランチのルールで必須にしているチェックで、
+- `pnpm typecheck`（`tsc -b`）と、CI の Static Checks の中の Type Check の手順は残す。
   `tsconfig` の参照のとおりに確かめるため。型のエラーは Lint と Type Check の両方で出る。
 
 ### 4. コミットの前に、コミットするファイルを整える
@@ -89,7 +89,9 @@ Issue #246 を受けて決める。
 - 依存は `vp install --frozen-lockfile` で入れる。`setup-vp` の中でも入れられるが（`run-install`）、どこで落ちたかをログで分かりやすくするため、別の手順にする。
 - スクリプトは `vp run <スクリプト名>`、Playwright は `vp exec playwright …` で動かす。`pnpm` のコマンドが PATH に無くても動く。
   `package.json` のスクリプトは `vp run` でもキャッシュされず、環境変数もそのまま渡る（`run.cache.scripts` の既定は `false`）。
-- ジョブの名前（Format・Lint・Type Check・Test・E2E）は変えない。ブランチのルールで必須にしているチェックを直さずに済むため。
+- Format・Lint・Type Check と peer dependency の検査（`pnpm peers check`）は、1 つのジョブ（Static Checks）の手順にする（2026-11-15 変更）。
+  どれも数秒で終わり、ジョブの時間の大半は Vite+ と依存を入れる準備だったため。ブランチのルールの必須のチェックも Static Checks に替えた。
+  1 つの手順が落ちても、依存が入っていれば残りの手順は動かす。
 - E2E のアプリは `vp preview` で起動する（`playwright.config.ts` の webServer）。
   Vite+ の `vite` には `bin/vite.js` が無いため、`node node_modules/vite-plus/bin/vp preview …` と書く。
 

@@ -2,6 +2,10 @@ name: CI
 
 on:
   workflow_dispatch:
+  # develop への push では、E2E を動かさない (run_e2e)。develop の Ruleset は最新の develop を含むことを求めるので、
+  # マージした後のツリーは PR で確かめたものと同じになる。
+  # E2E 以外のジョブを動かすのは、PR が使う依存のキャッシュを develop に作るため
+  # (PR の実行は、自分の PR のキャッシュが無いと develop のキャッシュを使う)
   push:
     branches: ["develop"]
   # main 向きの PR（release/*・hotfix/*）と、release/*・hotfix/* に修正を入れる PR でも、
@@ -20,8 +24,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run_format:
-    name: Format
+  # フォーマット・リント・型・peer dependency の検査を 1 つのジョブにまとめる。
+  # どれも数秒で終わり、ジョブの時間の大半は準備 (Vite+ と依存を入れる) なので、ジョブを分けても速くならない。
+  # 1 つが落ちても残りの検査は動かし、直すところを 1 回の実行でまとめて分かるようにする
+  run_static_checks:
+    name: Static Checks
     timeout-minutes: 60
     runs-on: ubuntu-latest
 
@@ -43,68 +50,31 @@ jobs:
           # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
           run-install: false
 
+      # peer dependency の食い違い (同じパッケージを、依存ごとに違う版で求めているなど) を確かめる。
+      # 次の install は --frozen-lockfile でロックファイルの解決を飛ばすので、peer の警告が出ない。
+      # ロックファイルだけを読むので、依存を入れる前に動かせる。
+      # `vp pm` は peers を pnpm に渡さないので、`vp env exec` で決めた版の pnpm を呼ぶ。
+      # コマンドは `pnpm peers check` (複数形)。`pnpm peer check` は検査にならず、install が走って通ってしまう
+      - name: Peer Dependencies
+        run: vp env exec pnpm peers check --lockfile-only
+
+      # peer の検査が落ちても、依存を入れて残りの検査を動かす
       - name: Install node modules
+        id: install
+        if: ${{ !cancelled() }}
         run: vp install --frozen-lockfile
 
+      # ここから下は、前の検査が落ちても動かす。依存が入らなかったときだけ動かさない
       - name: Format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: vp run format
 
-  run_lint:
-    name: Lint
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
-      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
-      # pnpm は package.json の devEngines.packageManager から読む
-      - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
-        with:
-          version-file: pnpm-workspace.yaml
-          node-version-file: .node-version
-          cache: true
-          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
-          run-install: false
-
-      - name: Install node modules
-        run: vp install --frozen-lockfile
-
       - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: vp run lint
 
-  run_type_check:
-    name: Type Check
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
-      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
-      # pnpm は package.json の devEngines.packageManager から読む
-      - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
-        with:
-          version-file: pnpm-workspace.yaml
-          node-version-file: .node-version
-          cache: true
-          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
-          run-install: false
-
-      - name: Install node modules
-        run: vp install --frozen-lockfile
-
       - name: Type Check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: vp run typecheck
 
   run_test:
@@ -136,6 +106,40 @@ jobs:
       - name: Test
         run: vp run test
 
+  # develop への push では E2E を動かさない代わりに、E2E と同じイメージの中で依存だけを入れ、キャッシュを作る。
+  # イメージの中と外では依存を置く場所が違い、同じキーでも別のキャッシュになるので、
+  # 外のジョブ (Static Checks・Test) が作ったキャッシュは、PR の E2E では使えない
+  warm_e2e_cache:
+    name: E2E Cache
+    if: ${{ github.event_name == 'push' }}
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    # run_e2e と同じイメージ・同じ利用者で動かす
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --user 1001
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
+      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
+      # pnpm は package.json の devEngines.packageManager から読む
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          version-file: pnpm-workspace.yaml
+          node-version-file: .node-version
+          cache: true
+          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
+          run-install: false
+
+      - name: Install node modules
+        run: vp install --frozen-lockfile
+
   # E2E テスト (ADR-007)。ビルド済みのアプリを手元の Workers (miniflare) で動かし、Playwright で画面を操作する。
   # 全部のジョブが通ったかは、下の e2e_result (E2E) のチェックにまとめる。
   # ブラウザごとに別のジョブにし、さらにテストのファイルを半分ずつ 2 つのジョブに分けて、並行して動かす
@@ -143,12 +147,15 @@ jobs:
   # ジョブごとにアプリと DB を用意し直すので、ジョブの中では今までどおり 1 つずつ順に動く。
   run_e2e:
     name: E2E (${{ matrix.project }} ${{ matrix.shard }}/2)
+    # develop への push では動かさない (上の on: の push を参照)
+    if: ${{ github.event_name != 'push' }}
     timeout-minutes: 15
     runs-on: ubuntu-latest
     # Playwright の公式のイメージの中で動かす。全部のブラウザと、ブラウザが使う OS のライブラリが入っている。
     # 前は毎回 `playwright install --with-deps` で入れていたが、Ubuntu のパッケージのミラーが遅いときに
     # 数分から 30 分かかり、時間切れで落ちることがあった。
     # 版は pnpm-lock.yaml の @playwright/test とそろえる。ずれると、Playwright がイメージの更新を求めて止まる。
+    # 上げるときは、warm_e2e_cache のイメージも同じ版にする
     container:
       image: mcr.microsoft.com/playwright:v1.64.0-noble
       # イメージの既定の root ではなく、ランナーと同じ利用者で動かす (Playwright の CI の手順どおり)。
@@ -206,8 +213,9 @@ jobs:
   e2e_result:
     name: E2E
     needs: run_e2e
-    # E2E のジョブが落ちても、このジョブは動かす。動かずに「スキップ」になると、必須のチェックが通った扱いになるため
-    if: ${{ !cancelled() }}
+    # E2E のジョブが落ちても、このジョブは動かす。動かずに「スキップ」になると、必須のチェックが通った扱いになるため。
+    # develop への push では E2E を動かさないので、これも動かさない (必須のチェックを見るのは PR だけ)
+    if: ${{ !cancelled() && github.event_name != 'push' }}
     timeout-minutes: 5
     runs-on: ubuntu-latest
     # この実行のジョブの結果を、GitHub の API で読むため
