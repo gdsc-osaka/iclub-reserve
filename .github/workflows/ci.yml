@@ -20,8 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run_format:
-    name: Format
+  # フォーマット・リント・型・peer dependency の検査を 1 つのジョブにまとめる。
+  # どれも数秒で終わり、ジョブの時間の大半は準備 (Vite+ と依存を入れる) なので、ジョブを分けても速くならない。
+  # 1 つが落ちても残りの検査は動かし、直すところを 1 回の実行でまとめて分かるようにする
+  run_static_checks:
+    name: Static Checks
     timeout-minutes: 60
     runs-on: ubuntu-latest
 
@@ -43,101 +46,32 @@ jobs:
           # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
           run-install: false
 
-      - name: Install node modules
-        run: vp install --frozen-lockfile
-
-      - name: Format
-        run: vp run format
-
-  run_lint:
-    name: Lint
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
-      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
-      # pnpm は package.json の devEngines.packageManager から読む
-      - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
-        with:
-          version-file: pnpm-workspace.yaml
-          node-version-file: .node-version
-          cache: true
-          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
-          run-install: false
-
-      - name: Install node modules
-        run: vp install --frozen-lockfile
-
-      - name: Lint
-        run: vp run lint
-
-  run_type_check:
-    name: Type Check
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
-      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
-      # pnpm は package.json の devEngines.packageManager から読む
-      - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
-        with:
-          version-file: pnpm-workspace.yaml
-          node-version-file: .node-version
-          cache: true
-          # 依存は次の手順で入れる (どこで落ちたかをログで分かりやすくするため)
-          run-install: false
-
-      - name: Install node modules
-        run: vp install --frozen-lockfile
-
-      - name: Type Check
-        run: vp run typecheck
-
-  # peer dependency の食い違い (同じパッケージを、依存ごとに違う版で求めているなど) を確かめる。
-  # ほかのジョブの install は --frozen-lockfile でロックファイルの解決を飛ばすので、peer の警告が出ない。
-  # ロックファイルが package.json と合っているかは、ほかのジョブの install が確かめる。
-  # ここではロックファイルだけを読むので、依存は入れない
-  run_peers_check:
-    name: Peer Dependencies
-    timeout-minutes: 10
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # Vite+ (vp) を入れ、Node.js と pnpm をリポジトリで決めた版にそろえる (ADR-015)。
-      # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
-      # pnpm は package.json の devEngines.packageManager から読む
-      - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
-        with:
-          version-file: pnpm-workspace.yaml
-          node-version-file: .node-version
-          # 依存を入れないので、pnpm のストアのキャッシュは使わない
-          cache: false
-          run-install: false
-
+      # peer dependency の食い違い (同じパッケージを、依存ごとに違う版で求めているなど) を確かめる。
+      # 次の install は --frozen-lockfile でロックファイルの解決を飛ばすので、peer の警告が出ない。
+      # ロックファイルだけを読むので、依存を入れる前に動かせる。
       # `vp pm` は peers を pnpm に渡さないので、`vp env exec` で決めた版の pnpm を呼ぶ。
       # コマンドは `pnpm peers check` (複数形)。`pnpm peer check` は検査にならず、install が走って通ってしまう
-      - name: Check peer dependencies
+      - name: Peer Dependencies
         run: vp env exec pnpm peers check --lockfile-only
+
+      # peer の検査が落ちても、依存を入れて残りの検査を動かす
+      - name: Install node modules
+        id: install
+        if: ${{ !cancelled() }}
+        run: vp install --frozen-lockfile
+
+      # ここから下は、前の検査が落ちても動かす。依存が入らなかったときだけ動かさない
+      - name: Format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: vp run format
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: vp run lint
+
+      - name: Type Check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: vp run typecheck
 
   run_test:
     name: Test
