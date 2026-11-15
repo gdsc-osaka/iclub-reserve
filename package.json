@@ -75,7 +75,7 @@
     "drizzle-kit": "^0.31.11",
     "semver": "^7.8.6",
     "shadcn": "^4.23.0",
-    "tailwindcss": "^4.3.4",
+    "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:",
