@@ -43,6 +43,12 @@
    * キャッシュヒット時は Worker を起動せずに直接応答を返す（CPU 時間を消費しない）。
    * キャッシュの制御は Cache-Control や CDN-Cache-Control 等の HTTP ヘッダーで行う。
    * https://developers.cloudflare.com/workers/cache/configuration/#enable-caching
+   *
+   * 【注意】Cache-Control の無い GET の応答も、Cloudflare は勝手にキャッシュする（200 なら 2 時間）。
+   * キャッシュのキーは URL だけで Cookie を含まないため、ログインした人の画面が別の人に返ってしまう。
+   * これを防ぐため、Worker の入口（workers/app.ts）で、Cache-Control の無い応答に
+   * `private, no-store` を付けている（app/lib/default-cache-control.server.ts）。
+   * キャッシュさせたい応答は、ルートで `Cache-Control: public, max-age=…` を付けること。
    */
   "cache": {
     "enabled": true,
