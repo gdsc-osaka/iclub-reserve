@@ -87,6 +87,21 @@ export default defineConfig({
      * .claude/worktrees/* や .worktree/* にある別の git worktree のテストまで拾ってしまう。
      */
     include: ["{app,scripts}/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
+    /*
+     * テストのファイルごとにワーカーを作り直さず、同じワーカーで続けて動かす。
+     * 時間の半分ほどは、ファイルごとに同じモジュールを読み直すこと（import）にかかっていた。
+     * 2026-11 に測ると、`--maxWorkers=3`（CI とほぼ同じ）で 49.4 秒が 19.8 秒に、
+     * 手元の 12 スレッドで 30.2 秒が 13.7 秒になった。
+     *
+     * その代わり、同じワーカーの中では、読み込んだモジュールとグローバルの値が次のファイルに残る。
+     * Vitest はファイルが終わるたびに `vi.spyOn` を戻し、`vi.mock` の登録を消すが、次の 2 つは残る。
+     * - `vi.stubGlobal`・`vi.stubEnv` の差し替え → 下の `unstubGlobals`・`unstubEnvs` で、テストごとに戻す
+     * - `vi.mock` したモジュールを読み込んだ側のモジュール → 順番しだいで、モックが別のファイルに漏れる。
+     *   依存は引数で渡し、`vi.mock` はなるべく使わない（AGENTS.md の単体テストの項）
+     */
+    isolate: false,
+    unstubGlobals: true,
+    unstubEnvs: true,
     server: {
       deps: {
         /*
