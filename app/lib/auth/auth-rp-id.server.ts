@@ -14,6 +14,6 @@ export const toRpId = (baseURL: string | undefined): string | undefined =>
  * 現在の環境のパスキー rpID を取得する。
  */
 export const getPasskeyRpId = (): string => {
-  const { BETTER_AUTH_URL } = env as Env & { readonly BETTER_AUTH_URL?: string };
+  const { BETTER_AUTH_URL } = env as { readonly BETTER_AUTH_URL?: string };
   return toRpId(BETTER_AUTH_URL) ?? "";
 };

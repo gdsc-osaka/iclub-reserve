@@ -42,6 +42,9 @@ function writeDevVars(): void {
     'SMTP_PASSWORD=""',
     'GOOGLE_SERVICE_ACCOUNT_EMAIL=""',
     'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=""',
+    // APP_ENV が local なので使わないが、`secrets.required` にある名前はすべて書いておく（無いと警告が出る）
+    'DISCORD_OTP_WEBHOOK_URL=""',
+    'DISCORD_OTP_THREAD_ID=""',
   ].join("\n");
 
   fs.writeFileSync(path.join(BUILD_SERVER_DIR, ".dev.vars"), `${devVars}\n`, "utf-8");

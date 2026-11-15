@@ -87,9 +87,9 @@ const toPasskeyOrigin = (appEnv: Env["APP_ENV"], baseURL: string | undefined): s
 /**
  * Better Auth の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
  *
- * `wrangler types` が生成する `Env` には「今の環境に実際にある値」しか載らない。
- * シークレットは CI には存在しないため型にも現れず、直接参照すると型検査が落ちる。
- * そのため、ここで形だけを宣言して読む。
+ * `wrangler types` は `wrangler.jsonc` の `secrets.required` から `Env` の型を作るが、
+ * 型は値が入っていることまでは保証しない（`.dev.vars` に書いていない手元、スキーマ生成の最中など）。
+ * そのため `Env` を通さず、あってもなくてもよい値として読む。
  */
 type AuthSecrets = {
   readonly BETTER_AUTH_SECRET?: string;
@@ -97,7 +97,7 @@ type AuthSecrets = {
 };
 
 const createAuth = () => {
-  const { BETTER_AUTH_SECRET, BETTER_AUTH_URL } = env as Env & AuthSecrets;
+  const { BETTER_AUTH_SECRET, BETTER_AUTH_URL } = env as AuthSecrets;
 
   return betterAuth({
     appName: APP_NAME,

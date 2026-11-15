@@ -29,6 +29,10 @@
    * `wrangler types` は `--env` なし（＝トップレベル）で走るので、
    * トップレベルにないキーは `Env` の型に現れない。
    *
+   * `secrets`（必要なシークレットの名前）も継承されないが、`env.preview.previews` には書けないため、
+   * 3 か所（トップレベル・`env.production`・`env.preview`）に書く。中身は環境ごとに違ってよい
+   * （トップレベルの `secrets` のコメントを参照）。
+   *
    * 一方 `main` `compatibility_date` `compatibility_flags` `cache` `observability`
    * `upload_source_maps` `account_id` は継承されるので、ここに 1 度書けばよい。
    */
@@ -120,6 +124,37 @@
     "MAIL_FROM_NAME": "i-Club 予約システム",
     "STAFF_CONTACT_EMAIL": "iclub-reserve-support@gdgoc-osaka.jp",
   },
+
+  /**
+   * その環境に必要なシークレットの名前（値は書かない。値は `.dev.vars` / `wrangler secret put` で渡す）。
+   * https://developers.cloudflare.com/workers/configuration/secrets/
+   *
+   * 名前を並べると、次のことが起きる。
+   * - `wrangler deploy` は、ここにある名前が Worker に 1 つでも入っていないと失敗する
+   *   （本番で SMTP の認証情報を入れ忘れ、メールがログに出るだけになる、といった事故を防ぐ）
+   * - `wrangler types` が、トップレベルの名前を `Env` の型に載せる
+   * - ローカル開発は、`.dev.vars` から**ここにある名前だけ**を読む。書いていない名前は捨てられる
+   *
+   * 環境に継承されないため、トップレベル・`env.production`・`env.preview` の 3 か所に書く。
+   * `env.preview.previews` には書けない（Wrangler が受け付けない）。ブランチの Preview の
+   * シークレットは `wrangler preview base-config secret put` で入れ、`wrangler preview` は名前を確かめない。
+   *
+   * トップレベル（ローカル開発）には、アプリが読むシークレットをすべて並べる。
+   * `.dev.vars` に無い名前は警告が出るだけで、開発サーバーは動く（空なら、メールや予定はターミナルに出る）。
+   * シークレットを増やすときは、ここと `.dev.vars.example` に足し、その値を使う環境の `secrets` にも足すこと。
+   */
+  "secrets": {
+    "required": [
+      "BETTER_AUTH_SECRET",
+      "BETTER_AUTH_URL",
+      "SMTP_USER",
+      "SMTP_PASSWORD",
+      "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+      "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+      "DISCORD_OTP_WEBHOOK_URL",
+      "DISCORD_OTP_THREAD_ID",
+    ],
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -189,6 +224,18 @@
         "MAIL_FROM_ADDRESS": "noreply@gdgoc-osaka.jp",
         "MAIL_FROM_NAME": "i-Club 予約システム",
         "STAFF_CONTACT_EMAIL": "iclub-reserve-support@gdgoc-osaka.jp",
+      },
+      // 本番に必要なシークレット。詳細はトップレベルの `secrets` のコメントを参照。
+      // メールはすべて SMTP で送るため、Discord の 2 つは要らない。
+      "secrets": {
+        "required": [
+          "BETTER_AUTH_SECRET",
+          "BETTER_AUTH_URL",
+          "SMTP_USER",
+          "SMTP_PASSWORD",
+          "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+          "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+        ],
       },
       "d1_databases": [
         {
@@ -271,6 +318,19 @@
         "MAIL_FROM_NAME": "i-Club 予約システム",
         "STAFF_CONTACT_EMAIL": "iclub-reserve-support@gdgoc-osaka.jp",
       },
+      // develop に必要なシークレット。詳細はトップレベルの `secrets` のコメントを参照。
+      // メールはすべて Discord のスレッドへ送るため（mail-sender-factory.server.ts）、SMTP の 2 つは要らない。
+      // ブランチの Preview は、ここではなく `wrangler preview base-config secret put` で入れた値を使う。
+      "secrets": {
+        "required": [
+          "BETTER_AUTH_SECRET",
+          "BETTER_AUTH_URL",
+          "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+          "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY",
+          "DISCORD_OTP_WEBHOOK_URL",
+          "DISCORD_OTP_THREAD_ID",
+        ],
+      },
       "d1_databases": [
         {
           "binding": "DB",
@@ -312,6 +372,9 @@
        *
        * Queue の consumer と Cron Triggers はここに書かない。Preview では動かない仕様のため、
        * Preview が積んだメールは、上の Worker 本体（develop）の consumer と Cron が送る。
+       *
+       * `secrets` もここには書けない（Wrangler が受け付けない）。Preview のシークレットは
+       * `wrangler preview base-config secret put` で入れる（README の「環境とデプロイ」）。
        */
       "previews": {
         "vars": {
