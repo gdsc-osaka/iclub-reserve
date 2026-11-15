@@ -37,3 +37,20 @@ updates:
         patterns:
           - "vite-plus"
           - "@voidzero-dev/vite-plus-core"
+      # @playwright/test を上げるときは、ci.yml の Playwright のイメージ (2 か所) も同じ版に手で上げる。
+      # 上げないと E2E が止まるので、ほかの更新とまとめない
+      playwright:
+        patterns:
+          - "@playwright/test"
+      # 上のグループに入らない更新のうち、minor と patch は 1 つの PR にまとめる。
+      # PR ごとに CI が動き、ほかの PR をマージするたびに最新の develop を取り込んで、また動くため。
+      # パッケージは上のグループから順に見て、最初に当てはまったグループに入るので、このグループは最後に置く。
+      # major は変更点を 1 つずつ確かめたいので、今までどおりパッケージごとの PR にする。
+      # まとめた PR が落ちたら、原因のパッケージを探し、PR に `@dependabot ignore <パッケージ名>` とコメントして外す。
+      # 外したパッケージは、`@dependabot unignore <パッケージ名>` とコメントするまで上がらないので、直したら戻す
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
