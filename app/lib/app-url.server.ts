@@ -5,8 +5,9 @@ import { toMailableOrigin } from "./app-url";
 /**
  * 実行環境の設定値（`.dev.vars` や `wrangler secret put` で渡す）。
  *
- * `wrangler types` が生成する `Env` には「今の環境に実際にある値」しか載らない。
- * シークレットは CI には存在せず型にも現れないため、ここで形だけ宣言して読む。
+ * `wrangler types` は `wrangler.jsonc` の `secrets.required` から `Env` の型を作るが、
+ * 型は値が入っていることまでは保証しない（`.dev.vars` に書いていない手元など）。
+ * そのため `Env` を通さず、あってもなくてもよい値として読む。
  */
 type AppUrlSecrets = { readonly BETTER_AUTH_URL?: string };
 
@@ -26,7 +27,7 @@ type AppUrlSecrets = { readonly BETTER_AUTH_URL?: string };
  * 偽装されうる origin をメールに載せるくらいなら、操作を失敗させて気付けるようにする。
  */
 export const resolveAppBaseUrl = (request: Request): string => {
-  const { BETTER_AUTH_URL } = env as Env & AppUrlSecrets;
+  const { BETTER_AUTH_URL } = env as AppUrlSecrets;
 
   const configured = toMailableOrigin(BETTER_AUTH_URL);
   if (configured !== null) return configured;

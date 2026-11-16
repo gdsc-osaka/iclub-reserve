@@ -9,6 +9,7 @@ import { fetchHolidayIcal } from "~/infra/holiday/google-holiday-fetcher";
 import { createD1MailOutbox } from "~/infra/mail/d1-mail-outbox";
 import type { MailQueueMessage } from "~/infra/mail/mail-queue.server";
 import { createMailSender, getMailFrom } from "~/infra/mail/mail-sender-factory.server";
+import { withDefaultCacheControl } from "~/lib/default-cache-control.server";
 import { attachQueueTraceContext, attachScheduledTraceContext } from "~/lib/trace-context.server";
 import { processCalendarSyncTasksUseCase } from "~/usecases/calendar/process-calendar-sync-tasks";
 import { reconcileCalendarsUseCase } from "~/usecases/calendar/reconcile-calendars";
@@ -30,8 +31,14 @@ const requestHandler = createRequestHandler(
 );
 
 export default {
+  /**
+   * 画面・データ・API（Better Auth を含む）のすべての応答がここを通る。
+   * `Cache-Control` を書いていない応答は、Workers Cache にもブラウザにも残させない
+   * （ログインした人の画面が、別の人に返らないようにするため。詳細は default-cache-control.server.ts）。
+   * 静的ファイル（build/client）は Worker を通らずに配られるので、ここには来ない。
+   */
   async fetch(request) {
-    return requestHandler(request);
+    return withDefaultCacheControl(await requestHandler(request));
   },
 
   /**
