@@ -33,6 +33,8 @@ Welcome! This `AGENTS.md` file provides context and strict guidelines for AI cod
 - **Start development server**: `pnpm run dev`
 - **Read a sign-in code (Local)**: `pnpm -s run dev:otp [人物の名前かメールアドレス]`（ローカルの D1 からログインの認証コードを読む。引数なしならシードの人物の一覧。手順は `local-login` スキル）
 - **Run unit tests**: `pnpm test`（`vp test run`）。テストの関数は `vitest` ではなく `vite-plus/test` から読み込む（`vitest` から読み込むとリントで止まる）。
+  - テストのファイルは、同じワーカーで続けて動く（`vite.config.ts` の `isolate: false`）。読み込んだモジュールとグローバルの値は、次のファイルに残る。`vi.spyOn`・`vi.stubGlobal`・`vi.stubEnv` は Vitest が戻すが、`vi.mock` は、モックしたモジュールを読み込んだ側が残り、別のファイルに漏れる。依存は引数で渡して `vi.mock` はなるべく使わず、モジュールの変数にも状態を持たせない。
+  - ファイルの順番で落ちるときは、`pnpm exec vp test run --sequence.shuffle.files --sequence.seed=<数>` で再現し、`--isolate` を付けると通るかを比べる。
 - **Lint / Format**: `pnpm lint`（`vp lint`。型の情報を使うリントと型の検査も行う）・`pnpm format`（`vp fmt --check .`）。直すときは `pnpm run lint:fix`・`pnpm run format:fix`。型の検査だけなら `pnpm typecheck`。リントは React Router・wrangler が生成した型を読むので、ルートを足して `./+types/route` が見つからないと出たときと、`wrangler.jsonc` を変えたときは `pnpm typecheck` で作り直す。
 - **Run a TypeScript script**: `pnpm exec vpx <ファイル>`（tsx は使わない）
 - **Run E2E tests**: `pnpm run test:e2e`（ビルドしてから Playwright で、パソコンの Chromium・Firefox・WebKit とスマホの Chrome・Safari の 5 種類で動かす。1 種類だけなら `pnpm exec playwright test --project=chromium`。方針は `docs/adr/007-e2e-testing.md`）。テストは `e2e/<RDRA のコンテキスト>/uc-<番号>-*.spec.ts` に置き、`@UC-<番号>` のタグを付ける。UC を `docs/implementation-status.md` で ✅ にする PR には、その UC の E2E も含める。E2E で確かめるのは主な流れ・権限の境目・UC ごとに代表的な失敗 1 つだけで、業務ルールの分岐はユースケースの単体テスト（Vitest）に書く。
