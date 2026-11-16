@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -42,7 +42,7 @@ jobs:
       # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
       # pnpm は package.json の devEngines.packageManager から読む
       - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
+        uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
           version-file: pnpm-workspace.yaml
           node-version-file: .node-version
@@ -84,7 +84,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -92,7 +92,7 @@ jobs:
       # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
       # pnpm は package.json の devEngines.packageManager から読む
       - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
+        uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
           version-file: pnpm-workspace.yaml
           node-version-file: .node-version
@@ -121,7 +121,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -129,7 +129,7 @@ jobs:
       # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
       # pnpm は package.json の devEngines.packageManager から読む
       - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
+        uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
           version-file: pnpm-workspace.yaml
           node-version-file: .node-version
@@ -171,7 +171,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -179,7 +179,7 @@ jobs:
       # 版はここに書かない。Vite+ は pnpm-workspace.yaml の catalog、Node.js は .node-version、
       # pnpm は package.json の devEngines.packageManager から読む
       - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1.22.0
+        uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
           version-file: pnpm-workspace.yaml
           node-version-file: .node-version
@@ -200,7 +200,7 @@ jobs:
       # 落ちたときに、操作の記録 (trace) と画面の写真を見られるようにする
       - name: Upload Playwright report
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report-${{ matrix.project }}-${{ matrix.shard }}
           path: |

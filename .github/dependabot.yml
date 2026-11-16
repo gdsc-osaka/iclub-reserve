@@ -54,3 +54,20 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # ワークフローのアクションは、タグではなくコミットの SHA で固定し、行末のコメントに版を書く
+  # （例: `actions/checkout@<SHA> # v7.0.1`）。タグは後から別のコミットに付け替えられるため。
+  # Dependabot は SHA と版のコメントを一緒に上げる。アクションを足すときも同じ書き方にする
+  - package-ecosystem: "github-actions"
+    # "/" を指定すると .github/workflows を見る
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # npm と同じ理由で、minor と patch は 1 つの PR にまとめ、major はアクションごとの PR にする
+      actions-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
