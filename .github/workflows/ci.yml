@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     # run_e2e と同じイメージ・同じ利用者で動かす
     container:
-      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
       options: --user 1001
 
     steps:
@@ -157,7 +157,7 @@ jobs:
     # 版は pnpm-lock.yaml の @playwright/test とそろえる。ずれると、Playwright がイメージの更新を求めて止まる。
     # 上げるときは、warm_e2e_cache のイメージも同じ版にする
     container:
-      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
       # イメージの既定の root ではなく、ランナーと同じ利用者で動かす (Playwright の CI の手順どおり)。
       # root のままだと Firefox が起動しない
       options: --user 1001
