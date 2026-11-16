@@ -1,4 +1,4 @@
-import { ChevronRight, Users } from "lucide-react";
+import { ChevronRight, Plus, Users } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "~/components/ui/button";
@@ -57,7 +57,10 @@ export function NoGroupsCard() {
       </EmptyHeader>
       <EmptyContent>
         <Button asChild size="sm">
-          <Link to="/groups/new">団体を登録</Link>
+          <Link to="/groups/new">
+            <Plus aria-hidden />
+            団体を登録
+          </Link>
         </Button>
       </EmptyContent>
     </Empty>

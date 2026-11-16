@@ -1,3 +1,4 @@
+import { KeyRound, Mail } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
 import { AllowedEmailHint } from "~/components/auth/allowed-email-hint";
@@ -62,7 +63,11 @@ export function EmailStep({
   );
 }
 
-/** メールアドレスを入力して、認証コードを送ってもらうフォーム。 */
+/**
+ * メールアドレスを入力して、認証コードを送ってもらうフォーム。
+ *
+ * ボタンのアイコンは、アカウント画面のメールアドレスの欄と同じ `Mail` にそろえている。
+ */
 function EmailOtpForm({
   email,
   onEmailChange,
@@ -106,6 +111,7 @@ function EmailOtpForm({
       </div>
 
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        <Mail aria-hidden />
         {isSending ? "送信中…" : "メールアドレスで続ける"}
       </Button>
     </form>
@@ -118,6 +124,8 @@ function EmailOtpForm({
  * 先頭に来ても見た目は変えない。塗りつぶしのボタンは
  * 「メールアドレスで続ける」に譲り、こちらは枠線だけにしておく。
  * 並び順で色まで入れ替わると、開くたびに画面の印象が変わってしまうため。
+ *
+ * アイコンは、アカウント画面のパスキーの欄と同じ `KeyRound` にそろえている。
  */
 function PasskeyButton({
   pending,
@@ -134,6 +142,7 @@ function PasskeyButton({
         onClick={onClick}
         disabled={pending}
       >
+        <KeyRound aria-hidden />
         {isVerifying ? "確認中…" : "パスキーでログイン"}
       </Button>
       <p className="text-xs text-muted-foreground">
