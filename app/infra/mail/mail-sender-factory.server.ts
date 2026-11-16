@@ -7,9 +7,10 @@ import type { MailSender } from "~/domain/mail/mail-sender";
 /**
  * メール送信まわりの秘密情報（`.dev.vars` や `wrangler secret put` で渡す）。
  *
- * `wrangler types` が生成する `Env` には「今の環境に実際にある値」しか載らないため、
- * 未設定の環境では型にも現れない。未設定でも動く（コンソール出力に切り替える）のが
- * この関数の役目なので、あってもなくてもよい値として読む。
+ * `wrangler types` は `wrangler.jsonc` の `secrets.required` から `Env` の型を作るが、
+ * 型は値が入っていることまでは保証しない（`.dev.vars` に書いていない手元など）。
+ * 未設定でも動く（コンソール出力に切り替える）のがこの関数の役目なので、
+ * `Env` を通さず、あってもなくてもよい値として読む。
  */
 type MailSecrets = {
   readonly SMTP_USER?: string;
@@ -31,7 +32,7 @@ const fallbackToConsole = (reason: string): MailSender => {
 
 /** SMTP（Oracle Email Delivery）で送る。認証情報が無ければコンソール出力に落とす。 */
 const createSmtpMailSenderOrFallback = (): MailSender => {
-  const { SMTP_USER: username, SMTP_PASSWORD: password } = env as Env & MailSecrets;
+  const { SMTP_USER: username, SMTP_PASSWORD: password } = env as MailSecrets;
 
   if (!username || !password) {
     return fallbackToConsole("SMTP_USER / SMTP_PASSWORD が未設定");
@@ -47,8 +48,8 @@ const createSmtpMailSenderOrFallback = (): MailSender => {
 
 /** Discord のスレッドへ投稿する。設定が足りなければコンソール出力に落とす。 */
 const createDiscordMailSenderOrFallback = (): MailSender => {
-  const { DISCORD_OTP_WEBHOOK_URL: webhookUrl, DISCORD_OTP_THREAD_ID: threadId } = env as Env &
-    MailSecrets;
+  const { DISCORD_OTP_WEBHOOK_URL: webhookUrl, DISCORD_OTP_THREAD_ID: threadId } =
+    env as MailSecrets;
 
   if (!webhookUrl || !threadId) {
     return fallbackToConsole("DISCORD_OTP_WEBHOOK_URL / DISCORD_OTP_THREAD_ID が未設定");

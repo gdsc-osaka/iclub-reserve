@@ -186,6 +186,9 @@ pnpm exec wrangler preview base-config secret put BETTER_AUTH_SECRET --env previ
 
 `BETTER_AUTH_URL`（`https://iclub-preview.gdgoc-osaka.jp`）、`DISCORD_OTP_WEBHOOK_URL`、`DISCORD_OTP_THREAD_ID` も同じように登録します。不要になった Preview は `pnpm exec wrangler preview delete --env preview --name <ブランチ名>` で消せます。
 
+> [!IMPORTANT]
+> 各環境に要るシークレットの名前は、`wrangler.jsonc` の `secrets.required` に並べています。本番と `develop` のデプロイは、そこにある名前が Worker に入っていないと失敗します。シークレットを増やすときは、先に `wrangler secret put` で入れてから、`secrets.required` と `.dev.vars.example` に名前を足してください。
+
 ### 本番に出す（リリース）
 
 流れは [ADR-017](docs/adr/017-release-flow-and-migrations.md) で決めています。

@@ -7,8 +7,9 @@ import { createGoogleTokenSource, type GoogleTokenSource } from "./google-servic
 /**
  * Google Calendar 連携まわりの秘密情報（`.dev.vars` や `wrangler secret put` で渡す）。
  *
- * `wrangler types` が生成する `Env` には未設定の環境の値が載らないため、
- * あってもなくてもよい値として読む。
+ * `wrangler types` は `wrangler.jsonc` の `secrets.required` から `Env` の型を作るが、
+ * 型は値が入っていることまでは保証しない（`.dev.vars` に書いていない手元など）。
+ * 未設定でも動く（コンソール出力に切り替える）ので、`Env` を通さず、あってもなくてもよい値として読む。
  */
 export type CalendarSecrets = {
   readonly GOOGLE_SERVICE_ACCOUNT_EMAIL?: string;
@@ -46,7 +47,7 @@ const fallbackToConsole = (reason: string): CalendarClient => {
  */
 export const createCalendarClient = (): CalendarClient => {
   const { GOOGLE_SERVICE_ACCOUNT_EMAIL: email, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: privateKey } =
-    env as Env & CalendarSecrets;
+    env as CalendarSecrets;
 
   if (!email || !privateKey) {
     return fallbackToConsole(
@@ -79,6 +80,6 @@ export const createCalendarClient = (): CalendarClient => {
  * 未設定時は null を返す。
  */
 export const getCalendarWriterEmail = (): string | null => {
-  const { GOOGLE_SERVICE_ACCOUNT_EMAIL: email } = env as Env & CalendarSecrets;
+  const { GOOGLE_SERVICE_ACCOUNT_EMAIL: email } = env as CalendarSecrets;
   return email ?? null;
 };

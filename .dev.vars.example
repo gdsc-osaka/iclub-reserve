@@ -1,3 +1,8 @@
+# ローカル開発で読むシークレット。
+# 開発サーバーは、wrangler.jsonc のトップレベルの `secrets.required` にある名前だけをこのファイルから読む。
+# 名前を足すときは、そちらにも足すこと（足さないと読まれない）。
+# 使わない値も、空のまま名前だけ残しておく（無いと、起動時に「Missing required secrets」の警告が出る）。
+
 # Better Auth
 # BETTER_AUTH_SECRET は `openssl rand -base64 32` などで生成する
 BETTER_AUTH_SECRET=your-secret-key-here
@@ -27,3 +32,8 @@ SMTP_PASSWORD=""
 # 秘密鍵（PKCS#8 PEM）には改行が含まれるため、1 行に \n で連結した文字列か複数行で指定する。
 GOOGLE_SERVICE_ACCOUNT_EMAIL=""
 GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=""
+
+# 認証コードを投稿する Discord のスレッド（プレビュー環境だけで使う）
+# 手元では空のままでよい。試し方は README の「認証コード（OTP）の届け先」を参照。
+DISCORD_OTP_WEBHOOK_URL=""
+DISCORD_OTP_THREAD_ID=""
