@@ -67,7 +67,10 @@ export function StaffTodayScheduleSection({
             </span>
           </div>
           <Button asChild variant="outline" size="sm" className="h-9 text-xs">
-            <Link to={toSharedScreenPath(AppArea.Staff, "/availability")}>空き状況で見る</Link>
+            <Link to={toSharedScreenPath(AppArea.Staff, "/availability")}>
+              <CalendarDays aria-hidden />
+              空き状況で見る
+            </Link>
           </Button>
         </div>
       </div>

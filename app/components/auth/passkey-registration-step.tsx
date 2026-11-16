@@ -1,3 +1,4 @@
+import { KeyRound } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertDescription } from "~/components/ui/alert";
@@ -136,6 +137,8 @@ export function PasskeyRegistrationStep({ onDone }: Readonly<PasskeyRegistration
           onClick={() => void registerPasskey()}
           disabled={pending}
         >
+          {/* ログイン画面の「パスキーでログイン」と同じアイコンにそろえる */}
+          <KeyRound aria-hidden />
           {pending ? "登録中…" : "パスキーを登録"}
         </Button>
 

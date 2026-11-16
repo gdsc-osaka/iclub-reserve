@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { Link } from "react-router";
 
 import { toMyGroup } from "~/components/group/my-group";
@@ -53,7 +53,10 @@ export default function GroupListRoute({ loaderData }: Route.ComponentProps) {
           所属団体
         </h1>
         <Button asChild size="sm">
-          <Link to="/groups/new">団体を登録</Link>
+          <Link to="/groups/new">
+            <Plus aria-hidden />
+            団体を登録
+          </Link>
         </Button>
       </div>
 

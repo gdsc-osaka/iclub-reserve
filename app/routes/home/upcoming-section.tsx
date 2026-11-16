@@ -1,4 +1,4 @@
-import { Calendar, ChevronRight, MessageSquare } from "lucide-react";
+import { Calendar, CalendarDays, ChevronRight, MessageSquare } from "lucide-react";
 import { Link } from "react-router";
 
 import { ReservationStatusBadge } from "~/components/reservation/reservation-status-badge";
@@ -63,7 +63,10 @@ export function UpcomingSection({
           </EmptyHeader>
           <EmptyContent>
             <Button asChild size="sm" variant="outline">
-              <Link to="/availability">空き状況を見る</Link>
+              <Link to="/availability">
+                <CalendarDays aria-hidden />
+                空き状況を見る
+              </Link>
             </Button>
           </EmptyContent>
         </Empty>

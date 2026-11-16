@@ -9,6 +9,7 @@ import {
   KeyRound,
   Mail,
   MessageSquareText,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -188,7 +189,11 @@ function UnreadReservationRow({ item, now }: Readonly<{ item: GroupUnreadUpdateI
         <div className="grid shrink-0 auto-cols-fr grid-flow-col gap-2 sm:flex sm:justify-end">
           {latestEvent.type === GroupUnreadEventType.Reject && (
             <Button asChild variant="outline" className="h-9 sm:h-8">
-              <Link to={toFormPathForFacility(AppArea.User, item.facilityId)}>別の日時で申請</Link>
+              <Link to={toFormPathForFacility(AppArea.User, item.facilityId)}>
+                {/* 上の帯の「予約を申請」と同じアイコンにそろえる */}
+                <Plus aria-hidden />
+                別の日時で申請
+              </Link>
             </Button>
           )}
           <fetcher.Form method="post" className="contents">
@@ -339,6 +344,7 @@ export function InboxSection({
         </div>
         {reservations.length > 0 && (
           <Button type="button" variant="ghost" className="h-9 sm:h-8" onClick={markAllRead}>
+            <Check aria-hidden />
             すべて確認済みにする
           </Button>
         )}

@@ -1,4 +1,4 @@
-import { Calendar, Plus } from "lucide-react";
+import { CalendarDays, Plus } from "lucide-react";
 import { Link } from "react-router";
 
 import { toNewReservationLabel } from "~/components/layout/nav-items";
@@ -36,7 +36,8 @@ export function DashboardHeader({
       <div className="grid grid-cols-2 gap-2 sm:flex">
         <Button asChild variant="outline" size="lg">
           <Link to={toSharedScreenPath(area, "/availability")}>
-            <Calendar aria-hidden />
+            {/* ナビの「空き状況」と同じアイコンにそろえる */}
+            <CalendarDays aria-hidden />
             空き状況を見る
           </Link>
         </Button>

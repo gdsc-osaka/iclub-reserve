@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { KeyRound, Laptop, Mail, ShieldAlert, User as UserIcon } from "lucide-react";
+import { KeyRound, Laptop, LogOut, Mail, ShieldAlert, User as UserIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFetcher, useRevalidator } from "react-router";
 import { toast } from "sonner";
@@ -484,6 +484,7 @@ function EmailChangeDialog({
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={pending || newEmail.trim() === ""}>
+                <Mail aria-hidden />
                 {pending ? "送信中…" : "認証コードを送る"}
               </Button>
             </DialogFooter>
@@ -840,6 +841,7 @@ function PasskeyCard({
               disabled={addingPasskey}
               onClick={() => void handleAddPasskey()}
             >
+              <KeyRound aria-hidden />
               {addingPasskey ? "パスキーを追加中…" : "パスキーを追加"}
             </Button>
           </div>
@@ -962,6 +964,8 @@ function RevokeConfirmDialog({
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button variant="outline" size="sm" disabled={disabled} className={triggerClassName}>
+          {/* アカウントメニューのログアウトと同じアイコンにそろえる */}
+          <LogOut aria-hidden />
           {triggerLabel}
         </Button>
       </AlertDialogTrigger>
