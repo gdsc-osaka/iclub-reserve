@@ -61,7 +61,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.70.1",
-    "@playwright/test": "^1.65.0",
+    "@playwright/test": "^1.65.1",
     "@react-router/dev": "8.5.2",
     "@tailwindcss/vite": "^4.3.5",
     "@types/better-sqlite3": "^9.6.0",
